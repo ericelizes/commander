@@ -132,6 +132,9 @@ func (c *Cache) Get(in Input) Result {
 	if e.err != "" {
 		wait = retryAfter
 	}
+	if same {
+		e.err = "" // the evidence is back to what the recap shows: nothing to retry
+	}
 	if !same && !e.pending && !c.busy && (e.attempt.IsZero() || now.Sub(e.attempt) >= wait) {
 		e.pending = true
 		e.attempt = now
@@ -142,6 +145,9 @@ func (c *Cache) Get(in Input) Result {
 			ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 			defer cancel()
 			ctx = WithProgress(ctx, func(d Recap) {
+				if len(d.Summary.Sentences) == 0 {
+					return // nothing the app can show yet
+				}
 				d = onlyKnown(d, in)
 				c.mu.Lock()
 				defer c.mu.Unlock()

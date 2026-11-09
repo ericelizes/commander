@@ -29,6 +29,13 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); useIntegrations.setState({ linearTeam: '' }) })
 
 describe('Overview', () => {
+  it('renders a null or empty streaming draft without throwing', async () => {
+    const draft = { state: 'updating', stale: false, evidence: [], draft: { summary: { sentences: null }, changes: null, next: null } }
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => new Response(JSON.stringify(String(input).includes('/api/overview') ? draft : { project_id: 1, ws: 'w', active_id: 0, tabs: [] }), { status: 200 })))
+    render(<InspectorColumn />)
+    expect(await screen.findByRole('article', { name: 'Workstream overview' })).toBeInTheDocument()
+    expect(screen.queryByText('The summary could not be shown.')).toBeNull()
+  })
   it('opens by default, keeps Workflow available, and does not move tabs on a snapshot', async () => {
     render(<InspectorColumn />)
     expect(await screen.findByRole('article', { name: 'Workstream overview' })).toBeInTheDocument()

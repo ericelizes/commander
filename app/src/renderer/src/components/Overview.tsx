@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Component, Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { BoardRow, BoardTrack, LineKind, SnapStep, SnapWorkstream, Snapshot } from '../../../shared/snapshot'
 import { splitTickets, TicketPills } from '../../../features/linear/Ticket'
 import { useStore } from '../store'
@@ -10,7 +10,7 @@ import './overview.css'
 type Sentence = { text: string; sources: string[] }
 // A daemon from before the per-sentence recap sends one block with its sources.
 type Claim = { sentences: Sentence[] } | Sentence
-const sentencesOf = (claim: Claim): Sentence[] => ('sentences' in claim ? claim.sentences : [claim])
+const sentencesOf = (claim: Claim): Sentence[] => ('sentences' in claim ? claim.sentences ?? [] : [claim])
 export type RecapResult = {
   // waiting/retrying are transient: the daemon says what it waits for and the tab asks again.
   state: 'waiting' | 'updating' | 'retrying' | 'ready' | 'unavailable'
@@ -185,7 +185,7 @@ export function Overview({ ws, row, track, onWorkflow, onTrack }: {
   const sourceNumbers = useMemo(() => {
     const numbers = new Map<string, number>()
     const recap = shown
-    if (recap) for (const c of [recap.summary, ...recap.changes, ...recap.next]) for (const s of sentencesOf(c)) for (const id of s.sources) if (!numbers.has(id)) numbers.set(id, numbers.size + 1)
+    if (recap) for (const c of [recap.summary, ...recap.changes, ...recap.next]) for (const s of sentencesOf(c)) for (const id of s.sources ?? []) if (!numbers.has(id)) numbers.set(id, numbers.size + 1)
     return numbers
   }, [result, shown])
   // The marks close their own sentence, held to its last word so they never sit alone on a line.
@@ -197,7 +197,7 @@ export function Overview({ ws, row, track, onWorkflow, onTrack }: {
         {s.text.slice(0, lastWord)}
         <span className="ov-cited">
           {s.text.slice(lastWord)}
-          <span className="ov-cites">{s.sources.map((id) => {
+          <span className="ov-cites">{(s.sources ?? []).map((id) => {
             const e = result?.evidence.find((x) => x.id === id)
             return e ? <button key={id} type="button" className={source?.evidence.id === id ? 'is-open' : ''} aria-label={`Evidence: ${e.label}`}
               onMouseEnter={(ev) => hoverOpen(e, ev.currentTarget)} onMouseLeave={hoverClose}
@@ -258,4 +258,13 @@ function decisionPreview(text: string): string {
  const plain = text.replace(/```[\s\S]*?```/g, '').replace(/^#{1,6}\s+.*$/gm, '').replace(/\*\*/g, '').trim()
  const paragraph = plain.split(/\n\s*\n/).find((p) => p.trim().length > 30) ?? plain
  return paragraph.length > 600 ? `${paragraph.slice(0, 600).trimEnd()}…` : paragraph
+}
+
+// A recap that cannot be drawn must never take the app down with it.
+export class OverviewBoundary extends Component<{ children: React.ReactNode }, { failed: boolean }> {
+  state = { failed: false }
+  static getDerivedStateFromError() { return { failed: true } }
+  render() {
+    return this.state.failed ? <div className="ov-pane" role="alert">The summary could not be shown.</div> : this.props.children
+  }
 }

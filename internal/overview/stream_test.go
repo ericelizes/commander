@@ -2,8 +2,10 @@ package overview
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -122,4 +124,18 @@ func TestChangedEvidenceWaitsOutTheCooldownAndDraftCarriesItsOwnEvidence(t *test
 	}
 	close(release)
 	waitReady(t, c, in)
+}
+
+func TestFirstDeltaPublishesNoDraftAndDraftsAreNonNil(t *testing.T) {
+	in := Input{Evidence: []Evidence{{ID: "a"}}}
+	// Before any sentence finishes the partial recap holds nothing to show.
+	if p := PartialRecap(`{"summary":{"sentences":[{"text":"Half wri`); len(p.Summary.Sentences) != 0 {
+		t.Fatalf("draft before a finished sentence: %+v", p)
+	}
+	// A sentence citing only unknown ids still encodes arrays, never null.
+	d := onlyKnown(PartialRecap(`{"summary":{"sentences":[{"text":"x","sources":["zz"]}]},"changes":[],"next":[]}`), in)
+	b, _ := json.Marshal(d)
+	if strings.Contains(string(b), "null") {
+		t.Fatalf("draft encodes null: %s", b)
+	}
 }

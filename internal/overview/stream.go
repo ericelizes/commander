@@ -124,9 +124,9 @@ func onlyKnown(r Recap, in Input) Recap {
 		ok[e.ID] = true
 	}
 	fix := func(c Claim) Claim {
-		out := Claim{}
+		out := Claim{Sentences: []Sentence{}}
 		for _, s := range c.Sentences {
-			var src []string
+			src := []string{}
 			for _, id := range s.Sources {
 				if ok[id] {
 					src = append(src, id)
@@ -136,7 +136,7 @@ func onlyKnown(r Recap, in Input) Recap {
 		}
 		return out
 	}
-	out := Recap{Summary: fix(r.Summary)}
+	out := Recap{Summary: fix(r.Summary), Changes: []Claim{}, Next: []Claim{}}
 	for _, c := range r.Changes {
 		if len(c.Sentences) > 0 {
 			out.Changes = append(out.Changes, fix(c))

@@ -13,7 +13,7 @@ import { useStore } from '../store'
 import { useAppDown } from './StartScreen'
 import { focusOf, PitchView, SavedPitchView } from './PitchView'
 import { DerivedDiagram, diagramFor } from './DerivedDiagram'
-import { Overview } from './Overview'
+import { Overview, OverviewBoundary } from './Overview'
 import type { FocusTarget } from './FocusHeader'
 import type { SnapWorkstream } from '../../../shared/snapshot'
 import { askKey, findTrack, trackTitle, wsKey } from '../viewmodel'
@@ -147,7 +147,7 @@ export function InspectorColumn() {
       tabs.push({
         id: 'overview',
         title: 'Overview',
-        content: <Overview key={`o${flow.key}`} ws={flow.ws} row={flow.boardRow} track={flow.track} onWorkflow={() => setActivePinned('workflow')} onTrack={(id) => useStore.getState().openWorkflow(flow.row, id)} />,
+        content: <OverviewBoundary key={`o${flow.key}`}><Overview ws={flow.ws} row={flow.boardRow} track={flow.track} onWorkflow={() => setActivePinned('workflow')} onTrack={(id) => useStore.getState().openWorkflow(flow.row, id)} /></OverviewBoundary>,
       })
       tabs.push({
         id: 'workflow',
