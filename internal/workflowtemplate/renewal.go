@@ -22,26 +22,30 @@ const (
 	RenewalMaxLines = 20
 )
 
-// proseExt are the documentation formats a renewal accepts.
-var proseExt = map[string]bool{".md": true, ".markdown": true, ".rst": true, ".adoc": true, ".txt": true}
+// proseExt are the documentation markup formats a renewal accepts. No .txt:
+// build and dependency inputs wear it (CMakeLists.txt, *requirements*.txt,
+// runtime.txt), so a plain-text name proves nothing.
+var proseExt = map[string]bool{".md": true, ".markdown": true, ".rst": true, ".adoc": true}
 
 // agentDirs are path segments that hold agent instructions or tooling config.
 var agentDirs = map[string]bool{"prompts": true, "agents": true, "skills": true, "commands": true, "hooks": true, "rules": true}
 
-// agentStems start the names of files agents read as instructions in any
-// variant (CLAUDE.local.md, AGENTS.override.md, SKILL.md ...) and of build
-// input that only looks like prose (requirements*.txt, constraints*.txt).
-var agentStems = []string{"claude", "agent", "gemini", "skill", "conventions", "copilot", "cursor", "windsurf", "codex", "requirements", "constraints"}
+// agentStems are words that, anywhere in a file's stem, mark a file agents read
+// as instructions in any variant (CLAUDE.local.md, AGENTS.override.md,
+// docs/my-skill.md ...) or a build or dependency input (dev-requirements,
+// CMakeLists, Makefile, runtime ...).
+var agentStems = []string{"claude", "agent", "gemini", "skill", "conventions", "copilot", "cursor", "windsurf", "codex",
+	"requirements", "constraints", "cmakelists", "makefile", "runtime", "dockerfile", "pipfile", "gemfile", "pyproject"}
 
 // topProse are the top-level documents a renewal accepts outside docs/, by stem.
 var topProse = map[string]bool{"readme": true, "changelog": true, "changes": true, "history": true, "contributing": true, "authors": true}
 
-// proseFile is an explicit allow-list of prose: a markup or .txt file under
-// docs/, or a top-level README-like document (README, CHANGELOG ...). Never a
+// proseFile is an explicit allow-list of prose: a markup file under docs/, or a
+// top-level README-like document (README, CHANGELOG ...). Never a .txt file, a
 // dot directory (.claude, .github, .cursor ...), an agent directory (prompts/,
-// agents/, skills/ ...) or a file whose name starts like an agent instruction
-// or build input (CLAUDE*, AGENTS*, SKILL*, requirements* ...): build, config
-// and agent files are behaviour, never prose.
+// agents/, skills/ ...) or a file whose stem contains an agent-instruction or
+// build word (*claude*, *agent*, *requirements*, *cmakelists* ...): build,
+// dependency, config and agent files are behaviour, never prose.
 func proseFile(p string) bool {
 	low := strings.ToLower(strings.TrimPrefix(p, "./"))
 	parts := strings.Split(low, "/")
@@ -51,7 +55,7 @@ func proseFile(p string) bool {
 	}
 	stem, _, _ := strings.Cut(base, ".")
 	for _, s := range agentStems {
-		if strings.HasPrefix(stem, s) {
+		if strings.Contains(stem, s) {
 			return false
 		}
 	}
