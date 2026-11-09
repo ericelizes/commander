@@ -1,0 +1,36 @@
+{
+  "schema": "external-writer-binding@v1",
+  "runner": "cmd/cmdr:TestExternalWriterBindingScenario",
+  "about": "A PR whose first commits came from the user's own sessions binds them as an external writer through the real `workflow bind-writers` CLI, then its review step closes with an independent review. Invented PR, SHAs and task ids.",
+  "pr": {
+    "head": "cccccccccccccccccccccccccccccccccccccccc",
+    "commits": ["1111111111111111111111111111111111111111", "2222222222222222222222222222222222222222", "cccccccccccccccccccccccccccccccccccccccc"],
+    "range": {"from": "base-sha", "to": "user-tip", "commits": ["2222222222222222222222222222222222222222", "1111111111111111111111111111111111111111"]}
+  },
+  "cases": [
+    {"name": "manager binds the user's range", "role": "manager-B",
+     "args": ["--external-writer", "user", "--commits", "base-sha..user-tip"],
+     "exit": 0, "commits": ["1111111111111111111111111111111111111111", "2222222222222222222222222222222222222222"], "review_closes": true},
+    {"name": "user CLI binds the user's commits and a fix task", "role": "",
+     "args": ["--external-writer", "user", "--commits", "1111111111111111111111111111111111111111", "--writers", "fix-task"],
+     "exit": 0, "commits": ["1111111111111111111111111111111111111111"], "tasks": ["fix-task"], "review_closes": true},
+    {"name": "commander binds the user's commits", "role": "commander",
+     "args": ["--external-writer", "user", "--commits", "2222222222222222222222222222222222222222"],
+     "exit": 0, "commits": ["2222222222222222222222222222222222222222"], "review_closes": true},
+    {"name": "operator refused", "role": "operator-fix", "manager": "manager-B",
+     "args": ["--external-writer", "user", "--commits", "base-sha..user-tip"],
+     "exit": 1, "stderr": "writer selection belongs"},
+    {"name": "foreign manager refused", "role": "manager-other",
+     "args": ["--external-writer", "user", "--commits", "base-sha..user-tip"],
+     "exit": 1, "stderr": "writer selection belongs"},
+    {"name": "commit off the PR refused", "role": "manager-B",
+     "args": ["--external-writer", "user", "--commits", "9999999999999999999999999999999999999999"],
+     "exit": 1, "stderr": "not on the PR"},
+    {"name": "commits without the external writer refused", "role": "manager-B",
+     "args": ["--writers", "fix-task", "--commits", "1111111111111111111111111111111111111111"],
+     "exit": 1, "stderr": "required:"},
+    {"name": "external writer without commits refused", "role": "manager-B",
+     "args": ["--external-writer", "user"],
+     "exit": 1, "stderr": "required:"}
+  ]
+}

@@ -119,7 +119,14 @@ func roleOverlap(a, b []string) bool {
 	return false
 }
 
-func bindWorkflowWriters(ctx context.Context, bc beads.Client, dir, project, blockID, head string, tasks []string) (*workflowtemplate.WriterBinding, error) {
+// externalWriterSpec asks to bind commits written outside any task: the user's
+// own sessions. Commits is a <base>..<last> range or a comma list of full SHAs.
+type externalWriterSpec struct {
+	Author  string
+	Commits string
+}
+
+func bindWorkflowWriters(ctx context.Context, bc beads.Client, dir, project, blockID, head string, tasks []string, external *externalWriterSpec) (*workflowtemplate.WriterBinding, error) {
 	if callerIsOperator("") {
 		return nil, fmt.Errorf("writer selection belongs to the owning Manager; Operators cannot bind writers")
 	}
@@ -140,7 +147,8 @@ func bindWorkflowWriters(ctx context.Context, bc beads.Client, dir, project, blo
 	}
 	// Agents may bind only as an owning Manager (the block's nearest owner or one
 	// above it; the root's alone while nested Managers are off). A human CLI has no role.
-	if role := os.Getenv("COMMANDER_ROLE"); role != "" {
+	// Commander may also bind the user's own commits as an external writer.
+	if role := os.Getenv("COMMANDER_ROLE"); role != "" && !(external != nil && role == "commander") {
 		owners, err := workflowOwnerRoles(ctx, bc, dir, blockID, root)
 		if err != nil {
 			return nil, err
@@ -149,11 +157,20 @@ func bindWorkflowWriters(ctx context.Context, bc beads.Client, dir, project, blo
 			return nil, fmt.Errorf("writer selection belongs to %s", owners[0])
 		}
 	}
-	if len(tasks) == 0 {
+	if external != nil && external.Author != workflowtemplate.ExternalAuthorUser {
+		return nil, fmt.Errorf("--external-writer must be %q (the user's own sessions)", workflowtemplate.ExternalAuthorUser)
+	}
+	if external != nil && strings.TrimSpace(external.Commits) == "" {
+		return nil, fmt.Errorf("--external-writer needs --commits <base-sha>..<last-sha> or a comma list of full SHAs")
+	}
+	if len(tasks) == 0 && external == nil {
 		return nil, fmt.Errorf("explicit original and actual fix writer tasks required")
 	}
 	slices.Sort(tasks)
 	tasks = slices.Compact(tasks)
+	if tasks == nil {
+		tasks = []string{}
+	}
 	for _, task := range tasks {
 		if task == "" {
 			return nil, fmt.Errorf("empty writer task")
@@ -174,19 +191,27 @@ func bindWorkflowWriters(ctx context.Context, bc beads.Client, dir, project, blo
 	if h.State != "OPEN" {
 		return nil, fmt.Errorf("writer binding requires an open PR")
 	}
+	var ext *workflowtemplate.ExternalWriter
+	if external != nil {
+		commits, err := externalCommits(ctx, pr, h, external.Commits)
+		if err != nil {
+			return nil, err
+		}
+		ext = &workflowtemplate.ExternalWriter{Author: external.Author, Commits: commits}
+	}
 	cs, err := bc.Comments(ctx, dir, blockID)
 	if err != nil {
 		return nil, err
 	}
 	old, err := workflowtemplate.Binding(cs)
-	if err == nil && old.PR == pr && old.Head == head && slices.Equal(old.Tasks, tasks) {
+	if err == nil && old.PR == pr && old.Head == head && slices.Equal(old.Tasks, tasks) && sameExternal(old.External, ext) {
 		return &old, nil
 	}
 	nonce := make([]byte, 16)
 	if _, err := rand.Read(nonce); err != nil {
 		return nil, err
 	}
-	binding := workflowtemplate.WriterBinding{Revision: hex.EncodeToString(nonce), PR: pr, Head: head, Tasks: tasks}
+	binding := workflowtemplate.WriterBinding{Revision: hex.EncodeToString(nonce), PR: pr, Head: head, Tasks: tasks, External: ext}
 	// Check head again before persisting the selection.
 	h, err = workflowtemplate.ReadHead(ctx, workflowGH, pr)
 	if err != nil {
@@ -200,6 +225,53 @@ func bindWorkflowWriters(ctx context.Context, bc beads.Client, dir, project, blo
 	}
 	return &binding, nil
 }
+
+// externalCommits resolves --commits to the exact sorted full SHAs, each one
+// a commit of the PR at head h. Short SHAs and refs in a list are refused: the
+// record names exact commits.
+func externalCommits(ctx context.Context, pr string, h workflowtemplate.Head, spec string) ([]string, error) {
+	var shas []string
+	if from, to, ok := strings.Cut(spec, ".."); ok {
+		if strings.HasPrefix(to, ".") || strings.Contains(spec, ",") {
+			return nil, fmt.Errorf("--commits takes one <base>..<last> range (two dots) or a comma list of full SHAs")
+		}
+		var err error
+		if shas, err = workflowtemplate.RangeCommits(ctx, workflowGH, pr, strings.TrimSpace(from), strings.TrimSpace(to)); err != nil {
+			return nil, err
+		}
+	} else {
+		for _, c := range strings.Split(spec, ",") {
+			c = strings.TrimSpace(c)
+			if !workflowtemplate.FullSHA(c) {
+				return nil, fmt.Errorf("--commits %q is not a full 40-character SHA", c)
+			}
+			shas = append(shas, c)
+		}
+	}
+	slices.Sort(shas)
+	shas = slices.Compact(shas)
+	if len(shas) == 0 {
+		return nil, fmt.Errorf("--commits names no commit")
+	}
+	for _, sha := range shas {
+		on, err := workflowtemplate.OnPR(ctx, workflowGH, pr, h, sha)
+		if err != nil {
+			return nil, fmt.Errorf("commit %s: %w", sha, err)
+		}
+		if !on {
+			return nil, fmt.Errorf("commit %s is not on the PR", sha)
+		}
+	}
+	return shas, nil
+}
+
+func sameExternal(a, b *workflowtemplate.ExternalWriter) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return a.Author == b.Author && slices.Equal(a.Commits, b.Commits)
+}
+
 func runWorkflowBindWriters(args []string, stdout, stderr *os.File) int {
 	if callerIsOperator("") {
 		emitErr(stderr, "writer selection belongs to the owning Manager; Operators cannot bind writers")
@@ -211,12 +283,22 @@ func runWorkflowBindWriters(args []string, stdout, stderr *os.File) int {
 	block := fs.String("block", "", "existing review block")
 	writers := fs.String("writers", "", "comma-separated original and actual fix task IDs, selected from commit reports")
 	head := fs.String("head", "", "current full PR head")
+	externalWriter := fs.String("external-writer", "", "user: commits from the user's own sessions (no task); needs --commits")
+	commits := fs.String("commits", "", "with --external-writer: <base-sha>..<last-sha> or a comma list of full SHAs on the PR")
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if *project == "" || *block == "" || *writers == "" || *head == "" || fs.NArg() != 0 {
-		emitErr(stderr, "required: --project P --block B --writers original-task,fix-task --head full-sha")
+	if *project == "" || *block == "" || (*writers == "" && *externalWriter == "") || *head == "" || fs.NArg() != 0 || (*commits != "") != (*externalWriter != "") {
+		emitErr(stderr, "required: --project P --block B --head full-sha and --writers original-task,fix-task and/or --external-writer user --commits base-sha..last-sha")
 		return 1
+	}
+	var external *externalWriterSpec
+	if *externalWriter != "" {
+		external = &externalWriterSpec{Author: *externalWriter, Commits: *commits}
+	}
+	var tasks []string
+	if *writers != "" {
+		tasks = strings.Split(*writers, ",")
 	}
 	p, err := resolveProjectRecFn(*project)
 	if err != nil {
@@ -227,7 +309,7 @@ func runWorkflowBindWriters(args []string, stdout, stderr *os.File) int {
 	defer unlock()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
-	b, err := bindWorkflowWriters(ctx, newBeadsClientFn(), p.Path, p.Name, *block, *head, strings.Split(*writers, ","))
+	b, err := bindWorkflowWriters(ctx, newBeadsClientFn(), p.Path, p.Name, *block, *head, tasks, external)
 	if err != nil {
 		emitErr(stderr, err.Error())
 		return 1

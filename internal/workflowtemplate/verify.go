@@ -430,7 +430,7 @@ func reviewProof(ctx context.Context, run GHRunner, read ReviewReader, pr string
 		}
 	}
 	for _, sha := range p.FixCommits {
-		on, err := onPR(ctx, run, pr, h, sha)
+		on, err := OnPR(ctx, run, pr, h, sha)
 		if err != nil {
 			return nil, fmt.Errorf("fix commit %s: %w", sha, err)
 		}
@@ -584,11 +584,11 @@ func deltaRecheck(ctx context.Context, run GHRunner, read ReviewReader, pr strin
 	return nil
 }
 
-// onPR says whether sha is one of the PR's commits. `gh pr view --json commits`
+// OnPR says whether sha is one of the PR's commits. `gh pr view --json commits`
 // lists only the oldest 100 (the REST list stops at 250), so a list that may be
 // cut short is no answer: beyond it the commit is on the PR when it is an
 // ancestor of the head and not of the base (compare API, any length).
-func onPR(ctx context.Context, run GHRunner, pr string, h Head, sha string) (bool, error) {
+func OnPR(ctx context.Context, run GHRunner, pr string, h Head, sha string) (bool, error) {
 	for _, c := range h.Commits {
 		if c.OID == sha {
 			return true, nil

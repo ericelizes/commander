@@ -18,6 +18,25 @@ commands; an Operator must hand the recipe back to that Manager.
    /absolute/path/to/cmdr workflow bind-writers --project P --block R --writers original-task,fix-task --head FULL_SHA
    ```
 
+   **Commits from the user's own sessions.** A PR the user wrote outside any
+   task (and handed over for readiness) has no writer task. Bind those commits
+   as an external writer, by range or by a comma list of full SHAs, adding
+   `--writers` only for actual fix tasks Operators made since:
+
+   ```sh
+   /absolute/path/to/cmdr workflow bind-writers --project P --block R --external-writer user --commits BASE_SHA..LAST_USER_SHA [--writers fix-task] --head FULL_SHA
+   ```
+
+   `BASE_SHA..LAST_USER_SHA` (two dots) is resolved through GitHub's compare
+   API to the commits reachable from the last one and not from the base; it must
+   be ahead of its base and GitHub's list must hold its full count. Every commit
+   must belong to the PR at the current head. The binding records
+   `"external":{"author":"user","commits":[...]}` (sorted full SHAs) beside
+   `tasks`. The user is never an Operator, so reviewer independence is judged
+   against the bound tasks only. The user's own CLI, Commander or the owning
+   Manager may bind an external writer; Operators and other Managers never.
+   Changing the commits, the tasks or the head gives a new revision, as above.
+
 4. Renew each step in template order. Existing closed steps use the same close
    command and stay closed. For every review/fix step, reference a closed separate
    review task with a CLEAN report for the current full SHA:

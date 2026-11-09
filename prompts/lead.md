@@ -246,6 +246,9 @@ edge already gone counts as done, so after a failure run the same command again.
    Before checks, explicitly bind the original writer and every actual fix writer
    relevant to the reviewed diff, selected from known commit reports:
    `cmdr workflow bind-writers --project P --block R --writers original-task,fix-task --head <current-full-sha>`.
+   Commits the user made in their own sessions (no task) bind as an external writer:
+   add `--external-writer user --commits <base-sha>..<last-user-sha>` (or a comma
+   list of full SHAs on the PR), with `--writers` only for actual fix tasks.
    Confirm the writer list yourself; never auto-select reviewers or all descendants.
    Rebind after head/selection changes, then renew checks in template order.
    If the PR merged before its review finished (the user merged it), its checks

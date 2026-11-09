@@ -1456,7 +1456,14 @@ Until the first read after a cmdrd start a merged target reads as not merged for
 Before checking any step, the owning Manager explicitly selects the original writer
 and every actual fix writer relevant to the reviewed diff from known commit reports:
 `cmdr workflow bind-writers --project P --block R --writers original-task,fix-task --head <current-full-sha>`.
-No descendants or reviewers are inferred as writers. Tasks must have fresh ancestry
+Commits from the user's own sessions (no task) bind as an external writer:
+`--external-writer user --commits <base-sha>..<last-sha>` (or a comma list of full SHAs), `--writers` optional for fix
+tasks. The range resolves through GitHub's compare API (ahead, full count, fail closed) and every commit must be on the
+PR; the record gains `external:{author:"user",commits:[sorted full SHAs]}` and reviewer independence is judged against
+the bound tasks only. The user's CLI, Commander or the owning Manager may bind one; Operators never. Tests
+`TestWorkflowBindExternalUserWriter`, `TestWorkflowExternalWriterReviewIndependence`, `TestExternalWriterBindingParse`,
+`TestRangeCommitsFailsClosed`, eval `TestExternalWriterBindingScenario` (`scenarios/external-writer-binding.json`, runs
+in cmd/cmdr). No descendants or reviewers are inferred as writers. Tasks must have fresh ancestry
 in the block's workstream and task-bound runs in the same project. The current PR
 head is required. Selection is persisted as `workflow-writers@v1` on the block;
 `internal-comment` reserves this prefix for the binding command. A selection/head
