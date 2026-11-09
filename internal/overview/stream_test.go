@@ -4,8 +4,11 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/example-user/commander/internal/testguard"
 )
 
 const partialJSON = `{"summary":{"sentences":[{"text":"The PR is \"open\".","sources":["pr"]},{"text":"Second sent`
@@ -62,6 +65,7 @@ func TestFailedReaderRetriesAndNeverReadsUnavailable(t *testing.T) {
 
 func TestClaudeStreamsDraftThenResult(t *testing.T) {
 	dir := t.TempDir()
+	testguard.NoLeakedProcesses(t, dir)
 	script := `#!/bin/sh
 cat >/dev/null
 echo '{"type":"stream_event","event":{"type":"content_block_start","content_block":{"type":"tool_use"}}}'
@@ -82,4 +86,40 @@ echo '{"type":"result","is_error":false,"structured_output":{"summary":{"sentenc
 	if len(drafts) != 2 || len(drafts[0].Summary.Sentences) != 1 {
 		t.Fatalf("%+v", drafts)
 	}
+}
+
+func TestChangedEvidenceWaitsOutTheCooldownAndDraftCarriesItsOwnEvidence(t *testing.T) {
+	var calls atomic.Int32
+	step, release := make(chan struct{}), make(chan struct{})
+	c := New(func(ctx context.Context, in Input) (Recap, error) {
+		if calls.Add(1) == 2 {
+			progressFrom(ctx)(PartialRecap(partialJSON))
+			close(step)
+			<-release
+		}
+		return valid(), nil
+	})
+	in := fixture()
+	c.Get(in)
+	waitReady(t, c, in)
+	in.Evidence = []Evidence{{ID: "pr", Label: "PR", Text: "PR now merged"}}
+	for i := 0; i < 5; i++ {
+		if r := c.Get(in); r.State != "ready" || !r.Stale {
+			t.Fatalf("changed evidence inside the cooldown: %+v", r)
+		}
+	}
+	if calls.Load() != 1 {
+		t.Fatal("reader reran inside the cooldown")
+	}
+	c.mu.Lock()
+	c.entries[in.Scope].attempt = time.Now().Add(-changeAfter)
+	c.mu.Unlock()
+	c.Get(in)
+	<-step
+	r := c.Get(in)
+	if r.State != "updating" || r.Draft == nil || r.Evidence[0].Text != "PR now merged" {
+		t.Fatalf("draft must carry its own evidence: %+v", r)
+	}
+	close(release)
+	waitReady(t, c, in)
 }

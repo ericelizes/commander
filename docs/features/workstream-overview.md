@@ -23,7 +23,11 @@ Overview separates the live board from a narrative reader:
   provenance, not a guarantee that the model's interpretation is correct.
 - Only the focused Overview requests a recap. One reader runs globally at a
   time, with a 90-second deadline and bounded output. Identical evidence is
-  reused; each scope has a two-minute retry/change cooldown. This never blocks
+  reused; changed evidence starts another run at most every two minutes per
+  scope, and a failed run retries after 30 seconds. While the board loads, or
+  the reader is retrying, the tab reads waiting/retrying (never unavailable);
+  with `"stream":true` the answer is NDJSON and carries a draft of the finished
+  sentences, with the evidence those sentences cite. This never blocks
   snapshot loading. The cache is bounded to 128 scopes and lasts for the daemon
   lifetime. An old recap keeps its original sources and is visibly stale when
   current evidence differs. Live state remains available on reader failure.

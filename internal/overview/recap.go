@@ -69,6 +69,9 @@ type entry struct {
 // retryAfter is how long a failed reader run waits before the next try.
 const retryAfter = 30 * time.Second
 
+// changeAfter is how soon changed evidence may start another reader run.
+const changeAfter = 2 * time.Minute
+
 type Cache struct {
 	mu       sync.Mutex
 	changed  chan struct{}
@@ -125,7 +128,11 @@ func (c *Cache) Get(in Input) Result {
 		c.entries[key] = e
 	}
 	same := e.recap != nil && e.recap.Hash == h
-	if !same && !e.pending && !c.busy && (e.attempt.IsZero() || e.err == "" || now.Sub(e.attempt) >= retryAfter) {
+	wait := changeAfter
+	if e.err != "" {
+		wait = retryAfter
+	}
+	if !same && !e.pending && !c.busy && (e.attempt.IsZero() || now.Sub(e.attempt) >= wait) {
 		e.pending = true
 		e.attempt = now
 		e.err = ""
@@ -173,6 +180,9 @@ func (c *Cache) Get(in Input) Result {
 	if e.pending {
 		r.State = "updating"
 		r.Draft = e.draft
+		if e.draft != nil {
+			r.Evidence = in.Evidence // the draft cites the new evidence
+		}
 		r.WaitingFor = ""
 	}
 	if e.err != "" && !e.pending {
