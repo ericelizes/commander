@@ -126,6 +126,9 @@ type PartialDetailsError struct {
 }
 
 func (e *PartialDetailsError) Error() string {
+	if len(e.Missing) == 0 {
+		return e.Err.Error() // every bead read, from a source that says why it is partial
+	}
 	return fmt.Sprintf("br show: %d of the requested beads unread: %v", len(e.Missing), e.Err)
 }
 func (e *PartialDetailsError) Unwrap() error { return e.Err }

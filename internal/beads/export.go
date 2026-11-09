@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"slices"
@@ -22,7 +23,7 @@ import (
 // A missing, half-written or lagging export also falls back to c.
 func ExportReads(c Client) Client {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &exportClient{ctx: ctx, cancel: cancel, Client: c, files: map[string]*exportFile{}, flushed: map[string]time.Time{}, flushing: map[string]bool{}, seen: map[string]map[string]fileStamp{}}
+	return &exportClient{ctx: ctx, cancel: cancel, Client: c, files: map[string]*exportFile{}, flushed: map[string]time.Time{}, inflight: map[string]*flushCall{}, failed: map[string]flushFailure{}, seen: map[string]map[string]fileStamp{}}
 }
 
 type exportClient struct {
@@ -34,11 +35,27 @@ type exportClient struct {
 	mu      sync.Mutex
 	files   map[string]*exportFile // projectDir -> last parse
 	flushed map[string]time.Time   // projectDir -> when this client last asked br to export
-	// flushing marks a background flush running for the project (Dolt only).
-	flushing map[string]bool
+	// inflight is the project's flush now running: every load that waits for
+	// an export waits for this one, and no second one starts beside it.
+	inflight map[string]*flushCall
+	// failed counts the project's flushes failing in a row and when to retry.
+	failed map[string]flushFailure
 	// seen is each project's Dolt journals as stat'ed right before this
 	// client's last successful flush: the export holds at least that state.
 	seen map[string]map[string]fileStamp
+}
+
+// flushCall is one flush of a project; done closes once err is set.
+type flushCall struct {
+	done chan struct{}
+	err  error
+}
+
+// flushFailure is a run of failed flushes of one project.
+type flushFailure struct {
+	n       int
+	retryAt time.Time
+	err     error
 }
 
 // fileStamp is a file's size and mtime: a Dolt journal grows on every write.
@@ -116,36 +133,56 @@ var errNoExport = errors.New("beads export unusable")
 // An export behind the database is refreshed once (br sync --flush-only) first.
 func (c *exportClient) load(ctx context.Context, dir string) (*exportFile, error) {
 	path := filepath.Join(dir, ".beads", "issues.jsonl")
+	// Before the stat: a flush ending between the two must not make this
+	// stat's (older) export look like one a warm client may skip waiting for.
+	c.mu.Lock()
+	_, warm := c.seen[dir]
+	c.mu.Unlock()
 	fi, err := os.Stat(path)
 	if err != nil {
 		return nil, errNoExport
 	}
 	if c.exportBehind(dir, fi) {
-		c.mu.Lock()
-		_, warm := c.seen[dir]
-		c.mu.Unlock()
-		if len(doltJournals(dir)) > 0 && warm {
+		switch {
+		case len(doltJournals(dir)) > 0 && warm:
 			// bd export of a big Dolt project takes seconds (5s for 5,600 beads),
 			// and on a busy one a write lands meanwhile, so the export it makes is
 			// behind again. Waiting for it made every load pay the export and
 			// then read bd anyway. Refresh it in the background for later loads
-			// and answer this one from bd now. Not on the first load (a cmdrd
-			// start): the detail cache is cold too, and with no fresh export it
-			// reads every bead through bd show (6 min for 5,600 beads,
-			// il9.202.29), so that one waits for the export below.
-			c.flushInBackground(dir)
+			// and answer this one from bd now.
+			c.startFlush(dir, backgroundFlushBudget, true)
 			return nil, errNoExport
-		}
-		if !c.flush(ctx, dir) {
-			return nil, errNoExport
+		case len(doltJournals(dir)) > 0:
+			// Not on a cold client (a cmdrd start): the detail cache is cold
+			// too, and with no fresh export it reads every bead through bd show
+			// (6 min for 5,600 beads, il9.202.29). Wait for the export instead;
+			// if it fails, answer from the export on disk, flagged stale.
+			if err := c.coldFlush(ctx, dir); err != nil {
+				if fi, serr := os.Stat(path); serr == nil {
+					if f, perr := c.parsed(path, fi); perr == nil {
+						return f, &staleExportError{err: err, at: fi.ModTime()}
+					}
+				}
+				return nil, errNoExport
+			}
+		default:
+			call := c.startFlush(dir, coldFlushBudget, true)
+			if call == nil || call.wait(ctx) != nil {
+				return nil, errNoExport
+			}
 		}
 		if fi, err = os.Stat(path); err != nil || c.exportBehind(dir, fi) {
 			return nil, errNoExport
 		}
 	}
+	return c.parsed(path, fi)
+}
+
+// parsed returns the export at path as stat'ed in fi, re-parsing only when it changed.
+func (c *exportClient) parsed(path string, fi os.FileInfo) (*exportFile, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if f := c.files[dir]; f != nil && f.size == fi.Size() && f.mtime.Equal(fi.ModTime()) {
+	if f := c.files[path]; f != nil && f.size == fi.Size() && f.mtime.Equal(fi.ModTime()) {
 		return f, nil
 	}
 	f, err := parseExport(path)
@@ -157,9 +194,22 @@ func (c *exportClient) load(ctx context.Context, dir string) (*exportFile, error
 		return nil, errNoExport
 	}
 	f.size, f.mtime = fi.Size(), fi.ModTime()
-	c.files[dir] = f
+	c.files[path] = f
 	return f, nil
 }
+
+// staleExportError is a cold Dolt project whose export could not be refreshed:
+// Details answers from the export on disk and says so (a partial read, so the
+// board shows it degraded), rather than reading every bead through bd show.
+type staleExportError struct {
+	err error
+	at  time.Time
+}
+
+func (e *staleExportError) Error() string {
+	return fmt.Sprintf("beads export not refreshed (%v): details are from the export of %s", e.err, e.at.Format(time.RFC3339))
+}
+func (e *staleExportError) Unwrap() error { return e.err }
 
 func (c *exportClient) exportBehind(dir string, export os.FileInfo) bool {
 	// Only beads.db, not its -wal: the WAL's mtime runs 10-40s ahead of the export on a
@@ -203,36 +253,99 @@ func doltJournals(dir string) map[string]fileStamp {
 // backgroundFlushBudget bounds a flush no load waits for.
 const backgroundFlushBudget = 2 * time.Minute
 
-// flushInBackground starts flush in its own goroutine unless one runs for dir.
-// It is still at most one per flushEvery (flush checks).
-func (c *exportClient) flushInBackground(dir string) {
+// coldFlushBudget bounds a flush loads wait for: bd export takes 5s for 5,600
+// beads; the rest is room for the br queue under load.
+const coldFlushBudget = 90 * time.Second
+
+// flushRetryMax caps the backoff between retries of a failing flush.
+const flushRetryMax = 2 * time.Minute
+
+// coldFlush gets a cold Dolt project's export refreshed. The first load waits
+// for one flush and every load beside it waits for the same one. Once a flush
+// has failed no load waits again: the export is retried in the background with
+// backoff and the error is returned at once.
+func (c *exportClient) coldFlush(ctx context.Context, dir string) error {
 	c.mu.Lock()
-	if c.flushing[dir] || time.Since(c.flushed[dir]) < flushEvery {
-		c.mu.Unlock()
-		return
-	}
-	if c.ctx.Err() != nil {
-		c.mu.Unlock()
-		return
-	}
-	c.flushing[dir] = true
-	c.wg.Add(1)
+	failed := c.failed[dir]
+	_, flushed := c.seen[dir]
 	c.mu.Unlock()
-	go func() {
-		defer c.wg.Done()
-		defer func() {
-			c.mu.Lock()
-			delete(c.flushing, dir)
-			c.mu.Unlock()
-		}()
-		ctx, cancel := context.WithTimeout(c.ctx, backgroundFlushBudget)
-		defer cancel()
-		c.flush(ctx, dir)
-	}()
+	if flushed {
+		return nil // a flush succeeded since the caller looked
+	}
+	if failed.n > 0 {
+		c.startFlush(dir, backgroundFlushBudget, false)
+		return fmt.Errorf("%d failed in a row: %w", failed.n, failed.err)
+	}
+	call := c.startFlush(dir, coldFlushBudget, false)
+	if call == nil {
+		return errNoExport
+	}
+	return call.wait(ctx)
 }
 
-// StopBackground ends the background flushes of an ExportReads client and waits
-// for them (cmdrd shutdown, tests); other clients have none.
+// startFlush returns dir's flush in flight, else starts one owned by this
+// client (a load that stops waiting does not end it) under budget. It starts
+// none while a failing project waits for its retry, after Close, when the
+// client cannot flush, or with throttle within flushEvery of the last.
+func (c *exportClient) startFlush(dir string, budget time.Duration, throttle bool) *flushCall {
+	f, ok := c.Client.(exportFlusher)
+	if !ok {
+		return nil
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if call := c.inflight[dir]; call != nil {
+		return call
+	}
+	if c.ctx.Err() != nil || time.Now().Before(c.failed[dir].retryAt) || (throttle && time.Since(c.flushed[dir]) < flushEvery) {
+		return nil
+	}
+	call := &flushCall{done: make(chan struct{})}
+	c.inflight[dir] = call
+	c.flushed[dir] = time.Now()
+	c.wg.Add(1)
+	go func() {
+		defer c.wg.Done()
+		ctx, cancel := context.WithTimeout(c.ctx, budget)
+		defer cancel()
+		before := doltJournals(dir)
+		err := f.FlushExport(ctx, dir)
+		c.mu.Lock()
+		if err == nil {
+			c.seen[dir] = before
+			if n := c.failed[dir].n; n > 0 {
+				log.Printf("beads: export of %s refreshed again after %d failed flushes", dir, n)
+			}
+			delete(c.failed, dir)
+		} else {
+			fail := c.failed[dir]
+			fail.n++
+			fail.err = err
+			wait := min(flushEvery<<min(fail.n-1, 10), flushRetryMax)
+			fail.retryAt = time.Now().Add(wait)
+			c.failed[dir] = fail
+			log.Printf("beads: export of %s failed (%d in a row), retrying in %v; cold loads answer from the export on disk meanwhile: %v", dir, fail.n, wait, err)
+		}
+		delete(c.inflight, dir)
+		call.err = err
+		c.mu.Unlock()
+		close(call.done)
+	}()
+	return call
+}
+
+// wait waits for the flush or ctx, whichever ends first.
+func (f *flushCall) wait(ctx context.Context) error {
+	select {
+	case <-f.done:
+		return f.err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// StopBackground ends the flushes of an ExportReads client and waits for them
+// (cmdrd shutdown, tests); other clients have none.
 func StopBackground(c Client) {
 	if e, ok := c.(*exportClient); ok {
 		e.stop()
@@ -244,29 +357,6 @@ func (c *exportClient) stop() {
 	c.cancel()
 	c.mu.Unlock()
 	c.wg.Wait()
-}
-
-// flush asks br to rewrite dir's export, at most once per flushEvery.
-func (c *exportClient) flush(ctx context.Context, dir string) bool {
-	f, ok := c.Client.(exportFlusher)
-	if !ok {
-		return false
-	}
-	c.mu.Lock()
-	if time.Since(c.flushed[dir]) < flushEvery {
-		c.mu.Unlock()
-		return false
-	}
-	c.flushed[dir] = time.Now()
-	c.mu.Unlock()
-	before := doltJournals(dir)
-	if f.FlushExport(ctx, dir) != nil {
-		return false
-	}
-	c.mu.Lock()
-	c.seen[dir] = before
-	c.mu.Unlock()
-	return true
 }
 
 func parseExport(path string) (*exportFile, error) {
@@ -366,13 +456,28 @@ func hasAny(labels, want []string) bool {
 
 func (c *exportClient) Details(ctx context.Context, dir string, ids []string) (map[string]Detail, error) {
 	f, err := c.load(ctx, dir)
+	var stale *staleExportError
+	if errors.As(err, &stale) {
+		// The beads the old export lacks stay unread: reading them through bd
+		// show is the storm this avoids. The partial read flags the project.
+		out, missing := f.details(ids)
+		return out, &PartialDetailsError{Missing: missing, Err: err}
+	}
 	if err != nil {
 		return c.Client.Details(ctx, dir, ids)
 	}
+	out, _ := f.details(ids)
+	return out, nil
+}
+
+// details answers ids from the export, listing those it lacks.
+func (f *exportFile) details(ids []string) (map[string]Detail, []string) {
 	out := make(map[string]Detail, len(ids))
+	var missing []string
 	for _, id := range ids {
 		is := f.byID[id]
 		if is == nil || is.Status == "tombstone" {
+			missing = append(missing, id)
 			continue
 		}
 		d := Detail{Deps: slices.Clone(is.Dependencies), Comments: slices.Clone(is.Comments)}
@@ -384,7 +489,7 @@ func (c *exportClient) Details(ctx context.Context, dir string, ids []string) (m
 		}
 		out[id] = d
 	}
-	return out, nil
+	return out, missing
 }
 
 func (c *exportClient) Deps(ctx context.Context, dir, id string) ([]Dep, error) {

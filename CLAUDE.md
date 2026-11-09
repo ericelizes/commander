@@ -1496,9 +1496,20 @@ flushes inline on a br/SQLite project; on Dolt the flush runs in the background 
 `TestCloseRightAfterItsHoldIsNotReadOpenFromTheExport`, eval `TestCloseAfterHoldScenario`; late exits after such a
 close: `TestDelayedExitAfterCloseKeepsTheNextHolder`.
 **Loads under churn (il9.202.25.1):** a busy Dolt project (a write every few seconds, `bd export` 5s for 5,600 beads)
-made loads take 20-60s and closes reach the board 30-55s late. Four causes, four fixes: (1) a behind Dolt export is no
-longer waited for: `flushInBackground` (one per project at a time, still at most one per `flushEvery`, 2 min budget)
-refreshes it for later loads and this load reads bd now (the flush is owned by its ExportReads client: `beads.StopBackground` cancels it and waits, called by `Daemon.Run` on exit); a br/SQLite project still flushes inline. (2) On a Dolt project
+made loads take 20-60s and closes reach the board 30-55s late. Four causes, four fixes: (1) on a warm client a behind Dolt export is
+no longer waited for: a background flush (`startFlush`, at most one per `flushEvery`, 2 min budget) refreshes it for
+later loads and this load reads bd now; a br/SQLite project still waits for its flush. **Cold client (il9.202.29):** a
+client that has never flushed the project (every cmdrd start; the detail cache is cold too, and with no fresh export
+the load sent every bead to bd show: 6 min for 5,600 beads) waits for the export (`coldFlush`, 90s budget). Every
+flush is ONE per project in flight (`inflight`), run by the client, not the caller: loads beside it (Poll, health
+loop, API) wait for that one, a waiter whose context ends leaves without ending it. A failed flush is never waited
+for again: retries run in the background with backoff (3s doubling to 2 min, logged), and meanwhile a cold load
+answers Details from the export on disk as a `PartialDetailsError` naming the failure (`staleExportError`; beads it
+lacks stay unread, never bd show), so the project reads degraded rather than storming bd; List goes to bd. cmdrd's
+board and invariant pass have separate ExportReads clients, so each makes its own first export at a start. Flushes
+are owned by the client: `beads.StopBackground` cancels them and waits, called by `Daemon.Run` on exit. Tests
+`TestColdDolt*`; measure with `COMMANDER_COLD_BENCH=1 go test ./internal/beads -run TestColdLoadBench -v` (5,600
+beads, 1/10 scale: four start loads 36.7s and 5,601 bd shows before, 0.55s and none after, export working or failing). (2) On a Dolt project
 `fingerprint` is the journals alone: `issues.jsonl` (rewritten by every flush, ours too) and the leftover SQLite files
 no longer drop the cache or fail `ReadConsistent`, so a read is retried only for a real write. (3) `CachedClient.List`
 answers every label filter of all statuses (`labelsOnly`) from one cached `List{Status:"all"}`, filtered in memory
