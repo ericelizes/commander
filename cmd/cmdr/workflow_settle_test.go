@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
 	"strings"
 	"testing"
 
@@ -220,5 +221,72 @@ func TestSettleBlockReportsARefusedBlockClose(t *testing.T) {
 	}
 	if b, _ := mem.Show(context.Background(), "/d", res.Remaining[5].BeadID); b.Status != "closed" {
 		t.Fatal("steps not settled")
+	}
+}
+
+// TestSettleBlockScenario runs tests/evals/scenarios/settle-block.json through the
+// real verb and the real close door (private to cmdr), with a scripted GitHub.
+func TestSettleBlockScenario(t *testing.T) {
+	var scenario struct {
+		Cases []struct {
+			Name            string `json:"name"`
+			Role            string `json:"role"`
+			State           string `json:"state"`
+			GHFails         bool   `json:"gh_fails"`
+			CloseStep       bool   `json:"close_step"`
+			Exit            int    `json:"exit"`
+			Stderr          string `json:"stderr"`
+			Settled         int    `json:"settled"`
+			Kept            int    `json:"kept"`
+			BlockClosed     bool   `json:"block_closed"`
+			ThenCloseTarget bool   `json:"then_close_target"`
+		} `json:"cases"`
+	}
+	data, err := os.ReadFile("../../tests/evals/scenarios/settle-block.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(data, &scenario); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range scenario.Cases {
+		t.Run(c.Name, func(t *testing.T) {
+			ctx := context.Background()
+			mem, res := settleProject(t)
+			pinWorkflowGH(t, mergedGH(c.State, c.GHFails))
+			t.Setenv("COMMANDER_ROLE", c.Role)
+			t.Setenv("COMMANDER_MANAGER_ROLE", "")
+			code, out, errOut := 0, "", ""
+			if c.CloseStep {
+				stdout, stderr, read := withTempOutputFiles(t)
+				code = runInternalCloseObjective([]string{"--project", "manifest", "--bead", res.Remaining[1].BeadID}, stdout, stderr)
+				out, errOut = read()
+			} else {
+				code, out, errOut = settleBlock(t, res.Container, settleReason)
+			}
+			if code != c.Exit || !strings.Contains(errOut, c.Stderr) {
+				t.Fatalf("exit %d want %d, stderr %q want %q", code, c.Exit, errOut, c.Stderr)
+			}
+			if c.Exit != 0 {
+				for _, s := range res.Remaining[1:] {
+					if b, _ := mem.Show(ctx, "/d", s.BeadID); b.Status == "closed" {
+						t.Fatalf("refused, yet %s closed", s.Step)
+					}
+				}
+				return
+			}
+			var got workflowSettleResult
+			if err := json.Unmarshal([]byte(out), &got); err != nil {
+				t.Fatal(out, err)
+			}
+			if len(got.Settled) != c.Settled || len(got.Kept) != c.Kept || got.BlockClosed != c.BlockClosed {
+				t.Fatalf("%+v", got)
+			}
+			if c.ThenCloseTarget {
+				if err := checkWorkflowClose(ctx, mem, "/d", "manifest", "M"); err != nil {
+					t.Fatalf("target after the settle: %v", err)
+				}
+			}
+		})
 	}
 }

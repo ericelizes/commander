@@ -390,3 +390,57 @@ func TestReviewBlock_SettledAndInvalidDispositionMatrix(t *testing.T) {
 		})
 	}
 }
+
+// A block settle-block closed after its PR merged outside the review reads
+// settled, not reviewed: the checks it closed say so, the ones checked before
+// the merge keep their evidence, and nothing on it reads Done for the block.
+func TestReviewBlock_SettledBlockReadsSettledNotReviewed(t *testing.T) {
+	mem := &beads.MemClient{}
+	seedStage(mem)
+	mem.Seed(beads.Bead{ID: "w.2", Title: "PR merged", Labels: []string{"kind:objective", "gate", "approver:user", "pr:1234"}})
+	seedClosedBlock(t, mem, "w.2", "head1")
+	key := ""
+	for _, b := range mem.Beads {
+		if b.ID == "w.9" {
+			key = workflowtemplate.Label(*b, workflowtemplate.LabelInstance)
+		}
+	}
+	// Steps 3..6 were never checked: the settle is their newest evidence.
+	for i := 3; i <= 6; i++ {
+		id := fmt.Sprintf("w.9.%d", i)
+		for _, b := range mem.Beads {
+			if b.ID == id {
+				step := workflowtemplate.Label(*b, workflowtemplate.LabelStep)
+				ev := workflowtemplate.Evidence{Instance: key, Step: step, Verifier: workflowtemplate.SettledVerifier, PR: reviewedPR, Head: "head9", Finding: workflowtemplate.SettledFinding("head9", "merged before the review ran")}
+				mem.AddComment(context.Background(), "/p", id, ev.Comment())
+			}
+		}
+	}
+	snap := reviewSnapshot(t, mem, &fakeHeads{state: "MERGED", head: "head9"})
+	d := Board(snap, 1793000000)
+	w, ds := reviewStep(t, d, "w.9")
+	if w == nil || ds == nil || ds.Review == nil {
+		t.Fatal("block missing")
+	}
+	rb := ds.Review
+	if rb.Done != 2 || rb.Settled != 4 || rb.Stale != 0 {
+		t.Fatalf("counts: %+v", rb)
+	}
+	if w.Kind != "done" || w.Text != "Settled: PR merged, review not completed" || ds.Text != w.Text {
+		t.Fatalf("block line: %s %q / %q", w.Kind, w.Text, ds.Text)
+	}
+	if ds.Progress != "2 of 6 checks done, 4 settled: PR merged, not reviewed" {
+		t.Fatalf("progress %q", ds.Progress)
+	}
+	if c := rb.Checks[0]; c.Settled || c.Text != "Done" || c.Finding != "passed" {
+		t.Fatalf("checked before the merge: %+v", c)
+	}
+	if c := rb.Checks[5]; !c.Settled || c.Kind != "done" || c.Text != "Settled: PR merged, not reviewed" || !strings.Contains(c.Finding, "review not completed") {
+		t.Fatalf("settled check: %+v", c)
+	}
+	for _, f := range CheckDiagram(snap.Workstreams[0], "w.2") {
+		if strings.HasPrefix(f.Check, "MERGE_REVIEW_") {
+			t.Fatalf("finding beside a settled block: %+v", f)
+		}
+	}
+}

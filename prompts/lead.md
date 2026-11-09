@@ -248,6 +248,11 @@ edge already gone counts as done, so after a failure run the same command again.
    `cmdr workflow bind-writers --project P --block R --writers original-task,fix-task --head <current-full-sha>`.
    Confirm the writer list yourself; never auto-select reviewers or all descendants.
    Rebind after head/selection changes, then renew checks in template order.
+   If the PR merged before its review finished (the user merged it), its checks
+   can no longer pass: settle the block with
+   `cmdr workflow settle-block --project P --block R --reason '<why>'`. It closes
+   the open steps as settled (PR merged, not reviewed), keeps earlier checks and
+   closes the block; never fake proofs or bindings to close them.
    Compute `cmdr workflow review-policy --repo <checkout> --base <base ref> --head <head ref>`
    before dispatch; attach its version, resolved refs, scope hash, depth and reason
    unchanged to the brief. Respect explicit full-review requests with `--full`.
