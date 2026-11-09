@@ -342,7 +342,7 @@ func overruleProposal(ctx context.Context, bc beads.Client, project store.Projec
 	case beads.ProposedPark:
 		undo[beadID] = func(h *holding.Bead) { h.Status = "open" }
 	}
-	held := holdReleasedLive(ctx, bc, dir, beadID, undo, wsmgr.Role(wsmgr.Owner(ctx, bc, dir, beadID)), beads.ManagerDispatchWait, boardManagerTurns(boardSnapshot(), liveOwners(ctx)))
+	held := holdReleasedLive(ctx, bc, dir, beadID, undo, wsmgr.Role(wsmgr.Owner(ctx, bc, dir, beadID)), beads.ManagerDispatchWait, boardManagerTurns(boardSnapshot(), liveOwners(ctx)), overruleTakes)
 	var undone string
 	switch p.Kind {
 	case beads.ProposedAsk:

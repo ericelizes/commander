@@ -240,13 +240,13 @@ func holdWithManager(ctx context.Context, bc beads.Client, dir, bead, manager, k
 // design (a proposal overruled, a spawn that failed): they are not refused, their result is held.
 // It returns the beads it held. A closure it cannot read is left as is (fail open).
 func holdReleased(ctx context.Context, bc beads.Client, dir, id string, edits map[string]holding.Edit, manager, kind string) []string {
-	return holdReleasedLive(ctx, bc, dir, id, edits, manager, kind, liveOwners(ctx))
+	return holdReleasedLive(ctx, bc, dir, id, edits, manager, kind, liveOwners(ctx), nil)
 }
 
 // holdReleasedLive is holdReleased judged with live as the Graph's live question. A bead that
 // already carries a kind wait (an earlier run of the same write held it) and needs it is
 // reported as held again, without a second wait. Never nil: an empty list when nothing is held.
-func holdReleasedLive(ctx context.Context, bc beads.Client, dir, id string, edits map[string]holding.Edit, manager, kind string, live func(string) (string, bool)) []string {
+func holdReleasedLive(ctx context.Context, bc beads.Client, dir, id string, edits map[string]holding.Edit, manager, kind string, live func(string) (string, bool), takes func(holding.Bead) bool) []string {
 	held := []string{}
 	g, err := holdread.Load(ctx, bc, dir, id, live, maxClosure)
 	if err != nil {
@@ -273,7 +273,7 @@ func holdReleasedLive(ctx context.Context, bc beads.Client, dir, id string, edit
 		}
 	}
 	for _, v := range holding.NewlyUnheld(g, id, judged) {
-		if !receivesHandoff(g.Beads[v.ID]) {
+		if takes != nil && !takes(g.Beads[v.ID]) {
 			continue
 		}
 		if already[v.ID] || holdWithManager(ctx, bc, dir, v.ID, manager, kind) == nil {
@@ -283,10 +283,10 @@ func holdReleasedLive(ctx context.Context, bc beads.Client, dir, id string, edit
 	return held
 }
 
-// receivesHandoff: b is a step its Manager can take as a handoff. A gate is held by its approver,
+// overruleTakes: b is a step its Manager can take as a handoff. A gate is held by its approver,
 // a workstream bead (top level or nested) by its own Manager, and a step an Operator claims stays
 // with that claim (cmdrd's settle hands it back when the run ends), as holdForManager judges it.
-func receivesHandoff(b holding.Bead) bool {
+func overruleTakes(b holding.Bead) bool {
 	if b.Gate || b.Parent == "" || beads.IsWorkstream(b.Labels) {
 		return false
 	}
