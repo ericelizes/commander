@@ -298,8 +298,8 @@ edge already gone counts as done, so after a failure run the same command again.
    yours to schedule or close) and the step passes; `no_findings` can never hide
    typed minors. **Tiny documentation fixes need no new review:** after a review
    of head H, a fix delta the verifier itself measures on GitHub as documentation
-   only (at most 3 files on the prose allow-list: docs/** or a .md/.rst/.adoc outside
-   dot, prompts/agents/skills directories and never CLAUDE.md/AGENTS.md/SKILL.md;
+   only (at most 3 files on the prose allow-list: docs/** prose or a top-level
+   README/CHANGELOG, never agent or build files such as CLAUDE*/AGENTS*/requirements*;
    20 lines, nothing reviewpolicy reads as sensitive) renews that typed review with
    `{"review_bead":"<the review of H>","head":"<current-full-sha>","prior_head":"<H>","fix_commits":["<full-fix-sha>"],"delta_renewal":true}`
    (renewing a delta recheck: add `"prior_review":"<the full review it retained>"`);

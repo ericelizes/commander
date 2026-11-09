@@ -22,38 +22,48 @@ const (
 	RenewalMaxLines = 20
 )
 
-// markupExt is prose anywhere outside agent configuration; .txt counts only
-// under docs/ (requirements.txt, CMakeLists.txt are build input, not prose).
-var markupExt = map[string]bool{".md": true, ".markdown": true, ".rst": true, ".adoc": true}
+// proseExt are the documentation formats a renewal accepts.
+var proseExt = map[string]bool{".md": true, ".markdown": true, ".rst": true, ".adoc": true, ".txt": true}
 
 // agentDirs are path segments that hold agent instructions or tooling config.
 var agentDirs = map[string]bool{"prompts": true, "agents": true, "skills": true, "commands": true, "hooks": true, "rules": true}
 
-// agentFiles are instruction files read by agents wherever they sit.
-var agentFiles = map[string]bool{"claude.md": true, "agents.md": true, "gemini.md": true, "skill.md": true, "copilot-instructions.md": true, "conventions.md": true}
+// agentStems start the names of files agents read as instructions in any
+// variant (CLAUDE.local.md, AGENTS.override.md, SKILL.md ...) and of build
+// input that only looks like prose (requirements*.txt, constraints*.txt).
+var agentStems = []string{"claude", "agent", "gemini", "skill", "conventions", "copilot", "cursor", "windsurf", "codex", "requirements", "constraints"}
 
-// proseFile is an explicit allow-list: docs/** prose (markup or .txt) and
-// markup files elsewhere, never inside a dot directory (.claude, .github,
-// .cursor ...), an agent directory (prompts/, agents/, skills/ ...) or an agent
-// instruction file (CLAUDE.md, AGENTS.md, GEMINI.md, SKILL.md ...). Build,
-// config and agent files are behaviour, never prose.
+// topProse are the top-level documents a renewal accepts outside docs/, by stem.
+var topProse = map[string]bool{"readme": true, "changelog": true, "changes": true, "history": true, "contributing": true, "authors": true}
+
+// proseFile is an explicit allow-list of prose: a markup or .txt file under
+// docs/, or a top-level README-like document (README, CHANGELOG ...). Never a
+// dot directory (.claude, .github, .cursor ...), an agent directory (prompts/,
+// agents/, skills/ ...) or a file whose name starts like an agent instruction
+// or build input (CLAUDE*, AGENTS*, SKILL*, requirements* ...): build, config
+// and agent files are behaviour, never prose.
 func proseFile(p string) bool {
 	low := strings.ToLower(strings.TrimPrefix(p, "./"))
 	parts := strings.Split(low, "/")
 	base := parts[len(parts)-1]
-	if base == "" || agentFiles[base] || strings.HasPrefix(base, ".") {
+	if base == "" || strings.HasPrefix(base, ".") || !proseExt[path.Ext(base)] {
 		return false
+	}
+	stem, _, _ := strings.Cut(base, ".")
+	for _, s := range agentStems {
+		if strings.HasPrefix(stem, s) {
+			return false
+		}
 	}
 	for _, dir := range parts[:len(parts)-1] {
 		if dir == "" || dir == ".." || strings.HasPrefix(dir, ".") || agentDirs[dir] {
 			return false
 		}
 	}
-	ext := path.Ext(base)
-	if markupExt[ext] {
-		return true
+	if len(parts) == 1 {
+		return topProse[stem]
 	}
-	return ext == ".txt" && len(parts) > 1 && parts[0] == "docs"
+	return parts[0] == "docs"
 }
 
 type compareFile struct {

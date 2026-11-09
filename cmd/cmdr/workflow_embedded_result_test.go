@@ -91,7 +91,7 @@ func TestEmbeddedReviewVerdictScenario(t *testing.T) {
 			err = loadReviewResults(context.Background(), "synthetic", review.ID, &review)
 			if err == nil {
 				gh := func(context.Context, ...string) ([]byte, error) {
-					return []byte(`{"headRefOid":"` + a.Head + `","state":"OPEN"}`), nil
+					return []byte(`{"headRefOid":"` + a.Head + `","baseRefOid":"` + a.Base + `","state":"OPEN"}`), nil
 				}
 				read := func(context.Context, string) (workflowtemplate.Review, error) { return review, nil }
 				_, err = workflowtemplate.Verify(context.Background(), gh, read, "review-proof", testPR, "instance", "review", &workflowtemplate.Proof{ReviewBead: review.ID, Head: a.Head, NoFindings: true})

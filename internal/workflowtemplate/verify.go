@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os/exec"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -446,10 +447,15 @@ func reviewProof(ctx context.Context, run GHRunner, read ReviewReader, pr string
 	return out, nil
 }
 
-// fullCoverage refuses a typed review that reviewed only a delta: its base is
-// one of the PR's commits, so it saw nothing between the PR base and that
-// commit. A full review's base is the PR base (or a merge-base), never on the PR.
+// fullCoverage refuses a typed review that did not review the whole PR: its
+// base must be the PR base or an ancestor of it (compare base...PR base is
+// ahead or identical), so it saw every PR commit. A base that is a PR commit
+// reviewed only a delta; any other base (a pre-force-push head, another
+// branch's commit) covers an unknown range; a failed read proves nothing.
 func fullCoverage(ctx context.Context, run GHRunner, pr string, h Head, review string, res *ReviewResult) error {
+	if h.Base != "" && res.Base == h.Base {
+		return nil
+	}
 	on, err := onPR(ctx, run, pr, h, res.Base)
 	if err != nil {
 		return fmt.Errorf("review %s base %s: %w", review, res.Base, err)
@@ -457,21 +463,55 @@ func fullCoverage(ctx context.Context, run GHRunner, pr string, h Head, review s
 	if on {
 		return fmt.Errorf("review %s reviewed only the delta %s..%s (its base is a PR commit): prove it as a delta recheck with prior_review and prior_head naming the full review it builds on", review, res.Base, res.Head)
 	}
+	if h.Base == "" {
+		return fmt.Errorf("review %s base %s: GitHub returned no PR base", review, res.Base)
+	}
+	status, err := compareStatus(ctx, run, pr, res.Base, h.Base)
+	if err != nil {
+		return fmt.Errorf("review %s base %s: %w", review, res.Base, err)
+	}
+	if status != "ahead" && status != "identical" {
+		return fmt.Errorf("review %s reviewed from %s, which is neither the PR base %s nor an ancestor of it (compare: %s): it does not cover the whole PR, review it again from the PR base", review, res.Base, h.Base, status)
+	}
 	return nil
+}
+
+// compareStatus is GitHub's compare status of from...to.
+func compareStatus(ctx context.Context, run GHRunner, pr, from, to string) (string, error) {
+	repo := strings.Split(strings.TrimPrefix(pr, "https://github.com/"), "/pull/")[0]
+	out, err := run(ctx, "api", "repos/"+repo+"/compare/"+url.PathEscape(from)+"..."+url.PathEscape(to), "--method", "GET", "--jq", ".status")
+	if err != nil {
+		return "", err
+	}
+	s := strings.TrimSpace(string(out))
+	switch s {
+	case "ahead", "behind", "identical", "diverged":
+		return s, nil
+	}
+	return "", fmt.Errorf("GitHub compare returned %q", s)
 }
 
 // currentResult is the latest valid typed result of r on head, nil when none
 // (a legacy CLEAN report carries no findings to file).
 func currentResult(r Review, head string) *ReviewResult {
-	var latest *ReviewResult
+	all := resultsOn(r, head)
+	if len(all) == 0 {
+		return nil
+	}
+	return &all[len(all)-1]
+}
+
+// resultsOn is every valid typed result of r on head, oldest first.
+func resultsOn(r Review, head string) []ReviewResult {
+	var out []ReviewResult
 	for _, c := range r.Comments {
 		result, ok, err := ParseReviewResult(c)
 		if !ok || err != nil || result.Head != head || result.validate(r) != nil {
 			continue
 		}
-		latest = &result
+		out = append(out, result)
 	}
-	return latest
+	return out
 }
 
 // deltaRecheck holds a recheck that reviewed only the fix delta to honest
@@ -514,14 +554,16 @@ func deltaRecheck(ctx context.Context, run GHRunner, read ReviewReader, pr strin
 	for _, id := range current.Resolved {
 		resolved[id] = true
 	}
+	// Every blocker/major any result of the prior review reported on that head
+	// (an interrupted run, then a clear resume) must be verified fixed.
 	known := map[string]bool{}
 	var unverified []string
-	for _, f := range retained.Findings {
-		known[f.ID] = true
-		switch {
-		case resolved[f.ID]:
-		case f.Severity == "blocker" || f.Severity == "major":
-			unverified = append(unverified, f.ID)
+	for _, res := range resultsOn(prior, p.PriorHead) {
+		for _, f := range res.Findings {
+			if !resolved[f.ID] && !slices.Contains(unverified, f.ID) && (f.Severity == "blocker" || f.Severity == "major") {
+				unverified = append(unverified, f.ID)
+			}
+			known[f.ID] = true
 		}
 	}
 	for _, id := range current.Resolved {
@@ -558,19 +600,7 @@ func onPR(ctx context.Context, run GHRunner, pr string, h Head, sha string) (boo
 	if h.Base == "" {
 		return false, fmt.Errorf("GitHub returned no PR base")
 	}
-	repo := strings.Split(strings.TrimPrefix(pr, "https://github.com/"), "/pull/")[0]
-	status := func(from, to string) (string, error) {
-		out, err := run(ctx, "api", "repos/"+repo+"/compare/"+url.PathEscape(from)+"..."+url.PathEscape(to), "--method", "GET", "--jq", ".status")
-		if err != nil {
-			return "", err
-		}
-		s := strings.TrimSpace(string(out))
-		switch s {
-		case "ahead", "behind", "identical", "diverged":
-			return s, nil
-		}
-		return "", fmt.Errorf("GitHub compare returned %q", s)
-	}
+	status := func(from, to string) (string, error) { return compareStatus(ctx, run, pr, from, to) }
 	toHead, err := status(sha, h.SHA)
 	if err != nil {
 		return false, err
