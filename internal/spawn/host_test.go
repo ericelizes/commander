@@ -141,7 +141,7 @@ func TestSpawnCodeHost_HappyPath(t *testing.T) {
 		t.Fatalf("tmux calls: %v", tx.Calls)
 	}
 	cmd := launcherCmd(t, dir)
-	if !strings.HasPrefix(cmd, "#!/bin/sh\nunset TMUX TMUX_PANE\nenv -u TMUX -u TMUX_PANE -u ANTHROPIC_API_KEY -u CLAUDE_CONFIG_DIR GOFLAGS='-trimpath -p=2' COMMANDER_ROLE='operator-feat-auth' COMMANDER_MANAGER_ROLE='manager-bd-100' 'claude' '-p'") ||
+	if !strings.HasPrefix(cmd, "#!/bin/sh\nunset TMUX TMUX_PANE\nenv -u TMUX -u TMUX_PANE -u ANTHROPIC_API_KEY -u CLAUDE_CONFIG_DIR GOFLAGS='-trimpath -p=2' COMMANDER_ROLE='operator-feat-auth' 'GIT_COMMITTER_NAME=operator-feat-auth' 'GIT_COMMITTER_EMAIL=operator-feat-auth@operator.commander.invalid' COMMANDER_MANAGER_ROLE='manager-bd-100' 'claude' '-p'") ||
 		!strings.Contains(cmd, "'--session-id' '"+res.SessionID+"'") { // minted up front, not captured
 		t.Fatalf("launcher: %s", cmd)
 	}
