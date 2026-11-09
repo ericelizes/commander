@@ -138,7 +138,7 @@ func (e *Engine) SetAccount(ctx context.Context, role, name string, o SwitchOpti
 	if err := WriteAccount(e.opts.Home, role, name); err != nil {
 		return Status{}, err
 	}
-	if err := WriteEffectiveRuntime(e.opts.Home, role, RuntimeClaude); err != nil {
+	if err := WriteAccountRuntime(e.opts.Home, role); err != nil {
 		return Status{}, err
 	}
 	if err := claudeacct.Sync(e.opts.Home, name); err != nil {
@@ -148,6 +148,24 @@ func (e *Engine) SetAccount(ctx context.Context, role, name string, o SwitchOpti
 		return e.Status(role)
 	}
 	return e.restart(ctx, role, o)
+}
+
+// WriteAccountRuntime puts role on Claude for an account a person chose. No
+// pin file changes. A Manager nobody pinned stays unpinned (a share's choice),
+// so its d82 fallback to Codex still applies when every Claude account runs
+// out; a pinned Manager now runs pinned on Claude (choosing a Claude account
+// chose Claude), its Codex fallback marker gone.
+func WriteAccountRuntime(home, role string) error {
+	switch {
+	case strings.HasPrefix(role, "operator-"):
+		return WriteEffectiveRuntime(home, role, RuntimeClaude)
+	case RuntimePinned(home, role):
+		if err := WriteEffectiveRuntime(home, role, RuntimeClaude); err != nil {
+			return err
+		}
+		return removeFallback(home, role)
+	}
+	return WriteAutoRuntime(home, role, RuntimeClaude)
 }
 
 // idleProcess is role's process when it may be restarted now: nil when it is

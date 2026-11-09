@@ -142,7 +142,7 @@ func useAccount(home, role, name string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "cmdr account use: %v\n", err)
 		return 1
 	}
-	if err := chat.WriteEffectiveRuntime(home, role, chat.RuntimeClaude); err != nil {
+	if err := chat.WriteAccountRuntime(home, role); err != nil {
 		fmt.Fprintf(stderr, "cmdr account use: %v\n", err)
 		return 1
 	}

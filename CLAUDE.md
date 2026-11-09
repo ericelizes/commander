@@ -207,7 +207,7 @@ not enough — this is an interactive cockpit; prove it works *in the cockpit*.
   engine start of a `manager-*` role that spawns a process (EnsureNative, Open/`internal-open-workstream`, mail via
   `EnsureRole`, stand-in parents, the app's Start, restarts; not an adopted host, not a terminal pane) runs
   `planManagerStart` then `steerManager`: a fresh Manager with no runtime file draws Codex only by share with hooks
-  and Codex usage left; a pinned runtime stays; an unpinned Codex Manager whose Codex is out runs on Claude; on
+  and Codex usage left; a Claude pin stays; a Codex pin runs on Claude while Codex is out or has no hooks, the pin kept in `<role>.runtime-fallback` (`ManagerPin`), and goes back once Codex can run it; an unpinned Codex Manager whose Codex is out runs on Claude, and one a share drew at share 0 leaves Codex only for a Claude account with usage (the steer replaces `dropDrawnCodex` for Managers, so an outage never flips it and drops its thread); a person's account choice (`WriteAccountRuntime`, app and `cmdr account use`) leaves an unpinned Manager unpinned; on
   Claude the account intent (`<role>.account-intent`) comes back once it has usage, else the current account, else
   `NextAccountWith` (intent kept, so a person's choice is never overwritten by a move); every Claude account out
   sends an unpinned Manager to Codex (usage + hooks), else the start fails with `chat.ErrNoUsage` naming why. A move
@@ -215,7 +215,7 @@ not enough — this is an interactive cockpit; prove it works *in the cockpit*.
   comment on the workstream bead). A Manager at a usage limit (Claude or unpinned Codex) always moves
   (`moveManager`: restart through that steer, then a `[switch]` message telling it to re-read its handover and
   `cmdr internal-inbox`); `AutoSwitch` is true for Managers. Tests: `TestPlanManagerStart*`, `TestManagerStart*`,
-  `TestManagerMovesAtUsageLimitAndReportsIt`, `TestManagerLeavesAnOutCodex`, `TestNoteOnWorkstreamCommentsTheBead`. `cmdr runtime rebalance [--dry-run]` moves
+  `TestManagerMovesAtUsageLimitAndReportsIt`, `TestManagerLeavesAnOutCodex`, `TestAccountChoiceKeepsTheManagerUnpinned`, `TestManagerAccountChoiceStillFallsBackToCodex`, `TestPlanManagerStartDrawnCodexStaysWhileClaudeIsOut`, `TestNoteOnWorkstreamCommentsTheBead`. `cmdr runtime rebalance [--dry-run]` moves
   idle, unpinned, running Managers through cmdrd (`POST /api/chat/<role>/runtime`, which refuses a
   turn in flight) until round(share x live Managers) run on Codex, never the Commander, and lists moves.
   Each host run writes an `operator-runtime` cost event (reason claude|codex) at its spawn time;

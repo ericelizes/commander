@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -19,28 +21,65 @@ type managerPlan struct {
 	runtime string // RuntimeClaude or RuntimeCodex
 	account string // Claude account (RuntimeClaude only)
 	intent  string // the account the role is headed for, when it runs elsewhere
+	pin     string // the runtime a person pinned ("" = unpinned): kept when it runs elsewhere
+	leave   string // why a Codex run goes to Claude
+}
+
+// ManagerPin is the runtime a person chose for a Manager, "" when a share (or
+// nothing) chose it: the runtime file a person wrote, or, while a Codex pin
+// runs on Claude for want of Codex usage or hooks, the pin that fallback keeps
+// (RuntimeFallbackFile).
+func ManagerPin(home, role string) string {
+	if !RuntimePinned(home, role) {
+		return ""
+	}
+	if b, err := os.ReadFile(RuntimeFallbackFile(home, role)); err == nil && ValidRuntime(strings.TrimSpace(string(b))) {
+		return strings.TrimSpace(string(b))
+	}
+	return ReadRuntime(home, role)
+}
+
+// RuntimeFallbackFile holds a pinned Manager's runtime while the start steer
+// runs it elsewhere (decision d82); a person's runtime or account choice
+// removes it.
+func RuntimeFallbackFile(home, role string) string {
+	return filepath.Join(home, "chat", role+".runtime-fallback")
 }
 
 // planManagerStart picks the runtime and account of a Manager's new process
 // (decision d82: any account with usage left, never one that is out). A
 // never-started Manager (fresh, no runtime file) draws its runtime from the
-// Manager share (Codex only with hooks and usage left). A runtime a person
-// pinned stays; an unpinned Codex Manager whose Codex is out runs on Claude.
-// On Claude the role's intent (the account a usage move took it off) comes
-// first once it has usage again, then the account it runs on, then the next
-// logged-in account with usage; with every Claude account out an unpinned
-// Manager goes to Codex if Codex has usage and hooks. Nothing left = ErrNoUsage.
-// It writes nothing.
+// Manager share (Codex only with hooks and usage left). A Codex pin runs on
+// Codex while Codex has usage and hooks, else on Claude with the pin kept (it
+// goes back once Codex can run it); a Claude pin never goes to Codex. An
+// unpinned Codex Manager stays on Codex while it has usage, unless a share drew
+// it there and the share is now 0 and Claude has usage. On Claude the role's
+// intent (the account a usage move took it off) comes first once it has usage
+// again, then the account it runs on, then the next logged-in account with
+// usage; with every Claude account out an unpinned Manager goes to Codex if
+// Codex has usage and hooks. Nothing left = ErrNoUsage. It writes nothing.
 func planManagerStart(home, role string, fresh bool, usage map[string]Usage, now time.Time, hooksReady func() bool) (managerPlan, error) {
 	codexOut := usage[UsageKey(RuntimeCodex, "")].Out(now)
 	codexOK := func() bool { return !codexOut && hooksReady() }
-	pinned := RuntimePinned(home, role)
+	pin := ManagerPin(home, role)
 	if fresh && !fileExists(RuntimeFile(home, role)) &&
 		CodexByShare(strings.TrimPrefix(role, "manager-"), agentrt.CodexManagerShare()) && codexOK() {
 		return managerPlan{runtime: RuntimeCodex}, nil
 	}
-	if ReadRuntime(home, role) == RuntimeCodex && (pinned || !codexOut) {
+	if pin == RuntimeCodex && codexOK() {
+		return managerPlan{runtime: RuntimeCodex, pin: pin}, nil
+	}
+	onCodex := ReadRuntime(home, role) == RuntimeCodex
+	drawn := onCodex && fileExists(RuntimeAutoFile(home, role)) && agentrt.CodexManagerShare() <= 0
+	if pin == "" && onCodex && !codexOut && !drawn {
 		return managerPlan{runtime: RuntimeCodex}, nil
+	}
+	leave := "out of usage"
+	switch {
+	case !codexOut && pin == RuntimeCodex:
+		leave = "Codex does not run hooks"
+	case !codexOut:
+		leave = "the Manager share no longer draws Codex"
 	}
 	out := func(a string) bool { return usage[UsageKey(RuntimeClaude, a)].Out(now) }
 	cur := ReadAccount(home, role)
@@ -50,24 +89,50 @@ func planManagerStart(home, role string, fresh bool, usage map[string]Usage, now
 	}
 	switch {
 	case want != cur && !out(want) && claudeacct.Get(home, want).LoggedIn:
-		return managerPlan{runtime: RuntimeClaude, account: want}, nil
+		return managerPlan{runtime: RuntimeClaude, account: want, pin: pin, leave: leave}, nil
 	case !out(cur):
-		return managerPlan{runtime: RuntimeClaude, account: cur, intent: want}, nil
+		return managerPlan{runtime: RuntimeClaude, account: cur, intent: want, pin: pin, leave: leave}, nil
 	}
 	if next := NextAccountWith(home, want, usage, now); next != "" {
-		return managerPlan{runtime: RuntimeClaude, account: next, intent: want}, nil
+		return managerPlan{runtime: RuntimeClaude, account: next, intent: want, pin: pin, leave: leave}, nil
 	}
-	if !pinned && codexOK() {
+	if pin == "" && codexOK() {
 		return managerPlan{runtime: RuntimeCodex}, nil
 	}
 	codex := "Codex is out of usage"
-	switch {
-	case pinned:
-		codex = "the runtime is pinned to Claude"
-	case !codexOut:
+	if !codexOut {
 		codex = "Codex does not run hooks"
 	}
+	switch pin {
+	case RuntimeClaude:
+		codex = "the runtime is pinned to Claude"
+	case RuntimeCodex:
+		codex = "the runtime is pinned to Codex and " + codex
+	}
 	return managerPlan{}, fmt.Errorf("%w for %s: every logged-in Claude account is out and %s (cmdr account list)", ErrNoUsage, role, codex)
+}
+
+// writeManagerRuntime records the plan's runtime: a pinned role stays pinned
+// (no auto marker) and, while it runs off its pin, keeps the pin in
+// RuntimeFallbackFile; an unpinned one stays a share's choice.
+func writeManagerRuntime(home, role string, plan managerPlan) error {
+	if plan.pin == "" {
+		return WriteAutoRuntime(home, role, plan.runtime)
+	}
+	if err := WriteEffectiveRuntime(home, role, plan.runtime); err != nil {
+		return err
+	}
+	if plan.runtime == plan.pin {
+		return removeFallback(home, role)
+	}
+	return os.WriteFile(RuntimeFallbackFile(home, role), []byte(plan.pin+"\n"), 0o600)
+}
+
+func removeFallback(home, role string) error {
+	if err := os.Remove(RuntimeFallbackFile(home, role)); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
 }
 
 // steerManager applies planManagerStart before a Manager's new process and
@@ -81,16 +146,19 @@ func (e *Engine) steerManager(role string, fresh bool) (moved string, changed bo
 	}
 	prevRT, prevAcct := ReadRuntime(home, role), ReadAccount(home, role)
 	if plan.runtime != prevRT {
-		if err := WriteAutoRuntime(home, role, plan.runtime); err != nil {
+		if err := writeManagerRuntime(home, role, plan); err != nil {
 			return "", false, err
 		}
 		changed = true
 	}
 	if plan.runtime == RuntimeCodex {
-		if prevRT != RuntimeCodex && !fresh {
-			return "moved from Claude account " + prevAcct + " to Codex (no Claude account has usage left)", true, nil
+		switch {
+		case prevRT == RuntimeCodex || fresh:
+			return "", changed, nil
+		case plan.pin == RuntimeCodex:
+			return "moved back to Codex (its pinned runtime, usage left again)", true, nil
 		}
-		return "", changed, nil
+		return "moved from Claude account " + prevAcct + " to Codex (no Claude account has usage left)", true, nil
 	}
 	intent := plan.intent
 	if intent == plan.account {
@@ -111,8 +179,10 @@ func (e *Engine) steerManager(role string, fresh bool) (moved string, changed bo
 		}
 	}
 	switch {
+	case prevRT == RuntimeCodex && plan.pin == RuntimeCodex:
+		return "moved from Codex (" + plan.leave + ") to Claude account " + plan.account + "; its Codex pin stays and it goes back once Codex can run it", true, nil
 	case prevRT == RuntimeCodex:
-		return "moved from Codex (out of usage) to Claude account " + plan.account, true, nil
+		return "moved from Codex (" + plan.leave + ") to Claude account " + plan.account, true, nil
 	case plan.account == prevAcct:
 		return "", changed, nil
 	case intent == "":

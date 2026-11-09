@@ -388,8 +388,10 @@ func (e *Engine) start(ctx context.Context, role string, o StartOptions) (st Sta
 	}
 	// A Manager a share drew onto Codex goes back to Claude at a new process
 	// only: an adopted host above keeps running as it is, and a host findHost
-	// could not reach holds the lock, so it never gets this far.
-	resolve := dropDrawnCodex(e.opts.Home, role)
+	// could not reach holds the lock, so it never gets this far. For a
+	// Manager the steer below makes that call (only when Claude has usage), so
+	// an outage never flips it to Claude and back, losing its Codex thread.
+	resolve := !isManagerRole(role) && dropDrawnCodex(e.opts.Home, role)
 	// Every Manager start lands on a runtime and account with usage left.
 	moved := ""
 	if isManagerRole(role) {

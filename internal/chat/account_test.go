@@ -392,9 +392,11 @@ func TestManagerMovesAtUsageLimitAndReportsIt(t *testing.T) {
 }
 
 // An unpinned Manager on Codex at Codex's limit moves to Claude, and onto a
-// Claude account with usage (never an out one); a pinned one stays on Codex.
+// Claude account with usage (never an out one); a pinned one moves too (d82)
+// with its Codex pin kept, and goes back to Codex once Codex has usage again.
 func TestManagerLeavesAnOutCodex(t *testing.T) {
 	h := accountHarness(t, "work")
+	h.e.opts.CodexHooksReady = func() bool { return true }
 	t.Setenv(agentrt.CodexManagerShareEnvVar, "1") // keep the drawn Codex run at its start
 	h.e.Usage().MarkOut(RuntimeClaude, claudeacct.Default, "manager-x", time.Now().Add(time.Hour).Unix(), time.Now())
 	for _, role := range []string{"manager-c", "manager-pc"} {
@@ -436,10 +438,58 @@ func TestManagerLeavesAnOutCodex(t *testing.T) {
 	pc, _ := h.e.chat("manager-pc")
 	h.e.moveManager(pc)
 	seen = waitFor(t, sub, func(e Event) bool { return e.Kind == KindNotice && e.Subtype == "usage_limit_switch" })
-	if n := seen[len(seen)-1]; !strings.Contains(n.Text, "Not moved") {
+	if n := seen[len(seen)-1]; !strings.Contains(n.Text, "to Claude account work") || !strings.Contains(n.Text, "Codex pin stays") {
 		t.Fatalf("pinned notice %q", n.Text)
 	}
+	if st, _ := h.e.Status("manager-pc"); st.Runtime != RuntimeClaude || st.Account != "work" {
+		t.Fatalf("pinned Codex Manager left on an out Codex: %+v", st)
+	}
+	if !RuntimePinned(h.home, "manager-pc") || ManagerPin(h.home, "manager-pc") != RuntimeCodex {
+		t.Fatalf("the fallback dropped the pin: pinned=%v pin=%q", RuntimePinned(h.home, "manager-pc"), ManagerPin(h.home, "manager-pc"))
+	}
+
+	// Codex has usage again: the next start goes back to the pinned runtime.
+	h.e.Usage().MarkOut(RuntimeCodex, "", "manager-c", time.Now().Add(-time.Minute).Unix(), time.Now())
+	if _, err := h.e.restart(context.Background(), "manager-pc", SwitchOptions{}); err != nil {
+		t.Fatal(err)
+	}
 	if st, _ := h.e.Status("manager-pc"); st.Runtime != RuntimeCodex {
-		t.Fatalf("pinned Codex moved: %+v", st)
+		t.Fatalf("pinned Codex Manager not back on Codex: %+v", st)
+	}
+	if ManagerPin(h.home, "manager-pc") != RuntimeCodex || fileExists(RuntimeFallbackFile(h.home, "manager-pc")) {
+		t.Fatal("back on its pin, the fallback marker must go")
+	}
+}
+
+// d82 through the engine: a Manager whose account a person chose, with every
+// Claude account out, starts on Codex; a drawn Codex Manager at share 0 with
+// Claude out restarts on Codex with no move and its thread kept.
+func TestManagerAccountChoiceStillFallsBackToCodex(t *testing.T) {
+	h := accountHarness(t, "work")
+	h.e.opts.CodexHooksReady = func() bool { return true }
+	t.Setenv(agentrt.CodexManagerShareEnvVar, "0")
+	h.role("manager-f")
+	if _, err := h.e.SetAccount(context.Background(), "manager-f", "work", SwitchOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	until := time.Now().Add(time.Hour).Unix()
+	h.e.Usage().MarkOut(RuntimeClaude, claudeacct.Default, "manager-x", until, time.Now())
+	h.e.Usage().MarkOut(RuntimeClaude, "work", "manager-x", until, time.Now())
+	if st := h.start("manager-f"); st.Runtime != RuntimeCodex {
+		t.Fatalf("account choice blocked the Codex fallback: %+v", st)
+	}
+
+	h.role("manager-d")
+	if err := WriteAutoRuntime(h.home, "manager-d", RuntimeCodex); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(CodexThreadFile(h.home, "manager-d"), []byte("thread-1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if st := h.start("manager-d"); st.Runtime != RuntimeCodex {
+		t.Fatalf("drawn Codex at share 0 with Claude out: %+v", st)
+	}
+	if b, err := os.ReadFile(CodexThreadFile(h.home, "manager-d")); err != nil || strings.TrimSpace(string(b)) != "thread-1" {
+		t.Fatalf("the Codex thread was lost: %q %v", b, err)
 	}
 }
