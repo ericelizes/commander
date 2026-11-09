@@ -49,7 +49,7 @@ func runInternalComment(args []string, in io.Reader, stdout, stderr *os.File) in
 			raw, err = io.ReadAll(in)
 		} else {
 			if sharedReportPath(*file) {
-				emitErr(stderr, fmt.Sprintf("refused: %s is a shared fixed path, so another Operator's report can land on your bead. Use --text, --file - (stdin), or a private file made with mktemp in your worktree", *file))
+				emitErr(stderr, fmt.Sprintf("refused: %s is a shared fixed path, so another Operator's report can land on your bead. Use --text, --file - (stdin), or a private file in your worktree (mktemp -p <worktree>)", *file))
 				return 1
 			}
 			raw, err = os.ReadFile(*file)
@@ -100,12 +100,30 @@ func runInternalComment(args []string, in io.Reader, stdout, stderr *os.File) in
 	return 0
 }
 
-// sharedReportPath reports whether p is a bare file directly in /tmp or
-// /var/tmp (e.g. /tmp/report.md): a name every Operator may pick, so two runs
-// collide. A private directory made by mktemp -d under /tmp passes.
+// sharedReportPath reports whether p (relative paths resolved from the working
+// directory) is a bare file directly in a shared temp dir (/tmp, /var/tmp,
+// /dev/shm, $TMPDIR, and their real paths, e.g. /private/tmp on macOS): a name
+// every Operator may pick, so two runs collide. A private directory made by
+// mktemp -d under one of them passes.
 func sharedReportPath(p string) bool {
-	d := filepath.Dir(filepath.Clean(p))
-	return d == "/tmp" || d == "/var/tmp"
+	abs, err := filepath.Abs(p)
+	if err != nil {
+		return false
+	}
+	d := realDir(filepath.Dir(abs))
+	for _, shared := range []string{"/tmp", "/var/tmp", "/dev/shm", os.TempDir()} {
+		if d == filepath.Clean(shared) || d == realDir(shared) {
+			return true
+		}
+	}
+	return false
+}
+
+func realDir(d string) string {
+	if r, err := filepath.EvalSymlinks(d); err == nil {
+		return r
+	}
+	return filepath.Clean(d)
 }
 
 func runInternalDep(args []string, stdout, stderr *os.File) int {

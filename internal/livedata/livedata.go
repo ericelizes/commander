@@ -104,6 +104,7 @@ type ObjectiveRow struct {
 	GateViz       []int        // each gate bead's own viz:<n> label (0 = none), parallel to Gates
 	Viz           int          // the bead's own viz:<n> label (0 = none); see EffectiveViz
 	Task          bool         // an Operator task bead (kind:task, not an objective, gate or track): agent-internal, not a step the user plans
+	KindTask      bool         // labelled kind:task at all (also with kind:objective, e.g. converted then --no-workstream): never a workstream row, as wsmgr refuses to register one
 	// Owns: a nested workstream with a Manager of its own (an open kind:workstream
 	// bead under another, in a project whose nested Managers are on); see beads.Owner.
 	Owns        bool
@@ -790,6 +791,7 @@ func projectObjectiveRows(ctx context.Context, bc beads.Client, project store.Pr
 			ParkedUntil:   beads.ParkedUntil(objective.Labels),
 			Viz:           beads.VizOf(objective.Labels),
 			Task:          slices.Contains(objective.Labels, "kind:task") && !slices.Contains(objective.Labels, "kind:objective") && !slices.Contains(objective.Labels, beads.GateLabel) && !beads.IsWorkstream(objective.Labels),
+			KindTask:      slices.Contains(objective.Labels, "kind:task"),
 			Track:         beads.IsNested(objective.Labels, parent),
 			Owns:          parent != "" && beads.OwnsWork(objective),
 			Superseded:    supersededBead(objective),

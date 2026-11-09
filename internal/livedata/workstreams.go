@@ -34,9 +34,10 @@ func NestObjectives(rows []ObjectiveRow) []NestedObjective {
 		switch {
 		case r.ParentBeadID != "" && present[r.ParentBeadID]:
 			children[r.ParentBeadID] = append(children[r.ParentBeadID], r)
-		case r.Task:
-			// An Operator task bead is never a workstream row: with no parent in
-			// the list (e.g. after --no-workstream) it is not drawn.
+		case r.Task || r.KindTask:
+			// An Operator task bead (any kind:task label, also beside kind:objective
+			// after convert then --no-workstream) is never a workstream row: with no
+			// parent in the list it is not drawn, since no Manager may own it.
 		case r.Track:
 			// A nested workstream never becomes a row: without its parent in the
 			// list (closed, or a dotted-id guess that missed) it is not drawn.
