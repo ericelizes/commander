@@ -159,3 +159,19 @@ func TestNestObjectives_OpenOrphanWithUnlistedParentStaysRoot(t *testing.T) {
 		t.Fatalf("a step under an open workstream must still nest: %v", depth1)
 	}
 }
+
+func TestNestObjectives_TaskBeadsAreNeverWorkstreams(t *testing.T) {
+	rows := []ObjectiveRow{
+		{BeadID: "w", Title: "WS", Status: "open"},
+		{BeadID: "w.1", ParentBeadID: "w", Title: "Task under ws", Status: "open", Task: true},
+		{BeadID: "t-9", Title: "Detached task", Status: "open", Task: true},
+		{BeadID: "t-10", ParentBeadID: "gone", Title: "Orphan task", Status: "in_progress", Task: true},
+	}
+	var ids []string
+	for _, n := range NestObjectives(rows) {
+		ids = append(ids, n.Row.BeadID)
+	}
+	if len(ids) != 2 || ids[0] != "w" || ids[1] != "w.1" {
+		t.Fatalf("got %v, want [w w.1]", ids)
+	}
+}

@@ -46,6 +46,11 @@ use `--db <project-root>/.beads/beads.db` (the exact command is in your first me
 4. When done (or blocked), write your **final report onto the bead**: what
    changed, where (branch/commits), how you verified it, what is left. Then
    mail your Manager a short summary pointing at the bead.
+   **Private report path:** never write a report to a fixed shared file such as
+   `/tmp/report.md` (another Operator may overwrite it and its report lands on
+   your bead). Pass it with `--text`, pipe it with `--file -`, or use a file
+   from `mktemp` inside your worktree. `internal-comment --file` refuses a bare
+   file in `/tmp` or `/var/tmp`.
 5. **Then stop.** Your process ends and the run is marked done. Do not wait
    for review, do not close the bead, do not start other work. The Manager
    reviews and closes it, or reopens it with feedback (you may be respawned).

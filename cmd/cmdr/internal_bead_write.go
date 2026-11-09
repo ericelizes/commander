@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -47,6 +48,10 @@ func runInternalComment(args []string, in io.Reader, stdout, stderr *os.File) in
 		if *file == "-" {
 			raw, err = io.ReadAll(in)
 		} else {
+			if sharedReportPath(*file) {
+				emitErr(stderr, fmt.Sprintf("refused: %s is a shared fixed path, so another Operator's report can land on your bead. Use --text, --file - (stdin), or a private file made with mktemp in your worktree", *file))
+				return 1
+			}
 			raw, err = os.ReadFile(*file)
 		}
 		if err != nil {
@@ -93,6 +98,14 @@ func runInternalComment(args []string, in io.Reader, stdout, stderr *os.File) in
 	}
 	fmt.Fprintf(stdout, "commented on %s\n", *bead)
 	return 0
+}
+
+// sharedReportPath reports whether p is a bare file directly in /tmp or
+// /var/tmp (e.g. /tmp/report.md): a name every Operator may pick, so two runs
+// collide. A private directory made by mktemp -d under /tmp passes.
+func sharedReportPath(p string) bool {
+	d := filepath.Dir(filepath.Clean(p))
+	return d == "/tmp" || d == "/var/tmp"
 }
 
 func runInternalDep(args []string, stdout, stderr *os.File) int {
