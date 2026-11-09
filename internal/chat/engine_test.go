@@ -427,7 +427,7 @@ func TestInterruptForMailIsLabelledNeverTheUser(t *testing.T) {
 	if got != note.Text {
 		t.Fatalf("the model saw %q, want the published note", got)
 	}
-	for _, want := range []string{"[commander interrupt] manager-other", "NOT the user", "not a hold", "carry on"} {
+	for _, want := range []string{"[commander interrupt] manager-other", "NOT the user", "not a hold", "do what it directs"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("note %q lacks %q", got, want)
 		}
@@ -456,6 +456,31 @@ func TestUserInterruptSendsNoNote(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 	if _, err := os.Stat(filepath.Join(h.fakeDir, "interrupt-note.json")); err == nil {
 		t.Fatal("the user's own stop got a Commander note")
+	}
+}
+
+// A turn deaf to the interrupt ends by the SIGINT fallback: Running stays
+// true until the exit is seen, but no note goes to the dying process.
+func TestInterruptForMailSendsNoNoteOnTheSIGINTFallback(t *testing.T) {
+	h := newHarness(t)
+	h.opts.InterruptGrace = 300 * time.Millisecond
+	h.e = New(h.opts)
+	h.role("manager-d")
+	h.start("manager-d")
+	sub := h.subscribe("manager-d")
+	_ = h.e.Send(context.Background(), "manager-d", "deaf long")
+	waitFor(t, sub, isKind(KindTextDelta))
+	if err := h.e.InterruptForMail(context.Background(), "manager-d", "commander"); err != nil {
+		t.Fatal(err)
+	}
+	seen := waitFor(t, sub, isKind(KindExit))
+	for _, e := range seen {
+		if e.Kind == KindUser {
+			t.Fatalf("a note went to a process the fallback is ending: %s", summarize(seen))
+		}
+	}
+	if _, err := os.Stat(filepath.Join(h.fakeDir, "interrupt-note.json")); err == nil {
+		t.Fatal("the dying process was sent the note")
 	}
 }
 

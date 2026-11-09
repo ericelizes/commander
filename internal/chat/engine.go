@@ -1304,23 +1304,31 @@ func withLeadingText(note string, content any) any {
 // not acknowledge it within InterruptGrace the process gets SIGINT (which ends
 // the turn and the process; Start resumes it).
 func (e *Engine) Interrupt(ctx context.Context, role string) error {
+	_, err := e.interrupt(ctx, role)
+	return err
+}
+
+// interrupt is Interrupt that also says whether the turn was ended by the
+// SIGINT fallback (no ack in time): that process is going away, though
+// Running stays true until its exit is seen.
+func (e *Engine) interrupt(ctx context.Context, role string) (fellBack bool, err error) {
 	c, p, err := e.live(role)
 	if err != nil {
-		return err
+		return false, err
 	}
 	ack := e.sendInterrupt(p)
 	c.publish(Event{Kind: KindStatus, Source: SourceEngine, Status: "interrupting"})
 	select {
 	case <-ack:
-		return nil
+		return false, nil
 	case <-p.done:
-		return nil
+		return true, nil
 	case <-ctx.Done():
-		return ctx.Err()
+		return false, ctx.Err()
 	case <-time.After(e.opts.InterruptGrace):
 	}
 	c.publish(Event{Kind: KindNotice, Source: SourceEngine, Subtype: "interrupt_fallback", Text: "no interrupt ack; sending SIGINT"})
-	return p.signal(syscall.SIGINT)
+	return true, p.signal(syscall.SIGINT)
 }
 
 // InterruptForMail stops role's current turn so it reads mail from by (a
@@ -1329,7 +1337,7 @@ func (e *Engine) Interrupt(ctx context.Context, role string) error {
 // proceed with this tool use ... STOP ... wait for the user" and a
 // "[Request interrupted by user for tool use]" line follows. Agents took that
 // for the user saying stop and held, so the interrupt is followed at once by
-// InterruptNote, which says who it was and to carry on. Idle, there is no
+// InterruptNote, which says who it was and to read the mail and act on it. Idle, there is no
 // turn to cut: nothing is interrupted and no note is sent (the mail is
 // delivered as the next message, as ever).
 func (e *Engine) InterruptForMail(ctx context.Context, role, by string) error {
@@ -1343,10 +1351,11 @@ func (e *Engine) InterruptForMail(ctx context.Context, role, by string) error {
 	if !busy {
 		return nil
 	}
-	if err := e.Interrupt(ctx, role); err != nil {
+	fellBack, err := e.interrupt(ctx, role)
+	if err != nil {
 		return err
 	}
-	if !e.Running(role) { // SIGINT fallback ended the process; its restart resumes
+	if fellBack || !e.Running(role) { // the process is ending (SIGINT fallback); its restart resumes
 		return nil
 	}
 	return e.send(role, InterruptNote(by, role), "mail")
@@ -1364,7 +1373,7 @@ func InterruptNote(by, role string) string {
 		"The \"[Request interrupted by user for tool use]\" line and any tool result saying \"The user doesn't want to proceed with this tool use\" " +
 		"or \"STOP what you are doing and wait for the user\" just above came from this interrupt. It is not a hold: do not stop or wait for the user. " +
 		"Read the new mail (it arrives with this message or right after; `cmdr internal-inbox --agent " + role + " --unread` lists it), " +
-		"then carry on with your work, rerunning the cut-off tool call if it is still needed."
+		"and do what it directs; only if it does not redirect you, resume your work, rerunning the cut-off tool call if it is still needed."
 }
 
 // cleanRole keeps a role name to one short line of name characters.
