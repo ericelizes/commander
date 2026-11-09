@@ -292,6 +292,9 @@ type Finding struct {
 	Check, Target, Block, Text, Fix string
 	Stale                           []string
 	Advisory                        bool
+	// NoPR: the target has no pr: label (nor its stage) and no review block, the
+	// one finding an approved no-PR ship may waive (internal-gate --no-pr).
+	NoPR bool
 }
 
 // MergeRule checks topology, exact snapshot steps and current-head evidence.
@@ -313,7 +316,7 @@ func MergeRule(project, repo string, nodes []Node, scope map[string]bool) []Find
 		pr := TargetPR(m, byID, project, repo)
 		label := prLabel(m, byID)
 		if pr == "" && label == "" {
-			out = append(out, Finding{Check: "MERGE_REVIEW_REQUIRED", Target: m.Bead.ID, Advisory: true,
+			out = append(out, Finding{Check: "MERGE_REVIEW_REQUIRED", Target: m.Bead.ID, Advisory: true, NoPR: true,
 				Text: fmt.Sprintf("MERGE_REVIEW_REQUIRED: %s has no PR yet; add its pr: label and plug the pr-review block when the PR exists", m.Bead.ID),
 				Fix:  "Once the PR exists, add its pr: label and plug the pr-review block before merging"})
 			continue

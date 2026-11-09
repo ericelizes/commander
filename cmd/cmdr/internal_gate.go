@@ -38,7 +38,8 @@ func runInternalGate(args []string, stdout, stderr *os.File) int {
 	name := fs.String("name", "", "gate name")
 	check := fs.String("check", "", "add: a shell command (auto) or the rule to verify (reviewer:/user)")
 	verifier := fs.String("verifier", "", "add: auto, operator, reviewer:<login> or user")
-	evidence := fs.String("evidence", "", "pass: what shows the gate holds (text or url)")
+	evidence := fs.String("evidence", "", "pass: what shows the gate holds (text or url); with --no-pr (pass, rm, apply): the user's approval of the ship (answer id or decision)")
+	noPR := fs.String("no-pr", "", "pass, rm, apply: why this ship has no PR (15+ chars); lets a merge gate with no pr: label and no review block pass or go, recorded on the gate. Owning Manager, Commander or the user")
 	reason := fs.String("reason", "", "unlink: why the edge is obsolete (recorded on the gate); add: why the user must be the verifier (a genuine decision: prod merge, outward message, spend, personal or regulated data egress, pilot go/no-go)")
 	template := fs.String("template", "", "apply: "+strings.Join(gateTemplates, "|")+" (the stage single standard gate)")
 	repo := fs.String("repo", "", "apply: owner/repo of the PRs")
@@ -62,6 +63,10 @@ func runInternalGate(args []string, stdout, stderr *os.File) int {
 	}
 	if *replacement != "" && verb != "retire-legacy" {
 		emitErr(stderr, "--replacement is only supported for retire-legacy")
+		return 1
+	}
+	if *noPR != "" && verb != "pass" && verb != "rm" && verb != "apply" {
+		emitErr(stderr, "--no-pr is only supported for pass, rm and apply")
 		return 1
 	}
 	if *repairWaiters != "" && verb != "publish" {
@@ -112,13 +117,13 @@ func runInternalGate(args []string, stdout, stderr *os.File) int {
 		*verifier = ownercompat.Normalize(*verifier)
 		out, err = gateAdd(ctx, st, *projectName, *beadID, store.Gate{Name: *name, Check: *check, Verifier: *verifier}, *reason)
 	case "apply":
-		out, err = gateApply(ctx, st, *projectName, *beadID, *template, templateArgs{Repo: *repo, PRs: splitList(*prs), Reviewers: splitList(*reviewers), LiveCheck: *liveCheck})
+		out, err = gateApply(ctx, st, *projectName, *beadID, *template, templateArgs{Repo: *repo, PRs: splitList(*prs), Reviewers: splitList(*reviewers), LiveCheck: *liveCheck}, *noPR, *evidence)
 	case "check":
 		out, err = gateCheck(ctx, st, *projectName, *beadID, *name)
 	case "pass":
-		out, err = gatePass(ctx, st, *projectName, *beadID, *name, *evidence, *by)
+		out, err = gatePass(ctx, st, *projectName, *beadID, *name, *evidence, *by, *noPR)
 	case "rm":
-		out, err = gateRemove(ctx, st, *projectName, *beadID, *name)
+		out, err = gateRemove(ctx, st, *projectName, *beadID, *name, *noPR, *evidence)
 	case "link":
 		out, err = gateLink(ctx, st, *projectName, *beadID, splitIDs(*after), splitIDs(*before))
 	case "convert":
@@ -468,7 +473,7 @@ func ensureGateWait(ctx context.Context, bc beads.Client, dir, beadID, verifier 
 	return bc.SetLabel(ctx, dir, beadID, w.Label(), true)
 }
 
-func gatePass(ctx context.Context, st *store.Store, projectName, beadID, name, evidence, by string) (any, error) {
+func gatePass(ctx context.Context, st *store.Store, projectName, beadID, name, evidence, by, noPR string) (any, error) {
 	if strings.TrimSpace(evidence) == "" {
 		return nil, fmt.Errorf("passing a gate needs --evidence: what shows it holds (text or url)")
 	}
@@ -477,6 +482,10 @@ func gatePass(ctx context.Context, st *store.Store, projectName, beadID, name, e
 		return nil, err
 	}
 	bc := newBeadsClientFn()
+	waiver, err := newNoPRWaiver(ctx, bc, p.Path, beadID, noPR, evidence)
+	if err != nil {
+		return nil, err
+	}
 	ns, err := stageGates(ctx, bc, p, beadID)
 	if err != nil {
 		return nil, err
@@ -486,13 +495,13 @@ func gatePass(ctx context.Context, st *store.Store, projectName, beadID, name, e
 		if g.Name != name {
 			continue
 		}
-		if err := checkWorkflowClose(ctx, bc, p.Path, projectName, n.ID); err != nil {
-			return nil, err
-		}
 		if g.Verifier == store.VerifierAuto {
 			return nil, fmt.Errorf("gate %q is auto: run `cmdr internal-gate check` instead of passing it by hand", name)
 		}
 		if err := requireGateClosesHeld(ctx, bc, p.Path, n.ID, "internal-gate pass "+name); err != nil {
+			return nil, err
+		}
+		if err := checkWorkflowCloseWaiving(ctx, bc, p.Path, p.Name, n.ID, waiver); err != nil {
 			return nil, err
 		}
 		if by == "" {
@@ -509,12 +518,16 @@ func gatePass(ctx context.Context, st *store.Store, projectName, beadID, name, e
 	return nil, fmt.Errorf("no gate %q on %s", name, beadID)
 }
 
-func gateRemove(ctx context.Context, st *store.Store, projectName, beadID, name string) (any, error) {
+func gateRemove(ctx context.Context, st *store.Store, projectName, beadID, name, noPR, evidence string) (any, error) {
 	p, err := gateProject(ctx, st, projectName, beadID)
 	if err != nil {
 		return nil, err
 	}
 	bc := newBeadsClientFn()
+	waiver, err := newNoPRWaiver(ctx, bc, p.Path, beadID, noPR, evidence)
+	if err != nil {
+		return nil, err
+	}
 	ns, err := stageGates(ctx, bc, p, beadID)
 	if err != nil {
 		return nil, err
@@ -522,7 +535,7 @@ func gateRemove(ctx context.Context, st *store.Store, projectName, beadID, name 
 	// Retiring a gate ends it as surely as passing it: a merge gate goes through the same check.
 	for _, n := range ns {
 		if n.Gate.Name == name {
-			if err := checkWorkflowClose(ctx, bc, p.Path, p.Name, n.ID); err != nil {
+			if err := checkWorkflowCloseWaiving(ctx, bc, p.Path, p.Name, n.ID, waiver); err != nil {
 				return nil, err
 			}
 			if err := requireGateClosesHeld(ctx, bc, p.Path, n.ID, "internal-gate rm "+name); err != nil {

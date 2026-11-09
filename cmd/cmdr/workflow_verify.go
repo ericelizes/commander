@@ -191,6 +191,14 @@ func workflowNode(b beads.Bead, d beads.Detail) workflowtemplate.Node {
 // judged on (edges, comments, status) are read fresh, never from the display's
 // export; evidence is recorded before the close and never inferred from closed status.
 func checkWorkflowClose(ctx context.Context, bc beads.Client, dir, project, id string) error {
+	return checkWorkflowCloseWaiving(ctx, bc, dir, project, id, nil)
+}
+
+// checkWorkflowCloseWaiving is checkWorkflowClose with an optional no-PR waiver:
+// a merge target the rule finds only "has no PR yet" (no pr: label on it or its
+// stage, no review block plugged before or waited on) passes once the waiver is
+// recorded on it. Any other finding still refuses.
+func checkWorkflowCloseWaiving(ctx context.Context, bc beads.Client, dir, project, id string, w *noPRWaiver) error {
 	bc = freshReader(bc)
 	var seen settleSeen
 	err := checkWorkflowCloseOnce(ctx, bc, dir, project, id, &seen)
@@ -489,6 +497,12 @@ func checkWorkflowCloseOnce(ctx context.Context, bc beads.Client, dir, project, 
 	}
 	findings := workflowtemplate.MergeRule(project, repo, nodes, scope)
 	if len(findings) > 0 {
+		if w != nil && !managed && onlyNoPR(findings, id) {
+			return bc.AddComment(ctx, dir, id, w.comment())
+		}
+		if w != nil {
+			return fmt.Errorf("%s (--no-pr waives only a merge with no pr: label and no review block; this one has a PR to review)", findings[0].Text)
+		}
 		return fmt.Errorf("%s", findings[0].Text)
 	}
 	for _, n := range nodes {

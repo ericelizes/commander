@@ -99,7 +99,7 @@ func templateGate(template string, a templateArgs) (store.Gate, error) {
 
 // gateApply makes template the stage's single gate: the stage = the template,
 // so any other gate on the bead is dropped.
-func gateApply(ctx context.Context, st *store.Store, projectName, beadID, template string, a templateArgs) (any, error) {
+func gateApply(ctx context.Context, st *store.Store, projectName, beadID, template string, a templateArgs, noPR, evidence string) (any, error) {
 	g, err := templateGate(template, a)
 	if err != nil {
 		return nil, err
@@ -109,6 +109,10 @@ func gateApply(ctx context.Context, st *store.Store, projectName, beadID, templa
 		return nil, err
 	}
 	bc := newBeadsClientFn()
+	waiver, err := newNoPRWaiver(ctx, bc, p.Path, beadID, noPR, evidence)
+	if err != nil {
+		return nil, err
+	}
 	existing, err := stageGates(ctx, bc, p, beadID)
 	if err != nil {
 		return nil, err
@@ -116,7 +120,7 @@ func gateApply(ctx context.Context, st *store.Store, projectName, beadID, templa
 	var dropped []string
 	for _, e := range existing {
 		if e.Gate.Name != g.Name {
-			if err := checkWorkflowClose(ctx, bc, p.Path, p.Name, e.ID); err != nil {
+			if err := checkWorkflowCloseWaiving(ctx, bc, p.Path, p.Name, e.ID, waiver); err != nil {
 				return nil, err
 			}
 			if err := requireGateClosesHeld(ctx, bc, p.Path, e.ID, "internal-gate apply (it retires "+e.Gate.Name+")"); err != nil {
