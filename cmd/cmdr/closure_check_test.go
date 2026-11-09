@@ -211,7 +211,7 @@ func TestEveryHolderDroppingVerbRunsTheClosureCheck(t *testing.T) {
 			t.Fatal(err)
 		}
 		n := 0
-		for _, call := range []string{"requireHeldAfter(", "requireHeldAfterSkipping(", "requireGateClosesHeld(", "requireMoveHeld(", "holdReleased(", "holdForManager(", "holdWithManager("} {
+		for _, call := range []string{"requireHeldAfter(", "requireHeldAfterSkipping(", "requireGateClosesHeld(", "requireMoveHeld(", "holdReleased(", "holdReleasedLive(", "holdForManager(", "holdWithManager("} {
 			n += strings.Count(string(raw), call)
 		}
 		switch file {

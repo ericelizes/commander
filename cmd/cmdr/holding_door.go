@@ -273,11 +273,24 @@ func holdReleasedLive(ctx context.Context, bc beads.Client, dir, id string, edit
 		}
 	}
 	for _, v := range holding.NewlyUnheld(g, id, judged) {
+		if !receivesHandoff(g.Beads[v.ID]) {
+			continue
+		}
 		if already[v.ID] || holdWithManager(ctx, bc, dir, v.ID, manager, kind) == nil {
 			held = append(held, v.ID)
 		}
 	}
 	return held
+}
+
+// receivesHandoff: b is a step its Manager can take as a handoff. A gate is held by its approver,
+// a workstream bead (top level or nested) by its own Manager, and a step an Operator claims stays
+// with that claim (cmdrd's settle hands it back when the run ends), as holdForManager judges it.
+func receivesHandoff(b holding.Bead) bool {
+	if b.Gate || b.Parent == "" || beads.IsWorkstream(b.Labels) {
+		return false
+	}
+	return !strings.HasPrefix(b.Owner, "operator-")
 }
 
 // handoffWaits counts the labels' until: waits whose label is kind (a Manager handoff receipt).
