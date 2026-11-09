@@ -99,6 +99,15 @@ func settleWorkflowBlock(ctx context.Context, bc beads.Client, dir, project, blo
 		}
 		steps[step] = n
 	}
+	// A step's own gates (a gate-of gate has no blocks edge) must have passed, as
+	// at every close door; read before the first write, any failed read refuses.
+	for _, s := range settleOrder(tpl) {
+		if n, ok := steps[s.ID]; ok && n.Bead.Status != "closed" {
+			if err := requireGatesPassed(ctx, project, n.Bead.ID); err != nil {
+				return nil, fmt.Errorf("%w; nothing settled", err)
+			}
+		}
+	}
 	res := &workflowSettleResult{Block: blockID, PR: pr, Head: h.SHA, Settled: []string{}, Kept: []string{}}
 	closeReason := "settled: PR merged at " + h.SHA + ", review not completed"
 	for _, s := range settleOrder(tpl) {

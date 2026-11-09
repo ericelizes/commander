@@ -193,6 +193,31 @@ func TestSettleBlockRefusesBeforeAnyWrite(t *testing.T) {
 	}
 }
 
+func TestSettleBlockRefusesAStepWithAnUnpassedGate(t *testing.T) {
+	allowManyGates(t)
+	mem, res := settleProject(t)
+	pinWorkflowGH(t, mergedGH("MERGED", false))
+	t.Setenv("COMMANDER_ROLE", "manager-B")
+	last := res.Remaining[len(res.Remaining)-1].BeadID
+	if code, _, errOut := gateCmd(t, "add", "--project", "manifest", "--bead", last, "--name", "lint", "--check", "see the lint run", "--verifier", "user"); code != 0 {
+		t.Fatal(errOut)
+	}
+	before := map[string]int{}
+	for _, s := range res.Remaining {
+		before[s.BeadID] = len(commentsOf(t, mem, s.BeadID))
+	}
+	code, _, errOut := settleBlock(t, res.Container, settleReason)
+	if code == 0 || !strings.Contains(errOut, "lint") || !strings.Contains(errOut, "nothing settled") {
+		t.Fatalf("%d %s", code, errOut)
+	}
+	for _, s := range res.Remaining[1:] {
+		b, _ := mem.Show(context.Background(), "/d", s.BeadID)
+		if b.Status == "closed" || len(commentsOf(t, mem, s.BeadID)) != before[s.BeadID] {
+			t.Fatalf("refusal wrote on %s", s.Step)
+		}
+	}
+}
+
 func TestSettleBlockByCommanderAndTheUser(t *testing.T) {
 	for _, role := range []string{"commander", ""} {
 		t.Run("role="+role, func(t *testing.T) {
