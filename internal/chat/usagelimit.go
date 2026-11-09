@@ -112,10 +112,10 @@ func (e *Engine) settleLimit(c *chatRole, p *process, ev Event) {
 	c.publish(Event{Kind: KindNotice, Source: SourceEngine, Subtype: "usage_limit",
 		Text: fmt.Sprintf("%s hit its usage limit: %s", who, u.Text)})
 	switch {
-	case u.Runtime == RuntimeClaude && (AutoSwitch(e.opts.Home, c.role) || isManagerRole(c.role)):
+	case isManagerRole(c.role):
+		go e.moveManager(c)
+	case u.Runtime == RuntimeClaude && AutoSwitch(e.opts.Home, c.role):
 		go e.autoSwitch(c, u.Account)
-	case u.Runtime == RuntimeCodex && isManagerRole(c.role) && !RuntimePinned(e.opts.Home, c.role):
-		go e.autoLeaveCodex(c)
 	}
 }
 
@@ -182,7 +182,6 @@ func (e *Engine) autoSwitch(c *chatRole, from string) {
 	}
 	c.publish(Event{Kind: KindNotice, Source: SourceEngine, Subtype: "usage_limit_switch",
 		Text: fmt.Sprintf("Switched from Claude account %s to %s after its usage limit.", from, next)})
-	e.noteUsageMove(c.role, fmt.Sprintf("%s hit its usage limit: moved from Claude account %s to %s.", c.role, from, next))
 }
 
 func isManagerRole(role string) bool { return strings.HasPrefix(role, "manager-") }
@@ -195,34 +194,6 @@ func (e *Engine) moveOptions(role string) SwitchOptions {
 		o.Message = ContinueMessage + "; first re-read your handover and unread mail (cmdr internal-inbox --agent " + role + ")"
 	}
 	return o
-}
-
-func (e *Engine) noteUsageMove(role, text string) {
-	if e.opts.OnUsageMove != nil {
-		e.opts.OnUsageMove(role, text)
-	}
-}
-
-// autoLeaveCodex moves a Manager a share drew onto Codex to Claude when Codex
-// is at its limit (a pinned one stays), and carries on there.
-func (e *Engine) autoLeaveCodex(c *chatRole) {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
-	p, err := e.idleProcess(c.role, "runtime")
-	if err == nil {
-		err = WriteAutoRuntime(e.opts.Home, c.role, RuntimeClaude)
-	}
-	if err == nil && p != nil {
-		_, err = e.restart(ctx, c.role, e.moveOptions(c.role))
-	}
-	if err != nil {
-		c.publish(Event{Kind: KindNotice, Source: SourceEngine, Subtype: "usage_limit_switch",
-			Text: fmt.Sprintf("Moving off Codex after its usage limit failed: %v", err)})
-		return
-	}
-	c.publish(Event{Kind: KindNotice, Source: SourceEngine, Subtype: "usage_limit_switch",
-		Text: "Switched from Codex to Claude after its usage limit."})
-	e.noteUsageMove(c.role, c.role+" hit Codex's usage limit: moved to Claude.")
 }
 
 func accountName(a string) string {

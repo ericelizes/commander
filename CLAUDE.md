@@ -203,7 +203,19 @@ not enough — this is an interactive cockpit; prove it works *in the cockpit*.
   down what it forked), else the draw on the task bead (new runs only), else Claude. The
   `operator-runtime` event's reason is then `claude-service-keyword`; `cmdr runtime report` counts those
   runs and `claude-hooks-unavailable` fallbacks under Claude in a "forced to claude" column. A never-started Manager draws on its workstream id
-  (`wsmgr.EnsureNative` -> `chat.AssignNewManagerRuntime`). `cmdr runtime rebalance [--dry-run]` moves
+  in the chat engine's start (below). **Manager starts steer by usage (d82)** (`internal/chat/managerstart.go`): every
+  engine start of a `manager-*` role that spawns a process (EnsureNative, Open/`internal-open-workstream`, mail via
+  `EnsureRole`, stand-in parents, the app's Start, restarts; not an adopted host, not a terminal pane) runs
+  `planManagerStart` then `steerManager`: a fresh Manager with no runtime file draws Codex only by share with hooks
+  and Codex usage left; a pinned runtime stays; an unpinned Codex Manager whose Codex is out runs on Claude; on
+  Claude the account intent (`<role>.account-intent`) comes back once it has usage, else the current account, else
+  `NextAccountWith` (intent kept, so a person's choice is never overwritten by a move); every Claude account out
+  sends an unpinned Manager to Codex (usage + hooks), else the start fails with `chat.ErrNoUsage` naming why. A move
+  publishes a `usage_limit_switch` notice and `Options.OnUsageMove` (cmdrd: `wsmgr.NoteOnWorkstream`, a `cmdrd:`
+  comment on the workstream bead). A Manager at a usage limit (Claude or unpinned Codex) always moves
+  (`moveManager`: restart through that steer, then a `[switch]` message telling it to re-read its handover and
+  `cmdr internal-inbox`); `AutoSwitch` is true for Managers. Tests: `TestPlanManagerStart*`, `TestManagerStart*`,
+  `TestManagerMovesAtUsageLimitAndReportsIt`, `TestManagerLeavesAnOutCodex`, `TestNoteOnWorkstreamCommentsTheBead`. `cmdr runtime rebalance [--dry-run]` moves
   idle, unpinned, running Managers through cmdrd (`POST /api/chat/<role>/runtime`, which refuses a
   turn in flight) until round(share x live Managers) run on Codex, never the Commander, and lists moves.
   Each host run writes an `operator-runtime` cost event (reason claude|codex) at its spawn time;
@@ -232,8 +244,8 @@ not enough — this is an interactive cockpit; prove it works *in the cockpit*.
   default); `POST /api/chat/<role>/account {"account","continue"}` restarts a chat there (409 mid-turn). Every
   Claude start copies the session's newest transcript (any account) into the account's projects dir before
   `--resume` (`claudeacct.CarryTranscript`). Usage limit = rejected `rate_limit_event` or the CLI's `rate_limit`/
-  `billing_error` assistant message: `Status.usage_limit` + notice `usage_limit`; `<role>.autoswitch` moves to
-  the next logged-in account with usage left. Per-account 5h/7d usage from rate_limit events (Codex
+  `billing_error` assistant message: `Status.usage_limit` + notice `usage_limit`; `<role>.autoswitch` (always on
+  for Managers, see "Manager starts steer by usage") moves to the next logged-in account with usage left. Per-account 5h/7d usage from rate_limit events (Codex
   `account/rateLimits/updated` via the bridge) in `chat/usage.json`; never poll Anthropic's usage endpoint.
   Operators: `internal-spawn-operator --account`, `internal-operator-provider <op> --account|--runtime`
   (respawn on the same bead/branch/worktree; a Manager, by `COMMANDER_ROLE`, only its own). App: chat ⋯

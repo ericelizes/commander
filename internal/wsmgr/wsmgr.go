@@ -564,6 +564,9 @@ func (m *Manager) Open(ctx context.Context, projectName, beadID string, opt Open
 				}
 			}
 			return &OpenResult{Project: projectName, BeadID: w.BeadID, Role: w.AgentName, Rank: w.Rank, Native: true}, nil
+		} else if noUsage(err) {
+			// A terminal window would start it on an account that is out: say so instead.
+			return nil, fmt.Errorf("start %s: %w", w.AgentName, err)
 		} else {
 			nativeErr = err
 		}
@@ -629,9 +632,6 @@ func (m *Manager) pointerPrompt(ctx context.Context, t Target, stepID string) st
 // chat, so a new workstream's Manager exists before anyone writes to it.
 // Managers held by a terminal, and ones that ran before and stopped, are left alone. It returns the first hard error
 // after trying every workstream.
-// codexHooksReady gates a new Manager's draw on Codex running hooks; tests replace it.
-var codexHooksReady = chat.CodexHooksReady
-
 func (m *Manager) EnsureNative(ctx context.Context) error {
 	if m.Native == nil {
 		return nil
@@ -658,13 +658,19 @@ func (m *Manager) EnsureNative(ctx context.Context) error {
 			}
 			continue
 		}
-		// A new Manager starts on the runtime the Manager share draws for its workstream.
-		_ = chat.AssignNewManagerRuntime(agentrt.CommanderHome(), role, t.BeadID, agentrt.CodexManagerShare(), codexHooksReady)
+		// The chat engine's start draws a new Manager's runtime and steers it to
+		// an account with usage left (chat.Engine.start), on every start path.
 		if err := m.EnsureTarget(ctx, t); err != nil && first == nil {
 			first = err
 		}
 	}
 	return first
+}
+
+// noUsage reports a native start refused because no account has usage left
+// (chat.ErrNoUsage, also as the text of cmdrd's HTTP answer).
+func noUsage(err error) bool {
+	return errors.Is(err, chat.ErrNoUsage) || strings.Contains(err.Error(), chat.ErrNoUsage.Error())
 }
 
 // standIns are the owners with exactly one nested owner under them.

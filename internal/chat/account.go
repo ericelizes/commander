@@ -74,8 +74,11 @@ func WriteRunAccount(home, role, name, intended string) error {
 // itself at a usage limit (off by default).
 func AutoSwitchFile(home, role string) string { return filepath.Join(home, "chat", role+".autoswitch") }
 
-// AutoSwitch reports whether role switches accounts by itself at a usage limit.
-func AutoSwitch(home, role string) bool { return fileExists(AutoSwitchFile(home, role)) }
+// AutoSwitch reports whether role switches accounts by itself at a usage
+// limit: always for a Manager (decision d82), else when its file is set.
+func AutoSwitch(home, role string) bool {
+	return isManagerRole(role) || fileExists(AutoSwitchFile(home, role))
+}
 
 // SetAutoSwitch turns role's auto-switch on or off.
 func SetAutoSwitch(home, role string, on bool) error {

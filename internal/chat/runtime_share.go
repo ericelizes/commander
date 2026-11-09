@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/example-user/commander/internal/agentrt"
 )
@@ -66,32 +65,4 @@ func CodexByShare(id string, share float64) bool {
 	h := fnv.New32a()
 	_, _ = h.Write([]byte(id))
 	return float64(h.Sum32())/(1<<32) < share
-}
-
-// AssignNewManagerRuntime picks a never-started Manager's runtime from the
-// Manager share (deterministic per workstream id) unless one is already set.
-// Codex only while it runs hooks (hooksReady) and has usage left; a Claude
-// start on an account that is out takes the next one with usage (kept as an
-// account intent), unless a person chose the account.
-func AssignNewManagerRuntime(home, role, workstreamID string, share float64, hooksReady func() bool) error {
-	if fileExists(RuntimeFile(home, role)) {
-		return nil
-	}
-	now := time.Now()
-	usage := ReadUsage(home)
-	rt := RuntimeClaude
-	if CodexByShare(workstreamID, share) && hooksReady() && !usage[UsageKey(RuntimeCodex, "")].Out(now) {
-		rt = RuntimeCodex
-	}
-	if err := WriteAutoRuntime(home, role, rt); err != nil {
-		return err
-	}
-	if rt == RuntimeClaude && !fileExists(AccountFile(home, role)) {
-		if cur := ReadAccount(home, role); usage[UsageKey(RuntimeClaude, cur)].Out(now) {
-			if next := NextAccountWith(home, cur, usage, now); next != "" {
-				return WriteRunAccount(home, role, next, cur)
-			}
-		}
-	}
-	return nil
 }

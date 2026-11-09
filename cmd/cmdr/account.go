@@ -89,6 +89,9 @@ func runAccount(args []string, stdout, stderr io.Writer) int {
 		if chat.AutoSwitch(home, role) {
 			state = "on"
 		}
+		if strings.HasPrefix(role, "manager-") {
+			state = "on (a Manager always moves to an account with usage left)"
+		}
 		fmt.Fprintf(stdout, "%s auto-switch at a usage limit: %s\n", role, state)
 		return 0
 	}

@@ -46,6 +46,8 @@ type Options struct {
 	Costs    CostSink // optional: per-turn cost of each role
 	// OnUsageMove, when set, is told of every move a usage limit made (role, text).
 	OnUsageMove func(role, text string)
+	// CodexHooksReady gates a Manager's move onto Codex; default CodexHooksReady.
+	CodexHooksReady func() bool
 	// Usage keeps the latest plan usage per account; default OpenUsage(Home).
 	Usage *UsageStore
 	// Procs finds processes that reference a session id; default PSScanner.
@@ -387,7 +389,19 @@ func (e *Engine) start(ctx context.Context, role string, o StartOptions) (st Sta
 	// A Manager a share drew onto Codex goes back to Claude at a new process
 	// only: an adopted host above keeps running as it is, and a host findHost
 	// could not reach holds the lock, so it never gets this far.
-	if dropDrawnCodex(e.opts.Home, role) {
+	resolve := dropDrawnCodex(e.opts.Home, role)
+	// Every Manager start lands on a runtime and account with usage left.
+	moved := ""
+	if isManagerRole(role) {
+		var changed bool
+		if moved, changed, err = e.steerManager(role, e.NeverStarted(role)); err != nil {
+			lock.release()
+			e.releaseSession(spec.SessionID)
+			return Status{}, false, err
+		}
+		resolve = resolve || changed
+	}
+	if resolve {
 		again, err := e.opts.Resolver.Resolve(ctx, role)
 		if err != nil {
 			lock.release()
@@ -404,6 +418,9 @@ func (e *Engine) start(ctx context.Context, role string, o StartOptions) (st Sta
 		lock.release()
 		e.releaseSession(spec.SessionID)
 		return Status{}, false, err
+	}
+	if moved != "" {
+		e.startMoved(c, moved)
 	}
 	st, err = e.Status(role)
 	return st, true, err
