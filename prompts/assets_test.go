@@ -761,3 +761,19 @@ func TestNestedManagersInPrompts(t *testing.T) {
 		t.Error("lead.md still says one Manager owns everything without the nested-Managers condition")
 	}
 }
+
+// An interrupt reads to Claude as the user rejecting the tool call; Commander
+// and Managers must not take that for a hold.
+func TestToolRejectionIsNotAHoldInPrompts(t *testing.T) {
+	for _, role := range []string{RoleCommander, RoleManager} {
+		body, err := roleBody(role)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, needle := range []string{"[commander interrupt]", "[Request interrupted by user for tool use]", "with no user text is", "not a hold", "answered card", "carry on"} {
+			if !strings.Contains(body, needle) {
+				t.Errorf("%s prompt missing %q", role, needle)
+			}
+		}
+	}
+}

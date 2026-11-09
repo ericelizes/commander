@@ -217,6 +217,10 @@ func TestInterruptRolesPostsToChatInterrupt(t *testing.T) {
 			return
 		}
 		got = append(got, r.Method+" "+r.URL.Path)
+		var body struct{ By string }
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.By != "commander" {
+			t.Errorf("%s: body by=%q err=%v, want the sender named so cmdrd labels the interrupt", r.URL.Path, body.By, err)
+		}
 		if r.URL.Path == "/api/chat/manager-x/interrupt" {
 			w.WriteHeader(http.StatusConflict)
 			_, _ = w.Write([]byte(`{"error":"no running process"}`))
@@ -233,7 +237,7 @@ func TestInterruptRolesPostsToChatInterrupt(t *testing.T) {
 		t.Fatal(err)
 	}
 	var stderr bytes.Buffer
-	done := interruptRoles(context.Background(), home, []string{"manager-import", "manager-x"}, &stderr)
+	done := interruptRoles(context.Background(), home, []string{"manager-import", "manager-x"}, "commander", &stderr)
 	if len(done) != 1 || done[0] != "manager-import" {
 		t.Fatalf("interrupted %v, want [manager-import]", done)
 	}

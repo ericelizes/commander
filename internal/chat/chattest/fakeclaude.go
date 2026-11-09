@@ -17,6 +17,8 @@
 //	             synthetic assistant error message, and an error result
 //	unsupported  a control_request the engine must refuse
 //	crash        exits with code 3 mid-turn
+//	[commander interrupt] ...  (a message starting so) recorded verbatim as
+//	             interrupt-note.json, then echoed: no other keyword applies
 //	anything else is echoed back as text
 //
 // Every result carries a cumulative total_cost_usd (+0.01 per turn) that
@@ -224,6 +226,9 @@ func (f *fake) turn(text string) int {
 		f.cost += 0.01
 		f.emit(map[string]any{"type": "result", "subtype": "success", "is_error": false, "result": "Prepared changes; tests passed. Commander review is required.", "total_cost_usd": f.cost, "num_turns": 1, "duration_ms": 5})
 		return -1
+	case strings.HasPrefix(text, "[commander interrupt]"):
+		f.record("interrupt-note", map[string]any{"text": text})
+		f.textBlock("", "carrying on", 0, false)
 	case strings.Contains(text, "crash"):
 		f.textBlock("", "about to crash", 0, true)
 		return 3

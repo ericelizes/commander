@@ -1323,6 +1323,64 @@ func (e *Engine) Interrupt(ctx context.Context, role string) error {
 	return p.signal(syscall.SIGINT)
 }
 
+// InterruptForMail stops role's current turn so it reads mail from by (a
+// Commander or Manager role, never the user). Claude records any interrupt as
+// the user's: the cut tool call's result reads "The user doesn't want to
+// proceed with this tool use ... STOP ... wait for the user" and a
+// "[Request interrupted by user for tool use]" line follows. Agents took that
+// for the user saying stop and held, so the interrupt is followed at once by
+// InterruptNote, which says who it was and to carry on. Idle, there is no
+// turn to cut: nothing is interrupted and no note is sent (the mail is
+// delivered as the next message, as ever).
+func (e *Engine) InterruptForMail(ctx context.Context, role, by string) error {
+	c, _, err := e.live(role)
+	if err != nil {
+		return err
+	}
+	c.mu.Lock()
+	busy := c.tracker.turn || len(c.tracker.order) > 0
+	c.mu.Unlock()
+	if !busy {
+		return nil
+	}
+	if err := e.Interrupt(ctx, role); err != nil {
+		return err
+	}
+	if !e.Running(role) { // SIGINT fallback ended the process; its restart resumes
+		return nil
+	}
+	return e.send(role, InterruptNote(by, role), "mail")
+}
+
+// InterruptNote is the labelled note that follows an interrupt sent to
+// deliver mail: it names the sender and says the "user" rejection just above
+// is not the user's.
+func InterruptNote(by, role string) string {
+	by = cleanRole(by)
+	if by == "" {
+		by = "commander"
+	}
+	return "[commander interrupt] " + by + " interrupted your turn to deliver mail. This is NOT the user: the user typed nothing. " +
+		"The \"[Request interrupted by user for tool use]\" line and any tool result saying \"The user doesn't want to proceed with this tool use\" " +
+		"or \"STOP what you are doing and wait for the user\" just above came from this interrupt. It is not a hold: do not stop or wait for the user. " +
+		"Read the new mail (it arrives with this message or right after; `cmdr internal-inbox --agent " + role + " --unread` lists it), " +
+		"then carry on with your work, rerunning the cut-off tool call if it is still needed."
+}
+
+// cleanRole keeps a role name to one short line of name characters.
+func cleanRole(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		if b.Len() >= 64 {
+			break
+		}
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-' || r == '.' || r == '_' {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
 func (e *Engine) sendInterrupt(p *process) chan struct{} {
 	p.pmu.Lock()
 	p.reqN++

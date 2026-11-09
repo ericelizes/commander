@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -172,7 +173,7 @@ func runInternalMail(args []string, stdout, stderr *os.File) int {
 		if len(failed) > 0 {
 			result["unreachable"] = failed
 		}
-		result["interrupted"] = interruptRoles(ctx, home, rest, stderr)
+		result["interrupted"] = interruptRoles(ctx, home, rest, *from, stderr)
 	} else if len(oneShot) > 0 {
 		names := make([]string, len(oneShot))
 		for i, run := range oneShot {
@@ -358,9 +359,12 @@ func markReroute(runID int64, role string) {
 
 // interruptRoles stops each role's current turn through cmdrd. The turn ends,
 // the chat goes idle, and the wake loop hands it the mail as its next message.
+// The request names the sender (`by`), so cmdrd follows the cut with a note
+// saying it was that agent, not the user (Claude records every interrupt as
+// the user rejecting the tool call).
 // Mail is already sent, so a role that cannot be interrupted (no native chat,
 // cmdrd down) is a warning, not a failure.
-func interruptRoles(ctx context.Context, home string, roles []string, stderr io.Writer) []string {
+func interruptRoles(ctx context.Context, home string, roles []string, by string, stderr io.Writer) []string {
 	raw, err := os.ReadFile(filepath.Join(home, "api-url"))
 	if err != nil {
 		fmt.Fprintf(stderr, "warning: not interrupted, cmdrd has no api-url: %v\n", err)
@@ -370,12 +374,14 @@ func interruptRoles(ctx context.Context, home string, roles []string, stderr io.
 	token, _ := os.ReadFile(filepath.Join(home, "api-token"))
 	done := []string{}
 	for _, role := range roles {
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, base+"/api/chat/"+url.PathEscape(role)+"/interrupt", nil)
+		payload, _ := json.Marshal(map[string]string{"by": by})
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, base+"/api/chat/"+url.PathEscape(role)+"/interrupt", bytes.NewReader(payload))
 		if err != nil {
 			fmt.Fprintf(stderr, "warning: %s not interrupted: %v\n", role, err)
 			continue
 		}
 		req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(string(token)))
+		req.Header.Set("Content-Type", "application/json")
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			fmt.Fprintf(stderr, "warning: %s not interrupted: %v\n", role, err)
