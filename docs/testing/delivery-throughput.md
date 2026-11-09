@@ -40,6 +40,15 @@ source has no findings; unassessed source cannot claim complete coverage.
 Only complete execution, complete coverage and no blocker/major findings satisfy
 a review. Retain minor suggestions without inventing a fix commit; a typed
 minor-only proof may use `no_fix_required:true` instead of claiming no findings.
+Minors get at most one fix pass (`one-minor-fix-pass@v1`): a recheck reviews only
+the fix delta (receipt base = the prior reviewed head, proof `prior_review` and
+`prior_head`), and every minor left on the passing head is filed by the close door
+as a Manager-held follow-up bead instead of another review round. A fix delta the
+verifier measures on GitHub as tiny documentation (at most 3 prose files and 20
+lines, no agent instructions, nothing sensitive) renews the earlier review with
+`delta_renewal:true` instead of a new review. Reviewers run
+`cmdr workflow review-report-check` before posting, so format errors never cost a
+review.
 The verifier resolves task/run/actor from stored run provenance, not owner labels.
 The executor registers the original manifest under Commander home's
 `review-executions/<run-id>/<manifest-hash>.json`, before releasing the child.

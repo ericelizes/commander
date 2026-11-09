@@ -98,10 +98,19 @@ func TestMinorFindingDoesNotRequireSourceChangeOrNewReview(t *testing.T) {
 	if err := reviewVerdict(review, r.Head); err != nil {
 		t.Fatalf("minor-only completed review blocked: %v", err)
 	}
+	var filed []ReviewFinding
+	review.FileFollowUps = func(_ context.Context, _, _ string, fs []ReviewFinding) ([]string, error) {
+		filed = fs
+		return []string{"follow-1"}, nil
+	}
 	read := func(context.Context, string) (Review, error) { return review, nil }
 	proof := &Proof{ReviewBead: r.Task, Head: r.Head, NoFixRequired: true}
-	if _, err := Verify(context.Background(), fakeGH(r.Head, false), read, "review-proof", testURL, "key", "step", proof); err != nil {
+	e, err := Verify(context.Background(), fakeGH(r.Head, false), read, "review-proof", testURL, "key", "step", proof)
+	if err != nil {
 		t.Fatalf("minor-only review required fake fix commit: %v", err)
+	}
+	if len(filed) != 1 || len(e.FollowUps) != 1 || e.FollowUps[0] != "follow-1" {
+		t.Fatalf("the unfixed minor was not filed as a follow-up: %v %+v", filed, e)
 	}
 	complete := testResult()
 	review.Comments = append(review.Comments, complete.Comment())

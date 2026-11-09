@@ -281,6 +281,26 @@ edge already gone counts as done, so after a failure run the same command again.
    review bead closed before you post the proof) and
    `cmdr internal-comment --project P --bead S --text 'workflow-review-proof@v1 {"review_bead":"<separate-review-task>","head":"<full-sha>","fix_commits":["<full-fix-sha>"]}'`
    (no findings: `"no_findings":true,"fix_commits":[]`).
+   **Bounded review loop (d78, `one-minor-fix-pass@v1`).** Blockers and majors are
+   fixed and rechecked, as ever. Minors get at most ONE fix pass: fix them once (or
+   skip the fix with `"no_fix_required":true`), then never chase a recheck's new
+   minors with another round. A recheck reviews only the fix delta: brief the
+   recheck reviewer with the prior review bead and the head it reviewed, have it run
+   policy with `--base <prior head>`, and prove it with
+   `"prior_review":"<prior-review-task>","prior_head":"<prior-full-sha>","fix_commits":["<full-fix-sha>"]`
+   added to the proof (the verifier checks the receipt's base is the prior head and
+   that the prior review completed a typed review of it). Any minor left on the
+   passing head is filed by the close door as a follow-up bead under your
+   workstream (label `workflow-followup-of:<block>`, a Manager-to-start receipt,
+   yours to schedule or close) and the step passes; `no_findings` can never hide
+   typed minors. **Tiny documentation fixes need no new review:** after a review
+   of head H, a fix delta the verifier itself measures on GitHub as documentation
+   only (at most 3 prose files, 20 lines, no agent-instruction file such as a
+   prompts/ file or CLAUDE.md, nothing reviewpolicy reads as sensitive) renews
+   that review with
+   `{"review_bead":"<the review of H>","head":"<current-full-sha>","prior_head":"<H>","fix_commits":["<full-fix-sha>"],"delta_renewal":true}`;
+   anything bigger is refused with the reason and needs a delta recheck. Brief
+   every reviewer to run `cmdr workflow review-report-check` before it exits.
 
    **Code review is never yours.** Every code change is reviewed by a SEPARATE
    review Operator, never the one who wrote it and never you. Lifecycle: writer

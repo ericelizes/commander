@@ -36,7 +36,7 @@ func TestUnresolvedAddendumCannotOverrideVerdict(t *testing.T) {
 	reader := func(context.Context, string) (Review, error) {
 		return Review{ID: p.ReviewBead, Status: "closed", Owner: "operator-review"}, nil
 	}
-	if err := reviewProof(context.Background(), nil, reader, "", Head{SHA: "head"}, &p); err == nil || !strings.Contains(err.Error(), "resolver unavailable") {
+	if _, err := reviewProof(context.Background(), nil, reader, "", Head{SHA: "head"}, &p); err == nil || !strings.Contains(err.Error(), "resolver unavailable") {
 		t.Fatalf("unresolved addendum: %v", err)
 	}
 }

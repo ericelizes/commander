@@ -375,6 +375,9 @@ func checkWorkflowCloseOnce(ctx context.Context, bc beads.Client, dir, project, 
 			if err = loadReviewResults(ctx, project, reviewID, &review); err != nil {
 				return workflowtemplate.Review{}, err
 			}
+			review.FileFollowUps = func(ctx context.Context, reviewID, head string, findings []workflowtemplate.ReviewFinding) ([]string, error) {
+				return fileReviewFollowUps(ctx, bc, dir, block.Bead, instance, step, reviewID, head, findings)
+			}
 			review.ValidateAddendum = func(ctx context.Context, h workflowtemplate.Head, p *workflowtemplate.Proof) error {
 				return resolveWorkflowAddendum(ctx, bc, dir, project, block.Bead, id, binding, h, p, review)
 			}

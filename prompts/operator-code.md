@@ -121,6 +121,19 @@ no unresolved blocker/major ends `CLEAN`; actual unresolved source defects end
 `NOT CLEAN`. An execution-blocked/coverage-partial report claims neither verdict.
 Record the verifier receipt as `workflow-review-result@v1` followed by JSON:
 `{"task":"<task>","run_id":123,"actor":"<actual Operator role>","head":"<head sha>","base":"<base sha>","scope_hash":"<policy hash>","depth":"focused|full","manifest_hash":"<sealed manifest digest>","execution":"complete|blocked|failed","source":"clear|findings|not-assessed","coverage":"complete|partial","reason":"<actual result>","findings":[{"id":"<stable id>","severity":"blocker|major|minor","summary":"<finding>"}]}`.
+A **recheck** (your brief names the prior review and the head it reviewed)
+reviews only the fix delta: run `review-policy` and `review-exec` with
+`--base <prior reviewed head>`, so the receipt's `base` is that head; the prior
+review's coverage of the rest is retained, so do not re-review unchanged code.
+Grade every finding honestly. Minors never make the report NOT CLEAN: the review
+loop gives minors at most one fix pass, and the close door files any minor left
+on the passing head as a follow-up bead for the Manager (decision d78), so a
+recheck that finds only new minors ends the loop instead of starting another.
+Before you post and exit, save the report and the receipt to files and run
+`cmdr workflow review-report-check --head <sha> --file <report> --receipt <receipt>`:
+post only what it accepts (it applies the close door's format and provenance
+rules, so a review is never redone for a missing `Head:` line or receipt). The
+verdict lives on your bead: a verdict given only in mail counts for nothing.
 Use the actual task-bound run/actor; a later completion can recover missing
 coverage on the same task/head, but earlier source findings still block until
 resolved. Legacy NOT CLEAN is ambiguous and requires explicit disposition.

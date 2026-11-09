@@ -47,6 +47,9 @@ func runWorkflow(args []string, stdout, stderr *os.File) int {
 	if len(args) > 0 && args[0] == "add-review-addendum" {
 		return runWorkflowAddendum(args[1:], stdout, stderr)
 	}
+	if len(args) > 0 && args[0] == "review-report-check" {
+		return runWorkflowReviewReportCheck(args[1:], stdout, stderr)
+	}
 	if len(args) > 0 && args[0] == "bind-writers" {
 		return runWorkflowBindWriters(args[1:], stdout, stderr)
 	}

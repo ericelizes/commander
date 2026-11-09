@@ -171,6 +171,9 @@ type Evidence struct {
 	Head     string `json:"head"`
 	Finding  string `json:"finding"`
 	Proof    *Proof `json:"proof,omitempty"`
+	// FollowUps are the beads filed for the minor findings this review left
+	// unfixed (MinorPolicy): the step passes with them, never with them dropped.
+	FollowUps []string `json:"follow_ups,omitempty"`
 }
 
 func (e Evidence) Comment() string { b, _ := json.Marshal(e); return EvidencePrefix + string(b) }
@@ -192,7 +195,26 @@ type Proof struct {
 	FixCommits    []string     `json:"fix_commits"`
 	NoFindings    bool         `json:"no_findings"`
 	NoFixRequired bool         `json:"no_fix_required,omitempty"`
+	// PriorReview and PriorHead make this a delta recheck: ReviewBead reviewed
+	// only the fix delta PriorHead..Head (its typed receipt's base is PriorHead),
+	// and PriorReview's complete review of PriorHead is the retained coverage.
+	PriorReview string `json:"prior_review,omitempty"`
+	PriorHead   string `json:"prior_head,omitempty"`
+	// DeltaRenewal carries ReviewBead's review of PriorHead to Head with no new
+	// review, when the verifier measures the fix delta as tiny documentation
+	// (renewDelta). PriorReview stays empty: ReviewBead is the renewed review.
+	DeltaRenewal bool `json:"delta_renewal,omitempty"`
 }
+
+// MinorPolicy is the review loop's bound (decision d78): blockers and majors are
+// fixed and rechecked; minors get at most one fix pass; minors a review leaves
+// unfixed on the passing head are filed as follow-up beads held by the owning
+// Manager, and the step passes. A recheck reviews only the fix delta.
+const MinorPolicy = "one-minor-fix-pass@v1"
+
+// FollowUpFiler files (idempotently) one follow-up bead per finding left
+// unfixed on head by review, returning their ids in finding order.
+type FollowUpFiler func(ctx context.Context, review, head string, findings []ReviewFinding) ([]string, error)
 
 // Review is a review bead as the proof reads it. Comments are oldest first.
 type Review struct {
@@ -201,6 +223,8 @@ type Review struct {
 	Runs              map[int64]string
 	Recorded          map[string]reviewrun.Recorded
 	ValidateAddendum  func(context.Context, Head, *Proof) error
+	// FileFollowUps is set by the close door; nil refuses a review that leaves minors.
+	FileFollowUps FollowUpFiler
 }
 type ReviewReader func(context.Context, string) (Review, error)
 
@@ -213,6 +237,7 @@ func Verify(ctx context.Context, run GHRunner, read ReviewReader, verifier, pr, 
 		return e, err
 	}
 	e.Head = h.SHA
+	var pending *followUps
 	switch verifier {
 	case "threads-resolved", "devin-comments-resolved":
 		err = threads(ctx, run, pr)
@@ -238,7 +263,7 @@ func Verify(ctx context.Context, run GHRunner, read ReviewReader, verifier, pr, 
 			err = fmt.Errorf("deploy job has not succeeded on PR head %s", h.SHA)
 		}
 	case "review-proof", "review-clean", "recheck-clean":
-		err = reviewProof(ctx, run, read, pr, h, proof)
+		pending, err = reviewProof(ctx, run, read, pr, h, proof)
 	case "head-current":
 		if err = threads(ctx, run, pr); err == nil {
 			err = ciGreen(h)
@@ -257,6 +282,23 @@ func Verify(ctx context.Context, run GHRunner, read ReviewReader, verifier, pr, 
 		return e, fmt.Errorf("PR head changed during check; retry")
 	}
 	e.Finding = verifier + " passed"
+	if pending != nil && pending.note != "" {
+		e.Finding += "; " + pending.note
+	}
+	if pending != nil && len(pending.findings) > 0 {
+		if pending.file == nil {
+			return e, fmt.Errorf("%s: review %s left %d minor finding(s) on head %s and no follow-up filer is available; close through cmdr internal-close-objective", verifier, pending.review, len(pending.findings), h.SHA)
+		}
+		ids, err := pending.file(ctx, pending.review, pending.head, pending.findings)
+		if err != nil {
+			return e, fmt.Errorf("%s: filing follow-ups for the minor findings: %w", verifier, err)
+		}
+		if len(ids) != len(pending.findings) {
+			return e, fmt.Errorf("%s: filed %d follow-ups for %d minor findings", verifier, len(ids), len(pending.findings))
+		}
+		e.FollowUps = ids
+		e.Finding += fmt.Sprintf("; %s: %d minor finding(s) filed as follow-ups %s", MinorPolicy, len(ids), strings.Join(ids, ", "))
+	}
 	if proof != nil && proof.Addendum != nil && (verifier == "review-proof" || verifier == "review-clean" || verifier == "recheck-clean") {
 		e.Finding += "; original NOT CLEAN retained; conformance addendum accepted"
 	}
@@ -289,47 +331,150 @@ func ciGreen(h Head) error {
 	}
 	return nil
 }
-func reviewProof(ctx context.Context, run GHRunner, read ReviewReader, pr string, h Head, p *Proof) error {
+
+// followUps are the minor findings a passing review leaves on the head, to be
+// filed once the head is confirmed unchanged.
+type followUps struct {
+	review, head string
+	findings     []ReviewFinding
+	file         FollowUpFiler
+	note         string
+}
+
+func reviewProof(ctx context.Context, run GHRunner, read ReviewReader, pr string, h Head, p *Proof) (*followUps, error) {
 	if p == nil || p.ReviewBead == "" || p.Head != h.SHA || (!p.NoFindings && !p.NoFixRequired && len(p.FixCommits) == 0) {
-		return fmt.Errorf("review proof required for current head: review_bead, head and fix_commits (or no_findings)")
+		return nil, fmt.Errorf("review proof required for current head: review_bead, head and fix_commits (or no_findings)")
 	}
 	if read == nil {
-		return fmt.Errorf("review reader unavailable")
+		return nil, fmt.Errorf("review reader unavailable")
 	}
 	r, err := read(ctx, p.ReviewBead)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if r.ID != p.ReviewBead || r.Status != "closed" || !strings.HasPrefix(r.Owner, "operator-") {
-		return fmt.Errorf("proof must name a closed separate review Operator bead")
+		return nil, fmt.Errorf("proof must name a closed separate review Operator bead")
 	}
 	if p.Addendum != nil {
 		if err := p.Addendum.Validate(); err != nil {
-			return err
+			return nil, err
 		}
 		if r.ValidateAddendum == nil {
-			return fmt.Errorf("review addendum resolver unavailable")
+			return nil, fmt.Errorf("review addendum resolver unavailable")
 		}
 		if err := r.ValidateAddendum(ctx, h, p); err != nil {
-			return err
+			return nil, err
 		}
-	} else if err := reviewVerdict(r, h.SHA); err != nil {
-		return err
+	}
+	// A renewal judges the review on the head it read; everything else on the current head.
+	reviewed, note := h.SHA, ""
+	if p.DeltaRenewal {
+		if p.Addendum != nil || p.PriorReview != "" || !hexLength(p.PriorHead, 40) || p.PriorHead == h.SHA || len(p.FixCommits) == 0 {
+			return nil, fmt.Errorf("a delta renewal names the renewed review as review_bead, its full prior_head and the fix_commits since, with no prior_review or addendum")
+		}
+		reviewed = p.PriorHead
+	}
+	if p.Addendum == nil {
+		if err := reviewVerdict(r, reviewed); err != nil {
+			return nil, err
+		}
+	}
+	current := currentResult(r, reviewed)
+	if p.DeltaRenewal {
+		on, err := onPR(ctx, run, pr, h, p.PriorHead)
+		if err != nil {
+			return nil, fmt.Errorf("prior head %s: %w", p.PriorHead, err)
+		}
+		if !on {
+			return nil, fmt.Errorf("prior head %s is not on the PR", p.PriorHead)
+		}
+		if note, err = renewDelta(ctx, run, pr, p.PriorHead, h.SHA); err != nil {
+			return nil, err
+		}
 	}
 	if p.NoFixRequired {
-		typed, err := resultVerdict(r, h.SHA)
+		typed, err := resultVerdict(r, reviewed)
 		if !typed || err != nil {
-			return fmt.Errorf("no_fix_required needs a complete typed review with no blocker or major findings")
+			return nil, fmt.Errorf("no_fix_required needs a complete typed review with no blocker or major findings")
+		}
+	}
+	if p.NoFindings && current != nil && len(current.Findings) > 0 {
+		return nil, fmt.Errorf("no_findings contradicts review %s, whose typed result on head %s has %d finding(s): use fix_commits or no_fix_required", r.ID, reviewed, len(current.Findings))
+	}
+	if !p.DeltaRenewal && (p.PriorReview != "" || p.PriorHead != "") {
+		if err := deltaRecheck(ctx, run, read, pr, h, p, current); err != nil {
+			return nil, err
 		}
 	}
 	for _, sha := range p.FixCommits {
 		on, err := onPR(ctx, run, pr, h, sha)
 		if err != nil {
-			return fmt.Errorf("fix commit %s: %w", sha, err)
+			return nil, fmt.Errorf("fix commit %s: %w", sha, err)
 		}
 		if !on {
-			return fmt.Errorf("fix commit %s is not on the PR", sha)
+			return nil, fmt.Errorf("fix commit %s is not on the PR", sha)
 		}
+	}
+	out := &followUps{review: r.ID, head: reviewed, file: r.FileFollowUps, note: note}
+	// Any finding left here is minor (reviewVerdict refused the rest): the head
+	// passes, and each one becomes a follow-up rather than another review round.
+	if current != nil {
+		out.findings = current.Findings
+	}
+	return out, nil
+}
+
+// currentResult is the latest valid typed result of r on head, nil when none
+// (a legacy CLEAN report carries no findings to file).
+func currentResult(r Review, head string) *ReviewResult {
+	var latest *ReviewResult
+	for _, c := range r.Comments {
+		result, ok, err := ParseReviewResult(c)
+		if !ok || err != nil || result.Head != head || result.validate(r) != nil {
+			continue
+		}
+		latest = &result
+	}
+	return latest
+}
+
+// deltaRecheck holds a recheck that reviewed only the fix delta to honest
+// retained coverage: the recheck's typed receipt has base = the prior head, the
+// prior review completed a typed review of that head, the prior head is on the
+// PR and the fix pass between them is named.
+func deltaRecheck(ctx context.Context, run GHRunner, read ReviewReader, pr string, h Head, p *Proof, current *ReviewResult) error {
+	if p.PriorReview == "" || !hexLength(p.PriorHead, 40) || p.PriorHead == h.SHA {
+		return fmt.Errorf("a delta recheck proof needs prior_review and the full prior_head it was reviewed at (not the current head)")
+	}
+	if p.PriorReview == p.ReviewBead {
+		return fmt.Errorf("a delta recheck must be a new review of the fix delta, not review %s again", p.ReviewBead)
+	}
+	if len(p.FixCommits) == 0 {
+		return fmt.Errorf("a delta recheck reviews a fix pass: name its fix_commits")
+	}
+	if current == nil {
+		return fmt.Errorf("a delta recheck needs a typed review result on head %s", h.SHA)
+	}
+	if current.Base != p.PriorHead {
+		return fmt.Errorf("delta recheck %s reviewed %s..%s, not the fix delta since the prior reviewed head %s: run review-policy with --base %s", p.ReviewBead, current.Base, h.SHA, p.PriorHead, p.PriorHead)
+	}
+	prior, err := read(ctx, p.PriorReview)
+	if err != nil {
+		return fmt.Errorf("prior review %s: %w", p.PriorReview, err)
+	}
+	if prior.ID != p.PriorReview || prior.Status != "closed" || !strings.HasPrefix(prior.Owner, "operator-") {
+		return fmt.Errorf("prior review %s must be a closed separate review Operator bead", p.PriorReview)
+	}
+	retained := currentResult(prior, p.PriorHead)
+	if retained == nil || retained.Execution != "complete" || retained.Coverage != "complete" || retained.Source == "not-assessed" {
+		return fmt.Errorf("prior review %s has no complete typed review of head %s to retain", p.PriorReview, p.PriorHead)
+	}
+	on, err := onPR(ctx, run, pr, h, p.PriorHead)
+	if err != nil {
+		return fmt.Errorf("prior head %s: %w", p.PriorHead, err)
+	}
+	if !on {
+		return fmt.Errorf("prior head %s is not on the PR", p.PriorHead)
 	}
 	return nil
 }
