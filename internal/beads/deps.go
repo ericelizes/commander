@@ -129,6 +129,10 @@ func (e *PartialDetailsError) Error() string {
 	if len(e.Missing) == 0 {
 		return e.Err.Error() // every bead read, from a source that says why it is partial
 	}
+	var stale *staleExportError
+	if errors.As(e.Err, &stale) {
+		return fmt.Sprintf("%d of the requested beads unread: %v", len(e.Missing), e.Err) // no bd show ran
+	}
 	return fmt.Sprintf("br show: %d of the requested beads unread: %v", len(e.Missing), e.Err)
 }
 func (e *PartialDetailsError) Unwrap() error { return e.Err }
@@ -330,7 +334,8 @@ func (c *cmdClient) showOnce(ctx context.Context, projectDir string, batch []str
 	return nil, lastErr
 }
 
-const maxExportAge = 30 * time.Second
+// maxExportAge is a var only so tests can age an export without waiting 30s.
+var maxExportAge = 30 * time.Second
 
 // exportDetails accepts bounded display lag; enforcement never calls it.
 func exportDetails(projectDir string, ids []string) map[string]Detail {

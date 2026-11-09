@@ -1505,7 +1505,13 @@ flush is ONE per project in flight (`inflight`), run by the client, not the call
 loop, API) wait for that one, a waiter whose context ends leaves without ending it. A failed flush is never waited
 for again: retries run in the background with backoff (3s doubling to 2 min, logged), and meanwhile a cold load
 answers Details from the export on disk as a `PartialDetailsError` naming the failure (`staleExportError`; beads it
-lacks stay unread, never bd show), so the project reads degraded rather than storming bd; List goes to bd. cmdrd's
+lacks stay unread, never bd show; the error names no bd show), so the project reads degraded rather than storming bd; List goes to bd. The backoff applies to every failed flush (warm Dolt and br/SQLite too) and a retry
+starts only when a load arrives. A client that cannot flush (or a stopped one) reads bd as before. **Cache fill
+(il9.202.29.5):** a load answered from the export fills an EMPTY detail cache from that file (`seedCache` ->
+`CachedClient.seedFromExport`): one bd list keys each bead, kept only while the Dolt journals and the file stand where
+they were at the flush (else nothing is seeded); entries are export-sourced, so the re-take/show rules above hold.
+Without it, the first write after 30s+ of quiet sent every bead to bd show (bench 5,601 shows / 36.7s -> 1 / 0.2s;
+`TestColdDoltLoadFillsTheDetailCacheSoTheFirstWriteShowsOneBead`). The test fake models `exportDetails`. cmdrd's
 board and invariant pass have separate ExportReads clients, so each makes its own first export at a start. Flushes
 are owned by the client: `beads.StopBackground` cancels them and waits, called by `Daemon.Run` on exit. Tests
 `TestColdDolt*`; measure with `COMMANDER_COLD_BENCH=1 go test ./internal/beads -run TestColdLoadBench -v` (5,600

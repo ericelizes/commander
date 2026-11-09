@@ -23,7 +23,7 @@ import (
 // A missing, half-written or lagging export also falls back to c.
 func ExportReads(c Client) Client {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &exportClient{ctx: ctx, cancel: cancel, Client: c, files: map[string]*exportFile{}, flushed: map[string]time.Time{}, inflight: map[string]*flushCall{}, failed: map[string]flushFailure{}, seen: map[string]map[string]fileStamp{}}
+	return &exportClient{ctx: ctx, cancel: cancel, Client: c, files: map[string]*exportFile{}, flushed: map[string]time.Time{}, inflight: map[string]*flushCall{}, failed: map[string]flushFailure{}, seen: map[string]map[string]fileStamp{}, seeded: map[string]time.Time{}}
 }
 
 type exportClient struct {
@@ -43,6 +43,8 @@ type exportClient struct {
 	// seen is each project's Dolt journals as stat'ed right before this
 	// client's last successful flush: the export holds at least that state.
 	seen map[string]map[string]fileStamp
+	// seeded is the export mtime each project's detail cache was last offered.
+	seeded map[string]time.Time
 }
 
 // flushCall is one flush of a project; done closes once err is set.
@@ -158,6 +160,9 @@ func (c *exportClient) load(ctx context.Context, dir string) (*exportFile, error
 			// (6 min for 5,600 beads, il9.202.29). Wait for the export instead;
 			// if it fails, answer from the export on disk, flagged stale.
 			if err := c.coldFlush(ctx, dir); err != nil {
+				if errors.Is(err, errNoExport) {
+					return nil, errNoExport // no flush to wait for: this client cannot, or is stopped
+				}
 				if fi, serr := os.Stat(path); serr == nil {
 					if f, perr := c.parsed(path, fi); perr == nil {
 						return f, &staleExportError{err: err, at: fi.ModTime()}
@@ -467,7 +472,31 @@ func (c *exportClient) Details(ctx context.Context, dir string, ids []string) (m
 		return c.Client.Details(ctx, dir, ids)
 	}
 	out, _ := f.details(ids)
+	c.seedCache(ctx, dir, f)
 	return out, nil
+}
+
+// seedCache offers f to an empty detail cache under this client (il9.202.29.5).
+// A cold load answers from the export alone and left the cache empty, so once
+// the project was quiet past maxExportAge, the first write's load (warm branch:
+// answer from bd) made the cache's first read and sent every bead to bd show
+// (6 min for 5,600 beads). Tried once per export file, and only on a Dolt
+// project this client flushed, where the journals say whether the database
+// has moved past the export.
+func (c *exportClient) seedCache(ctx context.Context, dir string, f *exportFile) {
+	inner, ok := c.Client.(*CachedClient)
+	if !ok || inner.hasDetails(dir) {
+		return
+	}
+	c.mu.Lock()
+	seen := c.seen[dir]
+	tried := c.seeded[dir].Equal(f.mtime)
+	c.seeded[dir] = f.mtime
+	c.mu.Unlock()
+	if len(seen) == 0 || tried {
+		return
+	}
+	inner.seedFromExport(ctx, dir, f, seen)
 }
 
 // details answers ids from the export, listing those it lacks.
@@ -475,21 +504,29 @@ func (f *exportFile) details(ids []string) (map[string]Detail, []string) {
 	out := make(map[string]Detail, len(ids))
 	var missing []string
 	for _, id := range ids {
-		is := f.byID[id]
-		if is == nil || is.Status == "tombstone" {
+		if d, ok := f.detail(id); ok {
+			out[id] = d
+		} else {
 			missing = append(missing, id)
-			continue
 		}
-		d := Detail{Deps: slices.Clone(is.Dependencies), Comments: slices.Clone(is.Comments)}
-		for _, dep := range is.Dependencies {
-			if dep.Type == "parent-child" {
-				d.Parent = dep.DependsOnID
-				break
-			}
-		}
-		out[id] = d
 	}
 	return out, missing
+}
+
+// detail is one bead's Detail from the export; false when it lacks the bead.
+func (f *exportFile) detail(id string) (Detail, bool) {
+	is := f.byID[id]
+	if is == nil || is.Status == "tombstone" {
+		return Detail{}, false
+	}
+	d := Detail{Deps: slices.Clone(is.Dependencies), Comments: slices.Clone(is.Comments)}
+	for _, dep := range is.Dependencies {
+		if dep.Type == "parent-child" {
+			d.Parent = dep.DependsOnID
+			break
+		}
+	}
+	return d, true
 }
 
 func (c *exportClient) Deps(ctx context.Context, dir, id string) ([]Dep, error) {

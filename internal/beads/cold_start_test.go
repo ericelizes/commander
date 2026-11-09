@@ -26,9 +26,27 @@ type showCountingFlusher struct {
 	flushCost, batchCost time.Duration
 }
 
+// Details models cmdClient's display read: beads an export under maxExportAge
+// answers (exportDetails) are not shown; the rest go to bd show.
 func (c *showCountingFlusher) Details(ctx context.Context, dir string, ids []string) (map[string]Detail, error) {
-	c.shown.Add(int64(len(ids)))
-	time.Sleep(time.Duration((len(ids)+19)/20) * c.batchCost)
+	fromExport := exportDetails(dir, ids)
+	var show []string
+	for _, id := range ids {
+		if _, ok := fromExport[id]; !ok {
+			show = append(show, id)
+		}
+	}
+	return c.show(ctx, dir, ids, show)
+}
+
+// changedDetails models cmdClient's: a changed bead always goes to bd show.
+func (c *showCountingFlusher) changedDetails(ctx context.Context, dir string, ids []string) (map[string]Detail, error) {
+	return c.show(ctx, dir, ids, ids)
+}
+
+func (c *showCountingFlusher) show(ctx context.Context, dir string, ids, show []string) (map[string]Detail, error) {
+	c.shown.Add(int64(len(show)))
+	time.Sleep(time.Duration((len(show)+19)/20) * c.batchCost)
 	return c.MemClient.Details(ctx, dir, ids)
 }
 
@@ -272,8 +290,9 @@ func TestColdLoadBench(t *testing.T) {
 		t.Skip("measurement; set COMMANDER_COLD_BENCH=1")
 	}
 	for _, failing := range []bool{false, true} {
-		dir, ids, _ := coldProjectOf(t, 1400) // 1 + 1400*4 = 5,601 beads
+		dir, ids, j := coldProjectOf(t, 1400) // 1 + 1400*4 = 5,601 beads
 		inner := &showCountingFlusher{MemClient: &MemClient{}, flushCost: 500 * time.Millisecond, batchCost: 130 * time.Millisecond}
+		inner.MemClient = memBeads(ids)
 		inner.failing.Store(failing)
 		c := ExportReads(NewCached(inner))
 		start := time.Now()
@@ -292,7 +311,120 @@ func TestColdLoadBench(t *testing.T) {
 		for range 4 {
 			<-done
 		}
-		StopBackground(c)
 		t.Logf("failing export=%v: all four loads answered in %v, %d beads through bd show, %d exports", failing, time.Duration(slowest.Load()).Round(time.Millisecond), inner.shown.Load(), inner.flushes.Load())
+		if !failing {
+			// The re-review's case: quiet past maxExportAge, then one write.
+			was := maxExportAge
+			maxExportAge = 100 * time.Millisecond
+			fi, _ := os.Stat(filepath.Join(dir, ".beads", "issues.jsonl"))
+			time.Sleep(time.Until(fi.ModTime().Add(2 * maxExportAge)))
+			inner.MemClient.Beads[7].UpdatedAt = "2026-11-09T00:00:00Z"
+			appendJournal(t, j, time.Now())
+			shown := inner.shown.Load()
+			start := time.Now()
+			c.Details(context.Background(), dir, ids)
+			maxExportAge = was
+			t.Logf("first write after a quiet cold start: load took %v, %d beads through bd show", time.Since(start).Round(time.Millisecond), inner.shown.Load()-shown)
+		}
+		StopBackground(c)
+	}
+}
+
+// A client that cannot flush (or one stopped) has no export to wait for: a
+// cold Dolt load reads bd as before, not the stale export flagged degraded.
+func TestColdDoltLoadWithNoFlusherReadsBd(t *testing.T) {
+	dir, ids, _ := coldProject(t)
+	c := ExportReads(NewCached(memBeads(ids)))
+	defer StopBackground(c)
+	if _, err := c.Details(context.Background(), dir, ids); err != nil {
+		t.Fatalf("err=%v, want a clean read from bd", err)
+	}
+}
+
+// A partial read from a stale export ran no bd show and must not say it did.
+func TestPartialFromAStaleExportDoesNotNameBdShow(t *testing.T) {
+	err := &PartialDetailsError{Missing: []string{"a"}, Err: &staleExportError{err: errors.New("killed"), at: time.Now()}}
+	if strings.Contains(err.Error(), "br show") || !strings.Contains(err.Error(), "export not refreshed") {
+		t.Fatalf("got %q", err.Error())
+	}
+}
+
+// memBeads lists ids in a MemClient as bd list would (every one closed, as in
+// coldProject), so the detail cache can key them.
+func memBeads(ids []string) *MemClient {
+	m := &MemClient{}
+	for _, id := range ids {
+		m.Beads = append(m.Beads, &Bead{ID: id, Title: "Step " + id, Status: "closed", UpdatedAt: "2026-10-02T00:00:00Z"})
+	}
+	return m
+}
+
+// The re-review's probe (il9.202.29.5): a cold load answered from the export
+// left the detail cache empty, so once the project was quiet past maxExportAge
+// the first write's load (warm branch: background flush, answer from bd) made
+// the cache's first read and sent every bead to bd show (121 of 121 here; 6 min
+// for 5,600 beads). The cold load now fills the cache from the export it
+// answered from, so that load shows only the bead the write changed.
+func TestColdDoltLoadFillsTheDetailCacheSoTheFirstWriteShowsOneBead(t *testing.T) {
+	ctx := context.Background()
+	dir, ids, j := coldProject(t)
+	inner := &showCountingFlusher{MemClient: memBeads(ids)}
+	c := ExportReads(NewCached(inner))
+	defer StopBackground(c)
+
+	if _, err := c.Details(ctx, dir, ids); err != nil {
+		t.Fatal(err)
+	}
+	if n := inner.shown.Load(); n != 0 {
+		t.Fatalf("cold load showed %d beads", n)
+	}
+
+	// The project stays quiet until the export is past maxExportAge (the fake
+	// flush dates it a second ahead), then one write lands.
+	defer func(was time.Duration) { maxExportAge = was }(maxExportAge)
+	maxExportAge = 100 * time.Millisecond
+	fi, _ := os.Stat(filepath.Join(dir, ".beads", "issues.jsonl"))
+	time.Sleep(time.Until(fi.ModTime().Add(2 * maxExportAge)))
+	inner.MemClient.Beads[7].UpdatedAt = "2026-11-09T00:00:00Z"
+	appendJournal(t, j, time.Now())
+
+	got, err := c.Details(ctx, dir, ids)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := inner.shown.Load(); n != 1 || len(got) != len(ids) || got["demo-w.7.2"].Parent != "demo-w.7" {
+		t.Fatalf("first write after a quiet cold start: %d of %d beads through bd show (want 1), details=%d", n, len(ids), len(got))
+	}
+}
+
+// A write landing while the first cold flush runs: the export it makes is
+// behind at once, so the load answers from bd. The cache's first read takes
+// details from that fresh export: no storm, and nothing is seeded from a
+// file the database has passed.
+func TestColdDoltLoadWithAWriteDuringTheFlushShowsNoBead(t *testing.T) {
+	ctx := context.Background()
+	dir, ids, j := coldProject(t)
+	inner := &showCountingFlusher{MemClient: memBeads(ids), release: make(chan struct{})}
+	c := ExportReads(NewCached(inner))
+	defer StopBackground(c)
+
+	done := make(chan error, 1)
+	var got map[string]Detail
+	go func() {
+		var err error
+		got, err = c.Details(ctx, dir, ids)
+		done <- err
+	}()
+	for inner.flushes.Load() < 1 {
+		time.Sleep(5 * time.Millisecond)
+	}
+	time.Sleep(20 * time.Millisecond) // the flush stat'ed the journal before this write
+	appendJournal(t, j, time.Now())
+	close(inner.release)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	if n := inner.shown.Load(); n != 0 || len(got) != len(ids) {
+		t.Fatalf("write during the cold flush: %d beads through bd show, details=%d", n, len(got))
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"hash/fnv"
+	"maps"
 	"math/rand/v2"
 	"os"
 	"path/filepath"
@@ -449,6 +450,56 @@ func (c *CachedClient) acquireReread(ctx context.Context, dir string) (func(), e
 		return func() { <-slot }, nil
 	case <-ctx.Done():
 		return nil, ctx.Err()
+	}
+}
+
+// hasDetails reports whether dir's detail cache holds any bead.
+func (c *CachedClient) hasDetails(dir string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return len(c.details[dir]) > 0
+}
+
+// seedFromExport fills dir's empty detail cache from f, an export holding at
+// least the state of the Dolt journals seen (stat'ed before the flush that
+// wrote it). Each bead is keyed by one bd list, read only while the journals
+// and the file still stand where they were: then the list, the export and the
+// database are one state. The entries are export-sourced (export = f's mtime),
+// so the rules for those hold: trusted while that file stands, re-taken from a
+// newer one under maxExportAge, else shown. A write anywhere in the meantime
+// seeds nothing; the cache's own first read then runs as before.
+func (c *CachedClient) seedFromExport(ctx context.Context, dir string, f *exportFile, seen map[string]fileStamp) {
+	release, err := c.acquireReread(ctx, dir)
+	if err != nil {
+		return
+	}
+	defer release()
+	export := filepath.Join(dir, ".beads", "issues.jsonl")
+	standing := func() bool {
+		fi, err := os.Stat(export)
+		return err == nil && fi.Size() == f.size && fi.ModTime().Equal(f.mtime) &&
+			maps.EqualFunc(doltJournals(dir), seen, func(a, b fileStamp) bool { return a.size == b.size && a.mtime.Equal(b.mtime) })
+	}
+	if c.hasDetails(dir) || !standing() {
+		return
+	}
+	all, err := c.List(ctx, dir, ListOptions{Status: "all"})
+	if err != nil || !standing() {
+		return
+	}
+	store := make(map[string]detailEntry, len(all))
+	for _, b := range all {
+		if d, ok := f.detail(b.ID); ok {
+			store[b.ID] = detailEntry{key: detailKey(b), detail: d, export: f.mtime}
+		}
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.details == nil {
+		c.details = map[string]map[string]detailEntry{}
+	}
+	if len(c.details[dir]) == 0 {
+		c.details[dir] = store
 	}
 }
 
