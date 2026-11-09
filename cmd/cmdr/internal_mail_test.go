@@ -866,3 +866,26 @@ func TestRerouteOperatorMail_StaleManagerRoleGoesToOwner(t *testing.T) {
 		t.Fatalf("after undo: to %v cc %q moved %q", got, cc, movedTo)
 	}
 }
+
+func TestManagerRoleMail_BothSpellingsFindTheNestedRegistration(t *testing.T) {
+	st := newFakeAmStore()
+	st.m[amKey+"\x00manager-app-596t.6"] = "RedFox"
+	for _, in := range []string{"manager-app-596t-6", "manager-app-596t.6"} {
+		got, err := canonicalRecipients(context.Background(), st, amKey, []string{in}, io.Discard)
+		if err != nil || got[0] != "manager-app-596t.6" {
+			t.Fatalf("%s: got %v, %v", in, got, err)
+		}
+	}
+	// dashed registration found by the dotted spelling
+	st2 := newFakeAmStore()
+	st2.m[amKey+"\x00manager-app-596t-7"] = "BlueOwl"
+	got, err := canonicalRecipients(context.Background(), st2, amKey, []string{"manager-app-596t.7"}, io.Discard)
+	if err != nil || got[0] != "manager-app-596t-7" {
+		t.Fatalf("got %v, %v", got, err)
+	}
+	// an unregistered manager passes through and nothing registers a second agent
+	got, err = canonicalRecipients(context.Background(), st, amKey, []string{"manager-ghost-1"}, io.Discard)
+	if err != nil || got[0] != "manager-ghost-1" || len(st.m) != 1 {
+		t.Fatalf("got %v, %v", got, err)
+	}
+}

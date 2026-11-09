@@ -34,7 +34,7 @@ type Mailer interface {
 
 // Registered returns the role spelling actually registered for role and its am
 // name; both are empty when nothing matches. An exact match wins; for an
-// Operator role every registered operator-* role with the same canonical
+// Operator or Manager role every registered role of that kind with the same canonical
 // spelling (spawn.CanonicalRole) counts, found by listing the registrations
 // (a local sqlite read, made only when the exact role is not registered).
 func Registered(ctx context.Context, st Store, amProjectKey, role string) (string, string, error) {
@@ -46,7 +46,7 @@ func Registered(ctx context.Context, st Store, amProjectKey, role string) (strin
 		return role, name, nil
 	}
 	lister, ok := st.(Lister)
-	if !ok || !strings.HasPrefix(role, "operator-") {
+	if !ok || !aliasedRole(role) {
 		return "", "", nil
 	}
 	agents, err := lister.ListAmAgents(ctx, amProjectKey)
@@ -55,11 +55,24 @@ func Registered(ctx context.Context, st Store, amProjectKey, role string) (strin
 	}
 	want := beads.OwnerLabelName(role)
 	for _, a := range agents {
-		if strings.HasPrefix(a.Role, "operator-") && beads.OwnerLabelName(a.Role) == want {
+		if strings.HasPrefix(a.Role, rolePrefix(role)) && beads.OwnerLabelName(a.Role) == want {
 			return a.Role, a.AmName, nil
 		}
 	}
 	return "", "", nil
+}
+
+// aliasedRole reports roles that carry a bead id and so have two spellings:
+// operator-* and manager-* (a nested Manager's id has dots, its label dashes).
+func aliasedRole(role string) bool { return rolePrefix(role) != "" }
+
+func rolePrefix(role string) string {
+	for _, p := range []string{"operator-", "manager-"} {
+		if strings.HasPrefix(role, p) {
+			return p
+		}
+	}
+	return ""
 }
 
 // Resolve maps a role to its am name. An unmapped role is registered when
