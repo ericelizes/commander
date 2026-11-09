@@ -194,7 +194,7 @@ func TestProposal_OverruleLeavesNoStepWithoutAHolder(t *testing.T) {
 			t.Fatalf("a step another holder keeps got a receipt: %v", b.Labels)
 		}
 	}
-	if len(mailer.sent) != 1 || strings.Contains(mailer.sent[0].body, "You now hold") {
+	if len(mailer.sent) != 1 || strings.Contains(mailer.sent[0].body, "You now hold") || strings.Contains(mailer.sent[0].body, "needs a holder now") {
 		t.Fatalf("want one overrule mail claiming no hold: %+v", mailer.sent)
 	}
 }
@@ -506,5 +506,52 @@ func TestAutomaticGateQuestionStillRequiresCommanderReview(t *testing.T) {
 	runOK(t, runInternalSetObjective, askArgs("ms-1.93")...)
 	if p, ok := proposalOf(t, m, "ms-1.93"); !ok || p.Kind != beads.ProposedAsk {
 		t.Fatalf("automatic gate introduced an unreviewed user decision: %+v %v", p, ok)
+	}
+}
+
+// A gate bead is never a board step: an overrule that releases one (it waited
+// on the retired review) or unparks one gives it no custody receipt, while the
+// ordinary step beside it still gets its own.
+func TestProposal_OverruleNeverHoldsAGateBead(t *testing.T) {
+	m, _ := proposalFixture(t, true)
+	ctx := context.Background()
+	m.Seed(beads.Bead{ID: "ms-1.95", Title: "Ship the panel", Labels: []string{"kind:objective"}})
+	m.Seed(beads.Bead{ID: "ms-1.96", Title: "Merge check", Labels: []string{"kind:gate", "gate", "approver:user"}})
+	t.Setenv("COMMANDER_ROLE", "manager-ms-1")
+	var r internalCreateObjectiveResult
+	if err := json.Unmarshal([]byte(strings.TrimSpace(runOK(t, runInternalCreateObjective, "--project", "manifest", "--parent", "ms-1", "--title", "Re-review the fix"))), &r); err != nil {
+		t.Fatal(err)
+	}
+	if r.Proposed == "" {
+		t.Fatalf("not proposed: %+v", r)
+	}
+	for _, w := range []string{"ms-1.95", "ms-1.96"} {
+		if err := m.DependOn(ctx, "", w, r.BeadID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	out := overruleOut(t, r.BeadID)
+	if hasStartReceipt(t, m, "ms-1.96") {
+		t.Fatal("a gate bead got a custody receipt")
+	}
+	if !hasStartReceipt(t, m, "ms-1.95") {
+		t.Fatal("the plain step lost its receipt")
+	}
+	if held, _ := out["held"].([]any); len(held) != 1 || held[0] != "ms-1.95" {
+		t.Fatalf("held: %v", out["held"])
+	}
+}
+
+func TestProposal_OverruledParkOnAGateGivesNoReceipt(t *testing.T) {
+	m, _ := proposalFixture(t, true)
+	m.Seed(beads.Bead{ID: "ms-1.96", Title: "Merge check", Status: "in_progress", Labels: []string{"kind:gate", "gate", "approver:user"}})
+	t.Setenv("COMMANDER_ROLE", "manager-ms-1")
+	runOK(t, runInternalSetObjective, "--project", "manifest", "--bead", "ms-1.96", "--park", "--until", "72h", "--reason", "waiting a long while for it")
+	if _, ok := proposalOf(t, m, "ms-1.96"); !ok {
+		t.Skip("park was not proposed in this fixture")
+	}
+	overruleOut(t, "ms-1.96")
+	if hasStartReceipt(t, m, "ms-1.96") {
+		t.Fatal("an unparked gate bead got a custody receipt")
 	}
 }

@@ -377,8 +377,6 @@ func overruleProposal(ctx context.Context, bc beads.Client, project store.Projec
 	body := fmt.Sprintf("Commander overruled your proposed %s on %s %q: %s\n\nUndone: %s. Do not add it again; carry on with the approved workflow. If the user wants it, they will say so.", p.Kind, beadID, b.Title, reason, undone)
 	if len(held) > 0 {
 		body += fmt.Sprintf("\n\nYou now hold %s (a \"Manager to start\" receipt, due within %s): start each, give it an owner or a wait, or close it.", strings.Join(held, ", "), custodyWithin)
-	} else if p.Kind == beads.ProposedAsk || p.Kind == beads.ProposedWait {
-		body += fmt.Sprintf("\n\n%s needs a holder now: an owner working it, a wait cmdrd can watch, or close it.", beadID)
 	}
 	st, client, key, cleanup, mailErr := mailDeps()
 	if mailErr == nil {
@@ -451,6 +449,9 @@ func overruleCustody(ctx context.Context, bc beads.Client, dir string, b *beads.
 		}
 		if c.Status == "closed" || c.Status == "tombstone" || c.Status == beads.StatusDeferred || beads.IsWorkstream(c.Labels) {
 			continue // done, parked, or a nested workstream bead (its own Manager holds it)
+		}
+		if gates.IsGate(*c) || slices.Contains(c.Labels, beads.GateLabel) {
+			continue // a gate is no board step: its approver holds it, never a custody receipt
 		}
 		fresh[id] = c
 		ids = append(ids, id)
