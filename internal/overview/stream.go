@@ -3,6 +3,7 @@ package overview
 import (
 	"context"
 	"encoding/json"
+	"regexp"
 )
 
 type progressKey struct{}
@@ -43,6 +44,24 @@ func PartialRecap(buf string) Recap {
 		strAt  int
 		claims = map[string]int{}
 	)
+	add := func(sec string, sent Sentence) {
+		if sec == "summary" {
+			r.Summary.Sentences = append(r.Summary.Sentences, sent)
+			return
+		}
+		list := &r.Changes
+		if sec == "next" {
+			list = &r.Next
+		} else if sec != "changes" {
+			return
+		}
+		for len(*list) < claims[sec] {
+			*list = append(*list, Claim{})
+		}
+		if n := claims[sec]; n > 0 {
+			(*list)[n-1].Sentences = append((*list)[n-1].Sentences, sent)
+		}
+	}
 	section := func() string {
 		if len(stack) > 0 {
 			return stack[0].key
@@ -93,27 +112,56 @@ func PartialRecap(buf string) Recap {
 			if json.Unmarshal([]byte(buf[f.start:i+1]), &s) != nil || s.Text == "" || s.Sources == nil || s.Sentences != nil {
 				continue
 			}
-			sent := Sentence{Text: s.Text, Sources: *s.Sources}
-			sec := stack[0].key
-			if sec == "summary" {
-				r.Summary.Sentences = append(r.Summary.Sentences, sent)
-				continue
-			}
-			list := &r.Changes
-			if sec == "next" {
-				list = &r.Next
-			} else if sec != "changes" {
-				continue
-			}
-			for len(*list) < claims[sec] {
-				*list = append(*list, Claim{})
-			}
-			if n := claims[sec]; n > 0 {
-				(*list)[n-1].Sentences = append((*list)[n-1].Sentences, sent)
+			add(stack[0].key, Sentence{Text: s.Text, Sources: *s.Sources})
+		}
+	}
+	// A sentence still open: show the text it has so far, character by character.
+	if n := len(stack); n > 0 {
+		if n > 1 && stack[n-1].open == '[' && stack[n-2].open == '{' {
+			n-- // inside the sentence's own sources list
+		}
+		top := stack[n-1]
+		sec := stack[0].key
+		if top.open == '{' && ((sec == "summary" && n == 4) || ((sec == "changes" || sec == "next") && n == 5)) {
+			if text := openText(buf[top.start:]); text != "" {
+				add(sec, Sentence{Text: text, Sources: []string{}, Partial: true})
 			}
 		}
 	}
 	return r
+}
+
+var textKey = regexp.MustCompile(`"text"\s*:\s*"((?:[^"\\]|\\.)*)`)
+
+// openText is the text value of a sentence object that may not be finished:
+// everything after the opening quote, with escapes read and a half-written
+// escape at the end left off.
+func openText(obj string) string {
+	m := textKey.FindStringSubmatch(obj)
+	if m == nil {
+		return ""
+	}
+	raw := m[1]
+	// Drop a half-written escape at the end: a lone backslash or \uXXXX cut short.
+	for cut := 1; cut <= 6 && cut <= len(raw); cut++ {
+		i := len(raw) - cut
+		if raw[i] != '\\' {
+			continue
+		}
+		run := 0
+		for j := i; j >= 0 && raw[j] == '\\'; j-- {
+			run++
+		}
+		if run%2 == 1 && ((cut == 1) || (raw[i+1] == 'u' && cut < 6)) {
+			raw = raw[:i]
+		}
+		break
+	}
+	var out string
+	if json.Unmarshal([]byte(`"`+raw+`"`), &out) != nil {
+		return ""
+	}
+	return out
 }
 
 // onlyKnown drops cited ids the evidence does not hold, so a draft never shows a
@@ -132,7 +180,7 @@ func onlyKnown(r Recap, in Input) Recap {
 					src = append(src, id)
 				}
 			}
-			out.Sentences = append(out.Sentences, Sentence{Text: s.Text, Sources: src})
+			out.Sentences = append(out.Sentences, Sentence{Text: s.Text, Sources: src, Partial: s.Partial})
 		}
 		return out
 	}

@@ -156,6 +156,24 @@ describe('Overview', () => {
     expect(await screen.findByText(/Waiting for the board to finish loading/)).toBeInTheDocument()
     expect(screen.queryByText(/unavailable/i)).toBeNull()
   })
+  it('streams a sentence in word by word, never redrawing what shows, and cites it once finished', async () => {
+    const enc = new TextEncoder()
+    const frame = (text: string, partial: boolean) => JSON.stringify({ state: 'updating', stale: false, evidence: result.evidence, draft: { summary: { sentences: [{ text, sources: partial ? [] : ['apply'], partial }] } } }) + '\n'
+    let ctl!: ReadableStreamDefaultController<Uint8Array>
+    const body = new ReadableStream<Uint8Array>({ start(c) { ctl = c } })
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(body, { status: 200 })))
+    render(<Overview ws={ws} row={row} onWorkflow={vi.fn()} onTrack={vi.fn()} />)
+    ctl.enqueue(enc.encode(frame('The dashboard ', true)))
+    const first = await screen.findByText('The')
+    expect(screen.queryByRole('button', { name: /Evidence/ })).toBeNull()
+    ctl.enqueue(enc.encode(frame('The dashboard button is pub', true)))
+    await screen.findByText(/pub/)
+    expect(screen.getByText('The')).toBe(first) // the drawn word is the same node, not redrawn
+    expect(screen.queryByRole('button', { name: /Evidence/ })).toBeNull()
+    ctl.enqueue(enc.encode(frame('The dashboard button is published.', false)))
+    expect(await screen.findByRole('button', { name: /Evidence: Terraform state/ })).toBeInTheDocument()
+    ctl.close()
+  })
   it('streams the recap in as it is written', async () => {
     const draft = { state: 'updating', stale: true, evidence: result.evidence, draft: { summary: { sentences: [{ text: 'The button is published.', sources: ['apply'] }] } } }
     const enc = new TextEncoder()
