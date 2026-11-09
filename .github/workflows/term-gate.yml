@@ -1,0 +1,11 @@
+name: term-gate
+on:
+  push:
+  pull_request:
+jobs:
+  term-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: scripts/term-inventory.sh --check
+      - run: scripts/term-inventory_test.sh

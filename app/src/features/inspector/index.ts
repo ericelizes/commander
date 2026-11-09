@@ -1,0 +1,5 @@
+export { InspectorPane, type InspectorPaneProps, type PinnedTab } from './InspectorPane'
+export { CardView } from './CardView'
+export { createClient, type InspectorClient } from './client'
+export type { InspectorApi, InspectorWindow, TabInfo, WebviewBridge } from './types'
+export { SIGNIN_SITES, openInPanel, hasConnections, signinStatus } from './connections'

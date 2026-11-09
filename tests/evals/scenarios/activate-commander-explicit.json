@@ -1,0 +1,28 @@
+{
+  "name": "open-commander-explicit",
+  "turns": [
+    {
+      "input": "add commander as code at {{project_path}}",
+      "reply_contains": [
+        "cmdr internal-add-project --name commander --type code --path {{project_path}}",
+        "Should I proceed?"
+      ]
+    },
+    {
+      "input": "yes",
+      "reply_contains": [
+        "Added. Manager session captured:"
+      ]
+    }
+  ],
+  "expect": {
+    "action_contains": [
+      "cmdr internal-add-project --name commander --type code --path {{project_path}}"
+    ],
+    "search_count": 0,
+    "projects": [
+      "commander"
+    ],
+    "lead_session": true
+  }
+}

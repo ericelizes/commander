@@ -1,0 +1,40 @@
+{
+  "name": "add-manifest-pathless",
+  "setup": {
+    "workspace_projects": [
+      {
+        "name": "manifest",
+        "type": "code"
+      }
+    ]
+  },
+  "turns": [
+    {
+      "input": "add manifest",
+      "reply_contains": [
+        "cmdr internal-add-project --name manifest --type code --path {{manifest_path}}",
+        "Should I proceed?"
+      ],
+      "reply_excludes": [
+        "Type — code or knowledge?",
+        "What's the path and type for manifest?"
+      ]
+    },
+    {
+      "input": "yes",
+      "reply_contains": [
+        "Added. Manager session captured:"
+      ]
+    }
+  ],
+  "expect": {
+    "action_contains": [
+      "cmdr internal-resolve-add-project --name manifest",
+      "cmdr internal-add-project --name manifest --type code --path {{manifest_path}}"
+    ],
+    "search_count": 1,
+    "projects": [
+      "manifest"
+    ]
+  }
+}

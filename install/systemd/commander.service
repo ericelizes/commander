@@ -1,0 +1,22 @@
+[Unit]
+Description=commander always-on daemon (cmdrd)
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/cmdrd
+Environment=COMMANDER_CHAT_HANDOVER=1
+KillMode=process
+TimeoutStopSec=20
+# Fork-storm cap: TasksMax bounds this unit's cgroup (children included). No
+# LimitNPROC: on Linux RLIMIT_NPROC counts every thread the user owns, and a
+# desktop session (browsers, Electron) passes 3000 on its own, so cmdrd could
+# not start a thread or fork br/tmux.
+TasksMax=3000
+Restart=on-failure
+RestartSec=5
+StandardOutput=append:%h/.commander/logs/cmdrd.log
+StandardError=append:%h/.commander/logs/cmdrd.err
+
+[Install]
+WantedBy=default.target

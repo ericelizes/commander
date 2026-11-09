@@ -1,0 +1,20 @@
+{
+  "project_key": "/fixture/fleet",
+  "sender_role": "manager-fixture",
+  "sender_name": "GoldTiger",
+  "recipient": "BlueLake",
+  "steps": [
+    {"route": "existing", "identity": "exact", "sent": true},
+    {"route": "existing", "identity": "exact", "caller_role": "manager-fixture", "sent": true},
+    {"route": "existing", "identity": "absent", "sent": false, "error": "no existing agent"},
+    {"route": "existing", "identity": "normalized", "sent": false, "error": "no existing agent"},
+    {"route": "existing", "identity": "retired", "sent": false, "error": "retired or deregistered"},
+    {"route": "existing", "identity": "whois_failure", "sent": false, "error": "could not read the identity"},
+    {"route": "existing", "identity": "unsupported", "sent": false, "error": "cannot verify existing identities"},
+    {"route": "existing", "identity": "wrong_project", "sent": false, "error": "conflicting server identity"},
+    {"route": "existing", "identity": "contact_required", "attempted": true, "sent": false, "error": "CONTACT_REQUIRED"},
+    {"route": "existing", "identity": "exact", "caller_role": "operator-fixture.1", "sent": false, "no_calls": true, "error": "Operator"},
+    {"route": "existing", "identity": "exact", "caller_role": "manager-peer", "sent": false, "no_calls": true, "error": "manager-peer"},
+    {"route": "role", "identity": "exact", "sent": false}
+  ]
+}

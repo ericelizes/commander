@@ -1,0 +1,10 @@
+{
+  "JournalBefore": "before",
+  "JournalAfter": "after external close",
+  "Close": "w.1",
+  "Beads": [
+    {"id":"w","title":"Release sample","labels":["kind:objective"]},
+    {"id":"w.1","parent_id":"w","title":"Approve sample","labels":["kind:objective","gate","approver:user","needs-user","waiting:1:main-ci:abcdef1234"]},
+    {"id":"w.2","parent_id":"w","title":"Verify sample","labels":["kind:objective","waiting:2:main-ci:abcdef1234"]}
+  ]
+}

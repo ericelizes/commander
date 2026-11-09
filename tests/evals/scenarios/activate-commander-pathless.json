@@ -1,0 +1,32 @@
+{
+  "name": "add-commander-pathless",
+  "turns": [
+    {
+      "input": "add the commander project",
+      "reply_contains": [
+        "cmdr internal-add-project --name commander --type code --path {{project_path}}",
+        "Should I proceed?"
+      ]
+    },
+    {
+      "input": "yes",
+      "reply_contains": [
+        "Added. Manager session captured:"
+      ]
+    }
+  ],
+  "expect": {
+    "action_contains": [
+      "cmdr internal-resolve-add-project --name commander",
+      "cmdr internal-add-project --name commander --type code --path {{project_path}}"
+    ],
+    "cockpit_contains": [
+      "Added. Manager session captured:"
+    ],
+    "search_count": 1,
+    "projects": [
+      "commander"
+    ],
+    "lead_session": true
+  }
+}

@@ -1,0 +1,20 @@
+[Unit]
+Description=commander live renderer dev server (Vite HMR on 127.0.0.1:5173/app/)
+After=network.target
+
+# While it answers, the app and cmdrd's /app/ load it, so an edit under
+# app/src shows up in seconds. Installed by `cmdr app dev enable`.
+[Service]
+Type=simple
+WorkingDirectory=__REPO__/app
+Environment=PATH=__NODE_BIN__:__HOME__/.local/bin:__HOME__/.volta/bin:/usr/local/bin:/usr/bin:/bin
+Environment=BROWSER=none
+# Vite exits when stdin closes, so keep a pipe open under it.
+ExecStart=/bin/sh -c 'tail -f /dev/null | npm run dev:renderer'
+Restart=always
+RestartSec=10
+StandardOutput=append:__LOG__
+StandardError=append:__LOG__
+
+[Install]
+WantedBy=default.target

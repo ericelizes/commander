@@ -1,0 +1,6 @@
+{
+  "argv": ["internal-set-objective", "--project", "example", "--bead", "p-1", "--state", "not-started", "--owner", "none"],
+  "bead_labels": ["kind:objective", "operator-died", "w:tro8w0:un:trobo0:Manager_20to_20close"],
+  "update_contains": ["--status open", "--remove-label operator-died", "--remove-label w:tro8w0:un:trobo0:Manager_20to_20close"],
+  "expected_updates": 1
+}

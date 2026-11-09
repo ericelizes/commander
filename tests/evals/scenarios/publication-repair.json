@@ -1,0 +1,8 @@
+{
+  "root": "sample-flow",
+  "ancestors": ["sample-track", "sample-wrapper-a", "sample-wrapper-b", "sample-wrapper-c", "sample-wrapper-d"],
+  "leaf": "sample-action",
+  "gate": "sample-approval",
+  "sibling": "sample-sibling",
+  "reason": "Publish existing decision and remove redundant ancestor waits"
+}

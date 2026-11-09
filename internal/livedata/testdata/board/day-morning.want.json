@@ -1,0 +1,208 @@
+{
+ "commander": {
+  "kind": "idle",
+  "text": "idle",
+  "since": 1792999880,
+  "unread": 3
+ },
+ "asks": [
+  {
+   "key": "ask:example-app:app-c.1.2",
+   "text": "Which wording should the page use?",
+   "rank": 3,
+   "workstream": "Login cleanup",
+   "track": "Shared login page",
+   "track_letter": ".1",
+   "ws_key": "example-app:app-c"
+  },
+  {
+   "key": "ask:example-app:app-b.4",
+   "text": "Enable the importer for everyone?",
+   "rank": 2,
+   "workstream": "Importer",
+   "track": "",
+   "track_letter": "",
+   "ws_key": "example-app:app-b"
+  },
+  {
+   "key": "ask:example-app:app-d.4",
+   "text": "Is the row count acceptable?",
+   "rank": 4,
+   "workstream": "Table migration",
+   "track": "",
+   "track_letter": "",
+   "ws_key": "example-app:app-d"
+  }
+ ],
+ "workstreams": [
+  {
+   "key": "example-app:app-a",
+   "n": 1,
+   "title": "Cleanup",
+   "project": "example-app",
+   "bead_id": "app-a",
+   "manager_role": "manager-app-a",
+   "starred": false,
+   "kind": "quiet",
+   "text": "Nothing to do",
+   "since": 0,
+   "progress": {
+    "done": 3,
+    "total": 3
+   },
+   "milestones": {
+    "done": 0,
+    "total": 0
+   },
+   "working": 0,
+   "flag": 0,
+   "unread": 0,
+   "gate": null,
+   "tracks": []
+  },
+  {
+   "key": "example-app:app-b",
+   "n": 2,
+   "title": "Importer",
+   "project": "example-app",
+   "bead_id": "app-b",
+   "manager_role": "manager-app-b",
+   "starred": false,
+   "kind": "waiting",
+   "text": "Waiting for review",
+   "since": 1792992800,
+   "progress": {
+    "done": 2,
+    "total": 4
+   },
+   "milestones": {
+    "done": 2,
+    "total": 4
+   },
+   "working": 0,
+   "flag": 1,
+   "unread": 1,
+   "gate": {
+    "bead_id": "app-b.3",
+    "title": "Reviewers signed off on the importer PR",
+    "who": "manager-app-b",
+    "at": false,
+    "for_you": false
+   },
+   "tracks": []
+  },
+  {
+   "key": "example-app:app-c",
+   "n": 3,
+   "title": "Login cleanup",
+   "project": "example-app",
+   "bead_id": "app-c",
+   "manager_role": "manager-app-c",
+   "starred": false,
+   "kind": "needs",
+   "text": "Needs you: Which wording should the page use?",
+   "since": 0,
+   "progress": {
+    "done": 2,
+    "total": 7
+   },
+   "milestones": {
+    "done": 2,
+    "total": 7
+   },
+   "working": 2,
+   "flag": 1,
+   "unread": 0,
+   "gate": null,
+   "tracks": [
+    {
+     "key": "example-app:app-c.1",
+     "bead_id": "app-c.1",
+     "letter": ".1",
+     "title": "Shared login page",
+     "kind": "needs",
+     "text": "Needs you: Which wording should the page use?",
+     "since": 0,
+     "progress": {
+      "done": 1,
+      "total": 2
+     },
+     "milestones": {
+      "done": 1,
+      "total": 2
+     },
+     "working": 0
+    },
+    {
+     "key": "example-app:app-c.2",
+     "bead_id": "app-c.2",
+     "letter": ".2",
+     "title": "Password reset mail",
+     "kind": "working",
+     "text": "Working on send the new mail",
+     "since": 0,
+     "progress": {
+      "done": 0,
+      "total": 2
+     },
+     "milestones": {
+      "done": 0,
+      "total": 2
+     },
+     "working": 1
+    },
+    {
+     "key": "example-app:app-c.3",
+     "bead_id": "app-c.3",
+     "letter": ".3",
+     "title": "Session timeout",
+     "kind": "needs",
+     "text": "Needs you: Which wording should the page use?",
+     "since": 0,
+     "progress": {
+      "done": 0,
+      "total": 2
+     },
+     "milestones": {
+      "done": 0,
+      "total": 2
+     },
+     "working": 0
+    }
+   ]
+  },
+  {
+   "key": "example-app:app-d",
+   "n": 4,
+   "title": "Table migration",
+   "project": "example-app",
+   "bead_id": "app-d",
+   "manager_role": "manager-app-d",
+   "starred": false,
+   "kind": "working",
+   "text": "Working on back up the table +1 more · then: copy approved",
+   "since": 0,
+   "progress": {
+    "done": 1,
+    "total": 4
+   },
+   "milestones": {
+    "done": 1,
+    "total": 4
+   },
+   "working": 2,
+   "flag": 1,
+   "unread": 0,
+   "gate": {
+    "bead_id": "app-d.5",
+    "title": "Copy approved",
+    "who": "you",
+    "at": false,
+    "for_you": false
+   },
+   "tracks": [],
+   "why": "An Operator is still on it; the ask waits for its report",
+   "age_as": "working|Working on back up the table · then: copy approved"
+  }
+ ]
+}

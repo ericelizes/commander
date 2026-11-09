@@ -1,0 +1,33 @@
+{
+  "projects": [{"name": "demo", "path": "/tmp/demo"}],
+  "workstreams": [
+    {
+      "project": "demo",
+      "bead_id": "demo-flow",
+      "title": "Release sample",
+      "status": "open",
+      "state": "in-progress",
+      "steps": [
+        {"bead_id": "demo-flow.1", "title": "Sample key registered", "status": "open", "state": "not-started"},
+        {
+          "bead_id": "demo-flow.2",
+          "title": "Stage rolled up from its closed child",
+          "status": "open",
+          "state": "in-progress",
+          "blocked_by": ["demo-flow.1"],
+          "children": [
+            {"bead_id": "demo-flow.2.1", "title": "First attempt stopped at its pre-check", "status": "closed", "state": "done"}
+          ]
+        },
+        {
+          "bead_id": "demo-flow.3",
+          "title": "Step really started ahead of its wait",
+          "status": "in_progress",
+          "state": "in-progress",
+          "owner": "manager-demo-flow",
+          "blocked_by": ["demo-flow.1"]
+        }
+      ]
+    }
+  ]
+}

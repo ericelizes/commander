@@ -1,0 +1,131 @@
+{
+  "projects": [
+    {
+      "name": "demo",
+      "path": "/tmp/demo"
+    }
+  ],
+  "workstreams": [
+    {
+      "project": "demo",
+      "bead_id": "demo-flow",
+      "title": "Release sample",
+      "status": "open",
+      "state": "not-started",
+      "steps": [
+        {
+          "bead_id": "demo-flow.1",
+          "title": "Merge approved",
+          "gate": true,
+          "approvers": [
+            "user"
+          ],
+          "criteria": "Approve merging",
+          "status": "open",
+          "state": "needs-user"
+        },
+        {
+          "bead_id": "demo-flow.2",
+          "title": "Changes merged",
+          "status": "open",
+          "state": "not-started",
+          "children": [
+            {
+              "bead_id": "demo-flow.2.1",
+              "title": "Review checks completed",
+              "status": "closed",
+              "state": "done"
+            }
+          ],
+          "blocked_by": [
+            "demo-flow.1"
+          ],
+          "gates": [
+            {
+              "name": "merged",
+              "verifier": "auto",
+              "status": "open"
+            }
+          ]
+        },
+        {
+          "bead_id": "demo-flow.3",
+          "title": "Main checks passed",
+          "status": "open",
+          "state": "not-started",
+          "children": [
+            {
+              "bead_id": "demo-flow.3.1",
+              "title": "Review checks completed",
+              "status": "closed",
+              "state": "done"
+            }
+          ],
+          "gates": [
+            {
+              "name": "ci",
+              "verifier": "auto",
+              "status": "open"
+            }
+          ]
+        },
+        {
+          "bead_id": "demo-flow.4",
+          "title": "Completed build",
+          "status": "open",
+          "state": "not-started",
+          "children": [
+            {
+              "bead_id": "demo-flow.4.1",
+              "title": "Review checks completed",
+              "status": "closed",
+              "state": "done"
+            }
+          ]
+        },
+        {
+          "bead_id": "demo-flow.5",
+          "title": "Dependent stage",
+          "status": "open",
+          "state": "not-started",
+          "children": [
+            {
+              "bead_id": "demo-flow.5.1",
+              "title": "Review checks completed",
+              "status": "closed",
+              "state": "done"
+            }
+          ],
+          "blocked_by": [
+            "demo-flow.1"
+          ]
+        },
+        {
+          "bead_id": "demo-flow.6",
+          "title": "Container waiting",
+          "status": "open",
+          "state": "not-started",
+          "children": [
+            {
+              "bead_id": "demo-flow.6.1",
+              "title": "Nested dependent stage",
+              "status": "open",
+              "state": "not-started",
+              "children": [
+                {
+                  "bead_id": "demo-flow.6.1.1",
+                  "title": "Review checks completed",
+                  "status": "closed",
+                  "state": "done"
+                }
+              ]
+            }
+          ],
+          "blocked_by": [
+            "demo-flow.1"
+          ]
+        }
+      ]
+    }
+  ]
+}

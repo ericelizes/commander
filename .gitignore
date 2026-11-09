@@ -1,0 +1,34 @@
+# Build output
+/cmdr
+bin/
+vendor/
+
+# Go test artifacts
+*.test
+coverage.out
+coverage.html
+
+# Editor / IDE
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Logs
+*.log
+
+# bv (beads viewer) local config and caches
+.bv/
+
+# Subagent sandbox Go caches (when GOCACHE/GOMODCACHE point inside the repo)
+.tmp/
+
+# beads tracker state (local, per machine)
+.beads/
+.commander/
+# br backup dirs (.beads-br-<timestamp>) made beside the checkout; they dirtied main and blocked internal-ship
+.beads-br-*
+# worktrees of Operators: .worktrees may be a symlink to .worktrees.noindex (a trailing-slash pattern misses a symlink); they dirtied main and blocked internal-ship
+.worktrees
+.worktrees/
+.worktrees.noindex/

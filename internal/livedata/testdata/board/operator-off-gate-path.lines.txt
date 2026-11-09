@@ -1,0 +1,9 @@
+0 Commander: no agent yet
+1 Operator beside the gate's work: Working on land the polish · then: release approved (0% done, next gate: Release approved, approved by reviewer-a, 2 working)
+2 Operator beside a recorded wait: Working on land the polish · then: release approved (0% done, next gate: Release approved, approved by reviewer-a, 2 working)
+3 Operator on a track task beside the gate: Working on land the sprint polish · then: sprint confirmed done · Second track waiting for CI (25% done, next gate: Sprint confirmed done, approved by you, 2 working)
+  3.1 Sprint track: Working on land the sprint polish · then: sprint confirmed done (33% done, 1 working)
+  3.2 Second track: Waiting for CI (0% done, for 8m)
+4 Live track with a broken step beside a waiting track: Waiting for CI (0% done, no gates, 2 working, for 8m)
+  4.1 Sprint track: State missing (0% done, 1 working) · why: Working on land the sprint polish; nothing holds check the sprint numbers
+  4.2 Second track: Waiting for CI (0% done, for 8m)

@@ -1,0 +1,118 @@
+{
+ "commander": {
+  "kind": "idle",
+  "text": "monitoring",
+  "since": 1792776800,
+  "unread": 2
+ },
+ "asks": [
+  {
+   "key": "ask:example-app:app-l.1",
+   "text": "Keep the old format?",
+   "rank": 1,
+   "workstream": "Format change",
+   "track": "",
+   "track_letter": "",
+   "ws_key": "example-app:app-l"
+  },
+  {
+   "key": "ask:example-app:app-n.1.2",
+   "text": "Proceed with the outer stage?",
+   "rank": 3,
+   "workstream": "Blocked stages",
+   "track": "",
+   "track_letter": "",
+   "ws_key": "example-app:app-n"
+  }
+ ],
+ "workstreams": [
+  {
+   "key": "example-app:app-l",
+   "n": 1,
+   "title": "Format change",
+   "project": "example-app",
+   "bead_id": "app-l",
+   "manager_role": "manager-app-l",
+   "starred": false,
+   "kind": "needs",
+   "text": "Needs you: Keep the old format?",
+   "since": 0,
+   "progress": {
+    "done": 0,
+    "total": 5
+   },
+   "milestones": {
+    "done": 0,
+    "total": 5
+   },
+   "working": 0,
+   "flag": 1,
+   "unread": 0,
+   "gate": {
+    "bead_id": "app-l.4",
+    "title": "Publish approved",
+    "who": "you",
+    "at": false,
+    "for_you": false
+   },
+   "tracks": []
+  },
+  {
+   "key": "example-app:app-m",
+   "n": 2,
+   "title": "Interrupted",
+   "project": "example-app",
+   "bead_id": "app-m",
+   "manager_role": "manager-app-m",
+   "starred": false,
+   "kind": "stalled",
+   "text": "Agent stopped on interrupted work: the Manager's move",
+   "since": 1793025200,
+   "progress": {
+    "done": 0,
+    "total": 2
+   },
+   "milestones": {
+    "done": 0,
+    "total": 1
+   },
+   "working": 0,
+   "flag": 0,
+   "unread": 0,
+   "gate": {
+    "bead_id": "app-m.2",
+    "title": "Interrupted work accepted",
+    "who": "operator",
+    "at": false,
+    "for_you": false
+   },
+   "tracks": [],
+   "why": "its session ended"
+  },
+  {
+   "key": "example-app:app-n",
+   "n": 3,
+   "title": "Blocked stages",
+   "project": "example-app",
+   "bead_id": "app-n",
+   "manager_role": "manager-app-n",
+   "starred": true,
+   "kind": "needs",
+   "text": "Needs you: Proceed with the outer stage?",
+   "since": 0,
+   "progress": {
+    "done": 0,
+    "total": 3
+   },
+   "milestones": {
+    "done": 0,
+    "total": 2
+   },
+   "working": 2,
+   "flag": 1,
+   "unread": 0,
+   "gate": null,
+   "tracks": []
+  }
+ ]
+}

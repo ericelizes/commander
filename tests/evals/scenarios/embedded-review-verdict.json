@@ -1,0 +1,5 @@
+{
+  "schema": "embedded-review-verdict@v1",
+  "runner": "cmd/cmdr:TestEmbeddedReviewVerdictScenario",
+  "cases": ["accepted", "missing-run", "wrong-actor", "missing-manifest", "missing-terminal", "changed-manifest", "wrong-head", "partial", "findings", "contradiction", "split-accepted", "split-blank-line", "split-wrapped"]
+}

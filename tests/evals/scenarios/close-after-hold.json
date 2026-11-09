@@ -1,0 +1,11 @@
+{
+  "Hold": {"Bead": "w.1", "Label": "waiting:2:operator:op-x-w-3"},
+  "Close": "w.2",
+  "CloseJournalAfterExport": "1s",
+  "Beads": [
+    {"id": "w", "title": "Release sample", "labels": ["kind:objective"]},
+    {"id": "w.1", "parent_id": "w", "title": "Ship the queue", "status": "in_progress", "labels": ["kind:objective", "waiting:1:operator:op-x-w-3"]},
+    {"id": "w.2", "parent_id": "w.1", "title": "Review the queue", "status": "in_progress", "labels": ["kind:objective", "kind:task"]},
+    {"id": "w.3", "parent_id": "w.1", "title": "Fix the queue", "status": "in_progress", "labels": ["kind:objective", "kind:task", "waiting:1:operator:op-x-w-3"]}
+  ]
+}

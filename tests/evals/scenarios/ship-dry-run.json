@@ -1,0 +1,18 @@
+{
+  "description": "cmdr internal-ship --dry-run runs a real ship's refusals and checks on the branch's tip and never moves main. Each branch adds its files to a small module on main; the cases run in order, and the last is a real ship, so a dry run's pass means what a ship's does.",
+  "files": {"go.mod": "module example.test/demo\n\ngo 1.25\n", "demo.go": "package demo\n\nfunc Answer() int { return 1 }\n", "tests/evals/doc.go": "package evals\n"},
+  "branches": {
+    "broken-build": {"demo.go": "package demo\n\nfunc Answer() int { return missing }\n"},
+    "broken-test": {"demo_test.go": "package demo\n\nimport \"testing\"\n\nfunc TestAnswer(t *testing.T) { t.Fatal(\"wrong answer\") }\n"},
+    "broken-app": {"app/package.json": "{\"name\":\"demo\",\"scripts\":{\"typecheck\":\"exit 0\",\"test\":\"echo app-test-failed; exit 1\"}}\n"},
+    "green": {"demo_test.go": "package demo\n\nimport \"testing\"\n\nfunc TestAnswer(t *testing.T) {\n\tif Answer() != 1 {\n\t\tt.Fatal(\"wrong answer\")\n\t}\n}\n"}
+  },
+  "cases": [
+    {"name": "a branch that does not build", "args": ["broken-build", "--dry-run"], "refused": true, "output": ["dry run", "is red: go build", "missing"]},
+    {"name": "a branch whose test fails", "args": ["broken-test", "--dry-run"], "refused": true, "output": ["dry run", "is red", "wrong answer"]},
+    {"name": "a branch whose app test fails", "args": ["broken-app", "--dry-run"], "needs": "npm", "refused": true, "output": ["dry run", "is red: npm test", "app-test-failed"]},
+    {"name": "a branch that is not there", "args": ["no-such-branch", "--dry-run"], "refused": true, "output": ["not found"]},
+    {"name": "a green branch", "args": ["green", "--dry-run"], "output": ["ship check: go build", "ship check: go test", "would move main", "nothing merged"], "absent": ["not installed: installing"]},
+    {"name": "the same branch, shipped for real", "args": ["green"], "moves": true, "output": ["not installed: installing"], "absent": ["would move"]}
+  ]
+}

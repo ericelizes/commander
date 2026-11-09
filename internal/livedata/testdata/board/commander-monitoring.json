@@ -1,0 +1,45 @@
+{
+ "now": 1793000000,
+ "snapshot": {
+  "version": 1,
+  "generated_at": "2026-10-26T12:00:00Z",
+  "projects": [
+   {
+    "id": 1,
+    "name": "p",
+    "type": "repo",
+    "path": "/tmp/p",
+    "status": "active"
+   }
+  ],
+  "fleet": {
+   "cost_usd_24h": 0,
+   "cost_usd_7d": 0,
+   "cost_series_24h": [],
+   "agents": 0,
+   "active": 0,
+   "blocked": 0,
+   "idle_ratio": 0,
+   "projects": 1,
+   "chat_cost_usd_24h": 0,
+   "roles_cost": []
+  },
+  "workstreams": [],
+  "needs_you": [],
+  "agents": {
+   "commander": {
+    "state": "idle",
+    "since": 1792999400
+   }
+  },
+  "unread": {
+   "commander": 3
+  },
+  "watch": {
+   "commander": {
+    "checked_at": 1792999970,
+    "operators": []
+   }
+  }
+ }
+}

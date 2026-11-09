@@ -1,0 +1,9 @@
+0 Commander: no agent yet
+1 Card in a sibling track: Needs you: Which name should the service use? (0% done, next gate: Dependent approved, approved by reviewer-a, ⚑ 1, 2 working, for 8m)
+  1.1 Asking track: Needs you: Which name should the service use? (0% done, for 8m)
+  1.2 Dependent track: Working on land the polish · then: dependent approved (0% done, 1 working)
+2 Card in this row: Needs you: Which region? (0% done, next gate: Region approved, approved by reviewer-a, ⚑ 1, for 8m)
+3 Blocked on another row's card: Working on land the polish · then: deploy approved (0% done, next gate: Deploy approved, approved by reviewer-a, 2 working)
+Needs you (2):
+  #1.1 Which name should the service use? (Card in a sibling track › Asking track)
+  #2 Which region? (Card in this row)

@@ -1,0 +1,119 @@
+{
+ "now": 1793000000,
+ "snapshot": {
+  "version": 1,
+  "generated_at": "2026-10-26T12:00:00Z",
+  "projects": [
+   {
+    "id": 1,
+    "name": "p",
+    "type": "repo",
+    "path": "/tmp/p",
+    "status": "active"
+   }
+  ],
+  "fleet": {
+   "cost_usd_24h": 0,
+   "cost_usd_7d": 0,
+   "cost_series_24h": [],
+   "agents": 0,
+   "active": 0,
+   "blocked": 0,
+   "idle_ratio": 0,
+   "projects": 1,
+   "chat_cost_usd_24h": 0,
+   "roles_cost": []
+  },
+  "workstreams": [],
+  "needs_you": [
+   {
+    "project": "p",
+    "bead_id": "p-1",
+    "title": "T p-1",
+    "workstream": "WS",
+    "rank": 1,
+    "ask": "Q p-1",
+    "since": 1792996400,
+    "decision": {
+     "question": "Q p-1?",
+     "options": [
+      {
+       "label": "Yes"
+      }
+     ]
+    },
+    "spec_hash": "s",
+    "basis": {
+     "spec": "s",
+     "gen": 1,
+     "raised": 1792996400
+    }
+   },
+   {
+    "project": "p",
+    "bead_id": "p-2",
+    "title": "T p-2",
+    "workstream": "WS",
+    "rank": 2,
+    "ask": "Q p-2",
+    "since": 1792481600,
+    "decision": {
+     "question": "Q p-2?",
+     "options": [
+      {
+       "label": "Yes"
+      }
+     ]
+    },
+    "spec_hash": "s"
+   },
+   {
+    "project": "p",
+    "bead_id": "p-3",
+    "title": "T p-3",
+    "workstream": "WS",
+    "rank": 3,
+    "ask": "Q p-3",
+    "since": 1792996400,
+    "decision": {
+     "question": "Q p-3?",
+     "options": [
+      {
+       "label": "Yes"
+      }
+     ]
+    },
+    "basis": {
+     "spec": "s",
+     "gen": 1,
+     "raised": 1792913600
+    }
+   },
+   {
+    "project": "p",
+    "bead_id": "p-4",
+    "title": "T p-4",
+    "workstream": "WS",
+    "rank": 4,
+    "ask": "Q p-4",
+    "since": 1792308800,
+    "decision": {
+     "question": "Q p-4?",
+     "options": [
+      {
+       "label": "Yes"
+      }
+     ]
+    },
+    "spec_hash": "s",
+    "basis": {
+     "spec": "s",
+     "gen": 1,
+     "raised": 1792913600
+    }
+   }
+  ],
+  "agents": {},
+  "unread": {}
+ }
+}

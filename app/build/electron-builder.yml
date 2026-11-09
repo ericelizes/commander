@@ -1,0 +1,77 @@
+# electron-builder config for the Commander desktop app.
+# Run from app/:  npx electron-builder --config build/electron-builder.yml
+# (package.json scripts `pack` / `dist` do this; see build/INTEGRATION.md).
+#
+# Local, unsigned-by-Apple builds for the user's machines: macOS arm64 is ad-hoc
+# signed with the hardened runtime off; Linux ships AppImage + deb.
+
+appId: org.commander
+productName: Commander
+copyright: Copyright © 2026 Commander contributors
+
+directories:
+  buildResources: build
+  output: release
+
+# electron-vite output: renderer in dist/ (also what cmdrd serves at /app/),
+# main + preload in out/main and out/preload. Production node_modules are
+# added automatically.
+files:
+  - dist/**/*
+  - out/main/**/*
+  - out/preload/**/*
+  - package.json
+  - "!**/*.map"
+asar: true
+
+# deb requires a homepage; keep it here so package.json stays minimal.
+extraMetadata:
+  homepage: https://github.com/example-user/commander
+
+# Predictable names so `cmdr app install` can find the artifact.
+artifactName: ${productName}-${version}-${arch}.${ext}
+
+mac:
+  category: public.app-category.developer-tools
+  icon: build/icon.icns
+  darkModeSupport: true
+  hardenedRuntime: false
+  gatekeeperAssess: false
+  identity: "-"
+  target:
+    - target: dmg
+      arch: [arm64]
+    - target: zip
+      arch: [arm64]
+    - target: dir
+      arch: [arm64]
+  extendInfo:
+    # A regular app: dock icon, app switcher, menu bar.
+    LSUIElement: false
+    NSHumanReadableCopyright: Copyright © 2026 Commander contributors
+
+dmg:
+  title: ${productName} ${version}
+
+linux:
+  icon: build/icons
+  category: Development
+  # `commander` is already cmdr's alias in ~/.local/bin.
+  executableName: commander-app
+  synopsis: Agent cockpit for Commander
+  description: Desktop cockpit for the Commander -> Lead -> Operator agent fleet.
+  maintainer: Commander contributors
+  desktop:
+    entry:
+      Name: Commander
+      # Electron on Wayland reports app_id (Hyprland class) `commander`.
+      StartupWMClass: commander
+      Keywords: agents;cockpit;commander;
+  target:
+    - target: AppImage
+      arch: [x64, arm64]
+    - target: deb
+      arch: [x64, arm64]
+
+deb:
+  packageCategory: devel

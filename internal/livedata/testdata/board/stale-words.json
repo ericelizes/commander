@@ -1,0 +1,131 @@
+{
+  "now": 1793350800,
+  "snapshot": {
+    "workstreams": [
+      {
+        "n": 1,
+        "project": "p",
+        "bead_id": "p-w",
+        "title": "Stale cards",
+        "state": "needs-user",
+        "status": "open",
+        "manager_role": "manager-p-w",
+        "steps": [
+          {
+            "bead_id": "p-w.1",
+            "title": "Approve the revised plan?",
+            "state": "needs-user",
+            "status": "open",
+            "approvers": [
+              "user"
+            ],
+            "gate": true,
+            "criteria": "User approves this plan"
+          },
+          {
+            "bead_id": "p-w.2",
+            "title": "Keep this request?",
+            "state": "needs-user",
+            "status": "open",
+            "approvers": [
+              "user"
+            ],
+            "gate": true,
+            "criteria": "User approves this plan"
+          },
+          {
+            "bead_id": "p-w.3",
+            "title": "Resume the deferred work?",
+            "state": "needs-user",
+            "status": "open",
+            "approvers": [
+              "user"
+            ],
+            "gate": true,
+            "criteria": "User approves this plan",
+            "push_count": 4,
+            "push_first": 1793091600
+          },
+          {
+            "bead_id": "p-w.4",
+            "title": "Approve the current plan?",
+            "state": "needs-user",
+            "status": "open",
+            "approvers": [
+              "user"
+            ],
+            "gate": true,
+            "criteria": "User approves this plan"
+          },
+          {
+            "bead_id": "p-w.5",
+            "title": "Wait for reconcile",
+            "state": "blocked",
+            "status": "open",
+            "waiting": "reconcile",
+            "owner": "manager-p-w",
+            "push_count": 3,
+            "push_first": 1793005200
+          }
+        ]
+      }
+    ],
+    "needs_you": [
+      {
+        "project": "p",
+        "bead_id": "p-w.1",
+        "title": "Approve the revised plan?",
+        "workstream": "Stale cards",
+        "rank": 1,
+        "since": 1793350740,
+        "spec_hash": "current",
+        "basis": {
+          "spec": "old",
+          "raised": 1793350740
+        }
+      },
+      {
+        "project": "p",
+        "bead_id": "p-w.2",
+        "title": "Keep this request?",
+        "workstream": "Stale cards",
+        "rank": 2,
+        "since": 1793350740,
+        "spec_hash": "current",
+        "basis": {
+          "spec": "current",
+          "raised": 1792573200
+        }
+      },
+      {
+        "project": "p",
+        "bead_id": "p-w.3",
+        "title": "Resume the deferred work?",
+        "workstream": "Stale cards",
+        "rank": 3,
+        "since": 1793350740,
+        "spec_hash": "current",
+        "basis": {
+          "spec": "current",
+          "raised": 1793350740
+        },
+        "push_count": 4,
+        "push_first": 1793091600
+      },
+      {
+        "project": "p",
+        "bead_id": "p-w.4",
+        "title": "Approve the current plan?",
+        "workstream": "Stale cards",
+        "rank": 4,
+        "since": 1793350740,
+        "spec_hash": "current",
+        "basis": {
+          "spec": "current",
+          "raised": 1793350740
+        }
+      }
+    ],
+    "agents": {}
+  }
+}

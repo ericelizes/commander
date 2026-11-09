@@ -1,0 +1,62 @@
+{
+  "now": 1793000000,
+  "snapshot": {
+    "version": 1,
+    "generated_at": "2026-10-26T12:00:00Z",
+    "projects": [{"id": 1, "name": "lab", "type": "repo", "path": "/tmp/lab", "status": "active"}],
+    "fleet": {"cost_usd_24h": 0, "cost_usd_7d": 0, "cost_series_24h": [], "agents": 0, "active": 0, "blocked": 0, "idle_ratio": 0, "projects": 1, "chat_cost_usd_24h": 0, "roles_cost": []},
+    "agents": {
+      "manager-lab-bex": {"state": "idle", "since": 1792990000},
+      "manager-lab-ops": {"state": "working", "since": 1792999000},
+      "operator-lab-bex-3-1": {"state": "working", "since": 1792999500}
+    },
+    "unread": {},
+    "needs_you": [
+      {"project": "lab", "bead_id": "lab-bex.3.4", "title": "Pick the file naming scheme", "workstream": "Report exports", "track": "Finance sign-off on the export format", "track_id": "lab-bex.3", "rank": 1,
+       "decision": {"question": "Name export files by date or by batch?", "context": "Finance reads them by date."}},
+      {"project": "lab", "bead_id": "lab-ops.3", "title": "Rotate the shared pager number", "workstream": "On-call tooling", "rank": 2,
+       "decision": {"question": "Rotate the pager number today?", "context": "Only you can change it."}}
+    ],
+    "workstreams": [
+      {"n": 1, "project": "lab", "project_id": 1, "bead_id": "lab-bex", "title": "Report exports", "state": "in-progress", "status": "in_progress", "manager_role": "manager-lab-bex", "done": 2, "total": 16,
+       "steps": [
+        {"bead_id": "lab-bex.1", "title": "Workflow approved", "state": "done", "status": "closed", "gate": true, "approvers": ["user"], "criteria": "The user approved the stages and gates.", "viz": 1},
+        {"bead_id": "lab-bex.2", "title": "Nightly export to the warehouse", "state": "blocked", "status": "in_progress", "owner": "manager-lab-bex", "track": true, "blocked_by": ["lab-bex.1"], "phase_note": "1 of 5 done", "viz": 2,
+         "children": [
+          {"bead_id": "lab-bex.2.1", "title": "Export job built", "state": "done", "status": "closed", "owner": "operator-lab-bex-2-1", "viz": 3},
+          {"bead_id": "lab-bex.2.2", "title": "CI green on the export PR", "state": "blocked", "status": "in_progress", "owner": "manager-lab-bex", "review": "412", "waiting": "CI #412", "waiting_since": 1792998000, "blocked_by": ["lab-bex.2.1"], "viz": 3},
+          {"bead_id": "lab-bex.2.3", "title": "Export PR approved by reviewers", "state": "not-started", "status": "open", "gate": true, "approvers": ["reviewer-a", "reviewer-b"], "criteria": "Both reviewers approve the PR on GitHub.", "blocked_by": ["lab-bex.2.2"], "viz": 1},
+          {"bead_id": "lab-bex.2.4", "title": "Greenlight merging the export to main", "state": "not-started", "status": "open", "gate": true, "approvers": ["user"], "criteria": "The user says merge.", "blocked_by": ["lab-bex.2.3"], "viz": 1},
+          {"bead_id": "lab-bex.2.5", "title": "Export live in production", "state": "not-started", "status": "open", "blocked_by": ["lab-bex.2.4"], "viz": 3}
+         ]},
+        {"bead_id": "lab-bex.3", "title": "Finance sign-off on the export format", "state": "in-progress", "status": "in_progress", "owner": "manager-lab-bex", "track": true, "blocked_by": ["lab-bex.1"], "phase_note": "0 of 4 done", "viz": 2,
+         "children": [
+          {"bead_id": "lab-bex.3.1", "title": "Sample file drafted", "state": "in-progress", "status": "in_progress", "owner": "operator-lab-bex-3-1", "owner_state": "working", "working": true, "viz": 3},
+          {"bead_id": "lab-bex.3.2", "title": "Finance team reviewed the sample", "state": "not-started", "status": "open", "lane": "elsewhere:finance_20team", "blocked_by": ["lab-bex.3.1"], "viz": 3},
+          {"bead_id": "lab-bex.3.4", "title": "Pick the file naming scheme", "state": "needs-user", "status": "in_progress", "owner": "user", "waiting": "you", "waiting_since": 1792995000, "viz": 3},
+          {"bead_id": "lab-bex.3.3", "title": "Greenlight the export format", "state": "not-started", "status": "open", "gate": true, "approvers": ["user"], "blocked_by": ["lab-bex.3.2", "lab-bex.3.4"], "viz": 1}
+         ]},
+        {"bead_id": "lab-bex.4", "title": "Backfill last quarter", "state": "not-started", "status": "open", "broken": true, "viz": 2},
+        {"bead_id": "lab-bex.5", "title": "Approve the rollout?", "state": "not-started", "status": "open", "gate": true, "approvers": ["manager"], "criteria": "Both tracks are done.", "blocked_by": ["lab-bex.2", "lab-bex.3"], "viz": 1},
+        {"bead_id": "lab-bex.6", "title": "Retention policy written", "state": "not-started", "status": "deferred", "parked_until": 1793100000, "viz": 2},
+        {"bead_id": "lab-bex.7", "title": "Rotate the export key", "state": "not-started", "status": "open", "blocked_by": ["lab-bex.8"], "viz": 2},
+        {"bead_id": "lab-bex.8", "title": "Key rotation scheduled", "state": "not-started", "status": "open", "lane": "bogus", "blocked_by": ["lab-bex.7"], "viz": 2},
+        {"bead_id": "lab-bex.9", "title": "Export docs updated", "state": "blocked", "status": "in_progress", "owner": "manager-lab-bex", "waiting": "Manager to close", "waiting_since": 1792999000, "waiting_until": 1793003600, "waiting_until_as": "Manager to close", "viz": 2}
+       ]},
+      {"n": 2, "project": "lab", "project_id": 1, "bead_id": "lab-ops", "title": "On-call tooling", "state": "in-progress", "status": "in_progress", "manager_role": "manager-lab-ops", "now_step": "lab-ops.4", "done": 0, "total": 4,
+       "steps": [
+        {"bead_id": "lab-ops.1", "title": "Alert router rewritten", "state": "in-progress", "status": "in_progress", "owner_state": "died", "viz": 2},
+        {"bead_id": "lab-ops.2", "title": "Runbook signed off by the on-call team", "state": "not-started", "status": "open", "gate": true, "approvers": ["oncall-team"], "viz": 1},
+        {"bead_id": "lab-ops.3", "title": "Rotate the shared pager number", "state": "needs-user", "status": "in_progress", "owner": "user", "waiting": "you", "waiting_since": 1792996000, "viz": 2},
+        {"bead_id": "lab-ops.4", "title": "Paging config drafted", "state": "in-progress", "status": "in_progress", "owner": "manager-lab-ops", "viz": 2},
+        {"bead_id": "lab-ops.5", "title": "Pager vendor contract renewed", "state": "blocked", "status": "in_progress", "owner": "manager-lab-ops", "waiting": "renewal lands", "waiting_since": 1792990000, "waiting_until": 1793050000, "waiting_until_as": "renewal lands", "viz": 2},
+        {"bead_id": "lab-ops.6", "title": "Paging change released", "state": "not-started", "status": "open", "viz": 2,
+         "children": [
+          {"bead_id": "lab-ops.6.1", "title": "Release notes prepared", "state": "not-started", "status": "open", "blocked_by": ["lab-ops.4"], "viz": 3},
+          {"bead_id": "lab-ops.6.2", "title": "Paging change shipped", "state": "not-started", "status": "open", "blocked_by": ["lab-ops.7"], "viz": 3}
+         ]},
+        {"bead_id": "lab-ops.7", "title": "Greenlight shipping the paging change", "state": "not-started", "status": "open", "gate": true, "approvers": ["user"], "criteria": "The user says ship.", "blocked_by": ["lab-ops.6.1"], "viz": 1}
+       ]}
+    ]
+  }
+}

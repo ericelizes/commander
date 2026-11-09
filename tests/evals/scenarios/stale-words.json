@@ -1,0 +1,5 @@
+{
+  "fixture": "../../internal/livedata/testdata/board/stale-words.json",
+  "contains": ["Asked", "days ago", "Pushed back 4 times since"],
+  "absent": ["The spec changed"]
+}

@@ -1,0 +1,738 @@
+{
+  "now": 1000000,
+  "agent": {
+    "state": "idle",
+    "since": 999400
+  },
+  "cases": [
+    {
+      "name": "flagged user gate outranks active work",
+      "steps": [
+        {
+          "bead_id": "a",
+          "title": "a",
+          "state": "in-progress",
+          "status": "open",
+          "owner": "operator-x",
+          "owner_state": "working"
+        },
+        {
+          "bead_id": "ask",
+          "title": "Approach approved",
+          "state": "needs-user",
+          "status": "open",
+          "gate": true,
+          "approvers": [
+            "user"
+          ]
+        },
+        {
+          "bead_id": "pr",
+          "title": "PR approval",
+          "state": "not-started",
+          "status": "open",
+          "gate": true,
+          "approvers": [
+            "user"
+          ],
+          "blocked_by": [
+            "a"
+          ]
+        }
+      ],
+      "needs": [
+        "ask"
+      ],
+      "expect": {
+        "kind": "needs",
+        "text": "Needs you: Approach approved · 0%",
+        "since": 0
+      }
+    },
+    {
+      "name": "closed gate with a card never counts",
+      "steps": [
+        {
+          "bead_id": "a",
+          "title": "a",
+          "state": "in-progress",
+          "status": "open",
+          "owner": "operator-x",
+          "owner_state": "working"
+        },
+        {
+          "bead_id": "old",
+          "title": "Spec approved",
+          "state": "needs-user",
+          "status": "closed",
+          "gate": true,
+          "approvers": [
+            "user"
+          ]
+        },
+        {
+          "bead_id": "pr",
+          "title": "PR approval",
+          "state": "not-started",
+          "status": "open",
+          "gate": true,
+          "approvers": [
+            "reviewer"
+          ],
+          "blocked_by": [
+            "a"
+          ]
+        }
+      ],
+      "needs": [
+        "old"
+      ],
+      "expect": {
+        "kind": "working",
+        "text": "Working on a · then: PR approval · 0%",
+        "since": 0
+      }
+    },
+    {
+      "name": "stale waiting on the user with no card is not a decision",
+      "steps": [
+        {
+          "bead_id": "a",
+          "title": "a",
+          "state": "in-progress",
+          "status": "open",
+          "owner": "operator-x",
+          "owner_state": "working",
+          "waiting": "you",
+          "waiting_since": 999000
+        },
+        {
+          "bead_id": "pr",
+          "title": "PR approval",
+          "state": "not-started",
+          "status": "open",
+          "gate": true,
+          "approvers": [
+            "reviewer"
+          ],
+          "blocked_by": [
+            "a"
+          ]
+        }
+      ],
+      "needs": [],
+      "expect": {
+        "kind": "working",
+        "text": "Working on a · then: PR approval · 0%",
+        "since": 0
+      }
+    },
+    {
+      "name": "listed waiting on the user reads Needs you, timed from when it was recorded",
+      "steps": [
+        {
+          "bead_id": "a",
+          "title": "a",
+          "state": "in-progress",
+          "status": "open",
+          "waiting": "you",
+          "waiting_since": 999000
+        },
+        {
+          "bead_id": "pr",
+          "title": "PR approval",
+          "state": "not-started",
+          "status": "open",
+          "gate": true,
+          "approvers": [
+            "reviewer"
+          ],
+          "blocked_by": [
+            "a"
+          ]
+        }
+      ],
+      "needs": [
+        "a"
+      ],
+      "expect": {
+        "kind": "needs",
+        "text": "Needs you: a · 0%",
+        "since": 999000
+      }
+    },
+    {
+      "name": "listed waiting on the user leads with its open card while its Operator still runs",
+      "steps": [
+        {
+          "bead_id": "a",
+          "title": "a",
+          "state": "in-progress",
+          "status": "open",
+          "owner": "operator-x",
+          "owner_state": "working",
+          "waiting": "you",
+          "waiting_since": 999000
+        },
+        {
+          "bead_id": "pr",
+          "title": "PR approval",
+          "state": "not-started",
+          "status": "open",
+          "gate": true,
+          "approvers": [
+            "reviewer"
+          ],
+          "blocked_by": [
+            "a"
+          ]
+        }
+      ],
+      "needs": [
+        "a"
+      ],
+      "expect": {
+        "kind": "needs",
+        "text": "Needs you: a · 0%",
+        "since": 999000
+      }
+    },
+    {
+      "name": "a decision outranks a next gate that is at",
+      "steps": [
+        {
+          "bead_id": "a",
+          "title": "a",
+          "state": "done",
+          "status": "closed"
+        },
+        {
+          "bead_id": "card",
+          "title": "Question",
+          "state": "needs-user",
+          "status": "open",
+          "waiting": "you",
+          "waiting_since": 999100
+        },
+        {
+          "bead_id": "pr",
+          "title": "PR approval",
+          "state": "not-started",
+          "status": "open",
+          "gate": true,
+          "approvers": [
+            "reviewer"
+          ],
+          "blocked_by": [
+            "a"
+          ]
+        }
+      ],
+      "needs": [
+        "card"
+      ],
+      "expect": {
+        "kind": "needs",
+        "text": "Needs you: Question · 50%",
+        "since": 999100
+      }
+    },
+    {
+      "name": "a next gate that is at and the user's own still reads Needs your gate",
+      "steps": [
+        {
+          "bead_id": "a",
+          "title": "a",
+          "state": "done",
+          "status": "closed"
+        },
+        {
+          "bead_id": "pr",
+          "title": "PR approval",
+          "state": "needs-user",
+          "status": "open",
+          "gate": true,
+          "approvers": [
+            "user"
+          ],
+          "blocked_by": [
+            "a"
+          ]
+        }
+      ],
+      "needs": [
+        "pr"
+      ],
+      "expect": {
+        "kind": "needs",
+        "text": "Needs you · PR approval · 100%",
+        "since": 0
+      }
+    },
+    {
+      "name": "a deferred flagged bead with a card is skipped",
+      "steps": [
+        {
+          "bead_id": "a",
+          "title": "a",
+          "state": "in-progress",
+          "status": "open",
+          "owner": "operator-x",
+          "owner_state": "working"
+        },
+        {
+          "bead_id": "parked",
+          "title": "Parked",
+          "state": "needs-user",
+          "status": "deferred"
+        },
+        {
+          "bead_id": "pr",
+          "title": "PR approval",
+          "state": "not-started",
+          "status": "open",
+          "gate": true,
+          "approvers": [
+            "reviewer"
+          ],
+          "blocked_by": [
+            "a"
+          ]
+        }
+      ],
+      "needs": [
+        "parked"
+      ],
+      "expect": {
+        "kind": "working",
+        "text": "Working on a · then: PR approval · 0%",
+        "since": 0
+      }
+    },
+    {
+      "name": "a flagged bead inside a track counts",
+      "steps": [
+        {
+          "bead_id": "track",
+          "title": "Track",
+          "state": "in-progress",
+          "status": "open",
+          "children": [
+            {
+              "bead_id": "card",
+              "title": "Question",
+              "state": "needs-user",
+              "status": "open"
+            }
+          ]
+        },
+        {
+          "bead_id": "a",
+          "title": "a",
+          "state": "in-progress",
+          "status": "open",
+          "owner": "operator-x",
+          "owner_state": "working"
+        },
+        {
+          "bead_id": "pr",
+          "title": "PR approval",
+          "state": "not-started",
+          "status": "open",
+          "gate": true,
+          "approvers": [
+            "reviewer"
+          ],
+          "blocked_by": [
+            "a"
+          ]
+        }
+      ],
+      "needs": [
+        "card"
+      ],
+      "expect": {
+        "kind": "needs",
+        "text": "Needs you: Question · 0%",
+        "since": 0
+      }
+    },
+    {
+      "name": "zero ready items keeps the row off Needs you",
+      "steps": [
+        {
+          "bead_id": "a",
+          "title": "a",
+          "state": "in-progress",
+          "status": "open",
+          "owner": "operator-x",
+          "owner_state": "working"
+        },
+        {
+          "bead_id": "pr",
+          "title": "PR approval",
+          "state": "not-started",
+          "status": "open",
+          "gate": true,
+          "approvers": [
+            "reviewer"
+          ],
+          "blocked_by": [
+            "a"
+          ]
+        }
+      ],
+      "needs": [],
+      "expect": {
+        "kind": "working",
+        "text": "Working on a · then: PR approval · 0%",
+        "since": 0
+      }
+    },
+    {
+      "name": "one item names its card",
+      "steps": [
+        {
+          "bead_id": "a",
+          "title": "a",
+          "state": "in-progress",
+          "status": "open",
+          "owner": "operator-x",
+          "owner_state": "working"
+        },
+        {
+          "bead_id": "c1",
+          "title": "Post the replies to reviewer-a",
+          "state": "needs-user",
+          "status": "open"
+        },
+        {
+          "bead_id": "pr",
+          "title": "PR approval",
+          "state": "not-started",
+          "status": "open",
+          "gate": true,
+          "approvers": [
+            "reviewer"
+          ],
+          "blocked_by": [
+            "a"
+          ]
+        }
+      ],
+      "needs": [
+        "c1"
+      ],
+      "expect": {
+        "kind": "needs",
+        "text": "Needs you: Post the replies to reviewer-a · 0%",
+        "since": 0
+      }
+    },
+    {
+      "name": "two items name the first card and count the rest",
+      "steps": [
+        {
+          "bead_id": "a",
+          "title": "a",
+          "state": "in-progress",
+          "status": "open",
+          "owner": "operator-x",
+          "owner_state": "working"
+        },
+        {
+          "bead_id": "c1",
+          "title": "Post the replies to reviewer-a",
+          "state": "needs-user",
+          "status": "open"
+        },
+        {
+          "bead_id": "c2",
+          "title": "Merge card",
+          "state": "needs-user",
+          "status": "open"
+        },
+        {
+          "bead_id": "pr",
+          "title": "PR approval",
+          "state": "not-started",
+          "status": "open",
+          "gate": true,
+          "approvers": [
+            "reviewer"
+          ],
+          "blocked_by": [
+            "a"
+          ]
+        }
+      ],
+      "needs": [
+        "c1",
+        "c2"
+      ],
+      "expect": {
+        "kind": "needs",
+        "text": "Needs you: Post the replies to reviewer-a (+1 more) · 0%",
+        "since": 0
+      }
+    },
+    {
+      "name": "three items follow the NEEDS YOU order, not the tree order",
+      "steps": [
+        {
+          "bead_id": "a",
+          "title": "a",
+          "state": "in-progress",
+          "status": "open",
+          "owner": "operator-x",
+          "owner_state": "working"
+        },
+        {
+          "bead_id": "c1",
+          "title": "First in tree",
+          "state": "needs-user",
+          "status": "open"
+        },
+        {
+          "bead_id": "c2",
+          "title": "Second in tree",
+          "state": "needs-user",
+          "status": "open"
+        },
+        {
+          "bead_id": "c3",
+          "title": "Third in tree",
+          "state": "needs-user",
+          "status": "open"
+        },
+        {
+          "bead_id": "pr",
+          "title": "PR approval",
+          "state": "not-started",
+          "status": "open",
+          "gate": true,
+          "approvers": [
+            "reviewer"
+          ],
+          "blocked_by": [
+            "a"
+          ]
+        }
+      ],
+      "needs": [
+        "c3",
+        "c1",
+        "c2"
+      ],
+      "expect": {
+        "kind": "needs",
+        "text": "Needs you: Third in tree (+2 more) · 0%",
+        "since": 0
+      }
+    },
+    {
+      "name": "a blocked user gate is not ready and not counted",
+      "steps": [
+        {
+          "bead_id": "a",
+          "title": "a",
+          "state": "in-progress",
+          "status": "open",
+          "owner": "operator-x",
+          "owner_state": "working"
+        },
+        {
+          "bead_id": "c1",
+          "title": "Post the replies",
+          "state": "needs-user",
+          "status": "open"
+        },
+        {
+          "bead_id": "g",
+          "title": "Merge approval",
+          "state": "needs-user",
+          "status": "open",
+          "gate": true,
+          "approvers": [
+            "user"
+          ],
+          "blocked_by": [
+            "a"
+          ]
+        },
+        {
+          "bead_id": "pr",
+          "title": "PR approval",
+          "state": "not-started",
+          "status": "open",
+          "gate": true,
+          "approvers": [
+            "reviewer"
+          ],
+          "blocked_by": [
+            "a"
+          ]
+        }
+      ],
+      "needs": [
+        "g",
+        "c1"
+      ],
+      "expect": {
+        "kind": "needs",
+        "text": "Needs you: Post the replies · 0%",
+        "since": 0
+      }
+    },
+    {
+      "name": "a parked item is not counted",
+      "steps": [
+        {
+          "bead_id": "a",
+          "title": "a",
+          "state": "in-progress",
+          "status": "open",
+          "owner": "operator-x",
+          "owner_state": "working"
+        },
+        {
+          "bead_id": "c1",
+          "title": "Post the replies",
+          "state": "needs-user",
+          "status": "open"
+        },
+        {
+          "bead_id": "p",
+          "title": "Parked card",
+          "state": "needs-user",
+          "status": "deferred"
+        },
+        {
+          "bead_id": "pr",
+          "title": "PR approval",
+          "state": "not-started",
+          "status": "open",
+          "gate": true,
+          "approvers": [
+            "reviewer"
+          ],
+          "blocked_by": [
+            "a"
+          ]
+        }
+      ],
+      "needs": [
+        "p",
+        "c1"
+      ],
+      "expect": {
+        "kind": "needs",
+        "text": "Needs you: Post the replies · 0%",
+        "since": 0
+      }
+    },
+    {
+      "name": "a ticket id is dropped and a long title is cut with an ellipsis",
+      "steps": [
+        {
+          "bead_id": "a",
+          "title": "a",
+          "state": "in-progress",
+          "status": "open",
+          "owner": "operator-x",
+          "owner_state": "working"
+        },
+        {
+          "bead_id": "c1",
+          "title": "Decide (TEAM-123) whether the long running migration should run before the freeze window starts",
+          "state": "needs-user",
+          "status": "open"
+        },
+        {
+          "bead_id": "pr",
+          "title": "PR approval",
+          "state": "not-started",
+          "status": "open",
+          "gate": true,
+          "approvers": [
+            "reviewer"
+          ],
+          "blocked_by": [
+            "a"
+          ]
+        }
+      ],
+      "needs": [
+        "c1"
+      ],
+      "expect": {
+        "kind": "needs",
+        "text": "Needs you: Decide whether the long running migration… · 0%",
+        "since": 0
+      }
+    },
+    {
+      "name": "items in two tracks name the first card and count all",
+      "steps": [
+        {
+          "bead_id": "t1",
+          "title": "Track one",
+          "state": "in-progress",
+          "status": "open",
+          "children": [
+            {
+              "bead_id": "c1",
+              "title": "Track one card",
+              "state": "needs-user",
+              "status": "open"
+            }
+          ]
+        },
+        {
+          "bead_id": "t2",
+          "title": "Track two",
+          "state": "in-progress",
+          "status": "open",
+          "children": [
+            {
+              "bead_id": "c2",
+              "title": "Track two card",
+              "state": "needs-user",
+              "status": "open"
+            }
+          ]
+        },
+        {
+          "bead_id": "a",
+          "title": "a",
+          "state": "in-progress",
+          "status": "open",
+          "owner": "operator-x",
+          "owner_state": "working"
+        },
+        {
+          "bead_id": "pr",
+          "title": "PR approval",
+          "state": "not-started",
+          "status": "open",
+          "gate": true,
+          "approvers": [
+            "reviewer"
+          ],
+          "blocked_by": [
+            "a"
+          ]
+        }
+      ],
+      "needs": [
+        "c1",
+        "c2"
+      ],
+      "expect": {
+        "kind": "needs",
+        "text": "Needs you: Track one card (+1 more) · 0%",
+        "since": 0
+      }
+    }
+  ]
+}

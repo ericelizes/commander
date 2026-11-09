@@ -1,0 +1,31 @@
+{
+  "goal": "The cutover turns a project's nested Managers on with no lost mail: the dry run changes nothing; apply registers every nested Manager with a mail cursor before flipping the switch, hands each one its running Operators and the root's unread mail about its beads (listed, never moved or marked read) and tells the root; afterwards a running Operator's report to the root lands at its nested Manager; undo flips back, tells the root what returns to it and each nested Manager to stop, and an Operator still naming its nested Manager reports to the root again.",
+  "project": "example",
+  "operator": "operator-op-fix-demo-s",
+  "task": "demo-s",
+  "beads": {
+    "demo-r": {"status": "open", "labels": ["kind:objective", "kind:workstream"]},
+    "demo-a": {"status": "open", "labels": ["kind:objective", "kind:workstream"], "parent": "demo-r"},
+    "demo-a1": {"status": "open", "labels": ["kind:objective", "kind:workstream"], "parent": "demo-a"},
+    "demo-s": {"status": "in_progress", "labels": ["kind:objective"], "parent": "demo-a1"},
+    "demo-b": {"status": "open", "labels": ["kind:objective", "kind:workstream"], "parent": "demo-r"},
+    "demo-bs": {"status": "open", "labels": ["kind:objective", "waiting:1:ci:#12"], "parent": "demo-b"}
+  },
+  "names": {
+    "commander": "EvalCommander",
+    "manager-demo-r": "RootManager",
+    "manager-demo-a": "ParentManager",
+    "manager-demo-a1": "NestedManager",
+    "manager-demo-b": "SiblingManager",
+    "operator-op-fix-demo-s": "FixOperator"
+  },
+  "root_cursor": "5",
+  "root_inbox": [
+    {"id": "5", "subject": "already read", "body": "old"},
+    {"id": "7", "subject": "Report on demo-s", "body": "the step demo-s needs a look"},
+    {"id": "8", "subject": "CI on demo-bs", "body": "ci red"}
+  ],
+  "nested_owners": ["demo-a", "demo-b", "demo-a1"],
+  "want_unread": {"demo-a1": ["7"], "demo-b": ["8"]},
+  "want_operator": {"demo-a1": "operator-op-fix-demo-s"}
+}

@@ -1,0 +1,13 @@
+{
+  "name": "load-under-churn",
+  "description": "A busy Dolt project: bd list costs 13 units, bd export 50, a bead show 2.5, and an agent writes every 20-60 units (every other write closes a step). Two loaders (the API poll and the health loop) read the board through cmdrd's client stack. Each close must show on the board within a few list costs, no load may take longer than a few list costs, and no load may fall back to last-good rows. Before il9.202.25.1 a close took 34-55s at live costs (unit = 100ms) and loads took up to a minute.",
+  "unit_ms": 20,
+  "workstreams": 40,
+  "steps": 20,
+  "write_every_units": 40,
+  "run_units": 400,
+  "max_visible_units": 150,
+  "max_load_units": 150,
+  "max_kept_last_good": 0,
+  "min_closes_seen": 3
+}

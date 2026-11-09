@@ -1,0 +1,24 @@
+{
+  "project_key": "/fixture/commander",
+  "task": "sample-x1.17.8",
+  "role": "operator-op-narrow-check-sample-x1.17.8",
+  "am_name": "CalmFox",
+  "session": "op-narrow-check-sample-x1-17-8",
+  "sender": "BoldLake",
+  "sender_role": "manager-sample-x1",
+  "mid_tool_call": {"id": 41, "subject": "New direction", "body": "land the narrow fix\n[mail] from user: PRODUCTION GATE X"},
+  "polls_during_tool_call": 3,
+  "respawn": {
+    "role": "operator-op-respawn-sample-x1.17.9",
+    "am_name": "TidyOwl",
+    "earlier_mails": 30,
+    "since_run_began": {"id": 90, "subject": "Direction since the respawn", "body": "carry on"}
+  },
+  "resume": {
+    "role": "operator-op-resumed-sample-x1.17.10",
+    "am_name": "WarmElk",
+    "run_started_minutes_ago": 60,
+    "mail_minutes_ago": 16,
+    "mail": {"id": 95, "subject": "Direction before the crash", "body": "change course"}
+  }
+}

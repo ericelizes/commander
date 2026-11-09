@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <clipPath id="tile"><rect x="100" y="100" width="824" height="824" rx="185"/></clipPath>
+  </defs>
+  <g clip-path="url(#tile)">
+    <rect x="100" y="100" width="824" height="824" fill="#3340c4"/>
+    <circle cx="720" cy="300" r="70" fill="#ffb547"/>
+    <path d="M520 220 Q660 370 680 590 L520 590 Z" fill="#ffffff"/>
+    <path d="M492 280 Q400 420 360 590 L492 590 Z" fill="#dfe3ff"/>
+    <path d="M506 200 L506 610" stroke="#ffffff" stroke-width="18" stroke-linecap="round"/>
+    <path d="M506 200 L580 222 L506 246 Z" fill="#ffb547"/>
+    <path d="M300 610 L720 610 Q690 690 630 700 L390 700 Q330 690 300 610 Z" fill="#ffffff"/>
+    <path d="M60 680 q50 -34 100 0 t100 0 t100 0 t100 0 t100 0 t100 0 t100 0 t100 0 t100 0 V940 H60 Z" fill="#262f8f"/>
+    <path d="M60 680 q50 -34 100 0 t100 0 t100 0 t100 0 t100 0 t100 0 t100 0 t100 0 t100 0" fill="none" stroke="#8b95ff" stroke-width="16" stroke-linecap="round"/>
+    <path d="M110 780 q50 -28 100 0 t100 0 t100 0 t100 0 t100 0 t100 0 t100 0 t100 0" fill="none" stroke="#5a66e0" stroke-width="14" stroke-linecap="round"/>
+  </g>
+</svg>

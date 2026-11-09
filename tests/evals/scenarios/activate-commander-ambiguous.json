@@ -1,0 +1,24 @@
+{
+  "name": "add-commander-ambiguous",
+  "setup": {
+    "ambiguous_project": true
+  },
+  "turns": [
+    {
+      "input": "add commander",
+      "reply_contains": [
+        "multiple matches",
+        "Which one should I add?"
+      ],
+      "reply_excludes": [
+        "Should I proceed?"
+      ]
+    }
+  ],
+  "expect": {
+    "action_excludes": [
+      "cmdr internal-add-project"
+    ],
+    "search_count": 1
+  }
+}

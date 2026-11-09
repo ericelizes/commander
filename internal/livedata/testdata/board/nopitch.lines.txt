@@ -1,0 +1,11 @@
+0 Commander: idle (for 10m)
+1 gate no pitch, Manager idle: Manager writing the pitch for greenlight merging the sample list test fix (100% done, next gate: Greenlight merging the sample list test fix, approved by you)
+2 gate no pitch, Manager working: Manager writing the pitch for greenlight merging the sample list test fix (100% done, next gate: Greenlight merging the sample list test fix, approved by you, 1 working, for 2m)
+3 gate no pitch, past the deadline: Pitch for greenlight merging the sample list test fix still not written: the Manager's move (100% done, next gate: Greenlight merging the sample list test fix, approved by you, for 1h)
+4 gate no pitch beside a real ask: Needs you: Which name should the service use? (50% done, next gate: Greenlight merging the sample list test fix, approved by you, ⚑ 1, for 5m)
+5 needs-user step with no card: Manager writing the pitch for pick a name (0% done, no gates)
+6 track with a gate no pitch: Working on write the parser · Ship: Manager writing the pitch for greenlight merging the sample list test fix (50% done, next gate: Greenlight merging the sample list test fix, approved by you, 2 working)
+  6.1 Build: Working on write the parser (0% done, 1 working)
+  6.2 Ship: Manager writing the pitch for greenlight merging the sample list test fix (100% done, for 5m)
+Needs you (1):
+  #4 Which name should the service use? (gate no pitch beside a real ask)

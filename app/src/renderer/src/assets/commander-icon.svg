@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4553d8"/>
+      <stop offset="0.55" stop-color="#262f8f"/>
+      <stop offset="1" stop-color="#11153f"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.3" cy="0.18" r="0.75">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="crown" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#d9def0"/>
+    </linearGradient>
+    <linearGradient id="band" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1a1f45"/>
+      <stop offset="1" stop-color="#0b0e26"/>
+    </linearGradient>
+    <linearGradient id="visor" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2b3160"/>
+      <stop offset="0.5" stop-color="#0c0f27"/>
+      <stop offset="1" stop-color="#05060f"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffe08a"/>
+      <stop offset="0.6" stop-color="#e3a832"/>
+      <stop offset="1" stop-color="#b9781a"/>
+    </linearGradient>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="160%">
+      <feGaussianBlur stdDeviation="22"/>
+    </filter>
+    <clipPath id="sq"><rect x="100" y="100" width="824" height="824" rx="186"/></clipPath>
+  </defs>
+
+  <g clip-path="url(#sq)">
+    <rect x="100" y="100" width="824" height="824" fill="url(#bg)"/>
+    <rect x="100" y="100" width="824" height="824" fill="url(#glow)"/>
+    <!-- shadow under the cap -->
+    <ellipse cx="512" cy="752" rx="270" ry="44" fill="#000" opacity="0.45" filter="url(#soft)"/>
+  </g>
+
+  <!-- crown: wide and flat-topped, flaring over the band -->
+  <path d="M206 452 C206 352 360 296 512 296 C664 296 818 352 818 452 C818 492 790 520 744 536 L280 536 C234 520 206 492 206 452 Z" fill="url(#crown)"/>
+  <!-- crown top seam -->
+  <path d="M250 446 C300 396 400 372 512 372 C624 372 724 396 774 446" fill="none" stroke="#c4cbe4" stroke-width="6" stroke-linecap="round"/>
+  <!-- band -->
+  <rect x="276" y="528" width="472" height="84" rx="18" fill="url(#band)"/>
+  <!-- gold cord across the band -->
+  <path d="M300 590 C400 606 624 606 724 590" fill="none" stroke="url(#gold)" stroke-width="10" stroke-linecap="round"/>
+  <circle cx="300" cy="590" r="11" fill="url(#gold)"/>
+  <circle cx="724" cy="590" r="11" fill="url(#gold)"/>
+  <!-- visor: glossy, sweeping forward -->
+  <path d="M286 606 C380 640 644 640 738 606 C744 664 662 714 512 718 C362 714 280 664 286 606 Z" fill="url(#visor)"/>
+  <path d="M332 640 C420 664 604 664 692 640" fill="none" stroke="#ffffff" stroke-opacity="0.22" stroke-width="8" stroke-linecap="round"/>
+  <!-- badge: gold oval with an anchor -->
+  <ellipse cx="512" cy="440" rx="74" ry="66" fill="url(#gold)"/>
+  <ellipse cx="512" cy="440" rx="74" ry="66" fill="none" stroke="#9a6212" stroke-opacity="0.45" stroke-width="5"/>
+  <g fill="none" stroke="#1a1f45" stroke-width="11" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="512" cy="402" r="11"/>
+    <path d="M512 414 V486"/>
+    <path d="M488 432 H536"/>
+    <path d="M470 458 C474 480 492 492 512 492 C532 492 550 480 554 458"/>
+  </g>
+</svg>

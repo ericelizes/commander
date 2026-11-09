@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>org.commander</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>__HOME__/.local/bin/cmdrd</string>
+    </array>
+
+    <!-- launchd starts agents with only the system PATH; cmdrd shells out to
+         tmux, br, claude/opencode and cmdr, which live in these dirs. -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>__HOME__/.local/bin:__HOME__/.cargo/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <!-- Native-app handover is enabled here; each handover call still
+             needs confirm=true. -->
+        <key>COMMANDER_CHAT_HANDOVER</key>
+        <string>1</string>
+    </dict>
+
+    <!-- Fork-storm cap: in an invented capacity exercise, recursive test
+         children exhaust a user's process budget. RLIMIT_NPROC is checked
+         against the number of processes the whole UID owns, not just this job's
+         tree, and children inherit it: once the user has 3000 processes, this job
+         and everything it starts fail to fork (EAGAIN) while other jobs and the
+         login session, still at the system limit, keep working. Sized above the
+         expected normal load and below the system cap; validate both locally. -->
+    <key>HardResourceLimits</key>
+    <dict>
+        <key>NumberOfProcesses</key>
+        <integer>3000</integer>
+    </dict>
+    <key>SoftResourceLimits</key>
+    <dict>
+        <key>NumberOfProcesses</key>
+        <integer>3000</integer>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>ProcessType</key>
+    <string>Background</string>
+
+    <key>StandardOutPath</key>
+    <string>__HOME__/.commander/logs/cmdrd.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>__HOME__/.commander/logs/cmdrd.err</string>
+
+    <!-- Chat hosts (and the claude each holds) are started by cmdrd with setsid, so
+         a restart of cmdrd must not take them down: launchd kills a job's
+         leftover processes unless AbandonProcessGroup is set. -->
+    <key>AbandonProcessGroup</key>
+    <true/>
+
+    <key>ExitTimeOut</key>
+    <integer>20</integer>
+
+    <key>ThrottleInterval</key>
+    <integer>5</integer>
+</dict>
+</plist>

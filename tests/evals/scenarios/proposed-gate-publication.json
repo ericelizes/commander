@@ -1,0 +1,8 @@
+{
+ "goal":"A proposed approval gate retains the real blocker and Commander responsibility until it is accepted, without creating a user approval early.",
+ "cases":[
+  {"proposal":"ask","now":110,"want":"Commander reviewing the proposed ask"},
+  {"proposal":"gate","now":110,"want":"Commander reviewing the proposed gate"},
+  {"proposal":"ask","now":100000,"want":"Commander's move"}
+ ]
+}

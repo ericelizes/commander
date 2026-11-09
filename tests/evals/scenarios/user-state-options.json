@@ -1,0 +1,9 @@
+{
+  "name": "user-state-options",
+  "turns": [{
+    "input": "show user-state options",
+    "reply_contains": ["needs-user", "the user", "operator:<role>"],
+    "reply_excludes": ["needs-owner"]
+  }],
+  "expect": {"action_contains": ["cmdr internal-set-objective --help"], "search_count": 0, "cockpit_contains": ["needs-user"]}
+}

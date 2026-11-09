@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- The tmux server every Operator session lives on (tmux -L commander-ops).
+         It is its own launchd job, so restarting or reinstalling cmdrd never
+         touches it. The job does not run the server in the foreground: a
+         foreground client in an invented recovery exercise joins an existing
+         server and fails without a terminal. Instead it starts detached with a `keeper`
+         session (so it never ends when the last Operator does, exit-empty off)
+         and polls; if the server dies it starts it again. Starting is
+         harmless when a server already owns the socket. the user's own cockpit
+         stays on the default tmux socket. -->
+    <key>Label</key>
+    <string>org.commander-tmux</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/sh</string>
+        <string>-c</string>
+        <string>while :; do tmux -L commander-ops has-session -t =keeper 2&gt;/dev/null || tmux -L commander-ops new-session -d -s keeper; tmux -L commander-ops set -s exit-empty off; while tmux -L commander-ops ls &gt;/dev/null 2&gt;&amp;1; do sleep 20; done; sleep 2; done</string>
+    </array>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>__HOME__/.local/bin:__HOME__/.cargo/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+
+    <!-- Fork-storm cap: in an invented capacity exercise, recursive test
+         children exhaust a user's process budget. RLIMIT_NPROC is checked
+         against the number of processes the whole UID owns, not just this job's
+         tree, and children inherit it: once the user has 3000 processes, this job
+         and everything it starts fail to fork (EAGAIN) while other jobs and the
+         login session, still at the system limit, keep working. Sized above the
+         expected normal load and below the system cap; validate both locally. -->
+    <key>HardResourceLimits</key>
+    <dict>
+        <key>NumberOfProcesses</key>
+        <integer>3000</integer>
+    </dict>
+    <key>SoftResourceLimits</key>
+    <dict>
+        <key>NumberOfProcesses</key>
+        <integer>3000</integer>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>ProcessType</key>
+    <string>Background</string>
+
+    <key>StandardOutPath</key>
+    <string>__HOME__/.commander/logs/tmux-ops.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>__HOME__/.commander/logs/tmux-ops.log</string>
+
+    <!-- The Operators' claude processes are children of this server: never
+         kill them when the job is reloaded. -->
+    <key>AbandonProcessGroup</key>
+    <true/>
+
+    <key>ThrottleInterval</key>
+    <integer>5</integer>
+</dict>
+</plist>

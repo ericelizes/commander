@@ -1,0 +1,7 @@
+{
+  "argv": ["internal-set-objective", "--project", "example", "--bead", "p-1", "--card-check", "still-right", "--reason", "read the edited description, the card still holds"],
+  "seed_basis_spec": "hash-from-before-the-edit",
+  "calls_contain": ["comments add p-1"],
+  "basis_rebaselined": true,
+  "notice_key_renewed": true
+}

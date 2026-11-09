@@ -1,0 +1,562 @@
+{
+ "now": 1793021600,
+ "snapshot": {
+  "version": 1,
+  "generated_at": "2026-10-26T12:00:00Z",
+  "projects": [
+   {
+    "id": 1,
+    "name": "example-app",
+    "type": "code",
+    "path": "/work/example-app",
+    "status": "active"
+   },
+   {
+    "id": 2,
+    "name": "example-docs",
+    "type": "knowledge",
+    "path": "/work/example-docs",
+    "status": "active"
+   }
+  ],
+  "workstreams": [
+   {
+    "n": 1,
+    "project": "example-app",
+    "project_id": 1,
+    "bead_id": "app-h",
+    "title": "Parallel work",
+    "state": "in-progress",
+    "status": "in_progress",
+    "owner": "manager-app-h",
+    "manager_role": "manager-app-h",
+    "done": 0,
+    "total": 5,
+    "steps": [
+     {
+      "bead_id": "app-h.1",
+      "title": "Parallel stage",
+      "state": "in-progress",
+      "status": "in_progress",
+      "viz": 3,
+      "owner": "manager-app-h",
+      "children": [
+       {
+        "bead_id": "app-h.1.1",
+        "title": "Worker one",
+        "state": "in-progress",
+        "status": "in_progress",
+        "viz": 3,
+        "owner": "operator-op-one-app-h.1.1",
+        "owner_state": "working",
+        "working": true
+       },
+       {
+        "bead_id": "app-h.1.2",
+        "title": "Worker two",
+        "state": "in-progress",
+        "status": "in_progress",
+        "viz": 3,
+        "owner": "operator-op-two-app-h.1.2",
+        "owner_state": "working",
+        "working": true
+       },
+       {
+        "bead_id": "app-h.1.3",
+        "title": "Worker three",
+        "state": "in-progress",
+        "status": "in_progress",
+        "viz": 3,
+        "owner": "operator-op-three-app-h.1.3",
+        "owner_state": "working",
+        "working": true
+       }
+      ]
+     },
+     {
+      "bead_id": "app-h.2",
+      "title": "Parallel work accepted",
+      "state": "not-started",
+      "status": "open",
+      "viz": 1,
+      "gate": true,
+      "approvers": [
+       "you"
+      ],
+      "criteria": "The change is checked",
+      "blocked_by": [
+       "app-h.1"
+      ]
+     },
+     {
+      "bead_id": "app-h.3",
+      "title": "Parallel work accepted again",
+      "state": "not-started",
+      "status": "open",
+      "viz": 1,
+      "gate": true,
+      "approvers": [
+       "you"
+      ],
+      "criteria": "The change is checked",
+      "blocked_by": [
+       "app-h.1",
+       "app-h.1.1",
+       "app-h.2",
+       "app-gone.9"
+      ]
+     },
+     {
+      "bead_id": "app-h.4",
+      "title": "Early sign-off given",
+      "state": "needs-user",
+      "status": "open",
+      "viz": 1,
+      "gate": true,
+      "approvers": [
+       "you"
+      ],
+      "criteria": "The change is checked",
+      "ask": "Sign off early?"
+     }
+    ]
+   },
+   {
+    "n": 2,
+    "project": "example-app",
+    "project_id": 1,
+    "bead_id": "app-i",
+    "title": "Sign-in",
+    "state": "in-progress",
+    "status": "in_progress",
+    "owner": "manager-app-i",
+    "manager_role": "manager-app-i",
+    "done": 0,
+    "total": 5,
+    "steps": [
+     {
+      "bead_id": "app-i.1",
+      "title": "Shared dependency",
+      "state": "in-progress",
+      "status": "in_progress",
+      "viz": 2,
+      "track": true,
+      "workstream": "app-i",
+      "children": [
+       {
+        "bead_id": "app-i.1.1",
+        "title": "Dependency audit green",
+        "state": "in-progress",
+        "status": "in_progress",
+        "viz": 3,
+        "owner": "operator-op-audit-app-i.1.1",
+        "owner_state": "working",
+        "working": true,
+        "waiting": "CI #205",
+        "waiting_since": 1793020700
+       },
+       {
+        "bead_id": "app-i.1.2",
+        "title": "Second dependency",
+        "state": "not-started",
+        "status": "open",
+        "viz": 3,
+        "owner": "manager-app-i"
+       }
+      ]
+     },
+     {
+      "bead_id": "app-i.2",
+      "title": "Sign-in change",
+      "state": "in-progress",
+      "status": "in_progress",
+      "viz": 2,
+      "track": true,
+      "workstream": "app-i",
+      "children": [
+       {
+        "bead_id": "app-i.2.1",
+        "title": "Sign-in code",
+        "state": "not-started",
+        "status": "open",
+        "viz": 3,
+        "blocked_by": [
+         "app-i.1.1",
+         "app-i.1.2"
+        ],
+        "owner": "manager-app-i"
+       },
+       {
+        "bead_id": "app-i.2.2",
+        "title": "Sign-in merge",
+        "state": "not-started",
+        "status": "open",
+        "viz": 3,
+        "blocked_by": [
+         "app-i.2.1",
+         "app-i.3"
+        ],
+        "owner": "manager-app-i"
+       }
+      ],
+      "blocked_by": [
+       "app-i.1"
+      ]
+     },
+     {
+      "bead_id": "app-i.3",
+      "title": "Parked track",
+      "state": "not-started",
+      "status": "deferred",
+      "viz": 2,
+      "track": true,
+      "workstream": "app-i",
+      "children": [
+       {
+        "bead_id": "app-i.3.1",
+        "title": "Parked track work",
+        "state": "not-started",
+        "status": "open",
+        "viz": 3,
+        "owner": "manager-app-i"
+       }
+      ],
+      "parked_until": 1793280800
+     }
+    ]
+   },
+   {
+    "n": 3,
+    "project": "example-app",
+    "project_id": 1,
+    "bead_id": "app-j",
+    "title": "Finished plan",
+    "state": "in-progress",
+    "status": "in_progress",
+    "owner": "manager-app-j",
+    "manager_role": "manager-app-j",
+    "done": 3,
+    "total": 3,
+    "steps": [
+     {
+      "bead_id": "app-j.1",
+      "title": "Spec approved",
+      "state": "done",
+      "status": "closed",
+      "viz": 1,
+      "gate": true,
+      "approvers": [
+       "you"
+      ],
+      "criteria": "The change is checked"
+     },
+     {
+      "bead_id": "app-j.2",
+      "title": "Plan approved",
+      "state": "done",
+      "status": "closed",
+      "viz": 1,
+      "gate": true,
+      "approvers": [
+       "you"
+      ],
+      "criteria": "The change is checked",
+      "blocked_by": [
+       "app-j.1"
+      ]
+     },
+     {
+      "bead_id": "app-j.3",
+      "title": "Everything shipped",
+      "state": "done",
+      "status": "closed",
+      "viz": 3,
+      "owner": "manager-app-j",
+      "blocked_by": [
+       "app-j.2"
+      ]
+     }
+    ]
+   },
+   {
+    "n": 4,
+    "project": "example-app",
+    "project_id": 1,
+    "bead_id": "app-k",
+    "title": "Long history",
+    "state": "in-progress",
+    "status": "in_progress",
+    "owner": "manager-app-k",
+    "manager_role": "manager-app-k",
+    "done": 7,
+    "total": 9,
+    "steps": [
+     {
+      "bead_id": "app-k.1",
+      "title": "Finished piece 1",
+      "state": "done",
+      "status": "closed",
+      "viz": 3,
+      "owner": "manager-app-k"
+     },
+     {
+      "bead_id": "app-k.2",
+      "title": "Finished piece 2",
+      "state": "done",
+      "status": "closed",
+      "viz": 3,
+      "owner": "manager-app-k"
+     },
+     {
+      "bead_id": "app-k.3",
+      "title": "Finished piece 3",
+      "state": "done",
+      "status": "closed",
+      "viz": 3,
+      "owner": "manager-app-k"
+     },
+     {
+      "bead_id": "app-k.4",
+      "title": "Finished piece 4",
+      "state": "done",
+      "status": "closed",
+      "viz": 3,
+      "owner": "manager-app-k"
+     },
+     {
+      "bead_id": "app-k.5",
+      "title": "Finished piece 5",
+      "state": "done",
+      "status": "closed",
+      "viz": 3,
+      "owner": "manager-app-k"
+     },
+     {
+      "bead_id": "app-k.6",
+      "title": "Finished piece 6",
+      "state": "done",
+      "status": "closed",
+      "viz": 3,
+      "owner": "manager-app-k"
+     },
+     {
+      "bead_id": "app-k.7",
+      "title": "Finished piece 7",
+      "state": "done",
+      "status": "closed",
+      "viz": 3,
+      "owner": "manager-app-k"
+     },
+     {
+      "bead_id": "app-k.8",
+      "title": "Container",
+      "state": "in-progress",
+      "status": "in_progress",
+      "viz": 3,
+      "owner": "manager-app-k",
+      "children": [
+       {
+        "bead_id": "app-k.8.2",
+        "title": "Finished inner piece 2",
+        "state": "done",
+        "status": "closed",
+        "viz": 3,
+        "owner": "manager-app-k"
+       },
+       {
+        "bead_id": "app-k.8.3",
+        "title": "Finished inner piece 3",
+        "state": "done",
+        "status": "closed",
+        "viz": 3,
+        "owner": "manager-app-k"
+       },
+       {
+        "bead_id": "app-k.8.4",
+        "title": "Finished inner piece 4",
+        "state": "done",
+        "status": "closed",
+        "viz": 3,
+        "owner": "manager-app-k"
+       },
+       {
+        "bead_id": "app-k.8.5",
+        "title": "Finished inner piece 5",
+        "state": "done",
+        "status": "closed",
+        "viz": 3,
+        "owner": "manager-app-k"
+       },
+       {
+        "bead_id": "app-k.8.6",
+        "title": "Finished inner piece 6",
+        "state": "done",
+        "status": "closed",
+        "viz": 3,
+        "owner": "manager-app-k"
+       },
+       {
+        "bead_id": "app-k.8.7",
+        "title": "Finished inner piece 7",
+        "state": "done",
+        "status": "closed",
+        "viz": 3,
+        "owner": "manager-app-k"
+       },
+       {
+        "bead_id": "app-k.8.8",
+        "title": "Finished inner piece 8",
+        "state": "done",
+        "status": "closed",
+        "viz": 3,
+        "owner": "manager-app-k"
+       },
+       {
+        "bead_id": "app-k.8.1",
+        "title": "Inner container",
+        "state": "in-progress",
+        "status": "in_progress",
+        "viz": 3,
+        "owner": "manager-app-k",
+        "children": [
+         {
+          "bead_id": "app-k.8.1.1",
+          "title": "Inner leaf",
+          "state": "in-progress",
+          "status": "in_progress",
+          "viz": 3,
+          "owner": "manager-app-k",
+          "waiting": "main CI 9f8e7d6",
+          "waiting_since": 1793021000
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  ],
+  "needs_you": [
+   {
+    "project": "example-app",
+    "bead_id": "app-h.4",
+    "title": "Early sign-off given",
+    "workstream": "Parallel work",
+    "rank": 1,
+    "ask": "Sign off early?",
+    "decision": {
+     "question": "Sign off early?",
+     "context": "A short summary of the choice.",
+     "options": [
+      {
+       "label": "Approve",
+       "implications": "The work starts.",
+       "recommended": true,
+       "approves": true
+      },
+      {
+       "label": "Change",
+       "implications": "The Manager reworks it."
+      }
+     ]
+    },
+    "since": 1793020400
+   }
+  ],
+  "agents": {
+   "commander": {
+    "state": "working",
+    "since": 1793021540
+   },
+   "manager-app-h": {
+    "state": "working",
+    "since": 1793021480
+   },
+   "manager-app-i": {
+    "state": "working",
+    "since": 1793020700
+   },
+   "manager-app-j": {
+    "state": "idle",
+    "since": 1792935200
+   },
+   "manager-app-k": {
+    "state": "idle",
+    "since": 1793021000,
+    "wait": "main CI 9f8e7d6"
+   }
+  },
+  "fleet": {
+   "cost_usd_24h": 2.5,
+   "cost_usd_7d": 10,
+   "cost_series_24h": [
+    0,
+    1,
+    1.5
+   ],
+   "agents": 3,
+   "active": 2,
+   "blocked": 0,
+   "idle_ratio": 0,
+   "projects": 2,
+   "chat_cost_usd_24h": 1,
+   "roles_cost": [
+    {
+     "role": "commander",
+     "today_usd": 1,
+     "session_usd": 2,
+     "total_usd": 3,
+     "input_tokens": 100,
+     "output_tokens": 200
+    }
+   ]
+  },
+  "unread": {
+   "commander": 2
+  },
+  "watch": {
+   "manager-app-h": {
+    "checked_at": 1793021580,
+    "operators": [
+     {
+      "role": "operator-op-one-app-h.1.1",
+      "bead_id": "app-h.1.1",
+      "active_at": 1793021570,
+      "since": 1793021300
+     },
+     {
+      "role": "operator-op-two-app-h.1.2",
+      "bead_id": "app-h.1.2",
+      "active_at": 1793021570,
+      "since": 1793021300
+     },
+     {
+      "role": "operator-op-three-app-h.1.3",
+      "bead_id": "app-h.1.3",
+      "active_at": 1793021570,
+      "since": 1793021300
+     }
+    ]
+   },
+   "manager-app-i": {
+    "checked_at": 1793021580,
+    "operators": [
+     {
+      "role": "operator-op-audit-app-i.1.1",
+      "bead_id": "app-i.1.1",
+      "active_at": 1793021570,
+      "since": 1793021300
+     }
+    ]
+   }
+  },
+  "live": {
+   "operators": [
+    "operator-op-one-app-h.1.1",
+    "operator-op-two-app-h.1.2",
+    "operator-op-three-app-h.1.3",
+    "operator-op-audit-app-i.1.1"
+   ]
+  }
+ }
+}

@@ -1,0 +1,92 @@
+{
+  "now": 1793214500,
+  "snapshot": {
+    "version": 1,
+    "generated_at": "2026-10-28T19:08:20Z",
+    "projects": [{"id": 1, "name": "app", "type": "code", "path": "/work/app", "status": "active"}],
+    "live": {
+      "operators": ["operator-op-classify-app-w3-1-2", "operator-op-fix-wave-app-w5-2-1"]
+    },
+    "agents": {
+      "manager-app-w1": {"state": "idle", "since": 1793170000},
+      "manager-app-w2": {"state": "idle", "since": 1793170000},
+      "manager-app-w3": {"state": "idle", "since": 1793170000},
+      "manager-app-w4": {"state": "idle", "since": 1793170000},
+      "manager-app-w5": {"state": "idle", "since": 1793170000},
+      "manager-app-w6": {"state": "idle", "since": 1793170000}
+    },
+    "unread": {},
+    "fleet": {"cost_usd_24h": 0, "cost_usd_7d": 0, "cost_series_24h": [], "agents": 0, "active": 0, "blocked": 0, "idle_ratio": 0, "projects": 1, "chat_cost_usd_24h": 0, "roles_cost": []},
+    "needs_you": [
+      {"project": "app", "bead_id": "app-w3.1", "title": "Run the classifier on the real job list", "workstream": "Classify the nightly jobs", "rank": 1, "decision": {"question": "Run the classifier on the real job list?", "context": "The dry run is done."}}
+    ],
+    "watch": {
+      "manager-app-w1": {"checked_at": 1793214460, "operators": [{"role": "operator-op-build-wav-app-w1.2", "bead_id": "app-w1.2", "active_at": 1793170700, "since": 1793170000}]},
+      "manager-app-w3": {"checked_at": 1793214460, "operators": [{"role": "operator-op-classify-app-w3.1.2", "bead_id": "app-w3.1.2", "active_at": 1793214400, "since": 1793213975}]},
+      "manager-app-w5": {"checked_at": 1793214460, "operators": [{"role": "operator-op-fix-wave-app-w5.2.1", "bead_id": "app-w5.2.1", "active_at": 1793214410, "since": 1793214362}]},
+      "manager-app-w6": {"checked_at": 1793214460, "operators": [{"role": "operator-op-poll-dev-app-w6.1.1", "bead_id": "app-w6.1.1", "active_at": 1793180000, "since": 1793170000}]}
+    },
+    "workstreams": [
+      {
+        "n": 1, "project": "app", "project_id": 1, "bead_id": "app-w1", "title": "Move background jobs to the queue", "state": "in-progress", "status": "open",
+        "manager_role": "manager-app-w1", "done": 1, "total": 2,
+        "steps": [
+          {"bead_id": "app-w1.1", "title": "Inventory the jobs", "state": "done", "status": "closed", "viz": 3},
+          {"bead_id": "app-w1.2", "title": "Build wave 2 of the job moves", "state": "in-progress", "status": "in_progress",
+            "owner": "operator-op-build-wav-app-w1-2", "owner_state": "working", "viz": 3}
+        ]
+      },
+      {
+        "n": 2, "project": "app", "project_id": 1, "bead_id": "app-w2", "title": "Fix the flaky login test", "state": "in-progress", "status": "open",
+        "manager_role": "manager-app-w2", "done": 0, "total": 1,
+        "steps": [
+          {"bead_id": "app-w2.1", "title": "Find why the login test fails on CI", "state": "not-started", "status": "open",
+            "owner_state": "died", "owner_why": "Operator stopped without a report; restarted once, stopped again", "owner_since": 1793213800, "restarts": 1, "broken": true, "viz": 3}
+        ]
+      },
+      {
+        "n": 3, "project": "app", "project_id": 1, "bead_id": "app-w3", "title": "Classify the nightly jobs", "state": "in-progress", "status": "open",
+        "manager_role": "manager-app-w3", "done": 1, "total": 2,
+        "steps": [
+          {"bead_id": "app-w3.1", "title": "Run the classifier on the real job list", "state": "needs-user", "status": "in_progress", "viz": 3,
+            "children": [
+              {"bead_id": "app-w3.1.1", "title": "Dry run of the classifier", "state": "done", "status": "closed", "viz": 3},
+              {"bead_id": "app-w3.1.2", "title": "Classify wave 1 against the read-only rule", "state": "in-progress", "status": "in_progress",
+                "owner": "operator-op-classify-app-w3-1-2", "owner_state": "working", "viz": 3}
+            ]
+          },
+          {"bead_id": "app-w3.2", "title": "Classifier PR approved", "state": "not-started", "status": "open", "gate": true, "approvers": ["reviewer-a"],
+            "blocked_by": ["app-w3.1"], "viz": 1}
+        ]
+      },
+      {
+        "n": 4, "project": "app", "project_id": 1, "bead_id": "app-w4", "title": "Tidy the deploy scripts", "state": "in-progress", "status": "open",
+        "manager_role": "manager-app-w4", "done": 1, "total": 2,
+        "steps": [
+          {"bead_id": "app-w4.1", "title": "Remove the old staging script", "state": "done", "status": "closed", "viz": 3},
+          {"bead_id": "app-w4.2", "title": "Rewrite the prod deploy script", "state": "not-started", "status": "open", "broken": true, "viz": 3,
+            "children": [
+              {"bead_id": "app-w4.2.1", "title": "Port the rollback step", "state": "not-started", "status": "deferred", "parked_until": 1793300000, "viz": 3}
+            ]
+          }
+        ]
+      },
+      {
+        "n": 5, "project": "app", "project_id": 1, "bead_id": "app-w5", "title": "Shrink the build image", "state": "in-progress", "status": "open",
+        "manager_role": "manager-app-w5", "done": 2, "total": 2,
+        "steps": [
+          {"bead_id": "app-w5.1", "title": "Measure the image layers", "state": "done", "status": "closed", "viz": 3},
+          {"bead_id": "app-w5.2", "title": "Drop the unused toolchains", "state": "done", "status": "closed", "viz": 3}
+        ]
+      },
+      {
+        "n": 6, "project": "app", "project_id": 1, "bead_id": "app-w6", "title": "Cut over the dev database", "state": "in-progress", "status": "open",
+        "manager_role": "manager-app-w6", "done": 0, "total": 1,
+        "steps": [
+          {"bead_id": "app-w6.1", "title": "Switch dev to the new database at a quiet window", "state": "in-progress", "status": "in_progress",
+            "owner": "manager-app-w6", "waiting": "operator-op-poll-dev-app-w6-1-1", "waiting_since": 1793170000, "viz": 3}
+        ]
+      }
+    ]
+  }
+}

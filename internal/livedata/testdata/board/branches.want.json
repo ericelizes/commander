@@ -1,0 +1,1937 @@
+{
+ "commander": {
+  "kind": "waiting",
+  "text": "waiting · CI #40",
+  "since": 1792999100,
+  "unread": 0
+ },
+ "asks": [
+  {
+   "key": "ask:p:w2.1",
+   "text": "Which name should the service use?",
+   "rank": 1,
+   "workstream": "needs card",
+   "track": "",
+   "track_letter": "",
+   "ws_key": "p:w2"
+  },
+  {
+   "key": "ask:p:w24.9",
+   "text": "Merge approval",
+   "rank": 2,
+   "workstream": "needs your gate",
+   "track": "",
+   "track_letter": "",
+   "ws_key": "p:w24"
+  },
+  {
+   "key": "ask:p:w33",
+   "text": "Is this still wanted?",
+   "rank": 3,
+   "workstream": "ask on the workstream",
+   "track": "",
+   "track_letter": "",
+   "ws_key": "p:w33"
+  },
+  {
+   "key": "ask:p:w34.9",
+   "text": "Spec approval",
+   "rank": 4,
+   "workstream": "your gate not ready",
+   "track": "",
+   "track_letter": "",
+   "ws_key": "p:w34"
+  },
+  {
+   "key": "ask:p:w37.2",
+   "text": "Pick a region",
+   "rank": 5,
+   "workstream": "decisions",
+   "track": "",
+   "track_letter": "",
+   "ws_key": "p:w37"
+  },
+  {
+   "key": "ask:p:w37.1",
+   "text": "Pick a queue",
+   "rank": 6,
+   "workstream": "decisions",
+   "track": "",
+   "track_letter": "",
+   "ws_key": "p:w37"
+  },
+  {
+   "key": "ask:p:w40.2.1",
+   "text": "Choose the log store",
+   "rank": 7,
+   "workstream": "two tracks",
+   "track": "Log audits",
+   "track_letter": ".2",
+   "ws_key": "p:w40"
+  },
+  {
+   "key": "ask:p:w43.2.1",
+   "text": "Beta choice",
+   "rank": 8,
+   "workstream": "cards in two tracks",
+   "track": "Beta",
+   "track_letter": ".2",
+   "ws_key": "p:w43"
+  },
+  {
+   "key": "ask:p:w43.1.1",
+   "text": "Alpha choice",
+   "rank": 9,
+   "workstream": "cards in two tracks",
+   "track": "Alpha",
+   "track_letter": ".1",
+   "ws_key": "p:w43"
+  },
+  {
+   "key": "ask:p:w46.1",
+   "text": "Start the reviews?",
+   "rank": 10,
+   "workstream": "tracks wait on your gate",
+   "track": "",
+   "track_letter": "",
+   "ws_key": "p:w46"
+  },
+  {
+   "key": "ask:p:w56.1",
+   "text": "Does the team approve scope for automating retries on dead imports?",
+   "rank": 11,
+   "workstream": "long card title",
+   "track": "",
+   "track_letter": "",
+   "ws_key": "p:w56"
+  },
+  {
+   "key": "ask:p:w57.1.1",
+   "text": "Sign in to the service",
+   "rank": 12,
+   "workstream": "open card with live login",
+   "track": "Login track",
+   "track_letter": ".1",
+   "ws_key": "p:w57"
+  }
+ ],
+ "workstreams": [
+  {
+   "key": "p:w1",
+   "n": 1,
+   "title": "no manager",
+   "project": "p",
+   "bead_id": "w1",
+   "manager_role": "manager-w1",
+   "starred": false,
+   "kind": "none",
+   "text": "No Manager yet",
+   "since": 0,
+   "progress": {
+    "done": 0,
+    "total": 1
+   },
+   "milestones": {
+    "done": 0,
+    "total": 1
+   },
+   "working": 0,
+   "flag": 0,
+   "unread": 0,
+   "gate": null,
+   "tracks": []
+  },
+  {
+   "key": "p:w2",
+   "n": 2,
+   "title": "needs card",
+   "project": "p",
+   "bead_id": "w2",
+   "manager_role": "manager-w2",
+   "starred": false,
+   "kind": "needs",
+   "text": "Needs you: Which name should the service use?",
+   "since": 1792999700,
+   "progress": {
+    "done": 0,
+    "total": 2
+   },
+   "milestones": {
+    "done": 0,
+    "total": 2
+   },
+   "working": 0,
+   "flag": 1,
+   "unread": 0,
+   "gate": null,
+   "tracks": []
+  },
+  {
+   "key": "p:w3",
+   "n": 3,
+   "title": "stuck",
+   "project": "p",
+   "bead_id": "w3",
+   "manager_role": "manager-w3",
+   "starred": false,
+   "kind": "stalled",
+   "text": "Stuck",
+   "since": 0,
+   "progress": {
+    "done": 0,
+    "total": 1
+   },
+   "milestones": {
+    "done": 0,
+    "total": 1
+   },
+   "working": 0,
+   "flag": 0,
+   "unread": 0,
+   "gate": null,
+   "tracks": []
+  },
+  {
+   "key": "p:w4",
+   "n": 4,
+   "title": "working on now step",
+   "project": "p",
+   "bead_id": "w4",
+   "manager_role": "manager-w4",
+   "starred": false,
+   "kind": "working",
+   "text": "Working on write the parser",
+   "since": 1792999880,
+   "progress": {
+    "done": 0,
+    "total": 2
+   },
+   "milestones": {
+    "done": 0,
+    "total": 2
+   },
+   "working": 1,
+   "flag": 0,
+   "unread": 0,
+   "gate": null,
+   "tracks": []
+  },
+  {
+   "key": "p:w5",
+   "n": 5,
+   "title": "working operator",
+   "project": "p",
+   "bead_id": "w5",
+   "manager_role": "manager-w5",
+   "starred": false,
+   "kind": "working",
+   "text": "Working on port the tests",
+   "since": 0,
+   "progress": {
+    "done": 0,
+    "total": 1
+   },
+   "milestones": {
+    "done": 0,
+    "total": 1
+   },
+   "working": 2,
+   "flag": 0,
+   "unread": 0,
+   "gate": null,
+   "tracks": []
+  },
+  {
+   "key": "p:w6",
+   "n": 6,
+   "title": "working no step",
+   "project": "p",
+   "bead_id": "w6",
+   "manager_role": "manager-w6",
+   "starred": false,
+   "kind": "working",
+   "text": "Working",
+   "since": 1792999880,
+   "progress": {
+    "done": 0,
+    "total": 1
+   },
+   "milestones": {
+    "done": 0,
+    "total": 1
+   },
+   "working": 1,
+   "flag": 0,
+   "unread": 0,
+   "gate": null,
+   "tracks": []
+  },
+  {
+   "key": "p:w7",
+   "n": 7,
+   "title": "agent died",
+   "project": "p",
+   "bead_id": "w7",
+   "manager_role": "manager-w7",
+   "starred": false,
+   "kind": "stalled",
+   "text": "Agent stopped on fix the build: the Manager's move",
+   "since": 0,
+   "progress": {
+    "done": 0,
+    "total": 1
+   },
+   "milestones": {
+    "done": 0,
+    "total": 1
+   },
+   "working": 0,
+   "flag": 0,
+   "unread": 0,
+   "gate": null,
+   "tracks": []
+  },
+  {
+   "key": "p:w8",
+   "n": 8,
+   "title": "agent finished",
+   "project": "p",
+   "bead_id": "w8",
+   "manager_role": "manager-w8",
+   "starred": false,
+   "kind": "stalled",
+   "text": "Agent finished fix the lint, step not closed: the Manager's move",
+   "since": 0,
+   "progress": {
+    "done": 0,
+    "total": 1
+   },
+   "milestones": {
+    "done": 0,
+    "total": 1
+   },
+   "working": 0,
+   "flag": 0,
+   "unread": 0,
+   "gate": null,
+   "tracks": []
+  },
+  {
+   "key": "p:w9",
+   "n": 9,
+   "title": "review acted",
+   "project": "p",
+   "bead_id": "w9",
+   "manager_role": "manager-w9",
+   "starred": false,
+   "kind": "stalled",
+   "text": "a-reviewer approved #12: the Manager's move",
+   "since": 0,
+   "progress": {
+    "done": 0,
+    "total": 1
+   },
+   "milestones": {
+    "done": 0,
+    "total": 1
+   },
+   "working": 0,
+   "flag": 0,
+   "unread": 0,
+   "gate": null,
+   "tracks": []
+  },
+  {
+   "key": "p:w10",
+   "n": 10,
+   "title": "review no pr",
+   "project": "p",
+   "bead_id": "w10",
+   "manager_role": "manager-w10",
+   "starred": false,
+   "kind": "stalled",
+   "text": "Waiting for a review of no PR: nothing can clear it",
+   "since": 0,
+   "progress": {
+    "done": 0,
+    "total": 1
+   },
+   "milestones": {
+    "done": 0,
+    "total": 1
+   },
+   "working": 0,
+   "flag": 0,
+   "unread": 0,
+   "gate": null,
+   "tracks": []
+  },
+  {
+   "key": "p:w11",
+   "n": 11,
+   "title": "review pending",
+   "project": "p",
+   "bead_id": "w11",
+   "manager_role": "manager-w11",
+   "starred": false,
+   "kind": "waiting",
+   "text": "Waiting for review: waiting on a-reviewer (#12)",
+   "since": 0,
+   "progress": {
+    "done": 0,
+    "total": 1
+   },
+   "milestones": {
+    "done": 0,
+    "total": 1
+   },
+   "working": 0,
+   "flag": 0,
+   "unread": 0,
+   "gate": null,
+   "tracks": []
+  },
+  {
+   "key": "p:w12",
+   "n": 12,
+   "title": "recorded wait",
+   "project": "p",
+   "bead_id": "w12",
+   "manager_role": "manager-w12",
+   "starred": false,
+   "kind": "waiting",
+   "text": "Waiting for review",
+   "since": 1792992800,
+   "progress": {
+    "done": 0,
+    "total": 1
+   },
+   "milestones": {
+    "done": 0,
+    "total": 1
+   },
+   "working": 0,
+   "flag": 0,
+   "unread": 0,
+   "gate": null,
+   "tracks": []
+  },
+  {
+   "key": "p:w13",
+   "n": 13,
+   "title": "time wait today",
+   "project": "p",
+   "bead_id": "w13",
+   "manager_role": "manager-w13",
+   "starred": false,
+   "kind": "waiting",
+   "text": "Waiting for reconcile · 04:33 AM",
+   "since": 1792999940,
+   "progress": {
+    "done": 0,
+    "total": 1
+   },
+   "milestones": {
+    "done": 0,
+    "total": 1
+   },
+   "working": 0,
+   "flag": 0,
+   "unread": 0,
+   "gate": null,
+   "tracks": []
+  },
+  {
+   "key": "p:w14",
+   "n": 14,
+   "title": "time wait another day",
+   "project": "p",
+   "bead_id": "w14",
+   "manager_role": "manager-w14",
+   "starred": false,
+   "kind": "waiting",
+   "text": "Waiting for reconcile · Thu 03:33 AM",
+   "since": 1792999940,
+   "progress": {
+    "done": 0,
+    "total": 1
+   },
+   "milestones": {
+    "done": 0,
+    "total": 1
+   },
+   "working": 0,
+   "flag": 0,
+   "unread": 0,
+   "gate": null,
+   "tracks": []
+  },
+  {
+   "key": "p:w15",
+   "n": 15,
+   "title": "in review",
+   "project": "p",
+   "bead_id": "w15",
+   "manager_role": "manager-w15",
+   "starred": false,
+   "kind": "waiting",
+   "text": "Waiting for review",
+   "since": 0,
+   "progress": {
+    "done": 0,
+    "total": 1
+   },
+   "milestones": {
+    "done": 0,
+    "total": 1
+   },
+   "working": 0,
+   "flag": 0,
+   "unread": 0,
+   "gate": null,
+   "tracks": []
+  },
+  {
+   "key": "p:w16",
+   "n": 16,
+   "title": "state missing",
+   "project": "p",
+   "bead_id": "w16",
+   "manager_role": "manager-w16",
+   "starred": false,
+   "kind": "stalled",
+   "text": "State missing",
+   "since": 0,
+   "progress": {
+    "done": 0,
+    "total": 1
+   },
+   "milestones": {
+    "done": 0,
+    "total": 1
+   },
+   "working": 0,
+   "flag": 0,
+   "unread": 0,
+   "gate": null,
+   "tracks": []
+  },
+  {
+   "key": "p:w17",
+   "n": 17,
+   "title": "stalled",
+   "project": "p",
+   "bead_id": "w17",
+   "manager_role": "manager-w17",
+   "starred": false,
+   "kind": "stalled",
+   "text": "Stalled",
+   "since": 0,
+   "progress": {
+    "done": 0,
+    "total": 1
+   },
+   "milestones": {
+    "done": 0,
+    "total": 1
+   },
+   "working": 0,
+   "flag": 0,
+   "unread": 0,
+   "gate": null,
+   "tracks": []
+  },
+  {
+   "key": "p:w18",
+   "n": 18,
+   "title": "nothing to do",
+   "project": "p",
+   "bead_id": "w18",
+   "manager_role": "manager-w18",
+   "starred": false,
+   "kind": "quiet",
+   "text": "Nothing to do",
+   "since": 0,
+   "progress": {
+    "done": 1,
+    "total": 1
+   },
+   "milestones": {
+    "done": 1,
+    "total": 1
+   },
+   "working": 0,
+   "flag": 0,
+   "unread": 0,
+   "gate": null,
+   "tracks": []
+  },
+  {
+   "key": "p:w19",
+   "n": 19,
+   "title": "picking it up",
+   "project": "p",
+   "bead_id": "w19",
+   "manager_role": "manager-w19",
+   "starred": false,
+   "kind": "working",
+   "text": "Manager picking it up",
+   "since": 0,
+   "progress": {
+    "done": 0,
+    "total": 1
+   },
+   "milestones": {
+    "done": 0,
+    "total": 1
+   },
+   "working": 0,
+   "flag": 0,
+   "unread": 2,
+   "gate": null,
+   "tracks": []
+  },
+  {
+   "key": "p:w20",
+   "n": 20,
+   "title": "waits on an operator",
+   "project": "p",
+   "bead_id": "w20",
+   "manager_role": "manager-w20",
+   "starred": false,
+   "kind": "waiting",
+   "text": "Waiting for an Operator: write the docs",
+   "since": 1792999900,
+   "progress": {
+    "done": 0,
+    "total": 1
+   },
+   "milestones": {
+    "done": 0,
+    "total": 1
+   },
+   "working": 0,
+   "flag": 0,
+   "unread": 0,
+   "gate": null,
+   "tracks": []
+  },
+  {
+   "key": "p:w21",
+   "n": 21,
+   "title": "operator owner",
+   "project": "p",
+   "bead_id": "w21",
+   "manager_role": "manager-w21",
+   "starred": false,
+   "kind": "working",
+   "text": "Working on write the docs",
+   "since": 0,
+   "progress": {
+    "done": 0,
+    "total": 1
+   },
+   "milestones": {
+    "done": 0,
+    "total": 1
+   },
+   "working": 2,
+   "flag": 0,
+   "unread": 0,
+   "gate": null,
+   "tracks": []
+  },
+  {
+   "key": "p:w22",
+   "n": 22,
+   "title": "waits on an unknown operator",
+   "project": "p",
+   "bead_id": "w22",
+   "manager_role": "manager-w22",
+   "starred": false,
+   "kind": "waiting",
+   "text": "Waiting for an Operator",
+   "since": 1792999900,
+   "progress": {
+    "done": 0,
+    "total": 1
+   },
+   "milestones": {
+    "done": 0,
+    "total": 1
+   },
+   "working": 0,
+   "flag": 0,
+   "unread": 0,
+   "gate": null,
+   "tracks": []
+  },
+  {
+   "key": "p:w23",
+   "n": 23,
+   "title": "parked work",
+   "project": "p",
+   "bead_id": "w23",
+   "manager_role": "manager-w23",
+   "starred": false,
+   "kind": "quiet",
+   "text": "Parked work returns 03:43 AM",
+   "since": 0,
+   "progress": {
+    "done": 1,
+    "total": 1
+   },
+   "milestones": {
+    "done": 1,
+    "total": 1
+   },
+   "working": 0,
+   "flag": 0,
+   "unread": 0,
+   "gate": null,
+   "tracks": []
+  },
+  {
+   "key": "p:w24",
+   "n": 24,
+   "title": "needs your gate",
+   "project": "p",
+   "bead_id": "w24",
+   "manager_role": "manager-w24",
+   "starred": false,
+   "kind": "needs",
+   "text": "Needs you · merge approval",
+   "since": 0,
+   "progress": {
+    "done": 1,
+    "total": 1
+   },
+   "milestones": {
+    "done": 1,
+    "total": 1
+   },
+   "working": 0,
+   "flag": 1,
+   "unread": 0,
+   "gate": {
+    "bead_id": "w24.9",
+    "title": "Merge approval",
+    "who": "you",
+    "at": true,
+    "for_you": true
+   },
+   "tracks": []
+  },
+  {
+   "key": "p:w25",
+   "n": 25,
+   "title": "gate waits on reviewers",
+   "project": "p",
+   "bead_id": "w25",
+   "manager_role": "manager-w25",
+   "starred": false,
+   "kind": "waiting",
+   "text": "Waiting for review (a-reviewer)",
+   "since": 0,
+   "progress": {
+    "done": 1,
+    "total": 1
+   },
+   "milestones": {
+    "done": 1,
+    "total": 1
+   },
+   "working": 0,
+   "flag": 0,
+   "unread": 0,
+   "gate": {
+    "bead_id": "w25.9",
+    "title": "PR approval",
+    "who": "a-reviewer",
+    "at": true,
+    "for_you": false
+   },
+   "tracks": []
+  },
+  {
+   "key": "p:w26",
+   "n": 26,
+   "title": "gate others approve",
+   "project": "p",
+   "bead_id": "w26",
+   "manager_role": "manager-w26",
+   "starred": false,
+   "kind": "waiting",
+   "text": "Waiting for deploy approval",
+   "since": 0,
+   "progress": {
+    "done": 1,
+    "total": 1
+   },
+   "milestones": {
+    "done": 1,
+    "total": 1
+   },
+   "working": 0,
+   "flag": 0,
+   "unread": 0,
+   "gate": {
+    "bead_id": "w26.9",
+    "title": "Deploy approval",
+    "who": "a-reviewer",
+    "at": true,
+    "for_you": false
+   },
+   "tracks": []
+  },
+  {
+   "key": "p:w27",
+   "n": 27,
+   "title": "readying manager",
+   "project": "p",
+   "bead_id": "w27",
+   "manager_role": "manager-w27",
+   "starred": false,
+   "kind": "working",
+   "text": "Working on w27.1 · then: merge approval",
+   "since": 1792999880,
+   "progress": {
+    "done": 1,
+    "total": 2
+   },
+   "milestones": {
+    "done": 1,
+    "total": 2
+   },
+   "working": 1,
+   "flag": 0,
+   "unread": 0,
+   "gate": {
+    "bead_id": "w27.9",
+    "title": "Merge approval",
+    "who": "a-reviewer",
+    "at": false,
+    "for_you": false
+   },
+   "tracks": []
+  },
+  {
+   "key": "p:w28",
+   "n": 28,
+   "title": "readying operator",
+   "project": "p",
+   "bead_id": "w28",
+   "manager_role": "manager-w28",
+   "starred": false,
+   "kind": "working",
+   "text": "Working on w28.1 · then: merge approval",
+   "since": 0,
+   "progress": {
+    "done": 0,
+    "total": 1
+   },
+   "milestones": {
+    "done": 0,
+    "total": 1
+   },
+   "working": 2,
+   "flag": 0,
+   "unread": 0,
+   "gate": {
+    "bead_id": "w28.9",
+    "title": "Merge approval",
+    "who": "a-reviewer",
+    "at": false,
+    "for_you": false
+   },
+   "tracks": []
+  },
+  {
+   "key": "p:w29",
+   "n": 29,
+   "title": "ci one",
+   "project": "p",
+   "bead_id": "w29",
+   "manager_role": "manager-w29",
+   "starred": false,
+   "kind": "waiting",
+   "text": "Waiting for CI",
+   "since": 1792999600,
+   "progress": {
+    "done": 0,
+    "total": 1
+   },
+   "milestones": {
+    "done": 0,
+    "total": 1
+   },
+   "working": 0,
+   "flag": 0,
+   "unread": 0,
+   "gate": {
+    "bead_id": "w29.9",
+    "title": "Merge approval",
+    "who": "a-reviewer",
+    "at": false,
+    "for_you": false
+   },
+   "tracks": []
+  },
+  {
+   "key": "p:w30",
+   "n": 30,
+   "title": "ci two",
+   "project": "p",
+   "bead_id": "w30",
+   "manager_role": "manager-w30",
+   "starred": false,
+   "kind": "waiting",
+   "text": "Waiting for CI on 2 PRs",
+   "since": 1792999600,
+   "progress": {
+    "done": 0,
+    "total": 2
+   },
+   "milestones": {
+    "done": 0,
+    "total": 2
+   },
+   "working": 0,
+   "flag": 0,
+   "unread": 0,
+   "gate": {
+    "bead_id": "w30.9",
+    "title": "Merge approval",
+    "who": "a-reviewer",
+    "at": false,
+    "for_you": false
+   },
+   "tracks": []
+  },
+  {
+   "key": "p:w31",
+   "n": 31,
+   "title": "other wait",
+   "project": "p",
+   "bead_id": "w31",
+   "manager_role": "manager-w31",
+   "starred": false,
+   "kind": "waiting",
+   "text": "Waiting for review",
+   "since": 1792999200,
+   "progress": {
+    "done": 0,
+    "total": 1
+   },
+   "milestones": {
+    "done": 0,
+    "total": 1
+   },
+   "working": 0,
+   "flag": 0,
+   "unread": 0,
+   "gate": {
+    "bead_id": "w31.9",
+    "title": "Merge approval",
+    "who": "a-reviewer",
+    "at": false,
+    "for_you": false
+   },
+   "tracks": []
+  },
+  {
+   "key": "p:w32",
+   "n": 32,
+   "title": "other time wait",
+   "project": "p",
+   "bead_id": "w32",
+   "manager_role": "manager-w32",
+   "starred": false,
+   "kind": "waiting",
+   "text": "Waiting for reconcile · 04:03 AM",
+   "since": 1792999200,
+   "progress": {
+    "done": 0,
+    "total": 1
+   },
+   "milestones": {
+    "done": 0,
+    "total": 1
+   },
+   "working": 0,
+   "flag": 0,
+   "unread": 0,
+   "gate": {
+    "bead_id": "w32.9",
+    "title": "Merge approval",
+    "who": "a-reviewer",
+    "at": false,
+    "for_you": false
+   },
+   "tracks": []
+  },
+  {
+   "key": "p:w33",
+   "n": 33,
+   "title": "ask on the workstream",
+   "project": "p",
+   "bead_id": "w33",
+   "manager_role": "manager-w33",
+   "starred": false,
+   "kind": "needs",
+   "text": "Needs you",
+   "since": 0,
+   "progress": {
+    "done": 0,
+    "total": 1
+   },
+   "milestones": {
+    "done": 0,
+    "total": 1
+   },
+   "working": 0,
+   "flag": 1,
+   "unread": 0,
+   "gate": {
+    "bead_id": "w33.9",
+    "title": "Merge approval",
+    "who": "a-reviewer",
+    "at": false,
+    "for_you": false
+   },
+   "tracks": []
+  },
+  {
+   "key": "p:w34",
+   "n": 34,
+   "title": "your gate not ready",
+   "project": "p",
+   "bead_id": "w34",
+   "manager_role": "manager-w34",
+   "starred": false,
+   "kind": "needs",
+   "text": "Needs you",
+   "since": 0,
+   "progress": {
+    "done": 0,
+    "total": 1
+   },
+   "milestones": {
+    "done": 0,
+    "total": 1
+   },
+   "working": 0,
+   "flag": 1,
+   "unread": 0,
+   "gate": {
+    "bead_id": "w34.9",
+    "title": "Spec approval",
+    "who": "you",
+    "at": false,
+    "for_you": true
+   },
+   "tracks": []
+  },
+  {
+   "key": "p:w35",
+   "n": 35,
+   "title": "stalled before gate",
+   "project": "p",
+   "bead_id": "w35",
+   "manager_role": "manager-w35",
+   "starred": false,
+   "kind": "stalled",
+   "text": "Stalled",
+   "since": 0,
+   "progress": {
+    "done": 0,
+    "total": 1
+   },
+   "milestones": {
+    "done": 0,
+    "total": 1
+   },
+   "working": 0,
+   "flag": 0,
+   "unread": 0,
+   "gate": {
+    "bead_id": "w35.9",
+    "title": "Merge approval",
+    "who": "a-reviewer",
+    "at": false,
+    "for_you": false
+   },
+   "tracks": []
+  },
+  {
+   "key": "p:w36",
+   "n": 36,
+   "title": "state missing before gate",
+   "project": "p",
+   "bead_id": "w36",
+   "manager_role": "manager-w36",
+   "starred": false,
+   "kind": "stalled",
+   "text": "State missing",
+   "since": 0,
+   "progress": {
+    "done": 0,
+    "total": 1
+   },
+   "milestones": {
+    "done": 0,
+    "total": 1
+   },
+   "working": 0,
+   "flag": 0,
+   "unread": 0,
+   "gate": {
+    "bead_id": "w36.9",
+    "title": "Merge approval",
+    "who": "a-reviewer",
+    "at": false,
+    "for_you": false
+   },
+   "tracks": []
+  },
+  {
+   "key": "p:w37",
+   "n": 37,
+   "title": "decisions",
+   "project": "p",
+   "bead_id": "w37",
+   "manager_role": "manager-w37",
+   "starred": false,
+   "kind": "needs",
+   "text": "Needs you: Pick a region (+1 more)",
+   "since": 0,
+   "progress": {
+    "done": 0,
+    "total": 3
+   },
+   "milestones": {
+    "done": 0,
+    "total": 3
+   },
+   "working": 2,
+   "flag": 2,
+   "unread": 0,
+   "gate": {
+    "bead_id": "w37.9",
+    "title": "Merge approval",
+    "who": "a-reviewer",
+    "at": false,
+    "for_you": false
+   },
+   "tracks": []
+  },
+  {
+   "key": "p:w38",
+   "n": 38,
+   "title": "your gate not listed",
+   "project": "p",
+   "bead_id": "w38",
+   "manager_role": "manager-w38",
+   "starred": false,
+   "kind": "waiting",
+   "text": "Waiting for CI",
+   "since": 1792999950,
+   "progress": {
+    "done": 1,
+    "total": 2
+   },
+   "milestones": {
+    "done": 1,
+    "total": 2
+   },
+   "working": 0,
+   "flag": 0,
+   "unread": 0,
+   "gate": {
+    "bead_id": "w38.9",
+    "title": "Spec approval",
+    "who": "you",
+    "at": false,
+    "for_you": false
+   },
+   "tracks": []
+  },
+  {
+   "key": "p:w39",
+   "n": 39,
+   "title": "stage gate first",
+   "project": "p",
+   "bead_id": "w39",
+   "manager_role": "manager-w39",
+   "starred": false,
+   "kind": "working",
+   "text": "Working on w39.1.2 · then: build approved",
+   "since": 0,
+   "progress": {
+    "done": 1,
+    "total": 3
+   },
+   "milestones": {
+    "done": 0,
+    "total": 2
+   },
+   "working": 2,
+   "flag": 0,
+   "unread": 0,
+   "gate": {
+    "bead_id": "w39.2",
+    "title": "Build approved",
+    "who": "a-reviewer",
+    "at": false,
+    "for_you": false
+   },
+   "tracks": []
+  },
+  {
+   "key": "p:w40",
+   "n": 40,
+   "title": "two tracks",
+   "project": "p",
+   "bead_id": "w40",
+   "manager_role": "manager-w40",
+   "starred": false,
+   "kind": "needs",
+   "text": "Needs you: Choose the log store",
+   "since": 0,
+   "progress": {
+    "done": 0,
+    "total": 2
+   },
+   "milestones": {
+    "done": 0,
+    "total": 2
+   },
+   "working": 0,
+   "flag": 1,
+   "unread": 0,
+   "gate": {
+    "bead_id": "w40.1.9",
+    "title": "Merge approval",
+    "who": "a-reviewer",
+    "at": false,
+    "for_you": false
+   },
+   "tracks": [
+    {
+     "key": "p:w40.1",
+     "bead_id": "w40.1",
+     "letter": ".1",
+     "title": "Script audits",
+     "kind": "waiting",
+     "text": "Waiting for CI",
+     "since": 1792999800,
+     "progress": {
+      "done": 0,
+      "total": 1
+     },
+     "milestones": {
+      "done": 0,
+      "total": 1
+     },
+     "working": 0
+    },
+    {
+     "key": "p:w40.2",
+     "bead_id": "w40.2",
+     "letter": ".2",
+     "title": "Log audits",
+     "kind": "needs",
+     "text": "Needs you: Choose the log store",
+     "since": 0,
+     "progress": {
+      "done": 0,
+      "total": 1
+     },
+     "milestones": {
+      "done": 0,
+      "total": 1
+     },
+     "working": 0
+    }
+   ]
+  },
+  {
+   "key": "p:w41",
+   "n": 41,
+   "title": "Only track",
+   "project": "p",
+   "bead_id": "w41",
+   "manager_role": "manager-w41",
+   "starred": false,
+   "kind": "working",
+   "text": "Working on w41.1.1",
+   "since": 0,
+   "progress": {
+    "done": 0,
+    "total": 1
+   },
+   "milestones": {
+    "done": 0,
+    "total": 1
+   },
+   "working": 2,
+   "flag": 0,
+   "unread": 0,
+   "gate": null,
+   "tracks": [],
+   "scope": "w41.1"
+  },
+  {
+   "key": "p:w42",
+   "n": 42,
+   "title": "manager in one track",
+   "project": "p",
+   "bead_id": "w42",
+   "manager_role": "manager-w42",
+   "starred": false,
+   "kind": "working",
+   "text": "Working on w42.1.1 · then: merge approval",
+   "since": 1792999880,
+   "progress": {
+    "done": 0,
+    "total": 2
+   },
+   "milestones": {
+    "done": 0,
+    "total": 2
+   },
+   "working": 1,
+   "flag": 0,
+   "unread": 0,
+   "gate": {
+    "bead_id": "w42.1.9",
+    "title": "Merge approval",
+    "who": "a-reviewer",
+    "at": false,
+    "for_you": false
+   },
+   "tracks": [
+    {
+     "key": "p:w42.1",
+     "bead_id": "w42.1",
+     "letter": ".1",
+     "title": "Parser",
+     "kind": "working",
+     "text": "Working on w42.1.1 · then: merge approval",
+     "since": 1792999880,
+     "progress": {
+      "done": 0,
+      "total": 1
+     },
+     "milestones": {
+      "done": 0,
+      "total": 1
+     },
+     "working": 0
+    },
+    {
+     "key": "p:w42.2",
+     "bead_id": "w42.2",
+     "letter": ".2",
+     "title": "Docs",
+     "kind": "working",
+     "text": "Manager picking it up",
+     "since": 0,
+     "progress": {
+      "done": 0,
+      "total": 1
+     },
+     "milestones": {
+      "done": 0,
+      "total": 1
+     },
+     "working": 0
+    }
+   ]
+  },
+  {
+   "key": "p:w43",
+   "n": 43,
+   "title": "cards in two tracks",
+   "project": "p",
+   "bead_id": "w43",
+   "manager_role": "manager-w43",
+   "starred": false,
+   "kind": "needs",
+   "text": "Needs you: Beta choice (+1 more)",
+   "since": 0,
+   "progress": {
+    "done": 0,
+    "total": 3
+   },
+   "milestones": {
+    "done": 0,
+    "total": 3
+   },
+   "working": 2,
+   "flag": 2,
+   "unread": 0,
+   "gate": null,
+   "tracks": [
+    {
+     "key": "p:w43.1",
+     "bead_id": "w43.1",
+     "letter": ".1",
+     "title": "Alpha",
+     "kind": "needs",
+     "text": "Needs you: Alpha choice",
+     "since": 0,
+     "progress": {
+      "done": 0,
+      "total": 1
+     },
+     "milestones": {
+      "done": 0,
+      "total": 1
+     },
+     "working": 0
+    },
+    {
+     "key": "p:w43.2",
+     "bead_id": "w43.2",
+     "letter": ".2",
+     "title": "Beta",
+     "kind": "needs",
+     "text": "Needs you: Beta choice",
+     "since": 0,
+     "progress": {
+      "done": 0,
+      "total": 1
+     },
+     "milestones": {
+      "done": 0,
+      "total": 1
+     },
+     "working": 0
+    }
+   ]
+  },
+  {
+   "key": "p:w44",
+   "n": 44,
+   "title": "one track beside open work",
+   "project": "p",
+   "bead_id": "w44",
+   "manager_role": "manager-w44",
+   "starred": false,
+   "kind": "waiting",
+   "text": "Waiting for CI",
+   "since": 1792999970,
+   "progress": {
+    "done": 0,
+    "total": 2
+   },
+   "milestones": {
+    "done": 0,
+    "total": 2
+   },
+   "working": 2,
+   "flag": 0,
+   "unread": 0,
+   "gate": null,
+   "tracks": [
+    {
+     "key": "p:w44.1",
+     "bead_id": "w44.1",
+     "letter": ".1",
+     "title": "Deploy script",
+     "kind": "waiting",
+     "text": "Waiting for CI",
+     "since": 1792999970,
+     "progress": {
+      "done": 0,
+      "total": 1
+     },
+     "milestones": {
+      "done": 0,
+      "total": 1
+     },
+     "working": 0
+    }
+   ]
+  },
+  {
+   "key": "p:w45",
+   "n": 45,
+   "title": "closed and parked tracks",
+   "project": "p",
+   "bead_id": "w45",
+   "manager_role": "manager-w45",
+   "starred": false,
+   "kind": "stalled",
+   "text": "Stalled",
+   "since": 0,
+   "progress": {
+    "done": 1,
+    "total": 3
+   },
+   "milestones": {
+    "done": 1,
+    "total": 2
+   },
+   "working": 0,
+   "flag": 0,
+   "unread": 0,
+   "gate": null,
+   "tracks": [
+    {
+     "key": "p:w45.3",
+     "bead_id": "w45.3",
+     "letter": ".1",
+     "title": "Live track",
+     "kind": "stalled",
+     "text": "Stalled",
+     "since": 0,
+     "progress": {
+      "done": 0,
+      "total": 1
+     },
+     "milestones": {
+      "done": 0,
+      "total": 1
+     },
+     "working": 0
+    },
+    {
+     "key": "p:w45.4",
+     "bead_id": "w45.4",
+     "letter": ".2",
+     "title": "Second live track",
+     "kind": "quiet",
+     "text": "Nothing to do",
+     "since": 0,
+     "progress": {
+      "done": 1,
+      "total": 1
+     },
+     "milestones": {
+      "done": 1,
+      "total": 1
+     },
+     "working": 0
+    }
+   ]
+  },
+  {
+   "key": "p:w46",
+   "n": 46,
+   "title": "tracks wait on your gate",
+   "project": "p",
+   "bead_id": "w46",
+   "manager_role": "manager-w46",
+   "starred": false,
+   "kind": "needs",
+   "text": "Needs you: Greenlight starting the reviews",
+   "since": 1792992800,
+   "progress": {
+    "done": 0,
+    "total": 3
+   },
+   "milestones": {
+    "done": 0,
+    "total": 3
+   },
+   "working": 0,
+   "flag": 1,
+   "unread": 0,
+   "gate": {
+    "bead_id": "w46.1",
+    "title": "Greenlight starting the reviews",
+    "who": "you",
+    "at": false,
+    "for_you": true
+   },
+   "tracks": [
+    {
+     "key": "p:w46.2",
+     "bead_id": "w46.2",
+     "letter": ".1",
+     "title": "Review A",
+     "kind": "needs",
+     "text": "Needs you: Greenlight starting the reviews",
+     "since": 1792992800,
+     "progress": {
+      "done": 0,
+      "total": 1
+     },
+     "milestones": {
+      "done": 0,
+      "total": 1
+     },
+     "working": 0
+    },
+    {
+     "key": "p:w46.3",
+     "bead_id": "w46.3",
+     "letter": ".2",
+     "title": "Review B",
+     "kind": "needs",
+     "text": "Needs you: Greenlight starting the reviews",
+     "since": 1792992800,
+     "progress": {
+      "done": 0,
+      "total": 2
+     },
+     "milestones": {
+      "done": 0,
+      "total": 2
+     },
+     "working": 0
+    }
+   ]
+  },
+  {
+   "key": "p:w47",
+   "n": 47,
+   "title": "your gate waits on a review",
+   "project": "p",
+   "bead_id": "w47",
+   "manager_role": "manager-w47",
+   "starred": false,
+   "kind": "waiting",
+   "text": "Waiting for review",
+   "since": 1792996400,
+   "progress": {
+    "done": 1,
+    "total": 2
+   },
+   "milestones": {
+    "done": 1,
+    "total": 2
+   },
+   "working": 0,
+   "flag": 0,
+   "unread": 0,
+   "gate": {
+    "bead_id": "w47.9",
+    "title": "Greenlight merging",
+    "who": "you",
+    "at": false,
+    "for_you": false
+   },
+   "tracks": []
+  },
+  {
+   "key": "p:w48",
+   "n": 48,
+   "title": "wait outside the gate's work",
+   "project": "p",
+   "bead_id": "w48",
+   "manager_role": "manager-w48",
+   "starred": false,
+   "kind": "waiting",
+   "text": "Waiting for example-auth-config · 04:33 AM",
+   "since": 1792998800,
+   "progress": {
+    "done": 0,
+    "total": 2
+   },
+   "milestones": {
+    "done": 0,
+    "total": 2
+   },
+   "working": 0,
+   "flag": 0,
+   "unread": 0,
+   "gate": {
+    "bead_id": "w48.9",
+    "title": "Rule approved",
+    "who": "a-reviewer",
+    "at": false,
+    "for_you": false
+   },
+   "tracks": []
+  },
+  {
+   "key": "p:w49",
+   "n": 49,
+   "title": "wait on a container",
+   "project": "p",
+   "bead_id": "w49",
+   "manager_role": "manager-w49",
+   "starred": false,
+   "kind": "waiting",
+   "text": "Waiting for review",
+   "since": 1792999100,
+   "progress": {
+    "done": 0,
+    "total": 1
+   },
+   "milestones": {
+    "done": 0,
+    "total": 1
+   },
+   "working": 0,
+   "flag": 0,
+   "unread": 0,
+   "gate": null,
+   "tracks": []
+  },
+  {
+   "key": "p:w50",
+   "n": 50,
+   "title": "deferred gate first",
+   "project": "p",
+   "bead_id": "w50",
+   "manager_role": "manager-w50",
+   "starred": false,
+   "kind": "working",
+   "text": "Working on w50.1 · then: tier 1 passed",
+   "since": 0,
+   "progress": {
+    "done": 0,
+    "total": 1
+   },
+   "milestones": {
+    "done": 0,
+    "total": 1
+   },
+   "working": 2,
+   "flag": 0,
+   "unread": 0,
+   "gate": {
+    "bead_id": "w50.9",
+    "title": "Tier 1 passed",
+    "who": "you",
+    "at": false,
+    "for_you": false
+   },
+   "tracks": []
+  },
+  {
+   "key": "p:w51",
+   "n": 51,
+   "title": "agent died before gate",
+   "project": "p",
+   "bead_id": "w51",
+   "manager_role": "manager-w51",
+   "starred": false,
+   "kind": "stalled",
+   "text": "Agent stopped on run the audit: the Manager's move",
+   "since": 0,
+   "progress": {
+    "done": 0,
+    "total": 1
+   },
+   "milestones": {
+    "done": 0,
+    "total": 1
+   },
+   "working": 0,
+   "flag": 0,
+   "unread": 0,
+   "gate": {
+    "bead_id": "w51.9",
+    "title": "Audit reviewed",
+    "who": "a-reviewer",
+    "at": false,
+    "for_you": false
+   },
+   "tracks": []
+  },
+  {
+   "key": "p:w52",
+   "n": 52,
+   "title": "finished, manager to close",
+   "project": "p",
+   "bead_id": "w52",
+   "manager_role": "manager-w52",
+   "starred": false,
+   "kind": "waiting",
+   "text": "Result ready for Manager review",
+   "since": 1792999400,
+   "progress": {
+    "done": 0,
+    "total": 1
+   },
+   "milestones": {
+    "done": 0,
+    "total": 1
+   },
+   "working": 0,
+   "flag": 0,
+   "unread": 0,
+   "gate": null,
+   "tracks": []
+  },
+  {
+   "key": "p:w53",
+   "n": 53,
+   "title": "finished before gate, manager to close",
+   "project": "p",
+   "bead_id": "w53",
+   "manager_role": "manager-w53",
+   "starred": false,
+   "kind": "waiting",
+   "text": "Result ready for Manager review",
+   "since": 1792999400,
+   "progress": {
+    "done": 0,
+    "total": 1
+   },
+   "milestones": {
+    "done": 0,
+    "total": 1
+   },
+   "working": 0,
+   "flag": 0,
+   "unread": 0,
+   "gate": {
+    "bead_id": "w53.9",
+    "title": "Build reviewed",
+    "who": "a-reviewer",
+    "at": false,
+    "for_you": false
+   },
+   "tracks": []
+  },
+  {
+   "key": "p:w54",
+   "n": 54,
+   "title": "time wait passed",
+   "project": "p",
+   "bead_id": "w54",
+   "manager_role": "manager-w54",
+   "starred": false,
+   "kind": "stalled",
+   "text": "Stalled",
+   "since": 0,
+   "progress": {
+    "done": 0,
+    "total": 2
+   },
+   "milestones": {
+    "done": 0,
+    "total": 2
+   },
+   "working": 0,
+   "flag": 0,
+   "unread": 0,
+   "gate": {
+    "bead_id": "w54.9",
+    "title": "Merge approval",
+    "who": "a-reviewer",
+    "at": false,
+    "for_you": false
+   },
+   "tracks": []
+  },
+  {
+   "key": "p:w55",
+   "n": 55,
+   "title": "long wait label",
+   "project": "p",
+   "bead_id": "w55",
+   "manager_role": "manager-w55",
+   "starred": false,
+   "kind": "waiting",
+   "text": "Waiting for the slow pages safety… · 04:33 AM",
+   "since": 1792999400,
+   "progress": {
+    "done": 0,
+    "total": 1
+   },
+   "milestones": {
+    "done": 0,
+    "total": 1
+   },
+   "working": 0,
+   "flag": 0,
+   "unread": 0,
+   "gate": null,
+   "tracks": []
+  },
+  {
+   "key": "p:w56",
+   "n": 56,
+   "title": "long card title",
+   "project": "p",
+   "bead_id": "w56",
+   "manager_role": "manager-w56",
+   "starred": false,
+   "kind": "needs",
+   "text": "Needs you: Does the team approve scope for automating…",
+   "since": 0,
+   "progress": {
+    "done": 0,
+    "total": 1
+   },
+   "milestones": {
+    "done": 0,
+    "total": 1
+   },
+   "working": 0,
+   "flag": 1,
+   "unread": 0,
+   "gate": null,
+   "tracks": []
+  },
+  {
+   "key": "p:w57",
+   "n": 57,
+   "title": "open card with live login",
+   "project": "p",
+   "bead_id": "w57",
+   "manager_role": "manager-w57",
+   "starred": false,
+   "kind": "needs",
+   "text": "Needs you: Sign in to the service",
+   "since": 0,
+   "progress": {
+    "done": 0,
+    "total": 2
+   },
+   "milestones": {
+    "done": 0,
+    "total": 1
+   },
+   "working": 2,
+   "flag": 1,
+   "unread": 0,
+   "gate": null,
+   "tracks": [
+    {
+     "key": "p:w57.1",
+     "bead_id": "w57.1",
+     "letter": ".1",
+     "title": "Login track",
+     "kind": "needs",
+     "text": "Needs you: Sign in to the service",
+     "since": 0,
+     "progress": {
+      "done": 0,
+      "total": 1
+     },
+     "milestones": {
+      "done": 0,
+      "total": 1
+     },
+     "working": 1
+    },
+    {
+     "key": "p:w57.2",
+     "bead_id": "w57.2",
+     "letter": ".2",
+     "title": "Other track",
+     "kind": "idle",
+     "text": "Not started: Manager to plan",
+     "since": 0,
+     "progress": {
+      "done": 0,
+      "total": 0
+     },
+     "milestones": {
+      "done": 0,
+      "total": 0
+     },
+     "working": 0
+    }
+   ]
+  }
+ ]
+}

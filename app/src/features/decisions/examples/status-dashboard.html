@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Import pipeline status</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px 28px;
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', sans-serif;
+    color: #cdd6f4; background: #1e1e2e;
+  }
+  h1 { margin: 0 0 2px; font-size: 20px; font-weight: 650; }
+  .sub { margin: 0 0 20px; color: #a6adc8; font-size: 13px; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 22px; }
+  .tile { padding: 14px 16px; background: #181825; border: 1px solid #313244; border-radius: 10px; }
+  .tile .k { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: #a6adc8; }
+  .tile .v { margin-top: 4px; font-size: 24px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .ok { color: #a6e3a1; } .err { color: #f38ba8; } .accent { color: #cba6f7; }
+  h2 { margin: 0 0 8px; font-size: 11.5px; text-transform: uppercase; letter-spacing: .08em; color: #a6adc8; }
+  table { width: 100%; border-collapse: collapse; background: #181825; border: 1px solid #313244; border-radius: 10px; overflow: hidden; }
+  th, td { padding: 9px 14px; text-align: left; border-bottom: 1px solid #313244; font-size: 13px; }
+  th { color: #a6adc8; font-weight: 600; font-size: 12px; }
+  tr:last-child td { border-bottom: 0; }
+  .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 600; }
+  .pill.ok { background: rgba(166, 227, 161, .14); }
+  .pill.err { background: rgba(243, 139, 168, .14); }
+  .pill.run { color: #cba6f7; background: rgba(203, 166, 247, .14); }
+  .bar { height: 6px; background: #313244; border-radius: 3px; overflow: hidden; }
+  .bar i { display: block; height: 100%; background: #cba6f7; }
+</style>
+</head>
+<body>
+  <h1>Import pipeline</h1>
+  <p class="sub">Status written by the Manager · 4 of 7 steps done</p>
+  <div class="tiles">
+    <div class="tile"><div class="k">Progress</div><div class="v accent">57%</div><div class="bar"><i style="width:57%"></i></div></div>
+    <div class="tile"><div class="k">CI</div><div class="v ok">passing</div></div>
+    <div class="tile"><div class="k">Open PRs</div><div class="v">2</div></div>
+    <div class="tile"><div class="k">Spend 24h</div><div class="v">$4.12</div></div>
+  </div>
+  <h2>Steps</h2>
+  <table>
+    <thead><tr><th>Step</th><th>Owner</th><th>State</th></tr></thead>
+    <tbody>
+      <tr><td>Schema for import events</td><td>op-1</td><td><span class="pill ok">done</span></td></tr>
+      <tr><td>Outbox writer</td><td>op-2</td><td><span class="pill run">in review #108</span></td></tr>
+      <tr><td>Staging migration</td><td>the user</td><td><span class="pill err">needs you</span></td></tr>
+      <tr><td>Reports read API</td><td>op-3</td><td><span class="pill run">in progress</span></td></tr>
+    </tbody>
+  </table>
+</body>
+</html>

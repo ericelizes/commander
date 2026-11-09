@@ -1,0 +1,9 @@
+{
+  "cases": [
+    {"name":"spawn after poll sample", "first":{}, "fresh":{"operator-op-build":true}, "fire":false},
+    {"name":"stopped in both reads", "first":{}, "fresh":{}, "fire":true},
+    {"name":"fresh read fails", "first":{}, "error":true, "fire":false},
+    {"name":"fresh read unavailable", "first":{}, "fire":false},
+    {"name":"already live", "first":{"operator-op-build":true}, "fire":false}
+  ]
+}

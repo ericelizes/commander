@@ -1,0 +1,9 @@
+{
+  "role": "manager-ws-1",
+  "account": "second",
+  "cases": [
+    {"name": "held by a terminal", "status": {"running": false, "owned_by": "terminal"}, "says": "did not move", "never": "runs on Claude account"},
+    {"name": "stopped", "status": {"running": false}, "says": "next starts in the app", "never": "runs on Claude account"},
+    {"name": "running in the engine", "status": {"running": true, "account": "second"}, "says": "runs on Claude account second", "never": "did not move"}
+  ]
+}

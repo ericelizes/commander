@@ -1,0 +1,5 @@
+0 Commander: no agent yet
+1 Operator off the gate path: Working on land the polish · then: release approved (0% done, next gate: Release approved, approved by reviewer-a, 2 working)
+2 Operator on the gate path: Working on land the polish · then: release approved (0% done, next gate: Release approved, approved by reviewer-a, 2 working)
+3 No gates, Operator: Working on land the polish (0% done, no gates, 2 working)
+4 No Operator: the Manager is the work: Working on write the notes · then: release approved (0% done, next gate: Release approved, approved by reviewer-a, 1 working, for 12h)

@@ -1,0 +1,9 @@
+0 Commander: working (2 unread, for 1m)
+1 Parallel work: Needs you: Sign off early? (0% done, next gate: Early sign-off given, approved by you, ⚑ 1, 4 working)
+2 Sign-in: Working on dependency audit green · Sign-in change waiting on #2.1 (dependency audit green) (0% done, no gates, 2 working)
+  2.1 Shared dependency: Working on dependency audit green (0% done, 1 working)
+  2.2 Sign-in change: Waiting on #2.1 (dependency audit green) (0% done, for 15m)
+3 Finished plan: Nothing to do (100% done, no gates)
+4 Long history: Waiting for CI (93% done, no gates, for 10m)
+Needs you (1):
+  #1 Sign off early? (Parallel work)

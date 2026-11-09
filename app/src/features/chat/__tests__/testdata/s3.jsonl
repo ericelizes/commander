@@ -1,0 +1,21 @@
+{"t":0,"dir":"out","ev":{"type":"system","session_id":"00000000-0000-4000-8000-000000000001","subtype":"init","model":"claude-haiku-5-5","cwd":"/tmp/work","claude_code_version":"2.1.305","capabilities":["interrupt_receipt_v1"],"mcp_servers":[]}}
+{"t":100,"dir":"in","msg":{"type":"user","uuid":"user-1","message":{"role":"user","content":"Describe a sample window."}}}
+{"t":200,"dir":"out","ev":{"type":"stream_event","session_id":"00000000-0000-4000-8000-000000000001","api_message_id":"message-window","event":{"type":"message_start","message":{"id":"message-window","usage":{"input_tokens":100}}}}}
+{"t":300,"dir":"out","ev":{"type":"stream_event","session_id":"00000000-0000-4000-8000-000000000001","api_message_id":"message-window","event":{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}}}
+{"t":400,"dir":"out","ev":{"type":"stream_event","session_id":"00000000-0000-4000-8000-000000000001","api_message_id":"message-window","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"A sample win"}}}}
+{"t":500,"dir":"out","ev":{"type":"stream_event","session_id":"00000000-0000-4000-8000-000000000001","api_message_id":"message-window","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"dow is open."}}}}
+{"t":600,"dir":"out","ev":{"type":"assistant","session_id":"00000000-0000-4000-8000-000000000001","message":{"id":"message-window","role":"assistant","content":[{"type":"text","text":"A sample window is open."}]}}}
+{"t":700,"dir":"out","ev":{"type":"stream_event","session_id":"00000000-0000-4000-8000-000000000001","api_message_id":"message-window","event":{"type":"content_block_stop","index":0}}}
+{"t":800,"dir":"in","msg":{"type":"user","uuid":"user-8","message":{"role":"user","content":"STEER: describe a second window."}}}
+{"t":900,"dir":"out","ev":{"type":"user","session_id":"00000000-0000-4000-8000-000000000001","message":{"role":"user","content":"[Request interrupted by user]"}}}
+{"t":1000,"dir":"out","ev":{"type":"result","session_id":"00000000-0000-4000-8000-000000000001","subtype":"error_during_execution","is_error":true,"terminal_reason":"aborted_streaming","total_cost_usd":0.01,"local_command":false,"usage":{"input_tokens":100,"output_tokens":20},"modelUsage":{"claude-haiku-5-5":{"contextWindow":1000000}}}}
+{"t":1100,"dir":"out","ev":{"type":"system","session_id":"00000000-0000-4000-8000-000000000001","subtype":"notification","priority":"immediate","text":"Stop hook error occurred"}}
+{"t":1200,"dir":"out","ev":{"type":"system","session_id":"00000000-0000-4000-8000-000000000001","subtype":"status","status":"requesting"}}
+{"t":1300,"dir":"out","ev":{"type":"stream_event","session_id":"00000000-0000-4000-8000-000000000001","api_message_id":"message-steer","event":{"type":"message_start","message":{"id":"message-steer","usage":{"input_tokens":100}}}}}
+{"t":1400,"dir":"out","ev":{"type":"stream_event","session_id":"00000000-0000-4000-8000-000000000001","api_message_id":"message-steer","event":{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}}}
+{"t":1500,"dir":"out","ev":{"type":"stream_event","session_id":"00000000-0000-4000-8000-000000000001","api_message_id":"message-steer","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"The second sampl"}}}}
+{"t":1600,"dir":"out","ev":{"type":"stream_event","session_id":"00000000-0000-4000-8000-000000000001","api_message_id":"message-steer","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"e window is open."}}}}
+{"t":1700,"dir":"out","ev":{"type":"assistant","session_id":"00000000-0000-4000-8000-000000000001","message":{"id":"message-steer","role":"assistant","content":[{"type":"text","text":"The second sample window is open."}]}}}
+{"t":1800,"dir":"out","ev":{"type":"stream_event","session_id":"00000000-0000-4000-8000-000000000001","api_message_id":"message-steer","event":{"type":"content_block_stop","index":0}}}
+{"t":1900,"dir":"out","ev":{"type":"result","session_id":"00000000-0000-4000-8000-000000000001","subtype":"success","is_error":false,"terminal_reason":"completed","total_cost_usd":0.02,"local_command":false,"usage":{"input_tokens":100,"output_tokens":20},"modelUsage":{"claude-haiku-5-5":{"contextWindow":1000000}}}}
+{"t":2000,"dir":"exit","code":0}

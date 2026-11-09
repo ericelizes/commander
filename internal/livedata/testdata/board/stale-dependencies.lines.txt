@@ -1,0 +1,7 @@
+0 Commander: no agent yet
+1 Stale cards: Needs you: Approve the revised plan? · A step named in this card changed state (+3 more) (0% done, next gate: Approve the revised plan?, approved by you, ⚑ 4)
+Needs you (4):
+  #1 Approve the revised plan? · A step named in this card changed state (Stale cards)
+  #2 Keep this request? · PR #12 merged (Stale cards)
+  #3 Resume the deferred work? · A newer decision on this step or its gate was answered (Stale cards)
+  #4 Approve the current plan? · PR #13 closed (Stale cards)

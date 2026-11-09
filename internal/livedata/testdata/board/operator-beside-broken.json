@@ -1,0 +1,431 @@
+{
+ "now": 1793214500,
+ "snapshot": {
+  "version": 1,
+  "generated_at": "2026-10-28T19:08:20Z",
+  "projects": [
+   {
+    "id": 1,
+    "name": "app",
+    "type": "code",
+    "path": "/work/app",
+    "status": "active"
+   }
+  ],
+  "live": {
+   "operators": [
+    "operator-op-a-3",
+    "operator-op-b-1",
+    "operator-op-c-3",
+    "operator-op-d-1",
+    "operator-op-e-1-1",
+    "operator-op-e-2-2",
+    "operator-op-g-1",
+    "operator-op-h-1"
+   ]
+  },
+  "agents": {
+   "manager-a": {
+    "state": "idle",
+    "since": 1793170000
+   },
+   "manager-b": {
+    "state": "idle",
+    "since": 1793170000
+   },
+   "manager-c": {
+    "state": "idle",
+    "since": 1793170000
+   },
+   "manager-d": {
+    "state": "idle",
+    "since": 1793170000
+   },
+   "manager-e": {
+    "state": "idle",
+    "since": 1793170000
+   },
+   "manager-f": {
+    "state": "idle",
+    "since": 1793170000
+   },
+   "manager-g": {
+    "state": "idle",
+    "since": 1793170000
+   },
+   "manager-h": {
+    "state": "working",
+    "since": 1793170000
+   }
+  },
+  "unread": {},
+  "fleet": {
+   "cost_usd_24h": 0,
+   "cost_usd_7d": 0,
+   "cost_series_24h": [],
+   "agents": 0,
+   "active": 0,
+   "blocked": 0,
+   "idle_ratio": 0,
+   "projects": 1,
+   "chat_cost_usd_24h": 0,
+   "roles_cost": []
+  },
+  "needs_you": [],
+  "workstreams": [
+   {
+    "n": 1,
+    "project": "app",
+    "project_id": 1,
+    "bead_id": "a",
+    "title": "Broken step beside an Operator off the gate path",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-a",
+    "done": 0,
+    "total": 4,
+    "steps": [
+     {
+      "bead_id": "a.1",
+      "title": "Write the notes",
+      "state": "not-started",
+      "status": "open",
+      "viz": 3
+     },
+     {
+      "bead_id": "a.2",
+      "title": "Forgotten step",
+      "state": "not-started",
+      "status": "open",
+      "viz": 3,
+      "broken": true
+     },
+     {
+      "bead_id": "a.3",
+      "title": "Land the polish",
+      "state": "in-progress",
+      "status": "in_progress",
+      "owner": "operator-op-a-3",
+      "owner_state": "working",
+      "viz": 3
+     },
+     {
+      "bead_id": "a.4",
+      "title": "Release approved",
+      "state": "not-started",
+      "status": "open",
+      "gate": true,
+      "approvers": [
+       "reviewer-a"
+      ],
+      "blocked_by": [
+       "a.1"
+      ],
+      "viz": 1,
+      "acceptance": "The reviewer approves."
+     }
+    ]
+   },
+   {
+    "n": 2,
+    "project": "app",
+    "project_id": 1,
+    "bead_id": "b",
+    "title": "Broken step beside an Operator on the gate path",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-b",
+    "done": 0,
+    "total": 3,
+    "steps": [
+     {
+      "bead_id": "b.1",
+      "title": "Land the polish",
+      "state": "in-progress",
+      "status": "in_progress",
+      "owner": "operator-op-b-1",
+      "owner_state": "working",
+      "viz": 3
+     },
+     {
+      "bead_id": "b.2",
+      "title": "Forgotten step",
+      "state": "not-started",
+      "status": "open",
+      "viz": 3,
+      "broken": true
+     },
+     {
+      "bead_id": "b.3",
+      "title": "Release approved",
+      "state": "not-started",
+      "status": "open",
+      "gate": true,
+      "approvers": [
+       "reviewer-a"
+      ],
+      "blocked_by": [
+       "b.1"
+      ],
+      "viz": 1,
+      "acceptance": "The reviewer approves."
+     }
+    ]
+   },
+   {
+    "n": 3,
+    "project": "app",
+    "project_id": 1,
+    "bead_id": "c",
+    "title": "Died step, broken, beside an Operator",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-c",
+    "done": 0,
+    "total": 4,
+    "steps": [
+     {
+      "bead_id": "c.1",
+      "title": "Write the notes",
+      "state": "not-started",
+      "status": "open",
+      "viz": 3
+     },
+     {
+      "bead_id": "c.2",
+      "title": "Dead step",
+      "state": "in-progress",
+      "status": "in_progress",
+      "owner": "operator-op-gone-c-2",
+      "owner_state": "died",
+      "owner_since": 1793214000,
+      "viz": 3,
+      "broken": true
+     },
+     {
+      "bead_id": "c.3",
+      "title": "Land the polish",
+      "state": "in-progress",
+      "status": "in_progress",
+      "owner": "operator-op-c-3",
+      "owner_state": "working",
+      "viz": 3
+     },
+     {
+      "bead_id": "c.4",
+      "title": "Release approved",
+      "state": "not-started",
+      "status": "open",
+      "gate": true,
+      "approvers": [
+       "reviewer-a"
+      ],
+      "blocked_by": [
+       "c.1"
+      ],
+      "viz": 1,
+      "acceptance": "The reviewer approves."
+     }
+    ]
+   },
+   {
+    "n": 4,
+    "project": "app",
+    "project_id": 1,
+    "bead_id": "d",
+    "title": "No gates: broken step beside an Operator",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-d",
+    "done": 0,
+    "total": 3,
+    "steps": [
+     {
+      "bead_id": "d.1",
+      "title": "Land the polish",
+      "state": "in-progress",
+      "status": "in_progress",
+      "owner": "operator-op-d-1",
+      "owner_state": "working",
+      "viz": 3
+     },
+     {
+      "bead_id": "d.2",
+      "title": "Forgotten step",
+      "state": "not-started",
+      "status": "open",
+      "viz": 3,
+      "broken": true
+     },
+     {
+      "bead_id": "d.3",
+      "title": "Forgotten too",
+      "state": "not-started",
+      "status": "open",
+      "viz": 3,
+      "broken": true
+     }
+    ]
+   },
+   {
+    "n": 5,
+    "project": "app",
+    "project_id": 1,
+    "bead_id": "e",
+    "title": "Tracks: broken in one, Operator in the other",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-e",
+    "done": 0,
+    "total": 2,
+    "steps": [
+     {
+      "bead_id": "e.1",
+      "title": "Working track",
+      "state": "in-progress",
+      "status": "open",
+      "viz": 2,
+      "track": true,
+      "children": [
+       {
+        "bead_id": "e.1.1",
+        "title": "Land the polish",
+        "state": "in-progress",
+        "status": "in_progress",
+        "owner": "operator-op-e-1-1",
+        "owner_state": "working",
+        "viz": 3
+       }
+      ]
+     },
+     {
+      "bead_id": "e.2",
+      "title": "Broken track",
+      "state": "in-progress",
+      "status": "open",
+      "viz": 2,
+      "track": true,
+      "children": [
+       {
+        "bead_id": "e.2.1",
+        "title": "Forgotten step",
+        "state": "not-started",
+        "status": "open",
+        "viz": 3,
+        "broken": true
+       },
+       {
+        "bead_id": "e.2.2",
+        "title": "Tidy the docs",
+        "state": "in-progress",
+        "status": "in_progress",
+        "owner": "operator-op-e-2-2",
+        "owner_state": "working",
+        "viz": 3
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "n": 6,
+    "project": "app",
+    "project_id": 1,
+    "bead_id": "f",
+    "title": "Broken step, no Operator",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-f",
+    "done": 0,
+    "total": 2,
+    "steps": [
+     {
+      "bead_id": "f.1",
+      "title": "Write the notes",
+      "state": "not-started",
+      "status": "open",
+      "viz": 3,
+      "broken": true
+     },
+     {
+      "bead_id": "f.2",
+      "title": "Release approved",
+      "state": "not-started",
+      "status": "open",
+      "gate": true,
+      "approvers": [
+       "reviewer-a"
+      ],
+      "blocked_by": [
+       "f.1"
+      ],
+      "viz": 1,
+      "acceptance": "The reviewer approves."
+     }
+    ]
+   },
+   {
+    "n": 7,
+    "project": "app",
+    "project_id": 1,
+    "bead_id": "g",
+    "title": "In-progress broken step beside an Operator",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-g",
+    "done": 0,
+    "total": 2,
+    "steps": [
+     {
+      "bead_id": "g.1",
+      "title": "Land the polish",
+      "state": "in-progress",
+      "status": "in_progress",
+      "viz": 3,
+      "owner": "operator-op-g-1",
+      "owner_state": "working"
+     },
+     {
+      "bead_id": "g.2",
+      "title": "Unheld task",
+      "state": "in-progress",
+      "status": "in_progress",
+      "viz": 3,
+      "broken": true
+     }
+    ]
+   },
+   {
+    "n": 8,
+    "project": "app",
+    "project_id": 1,
+    "bead_id": "h",
+    "title": "Busy Manager: broken step beside an Operator",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-h",
+    "done": 0,
+    "total": 2,
+    "steps": [
+     {
+      "bead_id": "h.1",
+      "title": "Land the polish",
+      "state": "in-progress",
+      "status": "in_progress",
+      "viz": 3,
+      "owner": "operator-op-h-1",
+      "owner_state": "working"
+     },
+     {
+      "bead_id": "h.2",
+      "title": "Forgotten step",
+      "state": "not-started",
+      "status": "open",
+      "viz": 3,
+      "broken": true
+     }
+    ]
+   }
+  ]
+ }
+}

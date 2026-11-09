@@ -1,0 +1,13 @@
+#1 Checkout rewrite
+  [gate, you] Workflow approved: Done (w.0)
+  Build the checkout: Done (w.1)
+  [gate, you] PR merged: Not reached (w.2)
+  [review block, 3 of 6 checks done] Review gate: Working on adversarial review by a different reviewer (w.9)
+      Answer and resolve every Devin comment: Done · found: devin-comments-resolved passed @head1 (w.9.1)
+      Run the code review: Done · found: review-clean passed @head1 (w.9.2)
+      Fix the review findings and get a clean recheck: Done · found: recheck-clean passed @head1 (w.9.3)
+    ▶ Adversarial review by a different reviewer: Operator working · check: review-clean (w.9.4)
+      Fix the adversarial findings and get a clean recheck: Not started · check: recheck-clean (w.9.5)
+      Final check on the current PR head: Not started · check: head-current (w.9.6)
+
+▶ = now (w.9.4)

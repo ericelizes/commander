@@ -1,0 +1,329 @@
+{
+ "version": 0,
+ "generated_at": "2026-10-26T07:33:20Z",
+ "projects": [
+  {
+   "id": 1,
+   "name": "p",
+   "type": "",
+   "path": "/p",
+   "status": "",
+   "repo": "o/r"
+  }
+ ],
+ "workstreams": [
+  {
+   "n": 1,
+   "project": "p",
+   "repo": "o/r",
+   "project_id": 1,
+   "bead_id": "w",
+   "title": "Workstream",
+   "state": "in-progress",
+   "status": "open",
+   "manager_role": "manager-w",
+   "done": 1,
+   "total": 3,
+   "steps": [
+    {
+     "bead_id": "w.1",
+     "title": "Build it",
+     "state": "not-started",
+     "status": "open",
+     "no_gates": true,
+     "viz": 3,
+     "broken": true,
+     "spec_hash": "b7b73385d9a51825408f54519d200b54c1856f90"
+    },
+    {
+     "workflow_check": {
+      "bead": {
+       "id": "w.2",
+       "title": "Greenlight merging the fix",
+       "status": "open",
+       "type": "",
+       "labels": [
+        "kind:objective",
+        "gate",
+        "approver:user",
+        "pr:1234"
+       ],
+       "parent_id": "w"
+      },
+      "waits": [
+       "w.3.1"
+      ],
+      "head": "head1",
+      "pr_states": {
+       "https://github.com/o/r/pull/1234": "OPEN"
+      },
+      "blocks": [
+       {
+        "bead": {
+         "id": "w.3.1",
+         "title": "Review gate",
+         "description": "for https://github.com/o/r/pull/1234\n\n{\"schema\":\"workflow-template@v1\",\"id\":\"pr-review\",\"version\":1,\"title\":\"Review gate\",\"steps\":[{\"id\":\"devin-comments\",\"title\":\"Answer and resolve every Devin comment\",\"kind\":\"task\",\"verifier\":\"devin-comments-resolved\",\"actor\":\"operator\"},{\"id\":\"review\",\"title\":\"Run the code review\",\"kind\":\"checkpoint\",\"verifier\":\"review-clean\",\"actor\":\"separate-reviewer\"},{\"id\":\"fix-review\",\"title\":\"Fix the review findings and get a clean recheck\",\"kind\":\"task\",\"verifier\":\"recheck-clean\",\"actor\":\"operator\"},{\"id\":\"adversarial-review\",\"title\":\"Adversarial review by a different reviewer\",\"kind\":\"checkpoint\",\"verifier\":\"review-clean\",\"actor\":\"separate-reviewer\"},{\"id\":\"fix-adversarial\",\"title\":\"Fix the adversarial findings and get a clean recheck\",\"kind\":\"task\",\"verifier\":\"recheck-clean\",\"actor\":\"operator\"},{\"id\":\"final-check\",\"title\":\"Final check on the current PR head\",\"kind\":\"checkpoint\",\"verifier\":\"head-current\",\"actor\":\"automatic\"}]}",
+         "status": "closed",
+         "type": "",
+         "labels": [
+          "kind:objective",
+          "kind:objective",
+          "workflow-template:pr-review",
+          "workflow-version:1",
+          "workflow-instance:3fc6758291c4",
+          "workflow-hash:6747f7cebb3d"
+         ],
+         "parent_id": "w.3"
+        },
+        "comments": [
+         {
+          "id": "comment-1",
+          "author": "test",
+          "text": "workflow-writers@v1 {\"revision\":\"rev\",\"pr\":\"https://github.com/o/r/pull/1234\",\"head\":\"head1\",\"tasks\":[\"writer\"]}",
+          "created_at": "2026-11-05T19:11:44Z"
+         }
+        ],
+        "steps": [
+         {
+          "bead": {
+           "id": "w.3.1.1",
+           "title": "Answer and resolve every Devin comment",
+           "status": "closed",
+           "type": "",
+           "labels": [
+            "kind:objective",
+            "kind:objective",
+            "workflow-step:devin-comments",
+            "workflow-template:pr-review",
+            "workflow-version:1",
+            "workflow-instance:3fc6758291c4",
+            "workflow-hash:6747f7cebb3d"
+           ],
+           "parent_id": "w.3.1"
+          },
+          "comments": [
+           {
+            "id": "comment-1",
+            "author": "test",
+            "text": "workflow-check@v1 {\"writer_binding\":\"rev\",\"instance\":\"3fc6758291c4\",\"step\":\"devin-comments\",\"verifier\":\"devin-comments-resolved\",\"pr\":\"https://github.com/o/r/pull/1234\",\"head\":\"head1\",\"finding\":\"devin-comments-resolved passed\"}",
+            "created_at": "2026-11-05T19:11:44Z"
+           }
+          ]
+         },
+         {
+          "bead": {
+           "id": "w.3.1.2",
+           "title": "Run the code review",
+           "status": "closed",
+           "type": "",
+           "labels": [
+            "kind:objective",
+            "kind:objective",
+            "workflow-step:review",
+            "workflow-template:pr-review",
+            "workflow-version:1",
+            "workflow-instance:3fc6758291c4",
+            "workflow-hash:6747f7cebb3d"
+           ],
+           "parent_id": "w.3.1"
+          },
+          "waits": [
+           "w.3.1.1"
+          ],
+          "comments": [
+           {
+            "id": "comment-1",
+            "author": "test",
+            "text": "workflow-check@v1 {\"writer_binding\":\"rev\",\"instance\":\"3fc6758291c4\",\"step\":\"review\",\"verifier\":\"review-clean\",\"pr\":\"https://github.com/o/r/pull/1234\",\"head\":\"head1\",\"finding\":\"review-clean passed\"}",
+            "created_at": "2026-11-05T19:11:44Z"
+           }
+          ]
+         },
+         {
+          "bead": {
+           "id": "w.3.1.3",
+           "title": "Fix the review findings and get a clean recheck",
+           "status": "closed",
+           "type": "",
+           "labels": [
+            "kind:objective",
+            "kind:objective",
+            "workflow-step:fix-review",
+            "workflow-template:pr-review",
+            "workflow-version:1",
+            "workflow-instance:3fc6758291c4",
+            "workflow-hash:6747f7cebb3d"
+           ],
+           "parent_id": "w.3.1"
+          },
+          "waits": [
+           "w.3.1.2"
+          ],
+          "comments": [
+           {
+            "id": "comment-1",
+            "author": "test",
+            "text": "workflow-check@v1 {\"writer_binding\":\"rev\",\"instance\":\"3fc6758291c4\",\"step\":\"fix-review\",\"verifier\":\"recheck-clean\",\"pr\":\"https://github.com/o/r/pull/1234\",\"head\":\"head1\",\"finding\":\"recheck-clean passed\"}",
+            "created_at": "2026-11-05T19:11:44Z"
+           }
+          ]
+         },
+         {
+          "bead": {
+           "id": "w.3.1.4",
+           "title": "Adversarial review by a different reviewer",
+           "status": "closed",
+           "type": "",
+           "labels": [
+            "kind:objective",
+            "kind:objective",
+            "workflow-step:adversarial-review",
+            "workflow-template:pr-review",
+            "workflow-version:1",
+            "workflow-instance:3fc6758291c4",
+            "workflow-hash:6747f7cebb3d"
+           ],
+           "parent_id": "w.3.1"
+          },
+          "waits": [
+           "w.3.1.3"
+          ],
+          "comments": [
+           {
+            "id": "comment-1",
+            "author": "test",
+            "text": "workflow-check@v1 {\"writer_binding\":\"rev\",\"instance\":\"3fc6758291c4\",\"step\":\"adversarial-review\",\"verifier\":\"review-clean\",\"pr\":\"https://github.com/o/r/pull/1234\",\"head\":\"head1\",\"finding\":\"review-clean passed\"}",
+            "created_at": "2026-11-05T19:11:44Z"
+           }
+          ]
+         },
+         {
+          "bead": {
+           "id": "w.3.1.5",
+           "title": "Fix the adversarial findings and get a clean recheck",
+           "status": "closed",
+           "type": "",
+           "labels": [
+            "kind:objective",
+            "kind:objective",
+            "workflow-step:fix-adversarial",
+            "workflow-template:pr-review",
+            "workflow-version:1",
+            "workflow-instance:3fc6758291c4",
+            "workflow-hash:6747f7cebb3d"
+           ],
+           "parent_id": "w.3.1"
+          },
+          "waits": [
+           "w.3.1.4"
+          ],
+          "comments": [
+           {
+            "id": "comment-1",
+            "author": "test",
+            "text": "workflow-check@v1 {\"writer_binding\":\"rev\",\"instance\":\"3fc6758291c4\",\"step\":\"fix-adversarial\",\"verifier\":\"recheck-clean\",\"pr\":\"https://github.com/o/r/pull/1234\",\"head\":\"head1\",\"finding\":\"recheck-clean passed\"}",
+            "created_at": "2026-11-05T19:11:44Z"
+           }
+          ]
+         },
+         {
+          "bead": {
+           "id": "w.3.1.6",
+           "title": "Final check on the current PR head",
+           "status": "closed",
+           "type": "",
+           "labels": [
+            "kind:objective",
+            "kind:objective",
+            "workflow-step:final-check",
+            "workflow-template:pr-review",
+            "workflow-version:1",
+            "workflow-instance:3fc6758291c4",
+            "workflow-hash:6747f7cebb3d"
+           ],
+           "parent_id": "w.3.1"
+          },
+          "waits": [
+           "w.3.1.5"
+          ],
+          "comments": [
+           {
+            "id": "comment-1",
+            "author": "test",
+            "text": "workflow-check@v1 {\"writer_binding\":\"rev\",\"instance\":\"3fc6758291c4\",\"step\":\"final-check\",\"verifier\":\"head-current\",\"pr\":\"https://github.com/o/r/pull/1234\",\"head\":\"head1\",\"finding\":\"head-current passed\"}",
+            "created_at": "2026-11-05T19:11:44Z"
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "bead_id": "w.2",
+     "title": "Greenlight merging the fix",
+     "state": "not-started",
+     "status": "open",
+     "pr": [
+      "1234"
+     ],
+     "blocked_by": [
+      "w.3.1"
+     ],
+     "gate": true,
+     "approvers": [
+      "user"
+     ],
+     "viz": 1,
+     "spec_hash": "01d0a282bc3275c5a77fe8a238df8d29c965723a"
+    },
+    {
+     "bead_id": "w.3",
+     "title": "Finished stage",
+     "state": "done",
+     "status": "closed",
+     "viz": 3,
+     "spec_hash": "237658f518f3cd586c1d7d63b6ca3ed7bad57c8c"
+    }
+   ],
+   "no_gates": true
+  }
+ ],
+ "needs_you": [],
+ "agents": {
+  "manager-w": {
+   "state": "idle",
+   "since": 1792990000
+  },
+  "operator-p-fix": {
+   "state": "working",
+   "since": 0
+  }
+ },
+ "fleet": {
+  "cost_usd_24h": 0,
+  "cost_usd_7d": 0,
+  "cost_series_24h": null,
+  "agents": 0,
+  "active": 0,
+  "blocked": 0,
+  "idle_ratio": 0,
+  "projects": 0,
+  "chat_cost_usd_24h": 0,
+  "roles_cost": []
+ },
+ "unread": {},
+ "broken": [
+  {
+   "bead_id": "w.1",
+   "title": "Build it",
+   "project": "p",
+   "workstream": "w",
+   "manager_role": "manager-w"
+  }
+ ],
+ "live": {
+  "operators": [
+   "operator-p-fix"
+  ]
+ }
+}

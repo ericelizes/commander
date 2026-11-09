@@ -1,0 +1,14 @@
+{
+  "schema": "workflow-template@v1",
+  "id": "pr-review",
+  "version": 1,
+  "title": "Review gate",
+  "steps": [
+    {"id": "devin-comments", "title": "Answer and resolve every Devin comment", "kind": "task", "verifier": "devin-comments-resolved", "actor": "operator"},
+    {"id": "review", "title": "Run the code review", "kind": "checkpoint", "verifier": "review-clean", "actor": "separate-reviewer"},
+    {"id": "fix-review", "title": "Fix the review findings and get a clean recheck", "kind": "task", "verifier": "recheck-clean", "actor": "operator"},
+    {"id": "adversarial-review", "title": "Adversarial review by a different reviewer", "kind": "checkpoint", "verifier": "review-clean", "actor": "separate-reviewer"},
+    {"id": "fix-adversarial", "title": "Fix the adversarial findings and get a clean recheck", "kind": "task", "verifier": "recheck-clean", "actor": "operator"},
+    {"id": "final-check", "title": "Final check on the current PR head", "kind": "checkpoint", "verifier": "head-current", "actor": "automatic"}
+  ]
+}

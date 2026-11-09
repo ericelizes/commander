@@ -1,0 +1,356 @@
+{
+ "now": 1793000000,
+ "snapshot": {
+  "version": 1,
+  "generated_at": "2026-10-26T12:00:00Z",
+  "projects": [
+   {
+    "id": 1,
+    "name": "p",
+    "type": "repo",
+    "path": "/tmp/p",
+    "status": "active"
+   }
+  ],
+  "fleet": {
+   "cost_usd_24h": 0,
+   "cost_usd_7d": 0,
+   "cost_series_24h": [],
+   "agents": 0,
+   "active": 0,
+   "blocked": 0,
+   "idle_ratio": 0,
+   "projects": 1,
+   "chat_cost_usd_24h": 0,
+   "roles_cost": []
+  },
+  "workstreams": [
+   {
+    "n": 1,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w1",
+    "title": "gate no pitch, Manager idle",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w1",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w1.1",
+      "title": "Fix the sample list test",
+      "state": "done",
+      "status": "closed"
+     },
+     {
+      "bead_id": "w1.9",
+      "title": "Greenlight merging the sample list test fix",
+      "state": "not-started",
+      "status": "open",
+      "gate": true,
+      "approvers": [
+       "user"
+      ],
+      "blocked_by": [
+       "w1.1"
+      ]
+     }
+    ]
+   },
+   {
+    "n": 2,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w2",
+    "title": "gate no pitch, Manager working",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w2",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w2.1",
+      "title": "Fix the sample list test",
+      "state": "done",
+      "status": "closed"
+     },
+     {
+      "bead_id": "w2.9",
+      "title": "Greenlight merging the sample list test fix",
+      "state": "not-started",
+      "status": "open",
+      "gate": true,
+      "approvers": [
+       "user"
+      ],
+      "blocked_by": [
+       "w2.1"
+      ]
+     }
+    ]
+   },
+   {
+    "n": 3,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w3",
+    "title": "gate no pitch, past the deadline",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w3",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w3.1",
+      "title": "Fix the sample list test",
+      "state": "done",
+      "status": "closed"
+     },
+     {
+      "bead_id": "w3.9",
+      "title": "Greenlight merging the sample list test fix",
+      "state": "not-started",
+      "status": "open",
+      "gate": true,
+      "approvers": [
+       "user"
+      ],
+      "blocked_by": [
+       "w3.1"
+      ]
+     }
+    ]
+   },
+   {
+    "n": 4,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w4",
+    "title": "gate no pitch beside a real ask",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w4",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w4.1",
+      "title": "Fix the sample list test",
+      "state": "done",
+      "status": "closed"
+     },
+     {
+      "bead_id": "w4.9",
+      "title": "Greenlight merging the sample list test fix",
+      "state": "not-started",
+      "status": "open",
+      "gate": true,
+      "approvers": [
+       "user"
+      ],
+      "blocked_by": [
+       "w4.1"
+      ]
+     },
+     {
+      "bead_id": "w4.2",
+      "title": "Name the service",
+      "state": "needs-user",
+      "status": "open",
+      "waiting": "you",
+      "waiting_since": 1792999700
+     }
+    ]
+   },
+   {
+    "n": 5,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w5",
+    "title": "needs-user step with no card",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w5",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w5.1",
+      "title": "Pick a name",
+      "state": "needs-user",
+      "status": "open",
+      "waiting": "you",
+      "waiting_since": 1792999700
+     }
+    ]
+   },
+   {
+    "n": 6,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w6",
+    "title": "track with a gate no pitch",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w6",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w6.1",
+      "title": "A: Build",
+      "state": "in-progress",
+      "status": "open",
+      "track": true,
+      "workstream": "w6",
+      "children": [
+       {
+        "bead_id": "w6.1.1",
+        "title": "Write the parser",
+        "state": "in-progress",
+        "status": "open",
+        "owner": "operator-x",
+        "owner_state": "working",
+        "working": true
+       }
+      ]
+     },
+     {
+      "bead_id": "w6.2",
+      "title": "B: Ship",
+      "state": "in-progress",
+      "status": "open",
+      "track": true,
+      "workstream": "w6",
+      "children": [
+       {
+        "bead_id": "w6.2.1",
+        "title": "Fix the sample list test",
+        "state": "done",
+        "status": "closed"
+       },
+       {
+        "bead_id": "w6.2.9",
+        "title": "Greenlight merging the sample list test fix",
+        "state": "not-started",
+        "status": "open",
+        "gate": true,
+        "approvers": [
+         "user"
+        ],
+        "blocked_by": [
+         "w6.2.1"
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  ],
+  "needs_you": [
+   {
+    "project": "p",
+    "bead_id": "w4.2",
+    "title": "Name the service",
+    "workstream": "gate no pitch beside a real ask",
+    "rank": 4,
+    "decision": {
+     "question": "Which name should the service use?",
+     "context": "Two names."
+    }
+   }
+  ],
+  "no_pitch": [
+   {
+    "project": "p",
+    "bead_id": "w1.9",
+    "title": "Greenlight merging the sample list test fix",
+    "workstream": "gate no pitch, Manager idle",
+    "workstream_id": "w1",
+    "manager_role": "manager-w1",
+    "gate": true
+   },
+   {
+    "project": "p",
+    "bead_id": "w2.9",
+    "title": "Greenlight merging the sample list test fix",
+    "workstream": "gate no pitch, Manager working",
+    "workstream_id": "w2",
+    "manager_role": "manager-w2",
+    "gate": true,
+    "asked_at": 1792999880
+   },
+   {
+    "project": "p",
+    "bead_id": "w3.9",
+    "title": "Greenlight merging the sample list test fix",
+    "workstream": "gate no pitch, past the deadline",
+    "workstream_id": "w3",
+    "manager_role": "manager-w3",
+    "gate": true,
+    "asked_at": 1792996400
+   },
+   {
+    "project": "p",
+    "bead_id": "w4.9",
+    "title": "Greenlight merging the sample list test fix",
+    "workstream": "gate no pitch beside a real ask",
+    "workstream_id": "w4",
+    "manager_role": "manager-w4",
+    "gate": true
+   },
+   {
+    "project": "p",
+    "bead_id": "w5.1",
+    "title": "Pick a name",
+    "workstream": "needs-user step with no card",
+    "workstream_id": "w5",
+    "manager_role": "manager-w5"
+   },
+   {
+    "project": "p",
+    "bead_id": "w6.2.9",
+    "title": "Greenlight merging the sample list test fix",
+    "workstream": "track with a gate no pitch",
+    "workstream_id": "w6",
+    "manager_role": "manager-w6",
+    "gate": true,
+    "asked_at": 1792999700
+   }
+  ],
+  "agents": {
+   "manager-w1": {
+    "state": "idle",
+    "since": 1792999400
+   },
+   "manager-w2": {
+    "state": "working",
+    "since": 1792999940
+   },
+   "manager-w3": {
+    "state": "idle",
+    "since": 1792999400
+   },
+   "manager-w4": {
+    "state": "idle",
+    "since": 1792999400
+   },
+   "manager-w5": {
+    "state": "idle",
+    "since": 1792999400
+   },
+   "manager-w6": {
+    "state": "idle",
+    "since": 1792999400
+   },
+   "commander": {
+    "state": "idle",
+    "since": 1792999400
+   }
+  },
+  "unread": {}
+ }
+}

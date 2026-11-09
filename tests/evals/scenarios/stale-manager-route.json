@@ -1,0 +1,27 @@
+{
+ "beads":[
+  {"id":"sample-open", "status":"open", "labels":["kind:objective"]},
+  {"id":"sample-open.3", "status":"open", "parent":"sample-open", "labels":["kind:operational"]},
+  {"id":"sample-open.3.1", "status":"open", "parent":"sample-open.3", "labels":["kind:task"]},
+  {"id":"sample-closed", "status":"closed", "labels":["kind:objective"]},
+  {"id":"sample-closed.6", "status":"deferred", "parent":"sample-closed", "labels":["kind:objective"]}
+ ],
+ "senders":[
+  {"name":"invariant names a nested bead as its own root", "role":"manager-sample-open.3.1", "subject":"[invariant] 1 open bead", "to":"manager-sample-open"},
+  {"name":"review wait fires under a closed workstream", "role":"manager-sample-closed", "subject":"[review] approved", "to":"commander", "marked":true},
+  {"name":"a live Manager is unchanged", "role":"manager-sample-open", "subject":"[wait] time reached", "to":"manager-sample-open"}
+ ],
+ "plan_alerts":[
+  {"name":"plan alert names a workstream closed since the board was read", "bead":"sample-closed", "to":"commander", "marked":true},
+  {"name":"plan alert names a live workstream", "bead":"sample-open", "to":"manager-sample-open"}
+ ],
+ "stale_batch":{"role":"manager-sample-closed", "am_name":"FixtureFox", "mail_id":"41", "subject":"old notice"},
+ "no_cursor":{"role":"manager-sample-open", "am_name":"FixtureOwl", "mail_id":"7", "subject":"close it", "hours_old":24},
+ "old_answers":[
+  {"role":"manager-sample-open", "am_name":"FixtureOwl", "mail_id":"8", "subject":"[decision] sample-open.3: Merge", "hours_old":6},
+  {"role":"manager-sample-open", "am_name":"FixtureOwl", "mail_id":"8", "subject":"[workflow approve] sample-open.3", "hours_old":2160},
+  {"role":"manager-sample-open", "am_name":"FixtureOwl", "mail_id":"8", "subject":"the user approved: Ship the sample", "hours_old":6},
+  {"role":"manager-sample-open", "am_name":"FixtureOwl", "mail_id":"8", "subject":"the user deferred: Ship the sample", "hours_old":6}
+ ],
+ "host_operator":{"role":"operator-sample-open-3-1", "am_name":"FixtureLark", "mail_id":"9", "subject":"New direction"}
+}

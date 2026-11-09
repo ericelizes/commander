@@ -1,0 +1,9 @@
+0 Commander: no agent yet
+1 Died step ahead of the Operator: Working on land the polish · then: release approved (0% done, next gate: Release approved, approved by reviewer-a, 2 working)
+2 Finished step ahead of the Operator: Working on land the polish · then: release approved (0% done, next gate: Release approved, approved by reviewer-a, 2 working)
+3 CI wait ahead of the Operator: Working on land the polish · then: release approved (0% done, next gate: Release approved, approved by reviewer-a, 2 working)
+4 In-progress step ahead of the Operator: Working on land the polish +1 more · then: release approved (0% done, next gate: Release approved, approved by reviewer-a, 2 working)
+5 Operator on a step with open children: Working on land the polish · then: release approved (0% done, next gate: Release approved, approved by reviewer-a, 2 working)
+6 No gates: CI wait ahead of the Operator: Working on land the polish (0% done, no gates, 2 working)
+7 Closed gate: CI wait ahead of the Operator: Working on land the polish (0% done, no gates, 2 working)
+8 No gates: Operator on a step with open children: Working on land the polish (0% done, no gates, 2 working)

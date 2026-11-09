@@ -1,0 +1,15 @@
+[
+  {"name": "bare, no terminal", "argv": [], "want_exit": 2},
+  {"name": "commander alias, no terminal", "binary": "commander", "argv": [], "want_exit": 2},
+  {"name": "pipe into grep, as the Operator ran it", "argv": [], "stdout_pipe": true, "want_exit": 2},
+  {"name": "project target, no terminal", "argv": ["--project", "demo"], "want_exit": 2},
+  {"name": "task target, no terminal", "argv": ["--task", "demo-1"], "want_exit": 2},
+  {"name": "root, no terminal", "argv": ["root"], "want_exit": 2},
+  {"name": "restart, no terminal", "argv": ["restart"], "want_exit": 2},
+  {"name": "operator role in a terminal", "argv": [], "terminal": true, "env": {"COMMANDER_ROLE": "operator-demo-1"}, "want_exit": 2},
+  {"name": "manager role only, in a terminal", "argv": [], "terminal": true, "env": {"COMMANDER_MANAGER_ROLE": "manager-demo"}, "want_exit": 2},
+  {"name": "project target with a role, in a terminal", "argv": ["-p", "demo"], "terminal": true, "env": {"COMMANDER_ROLE": "manager-demo"}, "want_exit": 2},
+  {"name": "the waiver never covers a role", "argv": [], "terminal": true, "env": {"COMMANDER_ROLE": "operator-demo-1", "COMMANDER_COCKPIT_NO_TERMINAL": "1"}, "want_exit": 2},
+  {"name": "the user's own terminal", "argv": [], "terminal": true, "want_session": true},
+  {"name": "no terminal with the waiver, as cockpit-test.sh runs it", "argv": [], "env": {"COMMANDER_COCKPIT_NO_TERMINAL": "1"}, "want_session": true}
+]

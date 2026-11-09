@@ -1,0 +1,286 @@
+{
+ "commander": {
+  "kind": "none",
+  "text": "no agent yet",
+  "since": 0,
+  "unread": 0
+ },
+ "asks": [],
+ "workstreams": [
+  {
+   "key": "app:a",
+   "n": 1,
+   "title": "Broken step beside an Operator off the gate path",
+   "project": "app",
+   "bead_id": "a",
+   "manager_role": "manager-a",
+   "starred": false,
+   "kind": "stalled",
+   "text": "State missing",
+   "since": 0,
+   "progress": {
+    "done": 0,
+    "total": 3
+   },
+   "milestones": {
+    "done": 0,
+    "total": 3
+   },
+   "working": 2,
+   "flag": 0,
+   "unread": 0,
+   "gate": {
+    "bead_id": "a.4",
+    "title": "Release approved",
+    "who": "reviewer-a",
+    "at": false,
+    "for_you": false
+   },
+   "tracks": [],
+   "why": "Working on land the polish; nothing holds forgotten step",
+   "age_as": "working|Working on land the polish · then: release approved"
+  },
+  {
+   "key": "app:b",
+   "n": 2,
+   "title": "Broken step beside an Operator on the gate path",
+   "project": "app",
+   "bead_id": "b",
+   "manager_role": "manager-b",
+   "starred": false,
+   "kind": "stalled",
+   "text": "State missing",
+   "since": 0,
+   "progress": {
+    "done": 0,
+    "total": 2
+   },
+   "milestones": {
+    "done": 0,
+    "total": 2
+   },
+   "working": 2,
+   "flag": 0,
+   "unread": 0,
+   "gate": {
+    "bead_id": "b.3",
+    "title": "Release approved",
+    "who": "reviewer-a",
+    "at": false,
+    "for_you": false
+   },
+   "tracks": [],
+   "why": "Working on land the polish; nothing holds forgotten step",
+   "age_as": "working|Working on land the polish · then: release approved"
+  },
+  {
+   "key": "app:c",
+   "n": 3,
+   "title": "Died step, broken, beside an Operator",
+   "project": "app",
+   "bead_id": "c",
+   "manager_role": "manager-c",
+   "starred": false,
+   "kind": "stalled",
+   "text": "State missing",
+   "since": 0,
+   "progress": {
+    "done": 0,
+    "total": 3
+   },
+   "milestones": {
+    "done": 0,
+    "total": 3
+   },
+   "working": 2,
+   "flag": 0,
+   "unread": 0,
+   "gate": {
+    "bead_id": "c.4",
+    "title": "Release approved",
+    "who": "reviewer-a",
+    "at": false,
+    "for_you": false
+   },
+   "tracks": [],
+   "why": "Working on land the polish; nothing holds dead step",
+   "age_as": "working|Working on land the polish · then: release approved"
+  },
+  {
+   "key": "app:d",
+   "n": 4,
+   "title": "No gates: broken step beside an Operator",
+   "project": "app",
+   "bead_id": "d",
+   "manager_role": "manager-d",
+   "starred": false,
+   "kind": "stalled",
+   "text": "State missing",
+   "since": 0,
+   "progress": {
+    "done": 0,
+    "total": 3
+   },
+   "milestones": {
+    "done": 0,
+    "total": 3
+   },
+   "working": 2,
+   "flag": 0,
+   "unread": 0,
+   "gate": null,
+   "tracks": [],
+   "why": "Working on land the polish; nothing holds forgotten step +1 more",
+   "age_as": "working|Working on land the polish"
+  },
+  {
+   "key": "app:e",
+   "n": 5,
+   "title": "Tracks: broken in one, Operator in the other",
+   "project": "app",
+   "bead_id": "e",
+   "manager_role": "manager-e",
+   "starred": false,
+   "kind": "working",
+   "text": "Working on land the polish",
+   "since": 0,
+   "progress": {
+    "done": 0,
+    "total": 3
+   },
+   "milestones": {
+    "done": 0,
+    "total": 3
+   },
+   "working": 3,
+   "flag": 0,
+   "unread": 0,
+   "gate": null,
+   "tracks": [
+    {
+     "key": "app:e.1",
+     "bead_id": "e.1",
+     "letter": ".1",
+     "title": "Working track",
+     "kind": "working",
+     "text": "Working on land the polish",
+     "since": 0,
+     "progress": {
+      "done": 0,
+      "total": 1
+     },
+     "milestones": {
+      "done": 0,
+      "total": 1
+     },
+     "working": 1
+    },
+    {
+     "key": "app:e.2",
+     "bead_id": "e.2",
+     "letter": ".2",
+     "title": "Broken track",
+     "kind": "stalled",
+     "text": "State missing",
+     "since": 0,
+     "progress": {
+      "done": 0,
+      "total": 2
+     },
+     "milestones": {
+      "done": 0,
+      "total": 2
+     },
+     "working": 1,
+     "why": "Working on tidy the docs; nothing holds forgotten step",
+     "age_as": "working|Working on tidy the docs"
+    }
+   ]
+  },
+  {
+   "key": "app:f",
+   "n": 6,
+   "title": "Broken step, no Operator",
+   "project": "app",
+   "bead_id": "f",
+   "manager_role": "manager-f",
+   "starred": false,
+   "kind": "stalled",
+   "text": "State missing",
+   "since": 0,
+   "progress": {
+    "done": 0,
+    "total": 1
+   },
+   "milestones": {
+    "done": 0,
+    "total": 1
+   },
+   "working": 0,
+   "flag": 0,
+   "unread": 0,
+   "gate": {
+    "bead_id": "f.2",
+    "title": "Release approved",
+    "who": "reviewer-a",
+    "at": false,
+    "for_you": false
+   },
+   "tracks": []
+  },
+  {
+   "key": "app:g",
+   "n": 7,
+   "title": "In-progress broken step beside an Operator",
+   "project": "app",
+   "bead_id": "g",
+   "manager_role": "manager-g",
+   "starred": false,
+   "kind": "stalled",
+   "text": "State missing",
+   "since": 0,
+   "progress": {
+    "done": 0,
+    "total": 2
+   },
+   "milestones": {
+    "done": 0,
+    "total": 2
+   },
+   "working": 2,
+   "flag": 0,
+   "unread": 0,
+   "gate": null,
+   "tracks": [],
+   "why": "Working on land the polish; nothing holds unheld task",
+   "age_as": "working|Working on land the polish"
+  },
+  {
+   "key": "app:h",
+   "n": 8,
+   "title": "Busy Manager: broken step beside an Operator",
+   "project": "app",
+   "bead_id": "h",
+   "manager_role": "manager-h",
+   "starred": false,
+   "kind": "working",
+   "text": "Manager picking it up",
+   "since": 0,
+   "progress": {
+    "done": 0,
+    "total": 2
+   },
+   "milestones": {
+    "done": 0,
+    "total": 2
+   },
+   "working": 2,
+   "flag": 0,
+   "unread": 0,
+   "gate": null,
+   "tracks": [],
+   "why": "Working on land the polish; nothing holds forgotten step",
+   "age_as": "working|Working on land the polish"
+  }
+ ]
+}

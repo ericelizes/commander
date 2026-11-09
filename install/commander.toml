@@ -1,0 +1,11 @@
+# apps.toml fragment for commander
+# ────────────────────────────────────────────────────────────────────────────
+# This is the canonical entry the dotfiles wizard merges into its own
+# `apps.toml`. Until commander is published, the wizard's apps_extended phase
+# short-circuits the clone if `clone_to` already exists, so a local checkout
+# (the common case during MVP) is honored.
+
+[apps.commander]
+clone_to = "~/code/commander"
+setup_cmd = "just install"
+update_cmd = "just update"

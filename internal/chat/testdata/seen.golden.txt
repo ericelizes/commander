@@ -1,0 +1,32 @@
+Conversation so far as the user saw it: the last 7 exchanges between the user and you, oldest first, newest last, from the Commander app's chat record. This is what the user was actually shown, and it is the authority on what they have and have not seen: your own memory of the conversation may be missing (a fresh session) or summarized (compaction). Replies are your final reply of each turn, trimmed.
+
+[Oct 28 09:00 UTC]
+User: What is on the board?
+You replied: Two rows are working, nothing needs you.
+
+[Oct 28 09:10 UTC]
+User: Ship the docs fix.
+You replied: The docs fix is shipped.
+
+[Oct 28 09:20 UTC]
+Agent mail reached you (the user did not write it):
+  [mail] manager-docs: Docs shipped — run cmdr internal-inbox --agent commander
+  [mail] manager-ci: CI green — run cmdr internal-inbox --agent commander
+You replied: **What changed:** docs shipped, CI green, and the review is in.
+
+[Oct 28 09:30 UTC]
+User: Stop.
+You replied: (nothing; the turn ended without a reply)
+
+[Oct 28 09:40 UTC]
+User: What did you tell me about the docs row?
+User: And the CI row.
+You replied: I told you the docs fix shipped and CI went green.
+
+[Oct 28 09:50 UTC]
+User: Next?
+You replied: Looking.
+
+[Oct 28 10:00 UTC]
+User: Are you there?
+You replied: (no reply yet)

@@ -1,0 +1,351 @@
+package api
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+
+	"github.com/example-user/commander/internal/beads"
+	"github.com/example-user/commander/internal/chat"
+	"github.com/example-user/commander/internal/claudeacct"
+	"github.com/example-user/commander/internal/livedata"
+	"github.com/example-user/commander/internal/overview"
+)
+
+type overviewRequest struct {
+	Project string `json:"project"`
+	BeadID  string `json:"bead_id"`
+	TrackID string `json:"track_id"`
+}
+
+func (s *Server) serveOverview(w http.ResponseWriter, r *http.Request) {
+	var q overviewRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&q); err != nil {
+		writeJSON(w, 400, map[string]string{"error": "invalid overview target"})
+		return
+	}
+	snap := s.current(r.Context())
+	if snap.Degraded != nil {
+		writeJSON(w, 503, map[string]string{"error": "Live state is unavailable; recap updates are paused."})
+		return
+	}
+	var ws *livedata.SnapWorkstream
+	for i := range snap.Workstreams {
+		x := &snap.Workstreams[i]
+		if x.Project == q.Project && x.BeadID == q.BeadID {
+			ws = x
+			break
+		}
+	}
+	if ws == nil {
+		writeJSON(w, 404, map[string]string{"error": "workstream not found"})
+		return
+	}
+	home := filepath.Dir(s.opts.ConfigPath)
+	if s.opts.Chat != nil {
+		home = s.opts.Chat.Home()
+	}
+	in, ok := buildOverviewInput(snap, ws, q, home)
+	if !ok {
+		writeJSON(w, 404, map[string]string{"error": "nested workstream not found in this workstream"})
+		return
+	}
+	writeJSON(w, http.StatusOK, s.overviews.Get(in))
+}
+
+func buildOverviewInput(snap livedata.Snapshot, ws *livedata.SnapWorkstream, q overviewRequest, home string) (overview.Input, bool) {
+	in, ok := overviewInput(*ws, q.TrackID)
+	if !ok {
+		return in, false
+	}
+	if snap.Display != nil {
+		for _, row := range snap.Display.Workstreams {
+			if row.Project != q.Project || row.BeadID != q.BeadID {
+				continue
+			}
+			var status any = map[string]any{"kind": row.Kind, "text": row.Text, "why": row.Why, "working": row.Working}
+			if q.TrackID != "" {
+				status = nil
+				if dg := row.Diagram.Sub(q.TrackID); dg != nil {
+					for _, st := range dg.Steps {
+						if st.ID == dg.Current {
+							status = map[string]any{"kind": st.Kind, "text": st.Text, "actor": st.Actor}
+						}
+					}
+				}
+				if row.Scope == q.TrackID {
+					status = map[string]any{"kind": row.Kind, "text": row.Text, "why": row.Why, "working": row.Working}
+				}
+				for _, t := range row.AllTracks() {
+					if t.BeadID == q.TrackID {
+						status = map[string]any{"kind": t.Kind, "text": t.Text, "why": t.Why, "working": t.Working}
+					}
+				}
+			}
+			if status == nil {
+				continue
+			}
+			raw, _ := json.Marshal(status)
+			in.Evidence = append(in.Evidence, overview.Evidence{ID: "live-status", Label: "Current verified board status", Text: string(raw)})
+		}
+	}
+	in.Evidence = append(in.Evidence, overviewMessages(home, ws.ManagerRole, q.TrackID)...)
+	return in, true
+}
+
+func overviewInput(ws livedata.SnapWorkstream, track string) (overview.Input, bool) {
+	in := overview.Input{Scope: ws.Project + ":" + ws.BeadID + ":" + track, Goal: ws.Title}
+	steps := ws.Steps
+	if track != "" {
+		var found *livedata.SnapStep
+		var walk func([]livedata.SnapStep)
+		walk = func(list []livedata.SnapStep) {
+			for i := range list {
+				if list[i].BeadID == track && list[i].Track {
+					found = &list[i]
+					return
+				}
+				walk(list[i].Children)
+			}
+		}
+		walk(steps)
+		if found == nil {
+			return in, false
+		}
+		in.Goal = found.Title
+		steps = []livedata.SnapStep{*found}
+	}
+	add := func(id, label string, v any) {
+		b, _ := json.Marshal(v)
+		in.Evidence = append(in.Evidence, overview.Evidence{ID: id, Label: label, Text: string(b)})
+	}
+	if track == "" {
+		add("scope", "Recorded workstream outcome", map[string]string{"title": ws.Title, "status": ws.Status, "note": trimOverview(ws.Note, 4000)})
+	}
+
+	// Prefer current/open work so a long history cannot crowd the live blocker out.
+	var candidates []livedata.SnapStep
+	parentOf := map[string]string{}
+	var walk func([]livedata.SnapStep, string)
+	walk = func(list []livedata.SnapStep, parent string) {
+		for _, st := range list {
+			if st.Task || st.Superseded {
+				continue
+			}
+			parentOf[st.BeadID] = parent
+			candidates = append(candidates, st)
+			walk(st.Children, st.Title)
+		}
+	}
+	walk(steps, "")
+	// A bare bead id means nothing to the reader, so a wait or a blocker is named by its title.
+	known := map[string]overviewBead{}
+	var names func([]livedata.SnapStep)
+	names = func(list []livedata.SnapStep) {
+		for _, st := range list {
+			known[st.BeadID] = overviewBead{title: st.Title, done: st.Status == "closed" || st.Status == beads.StatusDeferred || st.Superseded}
+			for _, id := range st.DoneBlockers {
+				if _, ok := known[id]; !ok {
+					known[id] = overviewBead{done: true} // finished and folded off the board
+				}
+			}
+			names(st.Children)
+		}
+	}
+	names(ws.Steps)
+	for _, g := range ws.GateNodes {
+		if _, ok := known[g.BeadID]; !ok {
+			known[g.BeadID] = overviewBead{title: "approval gate: " + g.Name, done: g.Status == "passed"}
+		}
+	}
+	priority := func(st livedata.SnapStep) int {
+		if st.BeadID == ws.NowStep {
+			return 0
+		}
+		if st.Status != "closed" && (st.Working || st.Broken || st.Waiting != "" || st.State == "needs-user") {
+			return 1
+		}
+		if st.Status != "closed" {
+			return 2
+		}
+		return 3
+	}
+	sort.SliceStable(candidates, func(i, j int) bool { return priority(candidates[i]) < priority(candidates[j]) })
+	finished := overviewFinishedTasks(steps, priority)
+	for _, st := range candidates {
+		if len(in.Evidence) >= overviewMaxEvidence-len(finished) {
+			break
+		}
+		add(st.BeadID, st.Title, overviewStepRecord(st, parentOf[st.BeadID], known))
+	}
+	for _, f := range finished {
+		add(f.task.BeadID, f.task.Title, map[string]any{"kind": "finished Operator task", "title": f.task.Title, "part_of": f.parent, "outcome": f.task.CloseReason})
+	}
+	return in, true
+}
+
+const (
+	overviewMaxEvidence = 48
+	// overviewMaxFinished bounds the finished Operator tasks the reader sees: their
+	// close reasons are often the only record of what a step's work found.
+	overviewMaxFinished = 12
+)
+
+type overviewBead struct {
+	title string
+	done  bool // closed, parked or superseded: no longer something to wait for
+}
+
+type overviewFinished struct {
+	task   livedata.SnapStep
+	parent string
+	rank   int
+	order  int
+}
+
+// overviewFinishedTasks picks the latest finished Operator tasks that say what they
+// ended with: those under the live steps first, then the most recent in plan order.
+func overviewFinishedTasks(steps []livedata.SnapStep, priority func(livedata.SnapStep) int) []overviewFinished {
+	var out []overviewFinished
+	var walk func([]livedata.SnapStep, *livedata.SnapStep)
+	walk = func(list []livedata.SnapStep, parent *livedata.SnapStep) {
+		for _, st := range list {
+			if st.Superseded {
+				continue
+			}
+			if st.Task && st.Status == "closed" && strings.TrimSpace(st.CloseReason) != "" {
+				f := overviewFinished{task: st, rank: 3, order: len(out)}
+				if parent != nil {
+					f.parent, f.rank = parent.Title, priority(*parent)
+				}
+				out = append(out, f)
+			}
+			// Tasks under a closed step are folded off the board; the step carries the latest.
+			for i := len(st.FinishedTasks) - 1; i >= 0; i-- {
+				t := st.FinishedTasks[i]
+				out = append(out, overviewFinished{task: livedata.SnapStep{BeadID: t.BeadID, Title: t.Title, CloseReason: t.Outcome}, parent: st.Title, rank: priority(st), order: len(out)})
+			}
+			walk(st.Children, &st)
+		}
+	}
+	walk(steps, nil)
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].rank != out[j].rank {
+			return out[i].rank < out[j].rank
+		}
+		return out[i].order > out[j].order
+	})
+	if len(out) > overviewMaxFinished {
+		out = out[:overviewMaxFinished]
+	}
+	return out
+}
+
+// overviewMessages reads a bounded tail, never tool payloads or credential files.
+func overviewMessages(home, role, track string) []overview.Evidence {
+	if !chat.ValidRole(role) {
+		return nil
+	}
+	f, err := os.Open(filepath.Join(home, "chat", role+".jsonl"))
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+	stat, err := f.Stat()
+	if err != nil {
+		return nil
+	}
+	start := stat.Size() - 256<<10
+	if start < 0 {
+		start = 0
+	}
+	if _, err = f.Seek(start, io.SeekStart); err != nil {
+		return nil
+	}
+	b, _ := io.ReadAll(io.LimitReader(f, 256<<10))
+	lines := strings.Split(string(b), "\n")
+	if start > 0 && len(lines) > 0 {
+		lines = lines[1:]
+	}
+	var out []overview.Evidence
+	for _, line := range lines {
+		var e chat.Event
+		if json.Unmarshal([]byte(line), &e) != nil || e.Kind != chat.KindText || e.ParentToolUseID != "" || strings.TrimSpace(e.Text) == "" {
+			continue
+		}
+		// Track recaps cannot borrow an unrelated track's Manager narrative.
+		if track != "" && !strings.Contains(e.Text, track) {
+			continue
+		}
+		out = append(out, overview.Evidence{ID: fmt.Sprintf("chat:%d", e.Seq), Label: "Manager report (not independently verified)", Text: trimOverview(e.Text, 4000), At: e.Time.UTC().Format("2006-01-02T15:04:05Z")})
+	}
+	if len(out) > 5 {
+		out = out[len(out)-5:]
+	}
+	return out
+}
+
+// overviewStepRecord is what the reader may say about a step. The pull requests, tickets,
+// criteria and the titles of what it waits on are what let the recap say what a named
+// thing is, not only that it exists.
+func overviewStepRecord(st livedata.SnapStep, parent string, known map[string]overviewBead) map[string]any {
+	var after []string
+	others := 0
+	for _, id := range st.BlockedBy {
+		b, ok := known[id]
+		switch {
+		case !ok:
+			others++ // outside this workstream: its state is not in the record
+		case !b.done:
+			after = append(after, b.title)
+		}
+	}
+	rec := map[string]any{"title": st.Title, "state": st.State, "status": st.Status, "note": trimOverview(st.Note, 2000), "waiting": st.Waiting, "working": st.Working, "owner_state": st.OwnerState, "owner_why": st.OwnerWhy, "review": st.ReviewFact, "waits_for": after, "gates": st.Gates}
+	if others > 0 {
+		rec["also_waits_on_beads_outside_this_workstream"] = others
+	}
+	if parent != "" {
+		rec["part_of"] = parent
+	}
+	if st.CloseReason != "" {
+		rec["outcome"] = st.CloseReason
+	}
+	if len(st.PR) > 0 {
+		rec["pull_requests"] = st.PR
+		rec["pull_request_repo"] = st.PRRepo
+	}
+	if len(st.Tickets) > 0 {
+		rec["tickets"] = st.Tickets
+	}
+	if st.Criteria != "" {
+		rec["done_when"] = trimOverview(st.Criteria, 1000)
+	}
+	return rec
+}
+
+func trimOverview(s string, n int) string {
+	r := []rune(s)
+	if len(r) > n {
+		return string(r[:n]) + "…"
+	}
+	return s
+}
+
+func overviewGenerator(opts Options) overview.Generate {
+	if opts.OverviewGenerate != nil {
+		return opts.OverviewGenerate
+	}
+	home := filepath.Dir(opts.ConfigPath)
+	if opts.Chat != nil {
+		home = opts.Chat.Home()
+	}
+	return func(ctx context.Context, in overview.Input) (overview.Recap, error) {
+		return overview.Claude(claudeacct.Env(home, chat.ReadAccount(home, "commander")))(ctx, in)
+	}
+}

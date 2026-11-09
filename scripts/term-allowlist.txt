@@ -1,0 +1,22 @@
+# path:term # reason. Paths may be * for a repository-wide term exception.
+*:github.com/example-user/commander # Module/repository coordinate remains until the fresh-repository stage.
+internal/ownercompat/compat.go:user # Legacy persisted labels and running Manager CLI arguments.
+internal/ownercompat/compat_test.go:user # Compatibility regression cases.
+internal/beads/owner_compat_test.go:user # Compatibility reader regression cases.
+cmd/cmdr/owner_compat_test.go:user # Legacy CLI and label transition regression cases.
+internal/livedata/owner_compat_test.go:user # Legacy gate approver regression cases.
+internal/gates/owner_compat_test.go:user # Legacy verifier migration regression cases.
+install/legacy-launchd.sh:example-user # Upgrade cleanup and preserving the running legacy tmux keeper.
+cmd/cmdr/legacy_launchd.go:example-user # Reader for already-installed service identities and UI upgrade cleanup.
+app/electron/legacy-launchd.ts:example-user # Fallback reader for already-installed daemon identity.
+app/src/renderer/src/ownerCompat.ts:user # Snapshot reader for daemons not yet upgraded.
+app/src/renderer/src/flow.ts:user # Legacy reader: beads written before the rename carry the old verifier/approver alias.
+app/test/flow.test.ts:user # One deliberate legacy-alias regression case.
+app/test/owner-compat.test.ts:user # Snapshot compatibility regression and free-text preservation.
+tests/evals/scenarios/user-state-options.json:user # Negative assertion: public help must not advertise legacy vocabulary.
+install/legacy_launchd_test.go:example-user # Upgrade regression: remove old login entries without stopping the keeper.
+app/src/features/decisions/INTEGRATION.md:/home/[A-Za-z0-9_.][A-Za-z0-9._-]* # "Arrows/j k/Home/End" key list, matched case-insensitively.
+scripts/cockpit-test_test.sh:/home/[A-Za-z0-9_.][A-Za-z0-9._-]* # Isolated test dir named home, not a user path.
+app/test/fixtures/home/api-token:/home/[A-Za-z0-9_.][A-Za-z0-9._-]* # Fixture directory named home, not a user path.
+app/test/fixtures/home/api-url:/home/[A-Za-z0-9_.][A-Za-z0-9._-]* # Fixture directory named home, not a user path.
+internal/notify/notify_test.go:[A-Za-z]:\\{1,2}Users\\{1,2}[A-Za-z0-9_.][A-Za-z0-9._-]* # Generic drive-letter placeholder user in escaping test.

@@ -1,0 +1,8 @@
+{
+  "project": "sample",
+  "root": "sample-rollout",
+  "gate": "sample-rollout-approval",
+  "decision": {"question":"Continue registered jobs?","context":" \tRun the next registered wave, then remaining registered jobs. Preserve existing limits. Extra jobs require their later approval.\n ","options":[{"label":"Continue","approves":true}]},
+  "answer_id": "fixture-original-answer",
+  "action_contains": ["dry run leaves closed gate unchanged", "exact retained context restored", "same context is idempotent", "different context refuses", "answer history unchanged"]
+}

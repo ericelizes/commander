@@ -1,0 +1,21 @@
+{
+  "goal": "A workstream dragged back under another gives up its registration. Its stopped Manager gets no notice it could never take, so health has nothing to report; a live or terminal-held one still hears, as does one cmdrd cannot read, and the new owner always does.",
+  "project": "example",
+  "args": ["internal-place", "--project", "example", "--bead", "demo-flow.2", "--parent", "demo-flow"],
+  "before": {
+    "demo-flow": {"status": "open", "labels": ["kind:objective", "kind:workstream"]},
+    "demo-flow.2": {"status": "open", "labels": ["kind:objective", "kind:workstream"]}
+  },
+  "after": {
+    "demo-flow.2": {"status": "open", "labels": ["kind:objective", "kind:workstream"], "parent": "demo-flow"}
+  },
+  "old_role": "manager-demo-flow.2",
+  "new_role": "manager-demo-flow",
+  "cases": [
+    {"name": "stopped Manager", "chat": {"role": "manager-demo-flow.2", "running": false}, "told": ["manager-demo-flow"]},
+    {"name": "live Manager", "chat": {"role": "manager-demo-flow.2", "running": true}, "told": ["manager-demo-flow.2", "manager-demo-flow"]},
+    {"name": "terminal-held Manager", "chat": {"role": "manager-demo-flow.2", "owned_by": "terminal"}, "told": ["manager-demo-flow.2", "manager-demo-flow"]},
+    {"name": "owner unknown", "chat": {"role": "manager-demo-flow.2", "owner_unknown": true}, "told": ["manager-demo-flow.2", "manager-demo-flow"]},
+    {"name": "answer names no chat", "chat": {}, "told": ["manager-demo-flow.2", "manager-demo-flow"]}
+  ]
+}

@@ -1,0 +1,137 @@
+{
+ "p:w": {
+  "current": "w.9.4",
+  "steps": [
+   {
+    "id": "w.0",
+    "title": "Workflow approved",
+    "kind": "done",
+    "text": "Done",
+    "gate": true,
+    "who": "you"
+   },
+   {
+    "id": "w.1",
+    "title": "Build the checkout",
+    "kind": "done",
+    "text": "Done"
+   },
+   {
+    "id": "w.2",
+    "title": "PR merged",
+    "kind": "idle",
+    "text": "Not reached",
+    "gate": true,
+    "who": "you"
+   },
+   {
+    "id": "w.9",
+    "title": "Review gate",
+    "kind": "working",
+    "text": "Working on adversarial review by a different reviewer",
+    "current": "w.9.4",
+    "children": [
+     {
+      "id": "w.9.1",
+      "title": "Answer and resolve every Devin comment",
+      "kind": "done",
+      "text": "Done"
+     },
+     {
+      "id": "w.9.2",
+      "title": "Run the code review",
+      "kind": "done",
+      "text": "Done"
+     },
+     {
+      "id": "w.9.3",
+      "title": "Fix the review findings and get a clean recheck",
+      "kind": "done",
+      "text": "Done"
+     },
+     {
+      "id": "w.9.4",
+      "title": "Adversarial review by a different reviewer",
+      "kind": "working",
+      "text": "Operator working"
+     },
+     {
+      "id": "w.9.5",
+      "title": "Fix the adversarial findings and get a clean recheck",
+      "kind": "idle",
+      "text": "Not started"
+     },
+     {
+      "id": "w.9.6",
+      "title": "Final check on the current PR head",
+      "kind": "idle",
+      "text": "Not started"
+     }
+    ],
+    "review": {
+     "template": "pr-review",
+     "pr": "https://github.com/o/r/pull/1234",
+     "head": "head1",
+     "done": 3,
+     "total": 6,
+     "checks": [
+      {
+       "id": "w.9.1",
+       "step": "devin-comments",
+       "title": "Answer and resolve every Devin comment",
+       "kind": "done",
+       "text": "Done",
+       "verifier": "devin-comments-resolved",
+       "head": "head1",
+       "finding": "devin-comments-resolved passed"
+      },
+      {
+       "id": "w.9.2",
+       "step": "review",
+       "title": "Run the code review",
+       "kind": "done",
+       "text": "Done",
+       "verifier": "review-clean",
+       "head": "head1",
+       "finding": "review-clean passed"
+      },
+      {
+       "id": "w.9.3",
+       "step": "fix-review",
+       "title": "Fix the review findings and get a clean recheck",
+       "kind": "done",
+       "text": "Done",
+       "verifier": "recheck-clean",
+       "head": "head1",
+       "finding": "recheck-clean passed"
+      },
+      {
+       "id": "w.9.4",
+       "step": "adversarial-review",
+       "title": "Adversarial review by a different reviewer",
+       "kind": "working",
+       "text": "Operator working",
+       "verifier": "review-clean"
+      },
+      {
+       "id": "w.9.5",
+       "step": "fix-adversarial",
+       "title": "Fix the adversarial findings and get a clean recheck",
+       "kind": "idle",
+       "text": "Not started",
+       "verifier": "recheck-clean"
+      },
+      {
+       "id": "w.9.6",
+       "step": "final-check",
+       "title": "Final check on the current PR head",
+       "kind": "idle",
+       "text": "Not started",
+       "verifier": "head-current"
+      }
+     ]
+    }
+   }
+  ]
+ }
+}

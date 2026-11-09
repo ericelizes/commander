@@ -1,0 +1,7 @@
+{
+  "profiles": [
+    {"name":"default","email":"one@example.test","uuid":"one","duplicate":""},
+    {"name":"second","email":"one@example.test","uuid":"one","duplicate":"default"},
+    {"name":"spare","email":"two@example.test","uuid":"two","duplicate":""}
+  ]
+}

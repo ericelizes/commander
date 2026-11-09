@@ -1,0 +1,7 @@
+# Copy to ~/.commander/local.toml (or $COMMANDER_HOME/local.toml).
+# Optional, installation-specific settings. Never put credentials here.
+[integrations.linear]
+workspace = "acme"
+
+# Board times (config.toml, not this file): [user]
+# timezone = "America/New_York"

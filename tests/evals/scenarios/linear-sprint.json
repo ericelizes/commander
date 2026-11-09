@@ -1,0 +1,10 @@
+{
+  "steps": [
+    {"key": false, "status": 200, "expected": "no_key", "calls": 0, "issues": 0},
+    {"key": true, "status": 200, "expected": "ok", "calls": 1, "issues": 1},
+    {"key": true, "status": 401, "expected": "ok", "calls": 1, "issues": 1},
+    {"key": true, "advance": true, "status": 401, "expected": "bad_key", "calls": 2, "issues": 1},
+    {"key": true, "advance": true, "status": 503, "expected": "unreachable", "calls": 3, "issues": 1},
+    {"key": true, "advance": true, "status": 200, "expected": "ok", "calls": 4, "issues": 1}
+  ]
+}

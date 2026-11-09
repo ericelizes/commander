@@ -1,0 +1,575 @@
+{
+ "now": 1793000000,
+ "snapshot": {
+  "version": 1,
+  "generated_at": "2026-10-26T12:00:00Z",
+  "projects": [
+   {
+    "id": 1,
+    "name": "example-app",
+    "type": "code",
+    "path": "/work/example-app",
+    "status": "active"
+   },
+   {
+    "id": 2,
+    "name": "example-docs",
+    "type": "knowledge",
+    "path": "/work/example-docs",
+    "status": "active"
+   }
+  ],
+  "workstreams": [
+   {
+    "n": 1,
+    "project": "example-app",
+    "project_id": 1,
+    "bead_id": "app-a",
+    "title": "Cleanup",
+    "state": "in-progress",
+    "status": "in_progress",
+    "owner": "manager-app-a",
+    "manager_role": "manager-app-a",
+    "done": 3,
+    "total": 3,
+    "steps": [
+     {
+      "bead_id": "app-a.1",
+      "title": "Finished cleanup 1",
+      "state": "done",
+      "status": "closed",
+      "viz": 2,
+      "track": true,
+      "workstream": "app-a",
+      "children": []
+     },
+     {
+      "bead_id": "app-a.2",
+      "title": "Finished cleanup 2",
+      "state": "done",
+      "status": "closed",
+      "viz": 2,
+      "track": true,
+      "workstream": "app-a",
+      "children": []
+     },
+     {
+      "bead_id": "app-a.3",
+      "title": "Finished cleanup 3",
+      "state": "done",
+      "status": "closed",
+      "viz": 2,
+      "track": true,
+      "workstream": "app-a",
+      "children": []
+     }
+    ],
+    "no_gates": true
+   },
+   {
+    "n": 2,
+    "project": "example-app",
+    "project_id": 1,
+    "bead_id": "app-b",
+    "title": "Importer",
+    "state": "in-progress",
+    "status": "in_progress",
+    "owner": "manager-app-b",
+    "manager_role": "manager-app-b",
+    "done": 1,
+    "total": 4,
+    "steps": [
+     {
+      "bead_id": "app-b.1",
+      "title": "Write the importer",
+      "state": "done",
+      "status": "closed",
+      "viz": 3,
+      "owner": "manager-app-b"
+     },
+     {
+      "bead_id": "app-b.2",
+      "title": "Importer PR in review",
+      "state": "in-progress",
+      "status": "in_progress",
+      "viz": 3,
+      "owner": "manager-app-b",
+      "review": "101",
+      "waiting": "review (reviewer-a)",
+      "waiting_since": 1792992800,
+      "blocked_by": [
+       "app-b.1"
+      ]
+     },
+     {
+      "bead_id": "app-b.3",
+      "title": "Reviewers signed off on the importer PR",
+      "state": "not-started",
+      "status": "open",
+      "viz": 1,
+      "gate": true,
+      "approvers": [
+       "manager-app-b"
+      ],
+      "criteria": "The change is checked",
+      "review": "101",
+      "waiting": "review (reviewer-a, reviewer-b)",
+      "waiting_since": 1792992800,
+      "blocked_by": [
+       "app-b.2"
+      ]
+     },
+     {
+      "bead_id": "app-b.4",
+      "title": "Importer enabled for everyone",
+      "state": "not-started",
+      "status": "open",
+      "viz": 1,
+      "gate": true,
+      "approvers": [
+       "you"
+      ],
+      "criteria": "The change is checked",
+      "blocked_by": [
+       "app-b.3"
+      ]
+     },
+     {
+      "bead_id": "app-b.5",
+      "title": "Importer docs PR",
+      "state": "in-progress",
+      "status": "in_progress",
+      "viz": 3,
+      "owner": "manager-app-b",
+      "review": "102",
+      "waiting": "review (reviewer-a)",
+      "waiting_since": 1792996400
+     },
+     {
+      "bead_id": "app-b.6",
+      "title": "Cleared by hand",
+      "state": "done",
+      "status": "closed",
+      "viz": 3,
+      "owner": "user"
+     }
+    ]
+   },
+   {
+    "n": 3,
+    "project": "example-app",
+    "project_id": 1,
+    "bead_id": "app-c",
+    "title": "Login cleanup",
+    "state": "in-progress",
+    "status": "in_progress",
+    "owner": "manager-app-c",
+    "manager_role": "manager-app-c",
+    "done": 2,
+    "total": 5,
+    "steps": [
+     {
+      "bead_id": "app-c.1",
+      "title": "Shared login page",
+      "state": "in-progress",
+      "status": "in_progress",
+      "viz": 2,
+      "track": true,
+      "workstream": "app-c",
+      "children": [
+       {
+        "bead_id": "app-c.1.1",
+        "title": "Draft the page",
+        "state": "done",
+        "status": "closed",
+        "viz": 3,
+        "owner": "manager-app-c"
+       },
+       {
+        "bead_id": "app-c.1.2",
+        "title": "Pick the wording",
+        "state": "needs-user",
+        "status": "open",
+        "viz": 3,
+        "ask": "Which wording should the page use?",
+        "owner": "user",
+        "blocked_by": [
+         "app-c.1.1"
+        ]
+       }
+      ]
+     },
+     {
+      "bead_id": "app-c.2",
+      "title": "Password reset mail",
+      "state": "in-progress",
+      "status": "in_progress",
+      "viz": 2,
+      "track": true,
+      "workstream": "app-c",
+      "children": [
+       {
+        "bead_id": "app-c.2.1",
+        "title": "Send the new mail",
+        "state": "in-progress",
+        "status": "in_progress",
+        "viz": 3,
+        "owner": "operator-op-mail-app-c.2.1",
+        "owner_state": "working",
+        "working": true
+       },
+       {
+        "bead_id": "app-c.2.2",
+        "title": "Remove the old mail",
+        "state": "not-started",
+        "status": "open",
+        "viz": 3,
+        "blocked_by": [
+         "app-c.2.1"
+        ]
+       }
+      ]
+     },
+     {
+      "bead_id": "app-c.3",
+      "title": "Session timeout",
+      "state": "in-progress",
+      "status": "in_progress",
+      "viz": 2,
+      "track": true,
+      "workstream": "app-c",
+      "children": [
+       {
+        "bead_id": "app-c.3.1",
+        "title": "Use the shared page",
+        "state": "not-started",
+        "status": "open",
+        "viz": 3,
+        "blocked_by": [
+         "app-c.3.2"
+        ],
+        "owner": "manager-app-c"
+       },
+       {
+        "bead_id": "app-c.3.2",
+        "title": "Link the shared page",
+        "state": "not-started",
+        "status": "open",
+        "viz": 3,
+        "blocked_by": [
+         "app-c.1.2"
+        ],
+        "owner": "manager-app-c"
+       }
+      ],
+      "blocked_by": [
+       "app-c.1"
+      ]
+     },
+     {
+      "bead_id": "app-c.4",
+      "title": "Old login removal",
+      "state": "done",
+      "status": "closed",
+      "viz": 2,
+      "track": true,
+      "workstream": "app-c",
+      "children": [
+       {
+        "bead_id": "app-c.4.1",
+        "title": "Delete the old route",
+        "state": "done",
+        "status": "closed",
+        "viz": 3,
+        "owner": "manager-app-c"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "n": 4,
+    "project": "example-app",
+    "project_id": 1,
+    "bead_id": "app-d",
+    "title": "Table migration",
+    "state": "in-progress",
+    "status": "in_progress",
+    "owner": "manager-app-d",
+    "manager_role": "manager-app-d",
+    "done": 3,
+    "total": 7,
+    "steps": [
+     {
+      "bead_id": "app-d.1",
+      "title": "Migrate the schema",
+      "state": "done",
+      "status": "closed",
+      "viz": 3,
+      "owner": "manager-app-d",
+      "blocked_by": [
+       "app-d.2"
+      ]
+     },
+     {
+      "bead_id": "app-d.2",
+      "title": "Back up the table",
+      "state": "in-progress",
+      "status": "in_progress",
+      "viz": 3,
+      "owner": "operator-op-backup-app-d.2",
+      "owner_state": "working",
+      "working": true
+     },
+     {
+      "bead_id": "app-d.3",
+      "title": "Copy the rows",
+      "state": "in-progress",
+      "status": "in_progress",
+      "viz": 3,
+      "owner": "manager-app-d",
+      "blocked_by": [
+       "app-d.2"
+      ]
+     },
+     {
+      "bead_id": "app-d.4",
+      "title": "Confirm the row count",
+      "state": "needs-user",
+      "status": "open",
+      "viz": 3,
+      "owner": "user",
+      "ask": "Is the row count acceptable?",
+      "blocked_by": [
+       "app-d.3"
+      ]
+     },
+     {
+      "bead_id": "app-d.5",
+      "title": "Copy approved",
+      "state": "not-started",
+      "status": "open",
+      "viz": 1,
+      "gate": true,
+      "approvers": [
+       "you"
+      ],
+      "criteria": "The change is checked",
+      "blocked_by": [
+       "app-d.4"
+      ]
+     },
+     {
+      "bead_id": "app-d.6",
+      "title": "Copy approved",
+      "state": "done",
+      "status": "closed",
+      "viz": 1,
+      "gate": true,
+      "approvers": [
+       "you"
+      ],
+      "criteria": "The change is checked"
+     },
+     {
+      "bead_id": "app-d.7",
+      "title": "Copy approved",
+      "state": "done",
+      "status": "closed",
+      "viz": 1,
+      "gate": true,
+      "approvers": [
+       "you"
+      ],
+      "criteria": "The change is checked"
+     },
+     {
+      "bead_id": "app-d.8",
+      "title": "Earlier copy approved",
+      "state": "done",
+      "status": "closed",
+      "viz": 1,
+      "gate": true,
+      "approvers": [
+       "you"
+      ],
+      "criteria": "The change is checked"
+     },
+     {
+      "bead_id": "app-d.9",
+      "title": "Earlier copy approved",
+      "state": "done",
+      "status": "closed",
+      "viz": 1,
+      "gate": true,
+      "approvers": [
+       "you"
+      ],
+      "criteria": "The change is checked"
+     }
+    ]
+   }
+  ],
+  "needs_you": [
+   {
+    "project": "example-app",
+    "bead_id": "app-c.1.2",
+    "title": "Pick the wording",
+    "workstream": "Login cleanup",
+    "rank": 3,
+    "ask": "Which wording should the page use?",
+    "decision": {
+     "question": "Which wording should the page use?",
+     "context": "A short summary of the choice.",
+     "options": [
+      {
+       "label": "Approve",
+       "implications": "The work starts.",
+       "recommended": true,
+       "approves": true
+      },
+      {
+       "label": "Change",
+       "implications": "The Manager reworks it."
+      }
+     ]
+    },
+    "since": 1792740800,
+    "track": "Shared login page",
+    "track_id": "app-c.1"
+   },
+   {
+    "project": "example-app",
+    "bead_id": "app-b.4",
+    "title": "Importer enabled for everyone",
+    "workstream": "Importer",
+    "rank": 2,
+    "ask": "Enable the importer for everyone?",
+    "decision": {
+     "question": "Enable the importer for everyone?",
+     "context": "A short summary of the choice.",
+     "options": [
+      {
+       "label": "Approve",
+       "implications": "The work starts.",
+       "recommended": true,
+       "approves": true
+      },
+      {
+       "label": "Change",
+       "implications": "The Manager reworks it."
+      }
+     ]
+    },
+    "since": 1792827200
+   },
+   {
+    "project": "example-app",
+    "bead_id": "app-d.4",
+    "title": "Confirm the row count",
+    "workstream": "Table migration",
+    "rank": 4,
+    "ask": "Is the row count acceptable?",
+    "decision": {
+     "question": "Is the row count acceptable?",
+     "context": "A short summary of the choice.",
+     "options": [
+      {
+       "label": "Approve",
+       "implications": "The work starts.",
+       "recommended": true,
+       "approves": true
+      },
+      {
+       "label": "Change",
+       "implications": "The Manager reworks it."
+      }
+     ]
+    },
+    "since": 1792997600
+   }
+  ],
+  "agents": {
+   "commander": {
+    "state": "idle",
+    "since": 1792999880
+   },
+   "manager-app-a": {
+    "state": "idle",
+    "since": 1792913600
+   },
+   "manager-app-b": {
+    "state": "idle",
+    "since": 1792992800,
+    "wait": "review (reviewer-a)"
+   },
+   "manager-app-c": {
+    "state": "working",
+    "since": 1792999700
+   },
+   "manager-app-d": {
+    "state": "idle",
+    "since": 1792997600
+   }
+  },
+  "fleet": {
+   "cost_usd_24h": 2.5,
+   "cost_usd_7d": 10,
+   "cost_series_24h": [
+    0,
+    1,
+    1.5
+   ],
+   "agents": 3,
+   "active": 2,
+   "blocked": 0,
+   "idle_ratio": 0,
+   "projects": 2,
+   "chat_cost_usd_24h": 1,
+   "roles_cost": [
+    {
+     "role": "commander",
+     "today_usd": 1,
+     "session_usd": 2,
+     "total_usd": 3,
+     "input_tokens": 100,
+     "output_tokens": 200
+    }
+   ]
+  },
+  "unread": {
+   "commander": 3,
+   "manager-app-b": 1
+  },
+  "watch": {
+   "manager-app-c": {
+    "checked_at": 1792999980,
+    "operators": [
+     {
+      "role": "operator-op-mail-app-c.2.1",
+      "bead_id": "app-c.2.1",
+      "active_at": 1792999970,
+      "since": 1792999700
+     }
+    ]
+   },
+   "manager-app-d": {
+    "checked_at": 1792999980,
+    "operators": [
+     {
+      "role": "operator-op-backup-app-d.2",
+      "bead_id": "app-d.2",
+      "active_at": 1792999970,
+      "since": 1792999700
+     }
+    ]
+   }
+  },
+  "live": {
+   "operators": [
+    "operator-op-mail-app-c.2.1",
+    "operator-op-backup-app-d.2"
+   ]
+  }
+ }
+}

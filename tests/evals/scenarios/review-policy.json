@@ -1,0 +1,58 @@
+{
+  "cases": [
+    {
+      "name": "seven-line CI timeout delta retains bounded independent challenge",
+      "patch": "diff --git a/.github/workflows/quality.yml b/.github/workflows/quality.yml\n-    run: pytest tests/ --timeout=120\n+    run: pytest tests/ --timeout=180\ndiff --git a/docs/ci-v2.md b/docs/ci-v2.md\n-Tests have a 120 second budget.\n-The previous value was too short.\n+Tests have a 180 second budget.\n+The runner has extra headroom.\n+Keep this value aligned with CI.\n",
+      "depth": "focused",
+      "files": [
+        {
+          "path": ".github/workflows/quality.yml",
+          "added": 1,
+          "deleted": 1
+        },
+        {
+          "path": "docs/ci-v2.md",
+          "added": 3,
+          "deleted": 2
+        }
+      ]
+    },
+    {
+      "name": "one-line auth bypass remains full",
+      "path": "internal/auth/login.go",
+      "added": 1,
+      "patch": "+return true",
+      "depth": "full"
+    },
+    {
+      "name": "innocent path with data loss remains full",
+      "path": "internal/helper.go",
+      "added": 1,
+      "patch": "+db.Exec(\"DROP TABLE records\")",
+      "depth": "full"
+    },
+    {
+      "name": "CI timeout edit cannot smuggle command change",
+      "path": ".github/workflows/quality.yml",
+      "added": 1,
+      "deleted": 1,
+      "patch": "diff --git a/.github/workflows/quality.yml b/.github/workflows/quality.yml\n-    run: pytest tests/ --timeout=120\n+    run: pytest tests/ --timeout=180 --ignore=tests/auth\n",
+      "depth": "full"
+    },
+    {
+      "name": "user explicitly requests full for docs",
+      "path": "docs/guide.md",
+      "added": 1,
+      "patch": "+Read this guide.",
+      "full": true,
+      "depth": "full"
+    },
+    {
+      "name": "broad otherwise harmless scope remains full",
+      "path": "internal/display.go",
+      "added": 201,
+      "patch": "+render()",
+      "depth": "full"
+    }
+  ]
+}

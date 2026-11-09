@@ -1,0 +1,341 @@
+{
+ "now": 1793214000,
+ "snapshot": {
+  "version": 1,
+  "generated_at": "2026-11-05T07:06:50Z",
+  "projects": [
+   {
+    "id": 1,
+    "name": "app",
+    "type": "code",
+    "path": "/tmp/app",
+    "status": "active"
+   }
+  ],
+  "live": {
+   "operators": [
+    "operator-op-live-app-w2-2"
+   ],
+   "reported": [
+    {
+     "operator": "operator-op-done-app-w1-1",
+     "project_id": 1,
+     "bead": "app-w1.1",
+     "since": 1793213980
+    },
+    {
+     "operator": "operator-op-done-app-w2-1",
+     "project_id": 1,
+     "bead": "app-w2.1",
+     "since": 1793213980
+    },
+    {
+     "operator": "operator-op-late-app-w4-1",
+     "project_id": 1,
+     "bead": "app-w4.1",
+     "since": 1793210300
+    },
+    {
+     "operator": "operator-op-done-app-w5-1",
+     "project_id": 1,
+     "bead": "app-w5.1",
+     "since": 1793213980
+    },
+    {
+     "operator": "operator-op-done-app-w6-1",
+     "project_id": 1,
+     "bead": "app-w6.1",
+     "since": 1793213980
+    },
+    {
+     "operator": "operator-op-old-app-w7-1",
+     "project_id": 1,
+     "bead": "app-w7.1",
+     "since": 1793213980
+    },
+    {
+     "operator": "operator-op-done-app-w-8-1",
+     "project_id": 1,
+     "bead": "app-w.8.1",
+     "since": 1793213980
+    },
+    {
+     "operator": "operator-op-left-app-w9-1",
+     "project_id": 1,
+     "bead": "app-w9.1",
+     "since": 1793213980
+    }
+   ]
+  },
+  "agents": {
+   "manager-app-w1": {
+    "state": "idle"
+   },
+   "manager-app-w2": {
+    "state": "idle"
+   },
+   "manager-app-w3": {
+    "state": "idle"
+   },
+   "manager-app-w4": {
+    "state": "idle"
+   },
+   "manager-app-w5": {
+    "state": "idle"
+   },
+   "manager-app-w6": {
+    "state": "idle"
+   },
+   "manager-app-w7": {
+    "state": "idle"
+   },
+   "manager-app-w.8": {
+    "state": "idle"
+   },
+   "manager-app-w9": {
+    "state": "idle"
+   }
+  },
+  "unread": {},
+  "fleet": {},
+  "needs_you": [],
+  "watch": {},
+  "workstreams": [
+   {
+    "n": 1,
+    "project": "app",
+    "project_id": 1,
+    "bead_id": "app-w1",
+    "title": "Report in, Manager idle",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-app-w1",
+    "done": 0,
+    "total": 1,
+    "steps": [
+     {
+      "bead_id": "app-w1.1",
+      "title": "Measure the job queue",
+      "state": "in-progress",
+      "status": "in_progress",
+      "owner": "operator-op-done-app-w1-1",
+      "owner_state": "working",
+      "viz": 3,
+      "broken": true
+     }
+    ]
+   },
+   {
+    "n": 2,
+    "project": "app",
+    "project_id": 1,
+    "bead_id": "app-w2",
+    "title": "Report in beside live work",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-app-w2",
+    "done": 0,
+    "total": 2,
+    "steps": [
+     {
+      "bead_id": "app-w2.1",
+      "title": "Fix the retry budget",
+      "state": "in-progress",
+      "status": "in_progress",
+      "owner": "operator-op-done-app-w2-1",
+      "owner_state": "working",
+      "viz": 3,
+      "broken": true
+     },
+     {
+      "bead_id": "app-w2.2",
+      "title": "Build the next wave",
+      "state": "in-progress",
+      "status": "in_progress",
+      "owner": "operator-op-live-app-w2-2",
+      "owner_state": "working",
+      "viz": 3
+     }
+    ]
+   },
+   {
+    "n": 3,
+    "project": "app",
+    "project_id": 1,
+    "bead_id": "app-w3",
+    "title": "Stopped with no report",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-app-w3",
+    "done": 0,
+    "total": 1,
+    "steps": [
+     {
+      "bead_id": "app-w3.1",
+      "title": "Trace the slow query",
+      "state": "in-progress",
+      "status": "in_progress",
+      "owner": "operator-op-gone-app-w3-1",
+      "owner_state": "working",
+      "viz": 3,
+      "broken": true
+     }
+    ]
+   },
+   {
+    "n": 4,
+    "project": "app",
+    "project_id": 1,
+    "bead_id": "app-w4",
+    "title": "Report in, timer run out",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-app-w4",
+    "done": 0,
+    "total": 1,
+    "steps": [
+     {
+      "bead_id": "app-w4.1",
+      "title": "Tidy the deploy scripts",
+      "state": "in-progress",
+      "status": "in_progress",
+      "owner": "operator-op-late-app-w4-1",
+      "owner_state": "working",
+      "viz": 3,
+      "broken": true
+     }
+    ]
+   },
+   {
+    "n": 5,
+    "project": "app",
+    "project_id": 1,
+    "bead_id": "app-w5",
+    "title": "Report in beside a step nothing holds",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-app-w5",
+    "done": 0,
+    "total": 2,
+    "steps": [
+     {
+      "bead_id": "app-w5.1",
+      "title": "Write the runbook",
+      "state": "in-progress",
+      "status": "in_progress",
+      "owner": "operator-op-done-app-w5-1",
+      "owner_state": "working",
+      "viz": 3,
+      "broken": true
+     },
+     {
+      "bead_id": "app-w5.2",
+      "title": "Rotate the staging keys",
+      "state": "not-started",
+      "status": "open",
+      "owner": "",
+      "owner_state": "",
+      "viz": 3,
+      "broken": true
+     }
+    ]
+   },
+   {
+    "n": 6,
+    "project": "app",
+    "project_id": 1,
+    "bead_id": "app-w6",
+    "title": "Settle half written",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-app-w6",
+    "done": 0,
+    "total": 1,
+    "steps": [
+     {
+      "bead_id": "app-w6.1",
+      "title": "Check the export",
+      "state": "review",
+      "status": "in_progress",
+      "owner": "manager-app-w6",
+      "owner_state": "",
+      "viz": 3,
+      "broken": true
+     }
+    ]
+   },
+   {
+    "n": 7,
+    "project": "app",
+    "project_id": 1,
+    "bead_id": "app-w7",
+    "title": "Another Operator claimed it since",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-app-w7",
+    "done": 0,
+    "total": 1,
+    "steps": [
+     {
+      "bead_id": "app-w7.1",
+      "title": "Split the worker",
+      "state": "in-progress",
+      "status": "in_progress",
+      "owner": "operator-op-new-app-w7-1",
+      "owner_state": "working",
+      "viz": 3,
+      "broken": true
+     }
+    ]
+   },
+   {
+    "n": 8,
+    "project": "app",
+    "project_id": 1,
+    "bead_id": "app-w.8",
+    "title": "Settle half written, promoted step",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-app-w.8",
+    "done": 0,
+    "total": 1,
+    "steps": [
+     {
+      "bead_id": "app-w.8.1",
+      "title": "Check the import",
+      "state": "review",
+      "status": "in_progress",
+      "owner": "manager-app-w-8",
+      "owner_state": "",
+      "viz": 3,
+      "broken": true
+     }
+    ]
+   },
+   {
+    "n": 9,
+    "project": "app",
+    "project_id": 1,
+    "bead_id": "app-w9",
+    "title": "Left over report, step reopened",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-app-w9",
+    "done": 0,
+    "total": 1,
+    "steps": [
+     {
+      "bead_id": "app-w9.1",
+      "title": "Retry the upload",
+      "state": "",
+      "status": "open",
+      "owner": "",
+      "owner_state": "",
+      "viz": 3,
+      "broken": true
+     }
+    ]
+   }
+  ]
+ }
+}

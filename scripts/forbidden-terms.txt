@@ -1,0 +1,8 @@
+# Terms the repo should not contain (read by scripts/term-inventory.sh).
+# One term per line, matched as a whole word, case-insensitive. Blank lines and # are ignored.
+# Prefix a line with "cs:" to match case-sensitively, "sub:" to match as a substring, "re:" for an extended regex.
+# Personal and company terms are not listed here (the list would itself leak them): keep them in a private
+# file outside the repo and run `scripts/term-inventory.sh --check --terms /path/to/private-terms.txt`.
+re:/Users/[A-Za-z0-9_.][A-Za-z0-9._-]*
+re:/home/[A-Za-z0-9_.][A-Za-z0-9._-]*
+re:[A-Za-z]:\\{1,2}Users\\{1,2}[A-Za-z0-9_.][A-Za-z0-9._-]*

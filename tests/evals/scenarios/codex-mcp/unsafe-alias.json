@@ -1,0 +1,14 @@
+{
+  "aliases": [
+    "browser.alias",
+    "browser alias",
+    "browser\"alias",
+    "br\u00f6wser",
+    "browser\\alias",
+    ""
+  ],
+  "selected": [
+    "",
+    "safe-browser"
+  ]
+}

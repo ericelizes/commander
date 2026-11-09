@@ -1,0 +1,41 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>xterm bridge spike</title>
+<link rel="stylesheet" href="/xterm.css">
+<style>html,body,#t{margin:0;height:100%;background:#1e1e2e}</style>
+</head>
+<body>
+<div id="t"></div>
+<script src="/xterm.js"></script>
+<script src="/addon-fit.js"></script>
+<script>
+const q = new URLSearchParams(location.search)
+const term = new Terminal({ fontFamily: 'Menlo, monospace', fontSize: 13, scrollback: 0,
+  theme: { background: '#1e1e2e', foreground: '#cdd6f4' } })
+const fit = new FitAddon.FitAddon()
+term.loadAddon(fit)
+term.open(document.getElementById('t'))
+fit.fit()
+q.set('cols', term.cols); q.set('rows', term.rows)
+const ws = new WebSocket(`ws://${location.host}/pty?${q}`)
+ws.onmessage = (e) => term.write(e.data)
+ws.onclose = () => term.write('\r\n[disconnected]\r\n')
+// tmux queries the terminal on attach; xterm.js answers DA1/DA2/OSC 10/11 but
+// not XTVERSION (CSI > q) or the colour-scheme report (CSI ? 996 n). While a
+// query is unanswered tmux holds every lone Esc ~500ms (it can't tell a key
+// from the start of a reply), which makes Esc (Claude's interrupt) laggy.
+if (q.get('noreply') !== '1') {
+  const reply = (s) => ws.readyState === 1 && ws.send(JSON.stringify({ t: 'i', d: s }))
+  term.parser.registerCsiHandler({ prefix: '>', final: 'q' }, () => { reply('\x1bP>|xterm.js\x1b\\'); return true })
+  term.parser.registerCsiHandler({ prefix: '?', final: 'n' }, (p) => { if (p[0] === 996) { reply('\x1b[?997;1n'); return true } return false })
+}
+term.onData((d) => ws.readyState === 1 && ws.send(JSON.stringify({ t: 'i', d })))
+term.onResize(({ cols, rows }) => ws.readyState === 1 && ws.send(JSON.stringify({ t: 'r', c: cols, r: rows })))
+addEventListener('resize', () => fit.fit())
+window.__term = term
+window.__ws = ws
+</script>
+</body>
+</html>

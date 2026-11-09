@@ -1,0 +1,23 @@
+#1 Quick merge
+Quick merge (lab-qm)
+  [Reviewers, waiting on reviewer-a (#4116)] [workstream] Orchestrator VM key renews before it expires: Waiting for review · 6 of 7 done (lab-qm.1)
+▶ [Automatic, CI, runs on each push to the PR] [workstream] Preview display names: Waiting for CI · 3 of 4 done (lab-qm.2)
+
+  Orchestrator VM key renews before it expires (lab-qm.1)
+    [You] [gate, you] Workflow approved: Done (lab-qm.1.1)
+    [Operators] Renewal fix written: Done (lab-qm.1.2) after lab-qm.1.1
+    [Operators] Self-review done: Done (lab-qm.1.3) after lab-qm.1.2
+    [Manager] CI green on the renewal PR: Done (lab-qm.1.4) after lab-qm.1.3
+    [Operators] Review comments resolved: Done (lab-qm.1.5) after lab-qm.1.4
+    [Manager] PR mergeable: Done (lab-qm.1.6) after lab-qm.1.5
+  ▶ [Reviewers, waiting on reviewer-a (#4116)] reviewer-a reviews PR #4116: Waiting for review: waiting on reviewer-a (#4116) (lab-qm.1.7#wait) after lab-qm.1.6
+    [You] [gate, you] Greenlight merging the one-line key renewal PR: Not reached (lab-qm.1.7) after lab-qm.1.7#wait
+        passes when: The user says merge once the reviewer approves.
+    [Operators] Key renewal merged to main: Not started (lab-qm.1.8) after lab-qm.1.7
+
+  Preview display names (lab-qm.2)
+    [Operators] Display names built: Done (lab-qm.2.1)
+  ▶ [Automatic, CI, runs on each push to the PR] CI passes on PR #77: Waiting for CI (lab-qm.2.2#wait) after lab-qm.2.1
+    [You] [gate, you] Greenlight merging display names: Not reached (lab-qm.2.2) after lab-qm.2.2#wait
+        passes when: The user says merge.
+    [Operators] Display names merged to main: Not started (lab-qm.2.3) after lab-qm.2.2

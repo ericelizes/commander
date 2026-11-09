@@ -1,0 +1,40 @@
+{
+  "schema": "review-addendum-scenario@v1",
+  "runner": "cmd/cmdr:TestWorkflowAddendumOrdinaryClose",
+  "flow": [
+    "legacy-refuses",
+    "operator-denied",
+    "manager-records",
+    "retained-prose-current-manager-transcription",
+    "ordinary-close-accepts",
+    "typed-clear-with-retained-not-clean-accepts",
+    "typed-finding-refuses-recording",
+    "original-unchanged",
+    "idempotent"
+  ],
+  "refusals": [
+    "stale-head",
+    "stale-base",
+    "stale-binding",
+    "wrong-digest",
+    "unknown-record",
+    "assessor-overlaps-writer",
+    "assessor-overlaps-original",
+    "missing-run",
+    "transcript-tamper",
+    "original-author",
+    "original-time",
+    "assessment-author",
+    "assessment-time",
+    "typed-major-finding",
+    "typed-execution-blocked",
+    "typed-coverage-partial",
+    "later-not-clean"
+  ],
+  "transcription_refusals": [
+    "wrong-source-id",
+    "wrong-source-digest",
+    "unsupported-claim",
+    "author-impersonation"
+  ]
+}

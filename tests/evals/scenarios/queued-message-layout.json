@@ -1,0 +1,9 @@
+{
+  "query": "fixture=chat&ws=1&agent=manager&update=0",
+  "themes": ["dark", "light"],
+  "sizes": [{"width": 1440, "height": 900}, {"width": 800, "height": 600}],
+  "replies": ["short", "long"],
+  "messages": ["Check the sample tests", "Also check the example output", "A long queued message with details that should truncate instead of extending beyond the composer width"],
+  "queueCount": 9,
+  "minViewport": 200
+}

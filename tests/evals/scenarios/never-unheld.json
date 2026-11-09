@@ -1,0 +1,21 @@
+{
+  "goal": "Live and new work never reads Nothing to do, State missing or Agent stopped: an unplanned workstream or nested workstream reads the Manager's plan move, and work a close released or a create made carries the Manager's start receipt. A receipt on a step a gate was linked in front of afterwards is no move of the Manager's, and an unplanned row is 0% done.",
+  "fixture": "../../internal/livedata/testdata/board/never-unheld.json",
+  "contains": [
+    "Plan pending: Not started: Manager to plan (0% done",
+    "Export area: Not started: Manager to plan",
+    "Released by a close: Manager to start the next step",
+    "Released and left: Next step not started; Manager recovery needed",
+    "Task closed under its step: Manager to start the next step"
+  ],
+  "absent": [
+    "Nothing to do",
+    "State missing",
+    "Agent stopped",
+    "Gate linked after create: Next step not started",
+    "Gate linked after create: Manager to start"
+  ],
+  "diagram": [
+    "[Manager] Send the notice: Manager to start the next step (p-c.2)"
+  ]
+}

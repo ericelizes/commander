@@ -1,0 +1,6 @@
+{
+  "root": "sample-flow",
+  "stage": "sample-flow.2",
+  "replacement": "sample-flow.3",
+  "reason": "Retire redundant legacy markers while retaining the approval"
+}

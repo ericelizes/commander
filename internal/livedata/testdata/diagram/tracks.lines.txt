@@ -1,0 +1,53 @@
+#1 Report exports
+Report exports (lab-bex)
+  [You] [gate, you] Workflow approved: Done (lab-bex.1)
+  [Nobody] Backfill last quarter: State missing (lab-bex.4)
+  [Automatic, parked until Tue 11:20 AM, then the Manager picks it up] Retention policy written: Parked until Tue 11:20 AM (lab-bex.6)
+  [Operators] Key rotation scheduled: Not started (lab-bex.8) after lab-bex.7
+  [Manager] Export docs updated: Result ready for Manager review (lab-bex.9)
+  [Automatic, CI, runs on each push to the PR] [workstream] Nightly export to the warehouse: Waiting for CI · 1 of 5 done (lab-bex.2) after lab-bex.1
+▶ [You] [workstream] Finance sign-off on the export format: Needs you: Name export files by date or by batch? · 0 of 4 done (lab-bex.3) after lab-bex.1
+  [Operators] Rotate the export key: Not started (lab-bex.7) after lab-bex.8
+  [Manager] [gate, manager] Approve the rollout?: Not reached (lab-bex.5) after lab-bex.2, lab-bex.3
+      passes when: Both tracks are done.
+
+  Nightly export to the warehouse (lab-bex.2)
+    [Operators] Export job built: Done (lab-bex.2.1)
+  ▶ [Automatic, CI, runs on each push to the PR] CI green on the export PR: Waiting for CI (lab-bex.2.2) after lab-bex.2.1
+    [Reviewers, reviewer-a, reviewer-b] [gate, reviewer-a, reviewer-b] Export PR approved by reviewers: Not reached (lab-bex.2.3) after lab-bex.2.2
+        passes when: Both reviewers approve the PR on GitHub.
+    [You] [gate, you] Greenlight merging the export to main: Not reached (lab-bex.2.4) after lab-bex.2.3
+        passes when: The user says merge.
+    [Operators] Export live in production: Not started (lab-bex.2.5) after lab-bex.2.4
+
+  Finance sign-off on the export format (lab-bex.3)
+    [Operators] Sample file drafted: Operator working (lab-bex.3.1)
+  ▶ [You] Pick the file naming scheme: Needs you (lab-bex.3.4)
+    [Reviewers, finance team] Finance team reviewed the sample: Not started (lab-bex.3.2) after lab-bex.3.1
+    [You] [gate, you] Greenlight the export format: Not reached (lab-bex.3.3) after lab-bex.3.2, lab-bex.3.4
+        passes when: (no criteria)
+
+5 findings (cmdr graph check lab-bex):
+  - [gate-criteria] lab-bex.3.3 "Greenlight the export format": the gate does not say what counts as passed. Fix: cmdr internal-update --project lab --bead lab-bex.3.3 --acceptance "<what counts as passed, one sentence>"
+  - [unheld] lab-bex.4 "Backfill last quarter": it is open with no running agent, no recorded wait and nothing asked of you, so the diagram cannot say whose move it is. Fix: record what it waits on (--waiting ci:#N, review:<login>, until:<time>:<what then>), give it a running owner, or ask the user (--state needs-user --decision)
+  - [gate-title, advisory] lab-bex.5 "Approve the rollout?": the title is a question; a checkpoint names the outcome. Fix: cmdr internal-rename-objective --project lab --bead lab-bex.5 --title "<Greenlight doing it | what is true, past tense>"
+  - [lane-label] lab-bex.8 "Key rotation scheduled": its label lane:bogus is not a lane, so the diagram ignores it. Fix: cmdr internal-set-objective --project lab --bead lab-bex.8 --lane you|agents|elsewhere:<who> (or --lane none)
+  - [cycle] lab-bex.7 "Rotate the export key": its dependencies loop (lab-bex.7 waits on lab-bex.8 waits on lab-bex.7), so nothing in the loop can start. Fix: cmdr internal-dep --project lab rm <step> <the step it does not really wait on>
+
+#2 On-call tooling
+On-call tooling (lab-ops)
+  [Manager] Alert router rewritten: Agent stopped: the Manager's move (lab-ops.1)
+  [Reviewers, oncall-team] [gate, oncall-team] Runbook signed off by the on-call team: Waiting for oncall-team (lab-ops.2)
+      passes when: (no criteria)
+▶ [You] Rotate the shared pager number: Needs you (lab-ops.3)
+  [Manager] Paging config drafted: Manager working (lab-ops.4)
+  [Automatic, a timer, then the Manager confirms] Pager vendor contract renewed: Waiting for renewal lands · 09:26 PM (lab-ops.5)
+  [You] [gate, you] Greenlight shipping the paging change: Not reached (lab-ops.7) after lab-ops.6
+      passes when: The user says ship.
+  [Operators] Paging change released: Manager picking it up (lab-ops.6) after lab-ops.4, lab-ops.7
+      [Operators] Release notes prepared: Not started (lab-ops.6.1)
+      [Operators] Paging change shipped: Not started (lab-ops.6.2)
+
+2 findings (cmdr graph check lab-ops):
+  - [gate-criteria] lab-ops.2 "Runbook signed off by the on-call team": the gate does not say what counts as passed. Fix: cmdr internal-update --project lab --bead lab-ops.2 --acceptance "<what counts as passed, one sentence>"
+  - [order, advisory] lab-ops.6 "Paging change released": it and lab-ops.7 wait on each other through the steps under them, so the diagram cannot draw one before the other. Fix: move the step that sits inside the other's run under it (a gate in the middle of a stage is a child of that stage), or split the stage at it

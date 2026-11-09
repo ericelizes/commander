@@ -1,0 +1,394 @@
+{
+ "lab:lab-bex": {
+  "id": "lab-bex",
+  "title": "Report exports",
+  "current": "lab-bex.3",
+  "steps": [
+   {
+    "id": "lab-bex.1",
+    "title": "Workflow approved",
+    "kind": "done",
+    "text": "Done",
+    "lane": "you",
+    "actor": "you",
+    "gate": true,
+    "approvers": "you",
+    "criteria": "The user approved the stages and gates."
+   },
+   {
+    "id": "lab-bex.4",
+    "title": "Backfill last quarter",
+    "kind": "stalled",
+    "text": "State missing",
+    "lane": "",
+    "actor": ""
+   },
+   {
+    "id": "lab-bex.6",
+    "title": "Retention policy written",
+    "kind": "idle",
+    "text": "Parked until Tue 11:20 AM",
+    "lane": "elsewhere",
+    "actor": "automatic",
+    "who": "parked until Tue 11:20 AM, then the Manager picks it up"
+   },
+   {
+    "id": "lab-bex.8",
+    "title": "Key rotation scheduled",
+    "kind": "idle",
+    "text": "Not started",
+    "lane": "agents",
+    "actor": "operators",
+    "after": [
+     "lab-bex.7"
+    ]
+   },
+   {
+    "id": "lab-bex.9",
+    "title": "Export docs updated",
+    "kind": "waiting",
+    "text": "Result ready for Manager review",
+    "since": 1792999000,
+    "lane": "agents",
+    "actor": "manager"
+   },
+   {
+    "id": "lab-bex.2",
+    "title": "Nightly export to the warehouse",
+    "kind": "waiting",
+    "text": "Waiting for CI",
+    "since": 1792998000,
+    "lane": "elsewhere",
+    "actor": "automatic",
+    "who": "CI, runs on each push to the PR",
+    "after": [
+     "lab-bex.1"
+    ],
+    "track": true,
+    "progress": "1 of 5 done"
+   },
+   {
+    "id": "lab-bex.3",
+    "title": "Finance sign-off on the export format",
+    "kind": "needs",
+    "text": "Needs you: Name export files by date or by batch?",
+    "since": 1792995000,
+    "lane": "you",
+    "actor": "you",
+    "after": [
+     "lab-bex.1"
+    ],
+    "track": true,
+    "progress": "0 of 4 done"
+   },
+   {
+    "id": "lab-bex.7",
+    "title": "Rotate the export key",
+    "kind": "idle",
+    "text": "Not started",
+    "lane": "agents",
+    "actor": "operators",
+    "after": [
+     "lab-bex.8"
+    ]
+   },
+   {
+    "id": "lab-bex.5",
+    "title": "Approve the rollout?",
+    "kind": "idle",
+    "text": "Not reached",
+    "lane": "agents",
+    "actor": "manager",
+    "gate": true,
+    "approvers": "manager",
+    "criteria": "Both tracks are done.",
+    "after": [
+     "lab-bex.2",
+     "lab-bex.3"
+    ]
+   }
+  ],
+  "tracks": [
+   {
+    "id": "lab-bex.2",
+    "title": "Nightly export to the warehouse",
+    "current": "lab-bex.2.2",
+    "steps": [
+     {
+      "id": "lab-bex.2.1",
+      "title": "Export job built",
+      "kind": "done",
+      "text": "Done",
+      "lane": "agents",
+      "actor": "operators"
+     },
+     {
+      "id": "lab-bex.2.2",
+      "title": "CI green on the export PR",
+      "kind": "waiting",
+      "text": "Waiting for CI",
+      "since": 1792998000,
+      "lane": "elsewhere",
+      "actor": "automatic",
+      "who": "CI, runs on each push to the PR",
+      "after": [
+       "lab-bex.2.1"
+      ]
+     },
+     {
+      "id": "lab-bex.2.3",
+      "title": "Export PR approved by reviewers",
+      "kind": "idle",
+      "text": "Not reached",
+      "lane": "elsewhere",
+      "actor": "reviewers",
+      "who": "reviewer-a, reviewer-b",
+      "gate": true,
+      "approvers": "reviewer-a, reviewer-b",
+      "criteria": "Both reviewers approve the PR on GitHub.",
+      "after": [
+       "lab-bex.2.2"
+      ]
+     },
+     {
+      "id": "lab-bex.2.4",
+      "title": "Greenlight merging the export to main",
+      "kind": "idle",
+      "text": "Not reached",
+      "lane": "you",
+      "actor": "you",
+      "gate": true,
+      "approvers": "you",
+      "criteria": "The user says merge.",
+      "after": [
+       "lab-bex.2.3"
+      ]
+     },
+     {
+      "id": "lab-bex.2.5",
+      "title": "Export live in production",
+      "kind": "idle",
+      "text": "Not started",
+      "lane": "agents",
+      "actor": "operators",
+      "after": [
+       "lab-bex.2.4"
+      ]
+     }
+    ]
+   },
+   {
+    "id": "lab-bex.3",
+    "title": "Finance sign-off on the export format",
+    "current": "lab-bex.3.4",
+    "steps": [
+     {
+      "id": "lab-bex.3.1",
+      "title": "Sample file drafted",
+      "kind": "working",
+      "text": "Operator working",
+      "lane": "agents",
+      "actor": "operators"
+     },
+     {
+      "id": "lab-bex.3.4",
+      "title": "Pick the file naming scheme",
+      "kind": "needs",
+      "text": "Needs you",
+      "since": 1792995000,
+      "lane": "you",
+      "actor": "you"
+     },
+     {
+      "id": "lab-bex.3.2",
+      "title": "Finance team reviewed the sample",
+      "kind": "idle",
+      "text": "Not started",
+      "lane": "elsewhere",
+      "actor": "reviewers",
+      "who": "finance team",
+      "after": [
+       "lab-bex.3.1"
+      ]
+     },
+     {
+      "id": "lab-bex.3.3",
+      "title": "Greenlight the export format",
+      "kind": "idle",
+      "text": "Not reached",
+      "lane": "you",
+      "actor": "you",
+      "gate": true,
+      "approvers": "you",
+      "after": [
+       "lab-bex.3.2",
+       "lab-bex.3.4"
+      ]
+     }
+    ],
+    "findings": [
+     {
+      "check": "gate-criteria",
+      "bead": "lab-bex.3.3",
+      "title": "Greenlight the export format",
+      "why": "the gate does not say what counts as passed",
+      "fix": "cmdr internal-update --project lab --bead lab-bex.3.3 --acceptance \"\u003cwhat counts as passed, one sentence\u003e\""
+     }
+    ]
+   }
+  ],
+  "findings": [
+   {
+    "check": "gate-criteria",
+    "bead": "lab-bex.3.3",
+    "title": "Greenlight the export format",
+    "why": "the gate does not say what counts as passed",
+    "fix": "cmdr internal-update --project lab --bead lab-bex.3.3 --acceptance \"\u003cwhat counts as passed, one sentence\u003e\""
+   },
+   {
+    "check": "unheld",
+    "bead": "lab-bex.4",
+    "title": "Backfill last quarter",
+    "why": "it is open with no running agent, no recorded wait and nothing asked of you, so the diagram cannot say whose move it is",
+    "fix": "record what it waits on (--waiting ci:#N, review:\u003clogin\u003e, until:\u003ctime\u003e:\u003cwhat then\u003e), give it a running owner, or ask the user (--state needs-user --decision)"
+   },
+   {
+    "check": "gate-title",
+    "bead": "lab-bex.5",
+    "title": "Approve the rollout?",
+    "why": "the title is a question; a checkpoint names the outcome",
+    "fix": "cmdr internal-rename-objective --project lab --bead lab-bex.5 --title \"\u003cGreenlight doing it | what is true, past tense\u003e\"",
+    "advisory": true
+   },
+   {
+    "check": "lane-label",
+    "bead": "lab-bex.8",
+    "title": "Key rotation scheduled",
+    "why": "its label lane:bogus is not a lane, so the diagram ignores it",
+    "fix": "cmdr internal-set-objective --project lab --bead lab-bex.8 --lane you|agents|elsewhere:\u003cwho\u003e (or --lane none)"
+   },
+   {
+    "check": "cycle",
+    "bead": "lab-bex.7",
+    "title": "Rotate the export key",
+    "why": "its dependencies loop (lab-bex.7 waits on lab-bex.8 waits on lab-bex.7), so nothing in the loop can start",
+    "fix": "cmdr internal-dep --project lab rm \u003cstep\u003e \u003cthe step it does not really wait on\u003e"
+   }
+  ]
+ },
+ "lab:lab-ops": {
+  "id": "lab-ops",
+  "title": "On-call tooling",
+  "current": "lab-ops.3",
+  "steps": [
+   {
+    "id": "lab-ops.1",
+    "title": "Alert router rewritten",
+    "kind": "stalled",
+    "text": "Agent stopped: the Manager's move",
+    "lane": "agents",
+    "actor": "manager"
+   },
+   {
+    "id": "lab-ops.2",
+    "title": "Runbook signed off by the on-call team",
+    "kind": "waiting",
+    "text": "Waiting for oncall-team",
+    "lane": "elsewhere",
+    "actor": "reviewers",
+    "who": "oncall-team",
+    "gate": true,
+    "approvers": "oncall-team"
+   },
+   {
+    "id": "lab-ops.3",
+    "title": "Rotate the shared pager number",
+    "kind": "needs",
+    "text": "Needs you",
+    "since": 1792996000,
+    "lane": "you",
+    "actor": "you"
+   },
+   {
+    "id": "lab-ops.4",
+    "title": "Paging config drafted",
+    "kind": "working",
+    "text": "Manager working",
+    "since": 1792999000,
+    "lane": "agents",
+    "actor": "manager"
+   },
+   {
+    "id": "lab-ops.5",
+    "title": "Pager vendor contract renewed",
+    "kind": "waiting",
+    "text": "Waiting for renewal lands · 09:26 PM",
+    "since": 1792990000,
+    "lane": "elsewhere",
+    "actor": "automatic",
+    "who": "a timer, then the Manager confirms"
+   },
+   {
+    "id": "lab-ops.7",
+    "title": "Greenlight shipping the paging change",
+    "kind": "idle",
+    "text": "Not reached",
+    "lane": "you",
+    "actor": "you",
+    "gate": true,
+    "approvers": "you",
+    "criteria": "The user says ship.",
+    "after": [
+     "lab-ops.6"
+    ]
+   },
+   {
+    "id": "lab-ops.6",
+    "title": "Paging change released",
+    "kind": "working",
+    "text": "Manager picking it up",
+    "lane": "agents",
+    "actor": "operators",
+    "after": [
+     "lab-ops.4",
+     "lab-ops.7"
+    ],
+    "children": [
+     {
+      "id": "lab-ops.6.1",
+      "title": "Release notes prepared",
+      "kind": "idle",
+      "text": "Not started",
+      "lane": "agents",
+      "actor": "operators"
+     },
+     {
+      "id": "lab-ops.6.2",
+      "title": "Paging change shipped",
+      "kind": "idle",
+      "text": "Not started",
+      "lane": "agents",
+      "actor": "operators"
+     }
+    ]
+   }
+  ],
+  "findings": [
+   {
+    "check": "gate-criteria",
+    "bead": "lab-ops.2",
+    "title": "Runbook signed off by the on-call team",
+    "why": "the gate does not say what counts as passed",
+    "fix": "cmdr internal-update --project lab --bead lab-ops.2 --acceptance \"\u003cwhat counts as passed, one sentence\u003e\""
+   },
+   {
+    "check": "order",
+    "bead": "lab-ops.6",
+    "title": "Paging change released",
+    "why": "it and lab-ops.7 wait on each other through the steps under them, so the diagram cannot draw one before the other",
+    "fix": "move the step that sits inside the other's run under it (a gate in the middle of a stage is a child of that stage), or split the stage at it",
+    "advisory": true
+   }
+  ]
+ }
+}

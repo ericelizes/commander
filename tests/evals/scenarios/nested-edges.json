@@ -1,0 +1,29 @@
+{
+  "Beads": [
+    {"id": "p-1", "title": "Release sample", "labels": ["kind:objective", "kind:workstream"]},
+    {"id": "p-1.2", "title": "Nested one", "labels": ["kind:objective", "kind:workstream"], "parent": "p-1"},
+    {"id": "p-1.3", "title": "Nested two", "labels": ["kind:objective", "kind:workstream"], "parent": "p-1", "blocks_on": ["p-1.2"]},
+    {"id": "p-1.4", "title": "Build it", "labels": ["kind:objective"], "parent": "p-1"},
+    {"id": "p-1.5", "title": "Old track", "labels": ["kind:objective", "kind:track"], "parent": "p-1"},
+    {"id": "p-1.2.1", "title": "Step in one", "labels": ["kind:objective"], "parent": "p-1.2"},
+    {"id": "p-1.3.1", "title": "Step in two", "labels": ["kind:objective"], "parent": "p-1.3"},
+    {"id": "p-2", "title": "Other area", "labels": ["kind:objective", "kind:workstream"], "description": "Parent: nothing-real"},
+    {"id": "p-3", "title": "Third area", "labels": ["kind:objective", "kind:workstream"]},
+    {"id": "p-1.6", "title": "Merge gate", "labels": ["kind:objective", "gate"], "parent": "p-1", "description": "Labels: plain"},
+    {"id": "p-1.7", "title": "Plain step", "labels": ["kind:objective"], "parent": "p-1", "description": "Labels: gate"}
+  ],
+  "Cases": [
+    {"Name": "nested to step is refused and names link", "Argv": ["internal-dep", "--project", "example", "add", "p-1.2", "p-1.4"], "Exit": 1, "Stderr": "internal-gate link"},
+    {"Name": "step to nested is refused", "Argv": ["internal-dep", "--project", "example", "add", "p-1.4", "p-1.2"], "Exit": 1, "Stderr": "p-1.2 is a kind:workstream bead"},
+    {"Name": "nested to nested is refused and says rm still works", "Argv": ["internal-dep", "--project", "example", "add", "p-1.2", "p-1.3"], "Exit": 1, "Stderr": "internal-dep rm still drops a nested workstream's edge"},
+    {"Name": "rm drops a nested edge", "Argv": ["internal-dep", "--project", "example", "rm", "p-1.3", "p-1.2"], "Exit": 0, "Writes": ["dep remove p-1.3 p-1.2"]},
+    {"Name": "a track refuses add", "Argv": ["internal-dep", "--project", "example", "add", "p-1.5", "p-1.4"], "Exit": 1, "Stderr": "p-1.5 is a kind:track bead"},
+    {"Name": "a track refuses rm", "Argv": ["internal-dep", "--project", "example", "rm", "p-1.4", "p-1.5"], "Exit": 1, "Stderr": "p-1.5 is a kind:track bead"},
+    {"Name": "steps under sibling nested workstreams may wait", "Argv": ["internal-dep", "--project", "example", "add", "p-1.2.1", "p-1.3.1"], "Exit": 0, "Writes": ["dep add p-1.2.1 p-1.3.1"]},
+    {"Name": "top-level to top-level may wait, a description line is no parent", "Argv": ["internal-dep", "--project", "example", "add", "p-2", "p-3"], "Exit": 0, "Writes": ["dep add p-2 p-3"]},
+    {"Name": "gate link adds the nested edge", "Argv": ["internal-gate", "link", "--project", "example", "--bead", "p-1.2", "--after", "p-1.4"], "Exit": 0, "Writes": ["dep add p-1.2 p-1.4"]},
+    {"Name": "a description line does not hide a gate on add", "Argv": ["internal-dep", "--project", "example", "add", "p-1.6", "p-1.4"], "Exit": 1, "Stderr": "p-1.6 is a gate bead"},
+    {"Name": "a description line does not hide a gate on rm", "Argv": ["internal-dep", "--project", "example", "rm", "p-1.4", "p-1.6"], "Exit": 1, "Stderr": "p-1.6 is a gate bead"},
+    {"Name": "a description line does not make a step a gate", "Argv": ["internal-dep", "--project", "example", "add", "p-1.7", "p-1.4"], "Exit": 0, "Writes": ["dep add p-1.7 p-1.4"]}
+  ]
+}

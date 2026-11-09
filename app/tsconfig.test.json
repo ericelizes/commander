@@ -1,0 +1,6 @@
+{
+  "extends": "./tsconfig.web.json",
+  "compilerOptions": { "types": ["node", "vite/client", "@testing-library/jest-dom"] },
+  "include": ["test/**/*.ts", "test/**/*.tsx", "src/renderer/**/*", "src/shared/**/*", "src/features/**/*", "src/main/config.ts"],
+  "exclude": []
+}

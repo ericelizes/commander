@@ -1,0 +1,31 @@
+{
+  "goal": "With a project's nested Managers on, an Operator under a nested workstream reaches that workstream's own Manager: mail it addresses to the root's Manager (its prompt and env predate the cutover) is rerouted there, the root hears once per run, and a report to commander goes there too.",
+  "project": "example",
+  "operator": "operator-op-fix-demo-s",
+  "task": "demo-s",
+  "beads": {
+    "demo-r": {"status": "open", "labels": ["kind:objective", "kind:workstream"]},
+    "demo-a": {"status": "open", "labels": ["kind:objective", "kind:workstream"], "parent": "demo-r"},
+    "demo-a1": {"status": "open", "labels": ["kind:objective", "kind:workstream"], "parent": "demo-a"},
+    "demo-s": {"status": "in_progress", "labels": ["kind:objective"], "parent": "demo-a1"},
+    "demo-b": {"status": "open", "labels": ["kind:objective", "kind:workstream"], "parent": "demo-r"}
+  },
+  "names": {
+    "commander": "EvalCommander",
+    "manager-demo-r": "RootManager",
+    "manager-demo-a": "ParentManager",
+    "manager-demo-a1": "NestedManager",
+    "operator-op-fix-demo-s": "FixOperator"
+  },
+  "sends": [
+    {"name": "first report to the stale root role", "to": "manager-demo-r",
+     "want": [{"to": "NestedManager", "subject": "done"}, {"to": "RootManager", "subject": "[cc: moved to manager-demo-a1] done"}]},
+    {"name": "second report: no second copy", "to": "manager-demo-r",
+     "want": [{"to": "NestedManager", "subject": "done"}]},
+    {"name": "report to commander goes to the nested Manager", "to": "commander",
+     "want": [{"to": "NestedManager", "subject": "done"}]},
+    {"name": "report to its own Manager is untouched", "to": "manager-demo-a1",
+     "want": [{"to": "NestedManager", "subject": "done"}]}
+  ],
+  "switch_off": {"to": "manager-demo-r", "want": [{"to": "RootManager", "subject": "done"}]}
+}

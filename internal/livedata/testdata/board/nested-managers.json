@@ -1,0 +1,152 @@
+{
+  "now": 1793300000,
+  "snapshot": {
+    "version": 1,
+    "generated_at": "2026-10-29T19:33:20Z",
+    "projects": [
+      {
+        "id": 1,
+        "name": "app",
+        "type": "code",
+        "path": "/work/app",
+        "status": "active"
+      }
+    ],
+    "live": {
+      "operators": [
+        "operator-op-build-app-w1-1-1",
+        "operator-op-build-app-w1-1-2"
+      ]
+    },
+    "agents": {
+      "manager-app-w1": {
+        "state": "idle",
+        "since": 1793290000
+      },
+      "manager-app-w1.1": {
+        "state": "working",
+        "since": 1793295000
+      },
+      "manager-app-w1.2": {
+        "state": "idle",
+        "since": 1793290000
+      }
+    },
+    "unread": {},
+    "fleet": {
+      "cost_usd_24h": 0,
+      "cost_usd_7d": 0,
+      "cost_series_24h": [],
+      "agents": 0,
+      "active": 0,
+      "blocked": 0,
+      "idle_ratio": 0,
+      "projects": 1,
+      "chat_cost_usd_24h": 0,
+      "roles_cost": []
+    },
+    "needs_you": [],
+    "workstreams": [
+      {
+        "n": 1,
+        "project": "app",
+        "project_id": 1,
+        "bead_id": "app-w1",
+        "title": "Parent coordinating two nested Managers",
+        "state": "in-progress",
+        "status": "open",
+        "manager_role": "manager-app-w1",
+        "done": 1,
+        "total": 7,
+        "steps": [
+          {
+            "bead_id": "app-w1.1",
+            "title": "Build track",
+            "state": "in-progress",
+            "status": "open",
+            "track": true,
+            "viz": 2,
+            "children": [
+              {
+                "bead_id": "app-w1.1.0",
+                "title": "Workflow approved (build)",
+                "state": "done",
+                "status": "closed",
+                "gate": true,
+                "approvers": [
+                  "user"
+                ],
+                "criteria": "The plan is approved",
+                "viz": 1
+              },
+              {
+                "bead_id": "app-w1.1.1",
+                "title": "Write the importer",
+                "state": "in-progress",
+                "status": "in_progress",
+                "owner": "operator-op-build-app-w1-1-1",
+                "owner_state": "working",
+                "blocked_by": [
+                  "app-w1.1.0"
+                ],
+                "viz": 3
+              },
+              {
+                "bead_id": "app-w1.1.2",
+                "title": "Write the exporter",
+                "state": "in-progress",
+                "status": "in_progress",
+                "owner": "operator-op-build-app-w1-1-2",
+                "owner_state": "working",
+                "blocked_by": [
+                  "app-w1.1.0"
+                ],
+                "viz": 3
+              }
+            ],
+            "manager_role": "manager-app-w1.1"
+          },
+          {
+            "bead_id": "app-w1.2",
+            "title": "Cutover track",
+            "state": "in-progress",
+            "status": "open",
+            "track": true,
+            "viz": 2,
+            "children": [
+              {
+                "bead_id": "app-w1.2.1",
+                "title": "Soak the staging run",
+                "state": "in-progress",
+                "status": "open",
+                "waiting": "soak-period",
+                "waiting_since": 1793290000,
+                "waiting_until": 1793310000,
+                "waiting_until_as": "soak-period",
+                "viz": 3
+              },
+              {
+                "bead_id": "app-w1.2.2",
+                "title": "Cutover approved",
+                "state": "not-started",
+                "status": "open",
+                "gate": true,
+                "approvers": [
+                  "reviewer-a"
+                ],
+                "criteria": "Staging soaked clean",
+                "waiting": "review of the cutover",
+                "waiting_since": 1793290000,
+                "blocked_by": [
+                  "app-w1.2.1"
+                ],
+                "viz": 1
+              }
+            ],
+            "manager_role": "manager-app-w1.2"
+          }
+        ]
+      }
+    ]
+  }
+}

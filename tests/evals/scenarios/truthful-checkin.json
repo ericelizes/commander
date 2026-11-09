@@ -1,0 +1,240 @@
+{
+  "name": "Grouped health is not a finding count",
+  "snapshot": {
+    "workstreams": [],
+    "needs_you": [],
+    "health": [
+      {
+        "key": "plan:manager-w0",
+        "detail": "grouped plan problem",
+        "since": 1
+      },
+      {
+        "key": "plan:manager-w1",
+        "detail": "grouped plan problem",
+        "since": 1
+      },
+      {
+        "key": "plan:manager-w2",
+        "detail": "grouped plan problem",
+        "since": 1
+      },
+      {
+        "key": "plan:manager-w3",
+        "detail": "grouped plan problem",
+        "since": 1
+      },
+      {
+        "key": "plan:manager-w4",
+        "detail": "grouped plan problem",
+        "since": 1
+      },
+      {
+        "key": "plan:manager-w5",
+        "detail": "grouped plan problem",
+        "since": 1
+      },
+      {
+        "key": "plan:manager-w6",
+        "detail": "grouped plan problem",
+        "since": 1
+      },
+      {
+        "key": "plan:manager-w7",
+        "detail": "grouped plan problem",
+        "since": 1
+      },
+      {
+        "key": "plan:manager-w8",
+        "detail": "grouped plan problem",
+        "since": 1
+      },
+      {
+        "key": "plan:manager-w9",
+        "detail": "grouped plan problem",
+        "since": 1
+      },
+      {
+        "key": "plan:manager-w10",
+        "detail": "grouped plan problem",
+        "since": 1
+      }
+    ],
+    "display": {
+      "workstreams": [
+        {
+          "key": "p:w",
+          "diagram": {
+            "findings": [
+              {
+                "check": "unheld",
+                "bead": "w.1",
+                "why": "open work has no holder"
+              },
+              {
+                "check": "unheld",
+                "bead": "w.2",
+                "why": "open work has no holder"
+              },
+              {
+                "check": "unheld",
+                "bead": "w.3",
+                "why": "open work has no holder"
+              },
+              {
+                "check": "unheld",
+                "bead": "w.4",
+                "why": "open work has no holder"
+              },
+              {
+                "check": "unheld",
+                "bead": "w.5",
+                "why": "open work has no holder"
+              },
+              {
+                "check": "unheld",
+                "bead": "w.6",
+                "why": "open work has no holder"
+              },
+              {
+                "check": "unheld",
+                "bead": "w.7",
+                "why": "open work has no holder"
+              },
+              {
+                "check": "unheld",
+                "bead": "w.8",
+                "why": "open work has no holder"
+              },
+              {
+                "check": "MERGE_REVIEW_INCOMPLETE",
+                "bead": "w.9",
+                "why": "review not finished"
+              },
+              {
+                "check": "MERGE_REVIEW_INCOMPLETE",
+                "bead": "w.10",
+                "why": "review not finished"
+              },
+              {
+                "check": "MERGE_REVIEW_INCOMPLETE",
+                "bead": "w.11",
+                "why": "review not finished"
+              },
+              {
+                "check": "MERGE_REVIEW_INCOMPLETE",
+                "bead": "w.12",
+                "why": "review not finished"
+              },
+              {
+                "check": "MERGE_REVIEW_INCOMPLETE",
+                "bead": "w.13",
+                "why": "review not finished"
+              },
+              {
+                "check": "MERGE_REVIEW_REQUIRED",
+                "bead": "w.14",
+                "why": "no PR yet",
+                "advisory": true
+              },
+              {
+                "check": "MERGE_REVIEW_REQUIRED",
+                "bead": "w.15",
+                "why": "no PR yet",
+                "advisory": true
+              }
+            ],
+            "tracks": [
+              {
+                "findings": [
+                  {
+                    "check": "unheld",
+                    "bead": "w.1",
+                    "why": "open work has no holder"
+                  },
+                  {
+                    "check": "unheld",
+                    "bead": "w.2",
+                    "why": "open work has no holder"
+                  },
+                  {
+                    "check": "unheld",
+                    "bead": "w.3",
+                    "why": "open work has no holder"
+                  },
+                  {
+                    "check": "unheld",
+                    "bead": "w.4",
+                    "why": "open work has no holder"
+                  },
+                  {
+                    "check": "unheld",
+                    "bead": "w.5",
+                    "why": "open work has no holder"
+                  },
+                  {
+                    "check": "unheld",
+                    "bead": "w.6",
+                    "why": "open work has no holder"
+                  },
+                  {
+                    "check": "unheld",
+                    "bead": "w.7",
+                    "why": "open work has no holder"
+                  },
+                  {
+                    "check": "unheld",
+                    "bead": "w.8",
+                    "why": "open work has no holder"
+                  },
+                  {
+                    "check": "MERGE_REVIEW_INCOMPLETE",
+                    "bead": "w.9",
+                    "why": "review not finished"
+                  },
+                  {
+                    "check": "MERGE_REVIEW_INCOMPLETE",
+                    "bead": "w.10",
+                    "why": "review not finished"
+                  },
+                  {
+                    "check": "MERGE_REVIEW_INCOMPLETE",
+                    "bead": "w.11",
+                    "why": "review not finished"
+                  },
+                  {
+                    "check": "MERGE_REVIEW_INCOMPLETE",
+                    "bead": "w.12",
+                    "why": "review not finished"
+                  },
+                  {
+                    "check": "MERGE_REVIEW_INCOMPLETE",
+                    "bead": "w.13",
+                    "why": "review not finished"
+                  },
+                  {
+                    "check": "MERGE_REVIEW_REQUIRED",
+                    "bead": "w.14",
+                    "why": "no PR yet",
+                    "advisory": true
+                  },
+                  {
+                    "check": "MERGE_REVIEW_REQUIRED",
+                    "bead": "w.15",
+                    "why": "no PR yet",
+                    "advisory": true
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "expected": {
+    "errors": 8,
+    "blockers": 5,
+    "advisories": 2
+  }
+}

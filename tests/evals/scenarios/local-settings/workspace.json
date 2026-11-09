@@ -1,0 +1,8 @@
+{
+  "steps": [
+    {"workspace": "acme", "expected": "acme"},
+    {"workspace": "example-team", "expected": "example-team"},
+    {"workspace": "", "expected": ""},
+    {"remove": true, "expected": ""}
+  ]
+}

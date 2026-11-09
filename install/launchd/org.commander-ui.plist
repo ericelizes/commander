@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- The live renderer dev server (Vite HMR on 127.0.0.1:5173/app/). While it
+         answers, the installed app and cmdrd's /app/ load it, so an edit under
+         app/src shows up in seconds. Installed by `cmdr app dev enable`. -->
+    <key>Label</key>
+    <string>org.commander-ui</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <!-- Vite exits when stdin closes (launchd gives it /dev/null), so keep a
+             pipe open under it. -->
+        <string>/bin/sh</string>
+        <string>-c</string>
+        <string>tail -f /dev/null | exec npm run dev:renderer</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>__REPO__/app</string>
+
+    <!-- launchd starts agents with only the system PATH. The first entry is
+         the dir of the npm `cmdr app dev enable` found (nvm and friends). -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>__NODE_BIN__:__HOME__/.local/bin:__HOME__/.volta/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>BROWSER</key>
+        <string>none</string>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>ProcessType</key>
+    <string>Background</string>
+
+    <key>StandardOutPath</key>
+    <string>__LOG__</string>
+
+    <key>StandardErrorPath</key>
+    <string>__LOG__</string>
+
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+</dict>
+</plist>

@@ -1,0 +1,29 @@
+{
+  "name": "add-commander-already-added",
+  "setup": {
+    "activate_project": true
+  },
+  "turns": [
+    {
+      "input": "add commander",
+      "reply_contains": [
+        "commander is already added"
+      ],
+      "reply_excludes": [
+        "Should I proceed?",
+        "What path should I use?",
+        "code or knowledge"
+      ]
+    }
+  ],
+  "expect": {
+    "action_excludes": [
+      "cmdr internal-add-project"
+    ],
+    "search_count": 0,
+    "projects": [
+      "commander"
+    ],
+    "lead_session": true
+  }
+}

@@ -1,0 +1,2258 @@
+{
+  "snapshot": {
+    "workstreams": [
+      {
+        "n": 3,
+        "project": "example-app",
+        "project_id": 2,
+        "bead_id": "example-app-t03",
+        "title": "Sample catalog refresh (TEAM-101)",
+        "state": "in-progress",
+        "status": "open",
+        "manager_role": "manager-example-app-t03",
+        "total": 27,
+        "done": 19,
+        "steps": [
+          {
+            "bead_id": "example-app-t03.1",
+            "title": "Explore the sample design",
+            "state": "done",
+            "status": "closed"
+          },
+          {
+            "bead_id": "example-app-t03.2",
+            "title": "Stack: Build, PR approved, Merged",
+            "state": "in-progress",
+            "status": "open",
+            "blocked_by": [
+              "example-app-t03.6"
+            ],
+            "children": [
+              {
+                "bead_id": "example-app-t03.2.1",
+                "title": "Plan",
+                "state": "done",
+                "status": "closed",
+                "owner": "user"
+              },
+              {
+                "bead_id": "example-app-t03.2.2",
+                "title": "Implement",
+                "state": "done",
+                "status": "closed",
+                "owner": "user"
+              },
+              {
+                "bead_id": "example-app-t03.2.3",
+                "title": "Self-review",
+                "state": "done",
+                "status": "closed"
+              },
+              {
+                "bead_id": "example-app-t03.2.4",
+                "title": "CI green",
+                "state": "done",
+                "status": "closed",
+                "owner": "manager-example-app-t03"
+              },
+              {
+                "bead_id": "example-app-t03.2.5",
+                "title": "Matches the spec",
+                "state": "done",
+                "status": "closed"
+              },
+              {
+                "bead_id": "example-app-t03.2.6",
+                "title": "Review comments resolved",
+                "state": "done",
+                "status": "closed"
+              },
+              {
+                "bead_id": "example-app-t03.2.7",
+                "title": "Merged to main in stack order",
+                "state": "not-started",
+                "status": "open",
+                "blocked_by": [
+                  "example-app-t03.2.8"
+                ]
+              },
+              {
+                "bead_id": "example-app-t03.2.8",
+                "title": "PR approved: reviewer-a and reviewer-b approve the stack",
+                "state": "not-started",
+                "status": "open",
+                "blocked_by": [
+                  "example-app-t03.2.12"
+                ],
+                "gate": true,
+                "approvers": [
+                  "reviewer-b",
+                  "reviewer-a"
+                ]
+              },
+              {
+                "bead_id": "example-app-t03.2.9",
+                "title": "Code review pass (ce-code-review)",
+                "state": "done",
+                "status": "closed"
+              },
+              {
+                "bead_id": "example-app-t03.2.10",
+                "title": "Bump catalog-parser to 2.4.1 (audit finding)",
+                "state": "done",
+                "status": "closed",
+                "owner": "manager-example-app-t03"
+              },
+              {
+                "bead_id": "example-app-t03.2.11",
+                "title": "Rebase the stack onto main with the catalog-parser ignore",
+                "state": "done",
+                "status": "closed",
+                "owner": "manager-example-app-t03"
+              },
+              {
+                "bead_id": "example-app-t03.2.12",
+                "title": "Build: the catalog reads a sample collection claim, CI green on four sample PRs",
+                "state": "in-progress",
+                "status": "open",
+                "blocked_by": [
+                  "example-app-t03.10"
+                ],
+                "children": [
+                  {
+                    "bead_id": "example-app-t03.2.12.1",
+                    "title": "Spike: the catalog reads a collection from a sample token (local, no push)",
+                    "state": "in-progress",
+                    "status": "in_progress",
+                    "now": true,
+                    "owner": "operator-op-spike-proxy-example-app-t03-2-12-1"
+                  }
+                ]
+              }
+            ],
+            "owner": "manager-example-app-t03"
+          },
+          {
+            "bead_id": "example-app-t03.3",
+            "title": "Live exercise: catalog indexer and worker group in sample production, one checked import",
+            "state": "not-started",
+            "status": "open",
+            "blocked_by": [
+              "example-app-t03.2.7"
+            ]
+          },
+          {
+            "bead_id": "example-app-t03.4",
+            "title": "Pilot: catalog-service on the new workers (dev host spike, then prod)",
+            "state": "not-started",
+            "status": "open",
+            "blocked_by": [
+              "example-app-t03.3"
+            ]
+          },
+          {
+            "bead_id": "example-app-t03.5",
+            "title": "Rebase stack on main, then fold in the catalog import rollout plan (U1-U7)",
+            "state": "done",
+            "status": "closed",
+            "owner": "manager-example-app-t03"
+          },
+          {
+            "bead_id": "example-app-t03.6",
+            "title": "Spec approval",
+            "state": "done",
+            "status": "closed",
+            "blocked_by": [
+              "example-app-t03.1"
+            ],
+            "gate": true,
+            "approvers": [
+              "user"
+            ]
+          },
+          {
+            "bead_id": "example-app-t03.7",
+            "title": "Merge approval",
+            "state": "done",
+            "status": "closed",
+            "blocked_by": [
+              "example-app-t03.2"
+            ],
+            "gate": true,
+            "approvers": [
+              "user"
+            ]
+          },
+          {
+            "bead_id": "example-app-t03.8",
+            "title": "Prod deploy approval",
+            "state": "done",
+            "status": "closed",
+            "blocked_by": [
+              "example-app-t03.7"
+            ],
+            "gate": true,
+            "approvers": [
+              "user"
+            ]
+          },
+          {
+            "bead_id": "example-app-t03.9",
+            "title": "Pilot sign-off",
+            "state": "done",
+            "status": "closed",
+            "blocked_by": [
+              "example-app-t03.4"
+            ],
+            "gate": true,
+            "approvers": [
+              "user"
+            ]
+          },
+          {
+            "bead_id": "example-app-t03.10",
+            "title": "Workflow approved",
+            "state": "done",
+            "status": "closed",
+            "gate": true,
+            "approvers": [
+              "user"
+            ]
+          },
+          {
+            "bead_id": "example-app-t03.11",
+            "title": "Greenlight the catalog-service dev host spike",
+            "state": "done",
+            "status": "closed",
+            "blocked_by": [
+              "example-app-t03.3"
+            ]
+          },
+          {
+            "bead_id": "example-app-t03.12",
+            "title": "Migrate the catalog-service dev host to the new workers",
+            "state": "done",
+            "status": "closed",
+            "blocked_by": [
+              "example-app-t03.11"
+            ]
+          },
+          {
+            "bead_id": "example-app-t03.13",
+            "title": "Greenlight catalog-service prod deploy on the new workers",
+            "state": "done",
+            "status": "closed",
+            "blocked_by": [
+              "example-app-t03.12"
+            ]
+          },
+          {
+            "bead_id": "example-app-t03.14",
+            "title": "Apply catalog-parser 2.4.1 in the sample mirror after the cooldown and drop the audit ignore",
+            "state": "not-started",
+            "status": "open"
+          }
+        ]
+      },
+      {
+        "n": 4,
+        "project": "example-app",
+        "project_id": 2,
+        "bead_id": "example-app-t01",
+        "title": "Catalog index overview",
+        "state": "in-progress",
+        "status": "open",
+        "manager_role": "manager-example-app-t01",
+        "total": 36,
+        "done": 27,
+        "steps": [
+          {
+            "bead_id": "example-app-t01.1",
+            "title": "Spec approval",
+            "state": "done",
+            "status": "closed",
+            "gate": true,
+            "approvers": [
+              "user"
+            ]
+          },
+          {
+            "bead_id": "example-app-t01.2",
+            "title": "Build",
+            "state": "done",
+            "status": "closed",
+            "blocked_by": [
+              "example-app-t01.1"
+            ]
+          },
+          {
+            "bead_id": "example-app-t01.3",
+            "title": "Go live",
+            "state": "not-started",
+            "status": "open",
+            "blocked_by": [
+              "example-app-t01.21",
+              "example-app-t01.18"
+            ]
+          },
+          {
+            "bead_id": "example-app-t01.4",
+            "title": "First pilot: cut catalog-service alerting over",
+            "state": "not-started",
+            "status": "open",
+            "blocked_by": [
+              "example-app-t01.21",
+              "example-app-t01.3"
+            ]
+          },
+          {
+            "bead_id": "example-app-t01.5",
+            "title": "Plan reviewed",
+            "state": "done",
+            "status": "closed"
+          },
+          {
+            "bead_id": "example-app-t01.6",
+            "title": "Commit plan",
+            "state": "done",
+            "status": "closed"
+          },
+          {
+            "bead_id": "example-app-t01.7",
+            "title": "Choose the sample implementation order",
+            "state": "done",
+            "status": "closed"
+          },
+          {
+            "bead_id": "example-app-t01.8",
+            "title": "U1 spike: catalog cache behavior (the user runs the staging commands)",
+            "state": "done",
+            "status": "closed",
+            "owner": "user"
+          },
+          {
+            "bead_id": "example-app-t01.9",
+            "title": "U2 catalog index + import routes",
+            "state": "done",
+            "status": "closed"
+          },
+          {
+            "bead_id": "example-app-t01.10",
+            "title": "U3 ship the catalog import unit",
+            "state": "done",
+            "status": "closed"
+          },
+          {
+            "bead_id": "example-app-t01.11",
+            "title": "U4 shelf index group + collector override",
+            "state": "done",
+            "status": "closed"
+          },
+          {
+            "bead_id": "example-app-t01.12",
+            "title": "U5 shelf discovery sweep, flag, route",
+            "state": "done",
+            "status": "closed"
+          },
+          {
+            "bead_id": "example-app-t01.13",
+            "title": "U6 per-shelf dashboards + sync",
+            "state": "done",
+            "status": "closed"
+          },
+          {
+            "bead_id": "example-app-t01.14",
+            "title": "U7 catalog notification adapter",
+            "state": "done",
+            "status": "closed"
+          },
+          {
+            "bead_id": "example-app-t01.15",
+            "title": "U8 catalog preferences and overview",
+            "state": "done",
+            "status": "closed"
+          },
+          {
+            "bead_id": "example-app-t01.16",
+            "title": "U9 catalog export and guide",
+            "state": "done",
+            "status": "closed"
+          },
+          {
+            "bead_id": "example-app-t01.17",
+            "title": "PR approval",
+            "state": "in-progress",
+            "status": "open",
+            "blocked_by": [
+              "example-app-t01.2"
+            ],
+            "gate": true,
+            "approvers": [
+              "reviewer-b",
+              "reviewer-a"
+            ],
+            "children": [
+              {
+                "bead_id": "example-app-t01.17.1",
+                "title": "Make the catalog index PRs one strict stack",
+                "state": "done",
+                "status": "closed",
+                "owner": "operator-chore-metrics-restack"
+              },
+              {
+                "bead_id": "example-app-t01.17.2",
+                "title": "Re-review the catalog index stack (pass 3)",
+                "state": "done",
+                "status": "closed",
+                "owner": "manager-example-app-t01"
+              },
+              {
+                "bead_id": "example-app-t01.17.3",
+                "title": "Fix pass 3 review findings on the catalog index stack",
+                "state": "done",
+                "status": "closed",
+                "owner": "manager-example-app-t01"
+              },
+              {
+                "bead_id": "example-app-t01.17.4",
+                "title": "Re-review the catalog index stack (pass 4)",
+                "state": "done",
+                "status": "closed",
+                "owner": "manager-example-app-t01"
+              },
+              {
+                "bead_id": "example-app-t01.17.5",
+                "title": "Fix pass 4 review findings on the catalog index stack",
+                "state": "review",
+                "status": "in_progress",
+                "owner": "manager-example-app-t01"
+              },
+              {
+                "bead_id": "example-app-t01.17.6",
+                "title": "Re-review the catalog index stack (pass 5)",
+                "state": "done",
+                "status": "closed",
+                "owner": "operator-op-re-review-the-example-app-t01-17-6"
+              },
+              {
+                "bead_id": "example-app-t01.17.7",
+                "title": "Fix pass 5 review findings on the catalog index stack",
+                "state": "done",
+                "status": "closed",
+                "owner": "operator-op-fix-pass-5-re-example-app-t01-17-7"
+              },
+              {
+                "bead_id": "example-app-t01.17.8",
+                "title": "Re-review the catalog index stack (pass 6)",
+                "state": "done",
+                "status": "closed",
+                "owner": "manager-example-app-t01"
+              },
+              {
+                "bead_id": "example-app-t01.17.9",
+                "title": "Get CI evidence for the final catalog index stack tip",
+                "state": "done",
+                "status": "closed",
+                "owner": "manager-example-app-t01"
+              },
+              {
+                "bead_id": "example-app-t01.17.10",
+                "title": "Triage the two CI failures on the catalog index tip",
+                "state": "done",
+                "status": "closed",
+                "owner": "manager-example-app-t01"
+              },
+              {
+                "bead_id": "example-app-t01.17.11",
+                "title": "Full CI rerun on the catalog index tip",
+                "state": "not-started",
+                "status": "open"
+              },
+              {
+                "bead_id": "example-app-t01.17.12",
+                "title": "Full CI rerun on the catalog index tip (retry)",
+                "state": "not-started",
+                "status": "open"
+              },
+              {
+                "bead_id": "example-app-t01.17.13",
+                "title": "Sync the catalog index chain and clear the two red checks",
+                "state": "not-started",
+                "status": "open"
+              },
+              {
+                "bead_id": "example-app-t01.17.14",
+                "title": "Rerun the flaky failed CI jobs on the three catalog index PRs",
+                "state": "done",
+                "status": "closed",
+                "owner": "operator-op-rerun-the-fl-example-app-t01-17-14"
+              },
+              {
+                "bead_id": "example-app-t01.17.15",
+                "title": "Review the sample branch updates (pass 7)",
+                "state": "done",
+                "status": "closed",
+                "owner": "operator-op-review-the-u-example-app-t01-17-15"
+              }
+            ]
+          },
+          {
+            "bead_id": "example-app-t01.18",
+            "title": "Merge the stack",
+            "state": "not-started",
+            "status": "open",
+            "blocked_by": [
+              "example-app-t01.17"
+            ],
+            "gate": true,
+            "approvers": [
+              "user"
+            ]
+          },
+          {
+            "bead_id": "example-app-t01.21",
+            "title": "Workflow approved",
+            "state": "done",
+            "status": "closed",
+            "gate": true,
+            "approvers": [
+              "user"
+            ]
+          }
+        ]
+      },
+      {
+        "n": 9,
+        "project": "example-app",
+        "project_id": 2,
+        "bead_id": "example-app-t04",
+        "title": "Trim the nightly catalog report on test hosts (#117)",
+        "state": "in-progress",
+        "status": "open",
+        "manager_role": "manager-example-app-t04",
+        "total": 9,
+        "done": 7,
+        "steps": [
+          {
+            "bead_id": "example-app-t04.6.1",
+            "title": "Find the next catalog run on the test hosts",
+            "state": "done",
+            "status": "closed"
+          },
+          {
+            "bead_id": "example-app-t04.1",
+            "title": "Sample rollout carries #117 (abc1234): main CI green, sample tag, deployed",
+            "state": "done",
+            "status": "closed",
+            "blocked_by": [
+              "example-app-t04.5"
+            ]
+          },
+          {
+            "bead_id": "example-app-t04.3.1",
+            "title": "Measure invented catalog report runs on test hosts",
+            "state": "done",
+            "status": "closed",
+            "owner": "manager-example-app-t04"
+          },
+          {
+            "bead_id": "example-app-t04.3",
+            "title": "Waiting for the scheduled catalog run",
+            "state": "in-progress",
+            "status": "in_progress",
+            "blocked_by": [
+              "example-app-t04.6",
+              "example-app-t04.1"
+            ],
+            "children": [
+              {
+                "bead_id": "example-app-t04.3.2",
+                "title": "Staged catalog report run on test hosts",
+                "state": "done",
+                "status": "closed",
+                "owner": "operator-op-staged-sync-example-app-t04-3-2"
+              },
+              {
+                "bead_id": "example-app-t04.3.3",
+                "title": "Confirm sample catalog host tier (medium vs manual)",
+                "state": "done",
+                "status": "closed",
+                "owner": "operator-op-confirm-tier-o-example-app-t04-3-3"
+              }
+            ],
+            "owner": "manager-example-app-t04"
+          },
+          {
+            "bead_id": "example-app-t04.4",
+            "title": "Verify the sample catalog rule is gone (rule files + loaded config)",
+            "state": "not-started",
+            "status": "open",
+            "blocked_by": [
+              "example-app-t04.3"
+            ]
+          },
+          {
+            "bead_id": "example-app-t04.5",
+            "title": "Workflow approved",
+            "state": "done",
+            "status": "closed",
+            "gate": true,
+            "approvers": [
+              "user"
+            ],
+            "owner": "user"
+          },
+          {
+            "bead_id": "example-app-t04.6",
+            "title": "Greenlight: run the sample catalog report",
+            "state": "done",
+            "status": "closed",
+            "blocked_by": [
+              "example-app-t04.6.1",
+              "example-app-t04.3.1",
+              "example-app-t04.1"
+            ],
+            "gate": true,
+            "approvers": [
+              "user"
+            ],
+            "owner": "user"
+          }
+        ]
+      }
+    ]
+  },
+  "br": {
+    "example-app": [
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t01.17"
+          }
+        ],
+        "id": "example-app-t01.17.15",
+        "labels": [
+          "cmdr:brainstorming",
+          "kind:task",
+          "owner:operator-op-review-the-u-example-app-t01-17-15"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t03.2.12"
+          }
+        ],
+        "id": "example-app-t03.2.12.1",
+        "labels": [
+          "cmdr:brainstorming",
+          "kind:task",
+          "owner:operator-op-spike-proxy-example-app-t03-2-12-1"
+        ],
+        "status": "in_progress"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t04.3"
+          }
+        ],
+        "id": "example-app-t04.3.3",
+        "labels": [
+          "cmdr:brainstorming",
+          "kind:task",
+          "owner:operator-op-confirm-tier-o-example-app-t04-3-3"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t04.3"
+          }
+        ],
+        "id": "example-app-t04.3.2",
+        "labels": [
+          "cmdr:brainstorming",
+          "kind:task",
+          "owner:operator-op-staged-sync-example-app-t04-3-2"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t01.17"
+          }
+        ],
+        "id": "example-app-t01.17.14",
+        "labels": [
+          "cmdr:brainstorming",
+          "kind:task",
+          "owner:operator-op-rerun-the-fl-example-app-t01-17-14"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t04"
+          }
+        ],
+        "id": "example-app-t04.6.1",
+        "labels": [
+          "kind:objective"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t04.1"
+          }
+        ],
+        "id": "example-app-t04.1.1",
+        "labels": [
+          "cmdr:brainstorming",
+          "kind:task",
+          "owner:manager-example-app-t04",
+          "review"
+        ],
+        "status": "in_progress"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t01.17"
+          }
+        ],
+        "id": "example-app-t01.17.13",
+        "labels": [
+          "cmdr:brainstorming",
+          "kind:task"
+        ],
+        "status": "open"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "blocks",
+            "id": "example-app-t04.1"
+          },
+          {
+            "dependency_type": "blocks",
+            "id": "example-app-t04.3.1"
+          },
+          {
+            "dependency_type": "blocks",
+            "id": "example-app-t04.6.1"
+          },
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t04"
+          }
+        ],
+        "id": "example-app-t04.6",
+        "labels": [
+          "approver:user",
+          "gate",
+          "kind:objective",
+          "needs-user",
+          "owner:user"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t04"
+          }
+        ],
+        "id": "example-app-t04.3.1",
+        "labels": [
+          "cmdr:brainstorming",
+          "kind:task",
+          "owner:manager-example-app-t04",
+          "review"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t01.17"
+          }
+        ],
+        "id": "example-app-t01.17.12",
+        "labels": [
+          "cmdr:brainstorming",
+          "kind:task"
+        ],
+        "status": "open"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t01.17"
+          }
+        ],
+        "id": "example-app-t01.17.11",
+        "labels": [
+          "cmdr:brainstorming",
+          "kind:task"
+        ],
+        "status": "open"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t01.17"
+          }
+        ],
+        "id": "example-app-t01.17.10",
+        "labels": [
+          "cmdr:brainstorming",
+          "kind:task",
+          "owner:manager-example-app-t01",
+          "review"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t04"
+          }
+        ],
+        "id": "example-app-t04.5",
+        "labels": [
+          "approver:user",
+          "gate",
+          "kind:objective",
+          "needs-user",
+          "owner:user"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "blocks",
+            "id": "example-app-t04.3"
+          },
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t04"
+          }
+        ],
+        "id": "example-app-t04.4",
+        "labels": [
+          "kind:objective"
+        ],
+        "status": "open"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "blocks",
+            "id": "example-app-t04.1"
+          },
+          {
+            "dependency_type": "blocks",
+            "id": "example-app-t04.6"
+          },
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t04"
+          }
+        ],
+        "id": "example-app-t04.3",
+        "labels": [
+          "kind:objective",
+          "owner:manager-example-app-t04"
+        ],
+        "status": "in_progress"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "blocks",
+            "id": "example-app-t04.5"
+          },
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t04"
+          }
+        ],
+        "id": "example-app-t04.1",
+        "labels": [
+          "kind:objective"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [],
+        "id": "example-app-t04",
+        "labels": [
+          "kind:objective"
+        ],
+        "status": "open"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t01.17"
+          }
+        ],
+        "id": "example-app-t01.17.9",
+        "labels": [
+          "cmdr:brainstorming",
+          "kind:task",
+          "owner:manager-example-app-t01",
+          "review"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t01.17"
+          }
+        ],
+        "id": "example-app-t01.17.8",
+        "labels": [
+          "cmdr:brainstorming",
+          "kind:task",
+          "owner:manager-example-app-t01",
+          "review"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "blocks",
+            "id": "example-app-t03.10"
+          },
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t03.2"
+          }
+        ],
+        "id": "example-app-t03.2.12",
+        "labels": [
+          "kind:objective"
+        ],
+        "status": "open"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t01.17"
+          }
+        ],
+        "id": "example-app-t01.17.7",
+        "labels": [
+          "cmdr:brainstorming",
+          "kind:task",
+          "owner:operator-op-fix-pass-5-re-example-app-t01-17-7"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t01.17"
+          }
+        ],
+        "id": "example-app-t01.17.6",
+        "labels": [
+          "cmdr:brainstorming",
+          "kind:task",
+          "owner:operator-op-re-review-the-example-app-t01-17-6"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t03.2.11"
+          }
+        ],
+        "id": "example-app-t03.2.11.1",
+        "labels": [
+          "cmdr:brainstorming",
+          "kind:task",
+          "owner:manager-example-app-t03",
+          "review"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t03.2"
+          }
+        ],
+        "id": "example-app-t03.2.11",
+        "labels": [
+          "kind:objective",
+          "owner:manager-example-app-t03"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t03.2.10"
+          }
+        ],
+        "id": "example-app-t03.2.10.3",
+        "labels": [
+          "cmdr:brainstorming",
+          "kind:task",
+          "owner:operator-op-re-run-the-example-app-t03-2-10-3"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t01.17"
+          }
+        ],
+        "id": "example-app-t01.17.5",
+        "labels": [
+          "cmdr:brainstorming",
+          "kind:task",
+          "owner:manager-example-app-t01",
+          "review"
+        ],
+        "status": "in_progress"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t03.2.9"
+          }
+        ],
+        "id": "example-app-t03.2.9.6",
+        "labels": [
+          "cmdr:brainstorming",
+          "kind:task",
+          "owner:manager-example-app-t03",
+          "review"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t01.17"
+          }
+        ],
+        "id": "example-app-t01.17.4",
+        "labels": [
+          "cmdr:brainstorming",
+          "kind:task",
+          "owner:manager-example-app-t01",
+          "review"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t03"
+          }
+        ],
+        "id": "example-app-t03.14",
+        "labels": [
+          "kind:objective"
+        ],
+        "status": "open"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t03.2.9"
+          }
+        ],
+        "id": "example-app-t03.2.9.5",
+        "labels": [
+          "cmdr:brainstorming",
+          "kind:task",
+          "owner:manager-example-app-t03",
+          "review"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t03.2.10"
+          }
+        ],
+        "id": "example-app-t03.2.10.2",
+        "labels": [
+          "cmdr:brainstorming",
+          "kind:task",
+          "owner:manager-example-app-t03",
+          "review"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t03.2.10"
+          }
+        ],
+        "id": "example-app-t03.2.10.1",
+        "labels": [
+          "cmdr:brainstorming",
+          "kind:task",
+          "owner:operator-op-open-a-bump-example-app-t03-2-10-1"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t03.2"
+          }
+        ],
+        "id": "example-app-t03.2.10",
+        "labels": [
+          "kind:objective",
+          "owner:manager-example-app-t03"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t03.2.9"
+          }
+        ],
+        "id": "example-app-t03.2.9.4",
+        "labels": [
+          "cmdr:brainstorming",
+          "kind:task",
+          "owner:manager-example-app-t03",
+          "review"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t03.2.9"
+          }
+        ],
+        "id": "example-app-t03.2.9.3",
+        "labels": [
+          "cmdr:brainstorming",
+          "kind:task",
+          "owner:operator-op-re-review-th-example-app-t03-2-9-3"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t01.17"
+          }
+        ],
+        "id": "example-app-t01.17.3",
+        "labels": [
+          "cmdr:brainstorming",
+          "kind:task",
+          "owner:manager-example-app-t01",
+          "review"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "blocks",
+            "id": "example-app-t03.12"
+          },
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t03"
+          }
+        ],
+        "id": "example-app-t03.13",
+        "labels": [
+          "kind:objective"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "blocks",
+            "id": "example-app-t03.11"
+          },
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t03"
+          }
+        ],
+        "id": "example-app-t03.12",
+        "labels": [
+          "kind:objective"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "blocks",
+            "id": "example-app-t03.3"
+          },
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t03"
+          }
+        ],
+        "id": "example-app-t03.11",
+        "labels": [
+          "kind:objective"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t03.2.9"
+          }
+        ],
+        "id": "example-app-t03.2.9.2",
+        "labels": [
+          "cmdr:brainstorming",
+          "kind:task",
+          "owner:operator-op-fix-ce-code-example-app-t03-2-9-2"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t03.2.9"
+          }
+        ],
+        "id": "example-app-t03.2.9.1",
+        "labels": [
+          "cmdr:brainstorming",
+          "kind:task",
+          "owner:operator-op-review-the-t-example-app-t03-2-9-1"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t03.2"
+          }
+        ],
+        "id": "example-app-t03.2.9",
+        "labels": [
+          "kind:objective"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t01.17"
+          }
+        ],
+        "id": "example-app-t01.17.2",
+        "labels": [
+          "cmdr:brainstorming",
+          "kind:task",
+          "owner:manager-example-app-t01",
+          "review"
+        ],
+        "status": "closed"
+      },
+      {
+        "id": "example-app-t01.21",
+        "status": "closed",
+        "labels": [
+          "approver:user",
+          "gate",
+          "kind:objective",
+          "needs-user",
+          "wait-checked:1792684142",
+          "waiting:1792625017:user"
+        ],
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t01"
+          }
+        ]
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t03"
+          }
+        ],
+        "id": "example-app-t03.10",
+        "labels": [
+          "approver:user",
+          "gate",
+          "kind:objective",
+          "needs-user"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t01.17"
+          }
+        ],
+        "id": "example-app-t01.17.1",
+        "labels": [
+          "cmdr:brainstorming",
+          "kind:task",
+          "owner:operator-chore-metrics-restack"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t03.2.4"
+          }
+        ],
+        "id": "example-app-t03.2.4.6",
+        "labels": [
+          "cmdr:brainstorming",
+          "kind:task",
+          "owner:manager-example-app-t03",
+          "review"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t03.2.4"
+          }
+        ],
+        "id": "example-app-t03.2.4.5",
+        "labels": [
+          "cmdr:brainstorming",
+          "kind:task",
+          "owner:manager-example-app-t03",
+          "review"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t03.2.4"
+          }
+        ],
+        "id": "example-app-t03.2.4.4",
+        "labels": [
+          "cmdr:brainstorming",
+          "kind:task",
+          "owner:manager-example-app-t03",
+          "review"
+        ],
+        "status": "closed"
+      },
+      {
+        "id": "example-app-t01.20",
+        "status": "closed",
+        "labels": [
+          "approver:user",
+          "gate",
+          "kind:objective",
+          "waiting:1792610477:user"
+        ],
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t01.2"
+          }
+        ]
+      },
+      {
+        "id": "example-app-t01.19",
+        "status": "closed",
+        "labels": [
+          "approver:user",
+          "gate",
+          "kind:objective",
+          "waiting:1792610477:user"
+        ],
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t01.2"
+          }
+        ]
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "blocks",
+            "id": "example-app-t01.17"
+          },
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t01"
+          }
+        ],
+        "id": "example-app-t01.18",
+        "labels": [
+          "approver:user",
+          "gate",
+          "kind:objective"
+        ],
+        "status": "open"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "blocks",
+            "id": "example-app-t01.2"
+          },
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t01"
+          }
+        ],
+        "id": "example-app-t01.17",
+        "labels": [
+          "approver:reviewer-b",
+          "approver:reviewer-a",
+          "gate",
+          "kind:objective"
+        ],
+        "status": "open"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "blocks",
+            "id": "example-app-t03.4"
+          },
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t03"
+          }
+        ],
+        "id": "example-app-t03.9",
+        "labels": [
+          "approver:user",
+          "gate",
+          "kind:objective"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "blocks",
+            "id": "example-app-t03.7"
+          },
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t03"
+          }
+        ],
+        "id": "example-app-t03.8",
+        "labels": [
+          "approver:user",
+          "gate",
+          "kind:objective"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "blocks",
+            "id": "example-app-t03.2"
+          },
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t03"
+          }
+        ],
+        "id": "example-app-t03.7",
+        "labels": [
+          "approver:user",
+          "gate",
+          "kind:objective"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "blocks",
+            "id": "example-app-t03.2.12"
+          },
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t03.2"
+          }
+        ],
+        "id": "example-app-t03.2.8",
+        "labels": [
+          "approver:reviewer-b",
+          "approver:reviewer-a",
+          "gate",
+          "kind:objective"
+        ],
+        "status": "open"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "blocks",
+            "id": "example-app-t03.1"
+          },
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t03"
+          }
+        ],
+        "id": "example-app-t03.6",
+        "labels": [
+          "approver:user",
+          "gate",
+          "kind:objective"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t03.2.3"
+          }
+        ],
+        "id": "example-app-t03.2.3.2",
+        "labels": [
+          "cmdr:brainstorming",
+          "kind:task",
+          "owner:manager-example-app-t03",
+          "review"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t03.2.4"
+          }
+        ],
+        "id": "example-app-t03.2.4.3",
+        "labels": [
+          "cmdr:brainstorming",
+          "kind:task",
+          "owner:manager-example-app-t03",
+          "review"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t03.2.3"
+          }
+        ],
+        "id": "example-app-t03.2.3.1",
+        "labels": [
+          "kind:task"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "blocks",
+            "id": "example-app-t03.2.8"
+          },
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t03.2"
+          }
+        ],
+        "id": "example-app-t03.2.7",
+        "labels": [
+          "kind:objective"
+        ],
+        "status": "open"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t03.2"
+          }
+        ],
+        "id": "example-app-t03.2.6",
+        "labels": [
+          "kind:objective"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t03.2"
+          }
+        ],
+        "id": "example-app-t03.2.5",
+        "labels": [
+          "kind:objective"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t03.2"
+          }
+        ],
+        "id": "example-app-t03.2.4",
+        "labels": [
+          "kind:objective",
+          "owner:manager-example-app-t03"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t03.2"
+          }
+        ],
+        "id": "example-app-t03.2.3",
+        "labels": [
+          "kind:objective"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t03.2"
+          }
+        ],
+        "id": "example-app-t03.2.2",
+        "labels": [
+          "kind:objective",
+          "owner:user"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t03.2"
+          }
+        ],
+        "id": "example-app-t03.2.1",
+        "labels": [
+          "kind:objective",
+          "owner:user"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t01.2.9"
+          }
+        ],
+        "id": "example-app-t01.2.9.1",
+        "labels": [
+          "cmdr:brainstorming",
+          "kind:task",
+          "owner:manager-example-app-t01",
+          "review"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t01.2.8"
+          }
+        ],
+        "id": "example-app-t01.2.8.1",
+        "labels": [
+          "cmdr:brainstorming",
+          "kind:task",
+          "owner:manager-example-app-t01",
+          "review"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t01.2"
+          }
+        ],
+        "id": "example-app-t01.2.9",
+        "labels": [
+          "in-review",
+          "kind:objective",
+          "owner:manager-example-app-t01"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t01.2"
+          }
+        ],
+        "id": "example-app-t01.2.8",
+        "labels": [
+          "in-review",
+          "kind:objective",
+          "owner:manager-example-app-t01"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t01.2"
+          }
+        ],
+        "id": "example-app-t01.2.7",
+        "labels": [
+          "in-review",
+          "kind:objective",
+          "owner:manager-example-app-t01",
+          "review"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t01.2"
+          }
+        ],
+        "id": "example-app-t01.2.6",
+        "labels": [
+          "in-review",
+          "kind:objective",
+          "owner:manager-example-app-t01",
+          "review"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t01.2"
+          }
+        ],
+        "id": "example-app-t01.2.5",
+        "labels": [
+          "in-review",
+          "kind:objective",
+          "owner:manager-example-app-t01",
+          "review"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t01.2"
+          }
+        ],
+        "id": "example-app-t01.2.4",
+        "labels": [
+          "in-review",
+          "kind:objective",
+          "owner:manager-example-app-t01",
+          "review"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t01.2"
+          }
+        ],
+        "id": "example-app-t01.2.3",
+        "labels": [
+          "in-review",
+          "kind:objective",
+          "owner:manager-example-app-t01",
+          "review"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t01.2"
+          }
+        ],
+        "id": "example-app-t01.2.2",
+        "labels": [
+          "in-review",
+          "kind:objective",
+          "owner:manager-example-app-t01",
+          "review"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t01.2"
+          }
+        ],
+        "id": "example-app-t01.2.1",
+        "labels": [
+          "in-review",
+          "kind:objective",
+          "owner:manager-example-app-t01",
+          "review"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t03.5"
+          }
+        ],
+        "id": "example-app-t03.5.2",
+        "labels": [
+          "kind:task"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t03.5"
+          }
+        ],
+        "id": "example-app-t03.5.1",
+        "labels": [
+          "kind:task"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t03"
+          }
+        ],
+        "id": "example-app-t03.5",
+        "labels": [
+          "kind:objective",
+          "owner:manager-example-app-t03"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t01"
+          }
+        ],
+        "id": "example-app-t01.16",
+        "labels": [
+          "kind:objective"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t01"
+          }
+        ],
+        "id": "example-app-t01.15",
+        "labels": [
+          "kind:objective"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t01"
+          }
+        ],
+        "id": "example-app-t01.14",
+        "labels": [
+          "kind:objective"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t01"
+          }
+        ],
+        "id": "example-app-t01.13",
+        "labels": [
+          "kind:objective"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t01"
+          }
+        ],
+        "id": "example-app-t01.12",
+        "labels": [
+          "kind:objective"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t01"
+          }
+        ],
+        "id": "example-app-t01.11",
+        "labels": [
+          "kind:objective"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t01"
+          }
+        ],
+        "id": "example-app-t01.10",
+        "labels": [
+          "kind:objective"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t01"
+          }
+        ],
+        "id": "example-app-t01.9",
+        "labels": [
+          "kind:objective"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t01"
+          }
+        ],
+        "id": "example-app-t01.8",
+        "labels": [
+          "kind:objective",
+          "needs-user",
+          "owner:user"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t01"
+          }
+        ],
+        "id": "example-app-t01.7",
+        "labels": [
+          "kind:objective"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t01"
+          }
+        ],
+        "id": "example-app-t01.6",
+        "labels": [
+          "kind:objective"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t01"
+          }
+        ],
+        "id": "example-app-t01.5",
+        "labels": [
+          "kind:objective"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "blocks",
+            "id": "example-app-t03.3"
+          },
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t03"
+          }
+        ],
+        "id": "example-app-t03.4",
+        "labels": [
+          "kind:objective"
+        ],
+        "status": "open"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "blocks",
+            "id": "example-app-t01.21"
+          },
+          {
+            "dependency_type": "blocks",
+            "id": "example-app-t01.3"
+          },
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t01"
+          }
+        ],
+        "id": "example-app-t01.4",
+        "labels": [
+          "kind:objective"
+        ],
+        "status": "open"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "blocks",
+            "id": "example-app-t01.18"
+          },
+          {
+            "dependency_type": "blocks",
+            "id": "example-app-t01.21"
+          },
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t01"
+          }
+        ],
+        "id": "example-app-t01.3",
+        "labels": [
+          "kind:objective"
+        ],
+        "status": "open"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "blocks",
+            "id": "example-app-t01.1"
+          },
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t01"
+          }
+        ],
+        "id": "example-app-t01.2",
+        "labels": [
+          "kind:objective",
+          "star"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t01"
+          }
+        ],
+        "id": "example-app-t01.1",
+        "labels": [
+          "approver:user",
+          "gate",
+          "kind:objective"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "blocks",
+            "id": "example-app-t03.2.7"
+          },
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t03"
+          }
+        ],
+        "id": "example-app-t03.3",
+        "labels": [
+          "kind:objective"
+        ],
+        "status": "open"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "blocks",
+            "id": "example-app-t03.6"
+          },
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t03"
+          }
+        ],
+        "id": "example-app-t03.2",
+        "labels": [
+          "in-review",
+          "kind:objective",
+          "owner:manager-example-app-t03",
+          "until:merged"
+        ],
+        "status": "open"
+      },
+      {
+        "dependencies": [
+          {
+            "dependency_type": "parent-child",
+            "id": "example-app-t03"
+          }
+        ],
+        "id": "example-app-t03.1",
+        "labels": [
+          "kind:objective",
+          "star"
+        ],
+        "status": "closed"
+      },
+      {
+        "dependencies": [],
+        "id": "example-app-t01",
+        "labels": [
+          "kind:objective"
+        ],
+        "status": "open"
+      },
+      {
+        "dependencies": [],
+        "id": "example-app-t03",
+        "labels": [
+          "kind:objective"
+        ],
+        "status": "open"
+      }
+    ]
+  }
+}

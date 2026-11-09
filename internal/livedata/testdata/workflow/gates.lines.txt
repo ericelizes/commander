@@ -1,0 +1,29 @@
+#1 Sample text trials
+  Experiment 3: off-modal completed: Done (lab-t06.1)
+  Experiment 2: slow pages: Needs you: Approve comparing sample text variants? (lab-t06.2)
+    [gate, you] Slow pages: design approved: Done (lab-t06.2.1)
+    Slow pages: run the baseline: Done (lab-t06.2.2)
++   Verify the sample list guide: Not started (lab-t06.2.3)
++   Measure slow-page impact: Not started (lab-t06.2.4)
+  Experiment 7: slow restarts: Working on restore the test VM (lab-t06.3)
+    Slow restarts: baseline: Done (lab-t06.3.1)
+    Restore the test VM: Operator working (lab-t06.3.2)
++   Measure real-app startup impact: Not started (lab-t06.3.3)
+    Wait for CI on the fixture fix: Waiting for CI (lab-t06.3.4)
+  Design work approved: Done (lab-t06.4)
+  Align both designs to one gate per tier: Done (lab-t06.5)
+▶ [gate, you] Workflow approved: compare sample text variants: Needs you (lab-t06.6)
++ [gate, you] Results reviewed and reports posted: Not reached (lab-t06.7)
+  Write the summary post: Not started (lab-t06.8)
+  Revisit the old fixtures: Parked (lab-t06.10)
+
+▶ = now (lab-t06.6)
++ = approving it starts these 4, through the next gate
+
+#2 Lab ops
+▶ Rotate the lab keys: Operator working (lab-ops.1)
+  Land the cleanup PR: Waiting for review (lab-ops.2)
+  Announce the new keys: Not started (lab-ops.3)
+  Old runner cleanup: Agent stopped: the Manager's move (lab-ops.4)
+
+▶ = now (lab-ops.1)

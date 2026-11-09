@@ -1,0 +1,14 @@
+{
+  "goal": "When the user says show me X or work on N, Commander runs the commands its prompt's table names. Run as Commander with no terminal they never build a cockpit: cmdrd starts the chat and tmux is not touched, a terminal-held chat opens and selects its window in the running cockpit, and with neither nothing starts and the error says who can start it.",
+  "project": "example",
+  "bead": "demo-flow",
+  "beads": {
+    "demo-flow": {"status": "open", "labels": ["kind:objective", "kind:workstream"]}
+  },
+  "phrases": ["\"show me commander\"", "\"work on 3\""],
+  "cases": [
+    {"name": "cmdrd runs the chat", "cmdrd": "ok", "want_native": true, "want_no_tmux": true},
+    {"name": "a terminal holds the chat", "cmdrd": "held", "cockpit": true, "want_focused": true},
+    {"name": "cmdrd down and no cockpit", "cmdrd": "down", "want_exit": 1, "want_stderr": ["commander tmux session not running", "own terminal"]}
+  ]
+}

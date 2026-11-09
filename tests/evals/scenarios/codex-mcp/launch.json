@@ -1,0 +1,9 @@
+{
+  "user": "[mcp_servers.mcp_agent_mail]\nurl='http://example.invalid/mail'\n[mcp_servers.search]\ncommand='fake-search'\n",
+  "managed": "[mcp_servers.local-browser]\ncommand='node'\nargs=['/fixture/chrome-devtools-mcp']\n[mcp_servers.remote-browser]\ncommand='chrome-devtools-mcp'\n",
+  "steps": [
+    {"selected": "", "disabled": ["local-browser", "remote-browser", "mcp_agent_mail"]},
+    {"selected": "local-browser", "disabled": ["remote-browser", "mcp_agent_mail"]},
+    {"selected": "remote-browser", "disabled": ["local-browser", "mcp_agent_mail"]}
+  ]
+}

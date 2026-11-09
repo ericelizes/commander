@@ -1,0 +1,7 @@
+{
+  "goal": "Approving a gate retains real dispatch custody while its Manager is stopped; failed or delayed mail never orphan the released step.",
+  "cases": [
+    {"name":"queued with sleeping Manager", "now":100, "want":"Approved; Manager dispatch pending", "kind":"waiting"},
+    {"name":"delivery failed beyond deadline", "now":300, "want":"Approved work not started; Manager recovery needed", "kind":"stalled"}
+  ]
+}

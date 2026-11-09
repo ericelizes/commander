@@ -1,0 +1,224 @@
+{
+  "now": 1793350800,
+  "snapshot": {
+    "workstreams": [
+      {
+        "n": 1,
+        "project": "p",
+        "bead_id": "p-c",
+        "title": "Released by a close",
+        "state": "in-progress",
+        "status": "open",
+        "manager_role": "manager-p-c",
+        "no_gates": true,
+        "steps": [
+          {
+            "bead_id": "p-c.1",
+            "title": "Draft the notice",
+            "state": "done",
+            "status": "closed"
+          },
+          {
+            "bead_id": "p-c.2",
+            "title": "Send the notice",
+            "state": "not-started",
+            "status": "open",
+            "blocked_by": [
+              "p-c.1"
+            ],
+            "waiting": "Manager to start",
+            "waiting_since": 1793350680,
+            "waiting_until": 1793353800,
+            "waiting_until_as": "Manager to start",
+            "waiting_untils": {
+              "Manager to start": 1793353800
+            }
+          }
+        ]
+      },
+      {
+        "n": 2,
+        "project": "p",
+        "bead_id": "p-b",
+        "title": "Two areas",
+        "state": "in-progress",
+        "status": "open",
+        "manager_role": "manager-p-b",
+        "no_gates": true,
+        "steps": [
+          {
+            "bead_id": "p-b.1",
+            "title": "Import area",
+            "state": "in-progress",
+            "status": "open",
+            "track": true,
+            "workstream": "p-b",
+            "no_gates": true,
+            "children": [
+              {
+                "bead_id": "p-b.1.1",
+                "title": "Load the sample files",
+                "state": "in-progress",
+                "status": "open",
+                "owner": "manager-p-b",
+                "waiting": "CI #12",
+                "waiting_since": 1793350500
+              }
+            ]
+          },
+          {
+            "bead_id": "p-b.2",
+            "title": "Export area",
+            "state": "not-started",
+            "status": "open",
+            "track": true,
+            "workstream": "p-b",
+            "no_gates": true
+          }
+        ]
+      },
+      {
+        "n": 3,
+        "project": "p",
+        "bead_id": "p-a",
+        "title": "Plan pending",
+        "state": "not-started",
+        "status": "open",
+        "manager_role": "manager-p-a",
+        "no_gates": true,
+        "steps": []
+      },
+      {
+        "n": 4,
+        "project": "p",
+        "bead_id": "p-d",
+        "title": "Released and left",
+        "state": "in-progress",
+        "status": "open",
+        "manager_role": "manager-p-d",
+        "no_gates": true,
+        "steps": [
+          {
+            "bead_id": "p-d.1",
+            "title": "Write the report",
+            "state": "done",
+            "status": "closed"
+          },
+          {
+            "bead_id": "p-d.2",
+            "title": "Publish the report",
+            "state": "not-started",
+            "status": "open",
+            "blocked_by": [
+              "p-d.1"
+            ],
+            "waiting": "Manager to start",
+            "waiting_since": 1793350680,
+            "waiting_until": 1793350740,
+            "waiting_until_as": "Manager to start",
+            "waiting_untils": {
+              "Manager to start": 1793350740
+            }
+          }
+        ]
+      },
+      {
+        "n": 5,
+        "project": "p",
+        "bead_id": "p-e",
+        "title": "Task closed under its step",
+        "state": "in-progress",
+        "status": "open",
+        "manager_role": "manager-p-e",
+        "no_gates": true,
+        "steps": [
+          {
+            "bead_id": "p-e.1",
+            "title": "Tune the importer",
+            "state": "in-progress",
+            "status": "in_progress",
+            "children": [
+              {
+                "bead_id": "p-e.1.1",
+                "title": "Tune the importer (task)",
+                "state": "done",
+                "status": "closed",
+                "task": true
+              }
+            ],
+            "waiting": "Manager to start",
+            "waiting_since": 1793350680,
+            "waiting_until": 1793353800,
+            "waiting_until_as": "Manager to start",
+            "waiting_untils": {
+              "Manager to start": 1793353800
+            }
+          }
+        ]
+      },
+      {
+        "n": 6,
+        "project": "p",
+        "bead_id": "p-g",
+        "title": "Gate linked after create",
+        "state": "not-started",
+        "status": "open",
+        "manager_role": "manager-p-g",
+        "steps": [
+          {
+            "bead_id": "p-g.1",
+            "title": "Workflow approved",
+            "state": "not-started",
+            "status": "open",
+            "gate": true,
+            "approvers": [
+              "user"
+            ]
+          },
+          {
+            "bead_id": "p-g.2",
+            "title": "Build the export",
+            "state": "not-started",
+            "status": "open",
+            "blocked_by": [
+              "p-g.1"
+            ],
+            "waiting": "Manager to start",
+            "waiting_since": 1793343600,
+            "waiting_until": 1793347200,
+            "waiting_until_as": "Manager to start",
+            "waiting_untils": {
+              "Manager to start": 1793347200
+            }
+          }
+        ]
+      }
+    ],
+    "agents": {
+      "manager-p-a": {
+        "state": "idle",
+        "since": 1793350200
+      },
+      "manager-p-b": {
+        "state": "idle",
+        "since": 1793350200
+      },
+      "manager-p-c": {
+        "state": "idle",
+        "since": 1793350200
+      },
+      "manager-p-d": {
+        "state": "idle",
+        "since": 1793350200
+      },
+      "manager-p-e": {
+        "state": "idle",
+        "since": 1793350200
+      },
+      "manager-p-g": {
+        "state": "idle",
+        "since": 1793350740
+      }
+    }
+  }
+}

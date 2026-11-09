@@ -1,0 +1,1485 @@
+{
+  "version": 3,
+  "generated_at": "2026-10-20T18:41:51.712984Z",
+  "projects": [
+    {
+      "id": 1,
+      "name": "example-automation",
+      "type": "knowledge",
+      "path": "/tmp/example/code/example-automation",
+      "status": "active"
+    },
+    {
+      "id": 2,
+      "name": "example-app",
+      "type": "code",
+      "path": "/tmp/example/code/example-app",
+      "status": "active"
+    },
+    {
+      "id": 3,
+      "name": "commander",
+      "type": "code",
+      "path": "/tmp/example/code/commander",
+      "status": "active"
+    }
+  ],
+  "workstreams": [
+    {
+      "n": 1,
+      "project": "example-app",
+      "project_id": 2,
+      "bead_id": "example-app-t03",
+      "title": "Metrics consumer for each host (TEAM-113)",
+      "state": "not-started",
+      "status": "open",
+      "manager_role": "manager-example-app-t03",
+      "now_step": "example-app-t03.5",
+      "done": 0,
+      "total": 5,
+      "steps": [
+        {
+          "bead_id": "example-app-t03.1",
+          "title": "Get new spec review",
+          "state": "not-started",
+          "status": "open",
+          "starred": true,
+          "gates": [
+            {
+              "name": "Spec reviewed",
+              "verifier": "reviewer:reviewer-a",
+              "status": "passed",
+              "evidence": "Approved in review, 2 comments resolved",
+              "by": "reviewer-a",
+              "at": 1792000000
+            },
+            {
+              "name": "Tests green",
+              "verifier": "auto",
+              "status": "failed",
+              "evidence": "go test ./...: 2 failures",
+              "at": 1792000100
+            },
+            {
+              "name": "the user signs off",
+              "verifier": "user",
+              "status": "open"
+            }
+          ]
+        },
+        {
+          "bead_id": "example-app-t03.2",
+          "title": "Merge #101 > #102 > #103 > #104",
+          "state": "needs-user",
+          "status": "open",
+          "review": "101",
+          "ask": "Release catalog-parser 2.4.1 in the package mirror so PR #105 (catalog-parser bump) can go green",
+          "note": "Release catalog-parser 2.4.1 in the package mirror so PR #105 (catalog-parser bump) can go green",
+          "decision": {
+            "question": "Release catalog-parser 2.4.1 in the package mirror so PR #105 (catalog-parser bump) can go green",
+            "context": "The sample catalog stack (#101/#102/#103/#104) is pushed and green except the dependency audit, which waits on the pinned package. Pick how to clear it.",
+            "options": [
+              {
+                "label": "Ask the mirror admin to release catalog-parser 2.4.1",
+                "implications": "Once released I re-run #105 CI; after it merges the stack's audit goes green. Needs you or reviewer-a to ping the mirror admin.",
+                "recommended": true
+              },
+              {
+                "label": "Wait out the cooldown",
+                "implications": "No action; I re-run #105 CI later. Stack stays blocked until then."
+              },
+              {
+                "label": "Admin-override the audit on the stack PRs",
+                "implications": "Merges the stack with a known red check. Commander said not to override."
+              }
+            ],
+            "input": true
+          }
+        },
+        {
+          "bead_id": "example-app-t03.3",
+          "title": "Go live",
+          "state": "not-started",
+          "status": "open"
+        },
+        {
+          "bead_id": "example-app-t03.4",
+          "title": "First pilot: move catalog-service jobs to the new workers",
+          "state": "not-started",
+          "status": "open"
+        },
+        {
+          "bead_id": "example-app-t03.5",
+          "title": "Rebase stack on main, then fold in the catalog import rollout plan (U1-U7)",
+          "state": "in-progress",
+          "status": "in_progress",
+          "owner": "manager-example-app-t03",
+          "now": true
+        }
+      ]
+    },
+    {
+      "n": 2,
+      "project": "example-app",
+      "project_id": 2,
+      "bead_id": "example-app-t01",
+      "title": "Catalog index overview",
+      "state": "not-started",
+      "status": "open",
+      "manager_role": "manager-example-app-t01",
+      "now_step": "example-app-t01.2.1",
+      "done": 13,
+      "total": 25,
+      "steps": [
+        {
+          "bead_id": "example-app-t01.1",
+          "title": "Spec approved",
+          "state": "done",
+          "status": "closed"
+        },
+        {
+          "bead_id": "example-app-t01.2",
+          "title": "Build",
+          "state": "in-progress",
+          "status": "in_progress",
+          "starred": true,
+          "phase_note": "in progress, 0 of 9 done",
+          "children": [
+            {
+              "bead_id": "example-app-t01.2.1",
+              "title": "U1 spike: catalog cache behavior",
+              "state": "in-progress",
+              "status": "in_progress",
+              "review": "106",
+              "now": true
+            },
+            {
+              "bead_id": "example-app-t01.2.2",
+              "title": "U2 catalog index + import routes",
+              "state": "in-progress",
+              "status": "in_progress",
+              "review": "107"
+            },
+            {
+              "bead_id": "example-app-t01.2.3",
+              "title": "U3 ship the catalog import unit · PR #108",
+              "state": "in-progress",
+              "status": "in_progress",
+              "review": "108"
+            },
+            {
+              "bead_id": "example-app-t01.2.4",
+              "title": "U4 shelf index group + collector override",
+              "state": "in-progress",
+              "status": "in_progress",
+              "review": "109"
+            },
+            {
+              "bead_id": "example-app-t01.2.5",
+              "title": "U5 shelf discovery sweep, flag, route · PR #110",
+              "state": "in-progress",
+              "status": "in_progress",
+              "review": "110"
+            },
+            {
+              "bead_id": "example-app-t01.2.6",
+              "title": "U6 per-shelf dashboards + sync",
+              "state": "in-progress",
+              "status": "in_progress"
+            },
+            {
+              "bead_id": "example-app-t01.2.7",
+              "title": "U7 catalog notification adapter",
+              "state": "in-progress",
+              "status": "in_progress",
+              "review": "111"
+            },
+            {
+              "bead_id": "example-app-t01.2.8",
+              "title": "U8 catalog preferences and overview",
+              "state": "not-started",
+              "status": "open"
+            },
+            {
+              "bead_id": "example-app-t01.2.9",
+              "title": "U9 catalog export and guide",
+              "state": "not-started",
+              "status": "open"
+            }
+          ]
+        },
+        {
+          "bead_id": "example-app-t01.3",
+          "title": "Go live",
+          "state": "not-started",
+          "status": "open",
+          "blocked_by": [
+            "example-app-t01.2"
+          ]
+        },
+        {
+          "bead_id": "example-app-t01.4",
+          "title": "First pilot: cut catalog-service alerting over",
+          "state": "not-started",
+          "status": "open",
+          "blocked_by": [
+            "example-app-t01.3"
+          ]
+        },
+        {
+          "bead_id": "example-app-t01.5",
+          "title": "Plan reviewed",
+          "state": "done",
+          "status": "closed"
+        },
+        {
+          "bead_id": "example-app-t01.6",
+          "title": "Commit plan",
+          "state": "done",
+          "status": "closed"
+        },
+        {
+          "bead_id": "example-app-t01.7",
+          "title": "Choose the sample implementation order",
+          "state": "done",
+          "status": "closed"
+        },
+        {
+          "bead_id": "example-app-t01.8",
+          "title": "U1 spike: catalog cache behavior (the user runs the staging commands)",
+          "state": "done",
+          "status": "closed",
+          "owner": "user"
+        },
+        {
+          "bead_id": "example-app-t01.9",
+          "title": "U2 catalog index + import routes",
+          "state": "done",
+          "status": "closed"
+        },
+        {
+          "bead_id": "example-app-t01.10",
+          "title": "U3 ship the catalog import unit",
+          "state": "done",
+          "status": "closed"
+        },
+        {
+          "bead_id": "example-app-t01.11",
+          "title": "U4 shelf index group + collector override",
+          "state": "done",
+          "status": "closed"
+        },
+        {
+          "bead_id": "example-app-t01.12",
+          "title": "U5 shelf discovery sweep, flag, route",
+          "state": "done",
+          "status": "closed"
+        },
+        {
+          "bead_id": "example-app-t01.13",
+          "title": "U6 per-shelf dashboards + sync",
+          "state": "done",
+          "status": "closed"
+        },
+        {
+          "bead_id": "example-app-t01.14",
+          "title": "U7 catalog notification adapter",
+          "state": "done",
+          "status": "closed"
+        },
+        {
+          "bead_id": "example-app-t01.15",
+          "title": "U8 catalog preferences and overview",
+          "state": "done",
+          "status": "closed"
+        },
+        {
+          "bead_id": "example-app-t01.16",
+          "title": "U9 catalog export and guide",
+          "state": "done",
+          "status": "closed"
+        }
+      ],
+      "no_gates": true
+    },
+    {
+      "n": 3,
+      "project": "example-app",
+      "project_id": 2,
+      "bead_id": "example-app-t02",
+      "title": "Config audits: write the scripts and run them",
+      "state": "needs-user",
+      "status": "open",
+      "manager_role": "manager-example-app-t02",
+      "now_step": "example-app-t02.5",
+      "done": 2,
+      "total": 6,
+      "steps": [
+        {
+          "bead_id": "example-app-t02.1",
+          "title": "Notification service (TEAM-114)",
+          "state": "needs-user",
+          "status": "open",
+          "viz": 2,
+          "track": true,
+          "workstream": "example-app-t02",
+          "children": [
+            {
+              "bead_id": "example-app-t02.1.1",
+              "title": "Workflow approved (A)",
+              "state": "needs-user",
+              "status": "open",
+              "viz": 1,
+              "gate": true,
+              "approvers": [
+                "user"
+              ]
+            },
+            {
+              "bead_id": "example-app-t02.1.2",
+              "title": "Write the audit scripts",
+              "state": "not-started",
+              "status": "open",
+              "viz": 3,
+              "blocked_by": [
+                "example-app-t02.1.1"
+              ]
+            }
+          ]
+        },
+        {
+          "bead_id": "example-app-t02.2",
+          "title": "B. Run the audits",
+          "state": "in-progress",
+          "status": "open",
+          "viz": 2,
+          "track": true,
+          "workstream": "example-app-t02",
+          "children": [
+            {
+              "bead_id": "example-app-t02.2.1",
+              "title": "Workflow approved (B)",
+              "state": "done",
+              "status": "closed",
+              "viz": 1,
+              "gate": true,
+              "approvers": [
+                "user"
+              ]
+            },
+            {
+              "bead_id": "example-app-t02.2.2",
+              "title": "Run against staging",
+              "state": "in-progress",
+              "status": "open",
+              "viz": 3,
+              "owner": "operator-run-staging-example-app-t02-2-2",
+              "owner_state": "working",
+              "blocked_by": [
+                "example-app-t02.2.1"
+              ]
+            }
+          ]
+        },
+        {
+          "bead_id": "example-app-t02.3",
+          "title": "C. Fix findings",
+          "state": "in-progress",
+          "status": "open",
+          "viz": 2,
+          "track": true,
+          "workstream": "example-app-t02",
+          "children": [
+            {
+              "bead_id": "example-app-t02.3.1",
+              "title": "Workflow approved (C)",
+              "state": "done",
+              "status": "closed",
+              "viz": 1,
+              "gate": true,
+              "approvers": [
+                "user"
+              ]
+            },
+            {
+              "bead_id": "example-app-t02.3.2",
+              "title": "Merge fix PR",
+              "state": "in-progress",
+              "status": "open",
+              "viz": 3,
+              "review": "116",
+              "waiting": "CI #116",
+              "waiting_since": 1792535449,
+              "blocked_by": [
+                "example-app-t02.3.1"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "n": 4,
+      "project": "example-app",
+      "project_id": 2,
+      "bead_id": "example-app-t06",
+      "title": "Prompt experiments",
+      "state": "not-started",
+      "status": "open",
+      "manager_role": "manager-example-app-t06",
+      "now_step": "example-app-t06.1",
+      "done": 0,
+      "total": 3,
+      "steps": [
+        {
+          "bead_id": "example-app-t06.1",
+          "title": "Exp 3: does the sample prompt reduce retries? (TEAM-105)",
+          "state": "in-progress",
+          "status": "in_progress",
+          "owner": "operator-op-exp-3-sample-example-app-t06-1-1",
+          "now": true
+        },
+        {
+          "bead_id": "example-app-t06.2",
+          "title": "Exp 2: does the sample prompt shorten runs? (TEAM-106)",
+          "state": "not-started",
+          "status": "open"
+        },
+        {
+          "bead_id": "example-app-t06.3",
+          "title": "Exp 7: does the sample prompt cut errors? (TEAM-107)",
+          "state": "not-started",
+          "status": "open"
+        }
+      ]
+    },
+    {
+      "n": 5,
+      "project": "example-app",
+      "project_id": 2,
+      "bead_id": "example-app-t05",
+      "title": "Developer setup: fix the dev flow",
+      "state": "not-started",
+      "status": "open",
+      "manager_role": "manager-example-app-t05",
+      "now_step": "example-app-t05.6",
+      "done": 0,
+      "total": 6,
+      "steps": [
+        {
+          "bead_id": "example-app-t05.1",
+          "title": "Standard deploy: docs-site (TEAM-108)",
+          "state": "not-started",
+          "status": "open"
+        },
+        {
+          "bead_id": "example-app-t05.2",
+          "title": "Standard deploy: test-bench (TEAM-109)",
+          "state": "not-started",
+          "status": "open"
+        },
+        {
+          "bead_id": "example-app-t05.3",
+          "title": "Docs site: charts tab",
+          "state": "not-started",
+          "status": "open"
+        },
+        {
+          "bead_id": "example-app-t05.4",
+          "title": "Dev host display names (TEAM-110)",
+          "state": "not-started",
+          "status": "open",
+          "review": "114"
+        },
+        {
+          "bead_id": "example-app-t05.5",
+          "title": "Data catalogue (TEAM-111)",
+          "state": "not-started",
+          "status": "open"
+        },
+        {
+          "bead_id": "example-app-t05.6",
+          "title": "Bug: the assistant asks for an API change instead of checking the data source first",
+          "state": "in-progress",
+          "status": "in_progress",
+          "owner": "operator-op-fix-assistant-sh-example-app-t05-6-1",
+          "now": true
+        }
+      ]
+    },
+    {
+      "n": 6,
+      "project": "example-automation",
+      "project_id": 1,
+      "bead_id": "example-automation-t08",
+      "title": "Keep catalog-service jobs healthy (TEAM-112)",
+      "state": "in-progress",
+      "status": "in_progress",
+      "owner": "user",
+      "manager_role": "manager-example-automation-t08",
+      "now_step": "example-automation-t08.2",
+      "done": 1,
+      "total": 8,
+      "steps": [
+        {
+          "bead_id": "example-automation-t08.1",
+          "title": "Dashboard stops showing false red (merge #115)",
+          "state": "done",
+          "status": "closed"
+        },
+        {
+          "bead_id": "example-automation-t08.2",
+          "title": "Stuck nightly export",
+          "state": "in-progress",
+          "status": "in_progress",
+          "now": true
+        },
+        {
+          "bead_id": "example-automation-t08.3",
+          "title": "Sample preview uses the wrong dataset",
+          "state": "in-progress",
+          "status": "in_progress"
+        },
+        {
+          "bead_id": "example-automation-t08.4",
+          "title": "Report query load (heads-up to owner)",
+          "state": "not-started",
+          "status": "open"
+        },
+        {
+          "bead_id": "example-automation-t08.5",
+          "title": "job_alpha failing often in the last day",
+          "state": "not-started",
+          "status": "open"
+        },
+        {
+          "bead_id": "example-automation-t08.6",
+          "title": "job_beta: no recent runs",
+          "state": "not-started",
+          "status": "open"
+        },
+        {
+          "bead_id": "example-automation-t08.7",
+          "title": "job_gamma: runs daily but no recent success",
+          "state": "not-started",
+          "status": "open"
+        },
+        {
+          "bead_id": "example-automation-t08.8",
+          "title": "Alert on runs that succeed but do nothing",
+          "state": "not-started",
+          "status": "open"
+        }
+      ]
+    },
+    {
+      "n": 7,
+      "project": "example-automation",
+      "project_id": 1,
+      "bead_id": "example-automation-t07",
+      "title": "Review sample entry replacements (TEAM-103)",
+      "state": "in-progress",
+      "status": "in_progress",
+      "manager_role": "manager-example-automation-t07",
+      "now_step": "example-automation-t07.1",
+      "done": 0,
+      "total": 4,
+      "steps": [
+        {
+          "bead_id": "example-automation-t07.1",
+          "title": "Fix 1 dry run + note to the queue owner",
+          "state": "in-progress",
+          "status": "in_progress",
+          "now": true
+        },
+        {
+          "bead_id": "example-automation-t07.2",
+          "title": "Replace sample entries (needs review)",
+          "state": "needs-user",
+          "status": "open",
+          "owner": "user",
+          "ask": "Get reviewer sign-off on replacing sample entries (TEAM-103) - who approves?",
+          "note": "Need reviewer sign-off on replacing sample entries; name the approver",
+          "decision": {
+            "question": "Get reviewer sign-off on replacing sample entries (TEAM-103) - who approves?",
+            "context": "Replacing sample entries rewrites the sample dataset, so a reviewer must approve before automation is built. Name the approver and the scope in your answer.",
+            "options": [
+              {
+                "label": "Signed off (name + scope in note)",
+                "implications": "I spawn an Operator to build retry handling for the approved scope, dry-run first",
+                "recommended": true
+              },
+              {
+                "label": "Not yet - I will ask Ops",
+                "implications": "Step stays parked; no work started"
+              },
+              {
+                "label": "Drop this step",
+                "implications": "Step closed without work"
+              }
+            ],
+            "input": true
+          }
+        },
+        {
+          "bead_id": "example-automation-t07.3",
+          "title": "Imports with several source files or none",
+          "state": "not-started",
+          "status": "open"
+        },
+        {
+          "bead_id": "example-automation-t07.4",
+          "title": "Routing tweaks",
+          "state": "not-started",
+          "status": "open"
+        }
+      ]
+    },
+    {
+      "n": 8,
+      "project": "commander",
+      "project_id": 3,
+      "bead_id": "commander-il9",
+      "title": "Catalog workbench",
+      "state": "not-started",
+      "status": "open",
+      "manager_role": "manager-commander-il9",
+      "now_step": "commander-il9.12.11",
+      "done": 35,
+      "total": 51,
+      "steps": [
+        {
+          "bead_id": "commander-il9.1",
+          "title": "Shelf-first catalog layout",
+          "state": "in-progress",
+          "status": "in_progress",
+          "owner": "user",
+          "phase_note": "7 of 7 done",
+          "children": [
+            {
+              "bead_id": "commander-il9.1.1",
+              "title": "Shelf list on the left in every catalog view",
+              "state": "done",
+              "status": "closed",
+              "owner": "user"
+            },
+            {
+              "bead_id": "commander-il9.1.2",
+              "title": "Catalog notes always in the middle",
+              "state": "done",
+              "status": "closed",
+              "owner": "user"
+            },
+            {
+              "bead_id": "commander-il9.1.3",
+              "title": "Numbered shelves ordered by aisle, collection as a tag",
+              "state": "done",
+              "status": "closed",
+              "owner": "user"
+            },
+            {
+              "bead_id": "commander-il9.1.4",
+              "title": "Reorder shelves by reading priority",
+              "state": "done",
+              "status": "closed",
+              "owner": "user"
+            },
+            {
+              "bead_id": "commander-il9.1.5",
+              "title": "Toggle: group by collection",
+              "state": "done",
+              "status": "closed",
+              "owner": "user"
+            },
+            {
+              "bead_id": "commander-il9.1.6",
+              "title": "Shelf panel hierarchy (Next / needs-review / dim rest, status column)",
+              "state": "done",
+              "status": "closed",
+              "owner": "user"
+            },
+            {
+              "bead_id": "commander-il9.1.7",
+              "title": "Shelf panel starts at the top, scrolls, and shows ↑/↓ N more",
+              "state": "done",
+              "status": "closed",
+              "owner": "manager-commander"
+            }
+          ]
+        },
+        {
+          "bead_id": "commander-il9.2",
+          "title": "Show catalog status and curator on each step",
+          "state": "done",
+          "status": "closed",
+          "owner": "user"
+        },
+        {
+          "bead_id": "commander-il9.3",
+          "title": "Curators start catalog checks themselves",
+          "state": "done",
+          "status": "closed",
+          "owner": "user"
+        },
+        {
+          "bead_id": "commander-il9.4",
+          "title": "Curator-review flag: ⚑ marker and footer count",
+          "state": "done",
+          "status": "closed",
+          "owner": "user"
+        },
+        {
+          "bead_id": "commander-il9.5",
+          "title": "Surface catalog steps that need curator review",
+          "state": "done",
+          "status": "closed",
+          "owner": "user"
+        },
+        {
+          "bead_id": "commander-il9.6",
+          "title": "Workbench restart resumes the catalog session",
+          "state": "done",
+          "status": "closed",
+          "owner": "user"
+        },
+        {
+          "bead_id": "commander-il9.7",
+          "title": "Fix catalog notification inbox (collection routing key)",
+          "state": "done",
+          "status": "closed",
+          "owner": "user"
+        },
+        {
+          "bead_id": "commander-il9.8",
+          "title": "Keybind hints: C-a prefix, persistent back-to-catalog hint",
+          "state": "done",
+          "status": "closed",
+          "owner": "user"
+        },
+        {
+          "bead_id": "commander-il9.9",
+          "title": "Curator per collection (plan first, editor approves)",
+          "state": "in-progress",
+          "status": "in_progress",
+          "owner": "manager-commander",
+          "phase_note": "5 of 6 done",
+          "children": [
+            {
+              "bead_id": "commander-il9.9.1",
+              "title": "S1 collection_curators store + roles",
+              "state": "done",
+              "status": "closed",
+              "owner": "user"
+            },
+            {
+              "bead_id": "commander-il9.9.2",
+              "title": "S2 open-collection + window creation + restart rehydration",
+              "state": "done",
+              "status": "closed",
+              "owner": "user"
+            },
+            {
+              "bead_id": "commander-il9.9.3",
+              "title": "S3 Collection-only navigation, Enter opens the curator",
+              "state": "done",
+              "status": "closed",
+              "owner": "user"
+            },
+            {
+              "bead_id": "commander-il9.9.4",
+              "title": "S6 Adopt the three sample curators",
+              "state": "done",
+              "status": "closed",
+              "owner": "user"
+            },
+            {
+              "bead_id": "commander-il9.9.5",
+              "title": "S4 Notify by collection role; drop the old catalog alias",
+              "state": "done",
+              "status": "closed",
+              "owner": "user"
+            },
+            {
+              "bead_id": "commander-il9.9.6",
+              "title": "S7 Curator activity tracking in catalog metrics",
+              "state": "not-started",
+              "status": "open"
+            }
+          ]
+        },
+        {
+          "bead_id": "commander-il9.10",
+          "title": "Shelf navigator: 0 Catalog, highlight follows the active shelf, index = rank, no status bar",
+          "state": "done",
+          "status": "closed",
+          "owner": "manager-commander-il9"
+        },
+        {
+          "bead_id": "commander-il9.11",
+          "title": "Soft restart: reload framing, keep catalog notes open",
+          "state": "done",
+          "status": "closed"
+        },
+        {
+          "bead_id": "commander-il9.12",
+          "title": "Catalog layout exercise: shelves + curators left, title + notes middle, tabbed preview right",
+          "state": "in-progress",
+          "status": "in_progress",
+          "owner": "manager-commander-il9",
+          "phase_note": "in progress, 10 of 13 done",
+          "children": [
+            {
+              "bead_id": "commander-il9.12.1",
+              "title": "S1 Paper backgrounds + visible shelf framing",
+              "state": "done",
+              "status": "closed"
+            },
+            {
+              "bead_id": "commander-il9.12.2",
+              "title": "S1b Catalog footer notification cleanup",
+              "state": "done",
+              "status": "closed"
+            },
+            {
+              "bead_id": "commander-il9.12.3",
+              "title": "S2 Catalog theme roles, readable ink",
+              "state": "done",
+              "status": "closed"
+            },
+            {
+              "bead_id": "commander-il9.12.4",
+              "title": "S3 Shelf markers, rows, current vs cursor",
+              "state": "done",
+              "status": "closed"
+            },
+            {
+              "bead_id": "commander-il9.12.5",
+              "title": "S4 Shelf navigator structure + accordion",
+              "state": "done",
+              "status": "closed"
+            },
+            {
+              "bead_id": "commander-il9.12.6",
+              "title": "S5 CURATORS block bottom-left",
+              "state": "done",
+              "status": "closed"
+            },
+            {
+              "bead_id": "commander-il9.12.7",
+              "title": "S6 Collection title bar: pill, status row",
+              "state": "done",
+              "status": "closed"
+            },
+            {
+              "bead_id": "commander-il9.12.8",
+              "title": "S7 Catalog hints on focus only",
+              "state": "done",
+              "status": "closed"
+            },
+            {
+              "bead_id": "commander-il9.12.9",
+              "title": "S8 Book preview skeleton + catalog tab",
+              "state": "done",
+              "status": "closed"
+            },
+            {
+              "bead_id": "commander-il9.12.10",
+              "title": "S9 Book preview v1 renderers",
+              "state": "done",
+              "status": "closed"
+            },
+            {
+              "bead_id": "commander-il9.12.11",
+              "title": "S10 Shelf widths + resize",
+              "state": "in-progress",
+              "status": "in_progress",
+              "now": true
+            },
+            {
+              "bead_id": "commander-il9.12.12",
+              "title": "S11 Catalog polish pass",
+              "state": "in-progress",
+              "status": "in_progress"
+            },
+            {
+              "bead_id": "commander-il9.12.13",
+              "title": "S12 Book preview v2 (text, cover)",
+              "state": "not-started",
+              "status": "open"
+            }
+          ]
+        },
+        {
+          "bead_id": "commander-il9.13",
+          "title": "Curator availability per collection",
+          "state": "done",
+          "status": "closed"
+        },
+        {
+          "bead_id": "commander-il9.14",
+          "title": "Catalog selection card demo",
+          "state": "done",
+          "status": "closed"
+        },
+        {
+          "bead_id": "commander-il9.15",
+          "title": "Web/desktop catalog workbench: plan first, editor approves",
+          "state": "not-started",
+          "status": "open"
+        },
+        {
+          "bead_id": "commander-il9.16",
+          "title": "Catalog workbench: decide go/no-go on the plan",
+          "state": "done",
+          "status": "closed"
+        },
+        {
+          "bead_id": "commander-il9.17",
+          "title": "Catalog spike: plain text vs rich notes (report), then Phase 0",
+          "state": "not-started",
+          "status": "open"
+        },
+        {
+          "bead_id": "commander-il9.18",
+          "title": "Catalog: approve hybrid notes rendering, start Phase 0",
+          "state": "in-progress",
+          "status": "in_progress"
+        },
+        {
+          "bead_id": "commander-il9.19",
+          "title": "Catalog checker launch smoke test",
+          "state": "done",
+          "status": "closed",
+          "owner": "operator-op-spawn-smoke-t-commander-il9-19-4"
+        },
+        {
+          "bead_id": "commander-il9.20",
+          "title": "Catalog workbench end-to-end (desktop, native, sample build)",
+          "state": "not-started",
+          "status": "open"
+        },
+        {
+          "bead_id": "commander-il9.21",
+          "title": "Catalog M1: launchable window with shelf sidebar (checker building)",
+          "state": "not-started",
+          "status": "open"
+        },
+        {
+          "bead_id": "commander-il9.22",
+          "title": "Catalog notes engine in sample service (checker building)",
+          "state": "not-started",
+          "status": "open"
+        },
+        {
+          "bead_id": "commander-il9.23",
+          "title": "Catalog: book previews + selection-card forms",
+          "state": "not-started",
+          "status": "open"
+        },
+        {
+          "bead_id": "commander-il9.24",
+          "title": "Catalog: native notes UI (checkers, then editors/curators)",
+          "state": "not-started",
+          "status": "open"
+        },
+        {
+          "bead_id": "commander-il9.25",
+          "title": "Catalog: Ctrl+0-9, preview reload, desktop packaging",
+          "state": "not-started",
+          "status": "open"
+        }
+      ]
+    }
+  ],
+  "needs_you": [
+    {
+      "project": "example-app",
+      "bead_id": "example-app-t03.2",
+      "title": "Merge #101 > #102 > #103 > #104",
+      "workstream": "Sample catalog refresh (TEAM-101)",
+      "rank": 1,
+      "ask": "Release catalog-parser 2.4.1 in the package mirror so PR #105 (catalog-parser bump) can go green",
+      "note": "Release catalog-parser 2.4.1 in the package mirror so PR #105 (catalog-parser bump) can go green",
+      "decision": {
+        "question": "Release catalog-parser 2.4.1 in the package mirror so PR #105 (catalog-parser bump) can go green",
+        "context": "The sample catalog stack (#101/#102/#103/#104) is pushed and green except the dependency audit, which waits on the pinned package. Pick how to clear it.",
+        "options": [
+          {
+            "label": "Ask the mirror admin to release catalog-parser 2.4.1",
+            "implications": "Once released I re-run #105 CI; after it merges the stack's audit goes green. Needs you or reviewer-a to ping the mirror admin.",
+            "recommended": true
+          },
+          {
+            "label": "Wait out the cooldown",
+            "implications": "No action; I re-run #105 CI later. Stack stays blocked until then."
+          },
+          {
+            "label": "Admin-override the audit on the stack PRs",
+            "implications": "Merges the stack with a known red check. Commander said not to override."
+          }
+        ],
+        "input": true
+      }
+    },
+    {
+      "project": "example-automation",
+      "bead_id": "example-automation-t07.2",
+      "title": "Replace sample entries (needs review)",
+      "workstream": "Review sample entry replacements (TEAM-103)",
+      "rank": 7,
+      "ask": "Get reviewer sign-off on replacing sample entries (TEAM-103) - who approves?",
+      "note": "Need reviewer sign-off on replacing sample entries; name the approver",
+      "decision": {
+        "question": "Get reviewer sign-off on replacing sample entries (TEAM-103) - who approves?",
+        "context": "Replacing sample entries rewrites the sample dataset, so a reviewer must approve before automation is built. Name the approver and the scope in your answer.",
+        "options": [
+          {
+            "label": "Signed off (name + scope in note)",
+            "implications": "I spawn an Operator to build retry handling for the approved scope, dry-run first",
+            "recommended": true
+          },
+          {
+            "label": "Not yet - I will ask Ops",
+            "implications": "Step stays parked; no work started"
+          },
+          {
+            "label": "Drop this step",
+            "implications": "Step closed without work"
+          }
+        ],
+        "input": true
+      }
+    },
+    {
+      "project": "example-app",
+      "bead_id": "example-app-t02.1.1",
+      "title": "Workflow approved (A)",
+      "workstream": "Config audits: write the scripts and run them",
+      "track": "A. Script audits",
+      "track_id": "example-app-t02.1",
+      "rank": 3,
+      "ask": "Approve: Workflow approved (A)?",
+      "decision": {
+        "question": "Approve: Workflow approved (A)?",
+        "context": "Scope of the script audits and how they run.",
+        "options": [
+          {
+            "label": "Approve",
+            "implications": "The gate closes and the work behind it may start.",
+            "recommended": true
+          },
+          {
+            "label": "Change",
+            "implications": "The Manager reworks the workflow."
+          },
+          {
+            "label": "Drop",
+            "implications": "The Manager closes the track."
+          }
+        ]
+      },
+      "track_letter": "A"
+    }
+  ],
+  "agents": {
+    "commander": {
+      "state": "idle",
+      "since": 1792536049
+    },
+    "manager-commander-il9": {
+      "state": "working",
+      "since": 1792536049
+    },
+    "manager-example-automation-t08": {
+      "state": "idle",
+      "since": 1792536049
+    },
+    "manager-example-automation-t07": {
+      "state": "idle",
+      "since": 1792536049
+    },
+    "manager-example-app-t03": {
+      "state": "idle",
+      "since": 1792536049
+    },
+    "manager-example-app-t02": {
+      "state": "idle",
+      "since": 1792536049
+    },
+    "manager-example-app-t01": {
+      "state": "waiting",
+      "detail": "3 sub-agents",
+      "since": 1792536049
+    },
+    "manager-example-app-t05": {
+      "state": "idle",
+      "since": 1792536049
+    },
+    "manager-example-app-t06": {
+      "state": "idle",
+      "since": 1792536049
+    }
+  },
+  "fleet": {
+    "cost_usd_24h": 0,
+    "cost_usd_7d": 0,
+    "cost_series_24h": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "agents": 5,
+    "active": 5,
+    "blocked": 0,
+    "idle_ratio": 0,
+    "projects": 3
+  },
+  "unread": {
+    "commander": 1,
+    "manager-commander-il9": 1,
+    "manager-example-automation-t08": 0,
+    "manager-example-automation-t07": 0,
+    "manager-example-app-t03": 0,
+    "manager-example-app-t02": 0,
+    "manager-example-app-t01": 0,
+    "manager-example-app-t05": 0,
+    "manager-example-app-t06": 0
+  },
+  "display": {
+    "commander": {
+      "kind": "idle",
+      "text": "idle",
+      "since": 1792536049,
+      "unread": 1
+    },
+    "asks": [
+      {
+        "key": "ask:example-app:example-app-t03.2",
+        "text": "Release catalog-parser 2.4.1 in the package mirror so PR #105 (catalog-parser bump) can go green",
+        "rank": 1,
+        "workstream": "Sample catalog refresh (TEAM-101)",
+        "track": "",
+        "track_letter": "",
+        "ws_key": "example-app:example-app-t03"
+      },
+      {
+        "key": "ask:example-automation:example-automation-t07.2",
+        "text": "Get reviewer sign-off on replacing sample entries (TEAM-103) - who approves?",
+        "rank": 7,
+        "workstream": "Review sample entry replacements (TEAM-103)",
+        "track": "",
+        "track_letter": "",
+        "ws_key": "example-automation:example-automation-t07"
+      },
+      {
+        "key": "ask:example-app:example-app-t02.1.1",
+        "text": "Approve: Workflow approved (A)?",
+        "rank": 3,
+        "workstream": "Config audits: write the scripts and run them",
+        "track": "A. Script audits",
+        "track_letter": "A",
+        "ws_key": "example-app:example-app-t02"
+      }
+    ],
+    "workstreams": [
+      {
+        "key": "example-app:example-app-t03",
+        "n": 1,
+        "title": "Metrics consumer for each host (TEAM-113)",
+        "project": "example-app",
+        "bead_id": "example-app-t03",
+        "manager_role": "manager-example-app-t03",
+        "starred": false,
+        "kind": "needs",
+        "text": "Needs you: Release catalog-parser 2.4.1 in the package mirror…",
+        "since": 0,
+        "progress": {
+          "done": 0,
+          "total": 5
+        },
+        "working": 0,
+        "flag": 1,
+        "unread": 0,
+        "gate": null,
+        "tracks": []
+      },
+      {
+        "key": "example-app:example-app-t01",
+        "n": 2,
+        "title": "Catalog index overview",
+        "project": "example-app",
+        "bead_id": "example-app-t01",
+        "manager_role": "manager-example-app-t01",
+        "starred": false,
+        "kind": "working",
+        "text": "Working on u1 spike: cache behavior",
+        "since": 1792536049,
+        "progress": {
+          "done": 13,
+          "total": 24
+        },
+        "working": 1,
+        "flag": 0,
+        "unread": 0,
+        "gate": null,
+        "tracks": []
+      },
+      {
+        "key": "example-app:example-app-t02",
+        "n": 3,
+        "title": "Config audits: write the scripts and run them",
+        "project": "example-app",
+        "bead_id": "example-app-t02",
+        "manager_role": "manager-example-app-t02",
+        "starred": false,
+        "kind": "needs",
+        "text": "Needs you: Approve: Workflow approved (A)?",
+        "since": 0,
+        "progress": {
+          "done": 0,
+          "total": 3
+        },
+        "working": 2,
+        "flag": 1,
+        "unread": 0,
+        "gate": {
+          "bead_id": "example-app-t02.1.1",
+          "title": "Workflow approved (A)",
+          "who": "you",
+          "at": false,
+          "for_you": true
+        },
+        "tracks": [
+          {
+            "key": "example-app:example-app-t02.1",
+            "bead_id": "example-app-t02.1",
+            "letter": "A",
+            "title": "Notification service (TEAM-114)",
+            "kind": "needs",
+            "text": "Needs you: Approve: Workflow approved (A)?",
+            "since": 0,
+            "progress": {
+              "done": 0,
+              "total": 1
+            },
+            "working": 0
+          },
+          {
+            "key": "example-app:example-app-t02.2",
+            "bead_id": "example-app-t02.2",
+            "letter": "B",
+            "title": "Example control (TEAM-115)",
+            "kind": "working",
+            "text": "Working on run against staging",
+            "since": 0,
+            "progress": {
+              "done": 3,
+              "total": 3
+            },
+            "working": 1
+          },
+          {
+            "key": "example-app:example-app-t02.3",
+            "bead_id": "example-app-t02.3",
+            "letter": "C",
+            "title": "Fix findings",
+            "kind": "waiting",
+            "text": "Waiting for CI",
+            "since": 1792535449,
+            "progress": {
+              "done": 0,
+              "total": 1
+            },
+            "working": 0
+          }
+        ]
+      },
+      {
+        "key": "example-app:example-app-t06",
+        "n": 4,
+        "title": "Prompt experiments",
+        "project": "example-app",
+        "bead_id": "example-app-t06",
+        "manager_role": "manager-example-app-t06",
+        "starred": false,
+        "kind": "working",
+        "text": "Working on exp 3: does the sample prompt reduce retries?",
+        "since": 0,
+        "progress": {
+          "done": 0,
+          "total": 3
+        },
+        "working": 2,
+        "flag": 0,
+        "unread": 0,
+        "gate": null,
+        "tracks": []
+      },
+      {
+        "key": "example-app:example-app-t05",
+        "n": 5,
+        "title": "Developer setup: fix the dev flow",
+        "project": "example-app",
+        "bead_id": "example-app-t05",
+        "manager_role": "manager-example-app-t05",
+        "starred": false,
+        "kind": "working",
+        "text": "Working on bug: the assistant asks for an API change instead of checking the data source first",
+        "since": 0,
+        "progress": {
+          "done": 0,
+          "total": 6
+        },
+        "working": 2,
+        "flag": 0,
+        "unread": 0,
+        "gate": null,
+        "tracks": []
+      },
+      {
+        "key": "example-automation:example-automation-t08",
+        "n": 6,
+        "title": "Keep catalog-service jobs healthy (TEAM-112)",
+        "project": "example-automation",
+        "bead_id": "example-automation-t08",
+        "manager_role": "manager-example-automation-t08",
+        "starred": false,
+        "kind": "stalled",
+        "text": "Stalled",
+        "since": 0,
+        "progress": {
+          "done": 1,
+          "total": 8
+        },
+        "working": 0,
+        "flag": 0,
+        "unread": 0,
+        "gate": null,
+        "tracks": []
+      },
+      {
+        "key": "example-automation:example-automation-t07",
+        "n": 7,
+        "title": "Review sample entry replacements (TEAM-103)",
+        "project": "example-automation",
+        "bead_id": "example-automation-t07",
+        "manager_role": "manager-example-automation-t07",
+        "starred": false,
+        "kind": "needs",
+        "text": "Needs you: Get reviewer sign-off on replacing sample entries - who\u2026",
+        "since": 0,
+        "progress": {
+          "done": 0,
+          "total": 4
+        },
+        "working": 0,
+        "flag": 1,
+        "unread": 0,
+        "gate": null,
+        "tracks": []
+      },
+      {
+        "key": "commander:commander-il9",
+        "n": 8,
+        "title": "Catalog workbench",
+        "project": "commander",
+        "bead_id": "commander-il9",
+        "manager_role": "manager-commander-il9",
+        "starred": false,
+        "kind": "working",
+        "text": "Working on s10 Shelf widths + resize",
+        "since": 1792536049,
+        "progress": {
+          "done": 28,
+          "total": 42
+        },
+        "working": 1,
+        "flag": 0,
+        "unread": 1,
+        "gate": null,
+        "tracks": []
+      }
+    ]
+  },
+  "linear": {
+    "state": "ok",
+    "key": "saved",
+    "issues": [
+      {
+        "id": "TEAM-113",
+        "title": "Metrics consumer for each host",
+        "status_name": "Done",
+        "status_type": "completed",
+        "url": "https://linear.app/example/issue/TEAM-113"
+      },
+      {
+        "id": "TEAM-116",
+        "title": "Job workers: test-bench",
+        "status_name": "In Progress",
+        "status_type": "started",
+        "url": "https://linear.app/example/issue/TEAM-116"
+      },
+      {
+        "id": "TEAM-109",
+        "title": "Standard deploy: test-bench",
+        "status_name": "In Progress",
+        "status_type": "started",
+        "url": "https://linear.app/example/issue/TEAM-109"
+      },
+      {
+        "id": "TEAM-114",
+        "title": "Notification service",
+        "status_name": "Todo",
+        "status_type": "unstarted",
+        "url": "https://linear.app/example/issue/TEAM-114"
+      },
+      {
+        "id": "TEAM-115",
+        "title": "Example control",
+        "status_name": "Todo",
+        "status_type": "unstarted",
+        "url": "https://linear.app/example/issue/TEAM-115"
+      },
+      {
+        "id": "TEAM-117",
+        "title": "Query tool",
+        "status_name": "Blocked",
+        "status_type": "started",
+        "url": "https://linear.app/example/issue/TEAM-117"
+      },
+      {
+        "id": "TEAM-118",
+        "title": "Paginate admin hosts",
+        "status_name": "In Review",
+        "status_type": "started",
+        "url": "https://linear.app/example/issue/TEAM-118"
+      }
+    ],
+    "cycle": {
+      "name": "Cycle 12",
+      "start": "2026-10-28T00:00:00Z",
+      "end": "2026-11-10T00:00:00Z"
+    }
+  }
+}

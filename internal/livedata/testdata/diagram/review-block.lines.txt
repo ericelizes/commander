@@ -1,0 +1,16 @@
+#1 Checkout rewrite
+Checkout rewrite (w)
+  [You] [gate, you] Workflow approved: Done (w.0)
+  [Operators] Build the checkout: Done (w.1)
+▶ [Operators] [review block] Review gate: Working on adversarial review by a different reviewer · 3 of 6 checks done (w.9) after w.1
+        Answer and resolve every Devin comment: Done · found: devin-comments-resolved passed @head1 (w.9.1)
+        Run the code review: Done · found: review-clean passed @head1 (w.9.2)
+        Fix the review findings and get a clean recheck: Done · found: recheck-clean passed @head1 (w.9.3)
+        Adversarial review by a different reviewer: Operator working · check: review-clean (w.9.4)
+        Fix the adversarial findings and get a clean recheck: Not started · check: recheck-clean (w.9.5)
+        Final check on the current PR head: Not started · check: head-current (w.9.6)
+  [You] [gate, you] PR merged: Not reached (w.2) after w.1, w.9
+      passes when: PR 1234 is merged on main.
+
+1 findings (cmdr graph check w):
+  - [MERGE_REVIEW_INCOMPLETE] w.2 "": MERGE_REVIEW_INCOMPLETE: w.2 is blocked by w.9; unfinished or stale: w.9, w.9.4, w.9.5, w.9.6. Fix, in this order (closing a closed step again reruns its fresh check; a proof names a closed separate review of head1 and the commits that fixed its findings; only if that review reports no findings, use "no_findings":true,"fix_commits":[] instead of fix_commits): cmdr internal-comment --project p --bead w.9.4 --text 'workflow-review-proof@v1 {"review_bead":"<separate-review-task>","head":"<full-sha>","fix_commits":["<full-fix-sha>"]}' ; cmdr internal-close-objective --project p --bead w.9.4 ; cmdr internal-comment --project p --bead w.9.5 --text 'workflow-review-proof@v1 {"review_bead":"<separate-review-task>","head":"<full-sha>","fix_commits":["<full-fix-sha>"]}' ; cmdr internal-close-objective --project p --bead w.9.5 ; cmdr internal-close-objective --project p --bead w.9.6 ; cmdr internal-close-objective --project p --bead w.9. Fix: cmdr internal-comment --project p --bead w.9.4 --text 'workflow-review-proof@v1 {"review_bead":"<separate-review-task>","head":"<full-sha>","fix_commits":["<full-fix-sha>"]}' ; cmdr internal-close-objective --project p --bead w.9.4 ; cmdr internal-comment --project p --bead w.9.5 --text 'workflow-review-proof@v1 {"review_bead":"<separate-review-task>","head":"<full-sha>","fix_commits":["<full-fix-sha>"]}' ; cmdr internal-close-objective --project p --bead w.9.5 ; cmdr internal-close-objective --project p --bead w.9.6 ; cmdr internal-close-objective --project p --bead w.9

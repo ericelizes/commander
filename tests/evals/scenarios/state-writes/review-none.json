@@ -1,0 +1,7 @@
+{
+  "argv": ["internal-set-objective", "--project", "example", "--bead", "p-1", "--review", "none"],
+  "bead_labels": ["kind:objective", "in-review", "pr:12", "pr:acme/widgets#34"],
+  "update_contains": ["--remove-label in-review", "--remove-label pr:12", "--remove-label pr:acme/widgets#34"],
+  "comment_contains": ["review labels cleared by", "in-review", "pr:12", "pr:acme/widgets#34", "no reason given"],
+  "expected_updates": 1
+}

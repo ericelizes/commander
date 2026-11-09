@@ -1,0 +1,73 @@
+{
+ "commander": {
+  "kind": "none",
+  "text": "no agent yet",
+  "since": 0,
+  "unread": 0
+ },
+ "asks": [],
+ "workstreams": [
+  {
+   "key": "app:t",
+   "n": 1,
+   "title": "Two tracks, a direct task each",
+   "project": "app",
+   "bead_id": "t",
+   "manager_role": "manager-t",
+   "starred": false,
+   "kind": "working",
+   "text": "Working on task A",
+   "since": 0,
+   "progress": {
+    "done": 0,
+    "total": 2
+   },
+   "milestones": {
+    "done": 0,
+    "total": 0
+   },
+   "working": 3,
+   "flag": 0,
+   "unread": 0,
+   "gate": null,
+   "tracks": [
+    {
+     "key": "app:t.1",
+     "bead_id": "t.1",
+     "letter": ".1",
+     "title": "Track A",
+     "kind": "working",
+     "text": "Working on task A",
+     "since": 0,
+     "progress": {
+      "done": 0,
+      "total": 1
+     },
+     "milestones": {
+      "done": 0,
+      "total": 0
+     },
+     "working": 1
+    },
+    {
+     "key": "app:t.2",
+     "bead_id": "t.2",
+     "letter": ".2",
+     "title": "Track B",
+     "kind": "working",
+     "text": "Working on task B",
+     "since": 0,
+     "progress": {
+      "done": 0,
+      "total": 1
+     },
+     "milestones": {
+      "done": 0,
+      "total": 0
+     },
+     "working": 1
+    }
+   ]
+  }
+ ]
+}

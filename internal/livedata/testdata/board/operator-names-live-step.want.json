@@ -1,0 +1,242 @@
+{
+ "commander": {
+  "kind": "none",
+  "text": "no agent yet",
+  "since": 0,
+  "unread": 0
+ },
+ "asks": [],
+ "workstreams": [
+  {
+   "key": "app:a",
+   "n": 1,
+   "title": "Died step ahead of the Operator",
+   "project": "app",
+   "bead_id": "a",
+   "manager_role": "manager-a",
+   "starred": false,
+   "kind": "working",
+   "text": "Working on land the polish · then: release approved",
+   "since": 0,
+   "progress": {
+    "done": 0,
+    "total": 3
+   },
+   "milestones": {
+    "done": 0,
+    "total": 3
+   },
+   "working": 2,
+   "flag": 0,
+   "unread": 0,
+   "gate": {
+    "bead_id": "a.4",
+    "title": "Release approved",
+    "who": "reviewer-a",
+    "at": false,
+    "for_you": false
+   },
+   "tracks": []
+  },
+  {
+   "key": "app:b",
+   "n": 2,
+   "title": "Finished step ahead of the Operator",
+   "project": "app",
+   "bead_id": "b",
+   "manager_role": "manager-b",
+   "starred": false,
+   "kind": "working",
+   "text": "Working on land the polish · then: release approved",
+   "since": 0,
+   "progress": {
+    "done": 0,
+    "total": 3
+   },
+   "milestones": {
+    "done": 0,
+    "total": 3
+   },
+   "working": 2,
+   "flag": 0,
+   "unread": 0,
+   "gate": {
+    "bead_id": "b.4",
+    "title": "Release approved",
+    "who": "reviewer-a",
+    "at": false,
+    "for_you": false
+   },
+   "tracks": []
+  },
+  {
+   "key": "app:c",
+   "n": 3,
+   "title": "CI wait ahead of the Operator",
+   "project": "app",
+   "bead_id": "c",
+   "manager_role": "manager-c",
+   "starred": false,
+   "kind": "working",
+   "text": "Working on land the polish · then: release approved",
+   "since": 0,
+   "progress": {
+    "done": 0,
+    "total": 3
+   },
+   "milestones": {
+    "done": 0,
+    "total": 3
+   },
+   "working": 2,
+   "flag": 0,
+   "unread": 0,
+   "gate": {
+    "bead_id": "c.4",
+    "title": "Release approved",
+    "who": "reviewer-a",
+    "at": false,
+    "for_you": false
+   },
+   "tracks": []
+  },
+  {
+   "key": "app:d",
+   "n": 4,
+   "title": "In-progress step ahead of the Operator",
+   "project": "app",
+   "bead_id": "d",
+   "manager_role": "manager-d",
+   "starred": false,
+   "kind": "working",
+   "text": "Working on land the polish +1 more · then: release approved",
+   "since": 0,
+   "progress": {
+    "done": 0,
+    "total": 3
+   },
+   "milestones": {
+    "done": 0,
+    "total": 3
+   },
+   "working": 2,
+   "flag": 0,
+   "unread": 0,
+   "gate": {
+    "bead_id": "d.4",
+    "title": "Release approved",
+    "who": "reviewer-a",
+    "at": false,
+    "for_you": false
+   },
+   "tracks": [],
+   "age_as": "working|Working on land the polish · then: release approved"
+  },
+  {
+   "key": "app:e",
+   "n": 5,
+   "title": "Operator on a step with open children",
+   "project": "app",
+   "bead_id": "e",
+   "manager_role": "manager-e",
+   "starred": false,
+   "kind": "working",
+   "text": "Working on land the polish · then: release approved",
+   "since": 0,
+   "progress": {
+    "done": 0,
+    "total": 2
+   },
+   "milestones": {
+    "done": 0,
+    "total": 2
+   },
+   "working": 2,
+   "flag": 0,
+   "unread": 0,
+   "gate": {
+    "bead_id": "e.3",
+    "title": "Release approved",
+    "who": "reviewer-a",
+    "at": false,
+    "for_you": false
+   },
+   "tracks": []
+  },
+  {
+   "key": "app:f",
+   "n": 6,
+   "title": "No gates: CI wait ahead of the Operator",
+   "project": "app",
+   "bead_id": "f",
+   "manager_role": "manager-f",
+   "starred": false,
+   "kind": "working",
+   "text": "Working on land the polish",
+   "since": 0,
+   "progress": {
+    "done": 0,
+    "total": 2
+   },
+   "milestones": {
+    "done": 0,
+    "total": 2
+   },
+   "working": 2,
+   "flag": 0,
+   "unread": 0,
+   "gate": null,
+   "tracks": []
+  },
+  {
+   "key": "app:g",
+   "n": 7,
+   "title": "Closed gate: CI wait ahead of the Operator",
+   "project": "app",
+   "bead_id": "g",
+   "manager_role": "manager-g",
+   "starred": false,
+   "kind": "working",
+   "text": "Working on land the polish",
+   "since": 0,
+   "progress": {
+    "done": 0,
+    "total": 2
+   },
+   "milestones": {
+    "done": 0,
+    "total": 2
+   },
+   "working": 2,
+   "flag": 0,
+   "unread": 0,
+   "gate": null,
+   "tracks": []
+  },
+  {
+   "key": "app:h",
+   "n": 8,
+   "title": "No gates: Operator on a step with open children",
+   "project": "app",
+   "bead_id": "h",
+   "manager_role": "manager-h",
+   "starred": false,
+   "kind": "working",
+   "text": "Working on land the polish",
+   "since": 0,
+   "progress": {
+    "done": 0,
+    "total": 1
+   },
+   "milestones": {
+    "done": 0,
+    "total": 1
+   },
+   "working": 2,
+   "flag": 0,
+   "unread": 0,
+   "gate": null,
+   "tracks": []
+  }
+ ]
+}

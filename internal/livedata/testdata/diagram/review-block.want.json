@@ -1,0 +1,127 @@
+{
+ "p:w": {
+  "id": "w",
+  "title": "Checkout rewrite",
+  "current": "w.9",
+  "steps": [
+   {
+    "id": "w.0",
+    "title": "Workflow approved",
+    "kind": "done",
+    "text": "Done",
+    "lane": "you",
+    "actor": "you",
+    "gate": true,
+    "approvers": "you",
+    "criteria": "The user approved the stages."
+   },
+   {
+    "id": "w.1",
+    "title": "Build the checkout",
+    "kind": "done",
+    "text": "Done",
+    "lane": "agents",
+    "actor": "operators"
+   },
+   {
+    "id": "w.9",
+    "title": "Review gate",
+    "kind": "working",
+    "text": "Working on adversarial review by a different reviewer",
+    "lane": "agents",
+    "actor": "operators",
+    "after": [
+     "w.1"
+    ],
+    "progress": "3 of 6 checks done",
+    "review": {
+     "template": "pr-review",
+     "pr": "https://github.com/o/r/pull/1234",
+     "head": "head1",
+     "done": 3,
+     "total": 6,
+     "checks": [
+      {
+       "id": "w.9.1",
+       "step": "devin-comments",
+       "title": "Answer and resolve every Devin comment",
+       "kind": "done",
+       "text": "Done",
+       "verifier": "devin-comments-resolved",
+       "head": "head1",
+       "finding": "devin-comments-resolved passed"
+      },
+      {
+       "id": "w.9.2",
+       "step": "review",
+       "title": "Run the code review",
+       "kind": "done",
+       "text": "Done",
+       "verifier": "review-clean",
+       "head": "head1",
+       "finding": "review-clean passed"
+      },
+      {
+       "id": "w.9.3",
+       "step": "fix-review",
+       "title": "Fix the review findings and get a clean recheck",
+       "kind": "done",
+       "text": "Done",
+       "verifier": "recheck-clean",
+       "head": "head1",
+       "finding": "recheck-clean passed"
+      },
+      {
+       "id": "w.9.4",
+       "step": "adversarial-review",
+       "title": "Adversarial review by a different reviewer",
+       "kind": "working",
+       "text": "Operator working",
+       "verifier": "review-clean"
+      },
+      {
+       "id": "w.9.5",
+       "step": "fix-adversarial",
+       "title": "Fix the adversarial findings and get a clean recheck",
+       "kind": "idle",
+       "text": "Not started",
+       "verifier": "recheck-clean"
+      },
+      {
+       "id": "w.9.6",
+       "step": "final-check",
+       "title": "Final check on the current PR head",
+       "kind": "idle",
+       "text": "Not started",
+       "verifier": "head-current"
+      }
+     ]
+    }
+   },
+   {
+    "id": "w.2",
+    "title": "PR merged",
+    "kind": "idle",
+    "text": "Not reached",
+    "lane": "you",
+    "actor": "you",
+    "gate": true,
+    "approvers": "you",
+    "criteria": "PR 1234 is merged on main.",
+    "after": [
+     "w.1",
+     "w.9"
+    ]
+   }
+  ],
+  "findings": [
+   {
+    "check": "MERGE_REVIEW_INCOMPLETE",
+    "bead": "w.2",
+    "title": "",
+    "why": "MERGE_REVIEW_INCOMPLETE: w.2 is blocked by w.9; unfinished or stale: w.9, w.9.4, w.9.5, w.9.6. Fix, in this order (closing a closed step again reruns its fresh check; a proof names a closed separate review of head1 and the commits that fixed its findings; only if that review reports no findings, use \"no_findings\":true,\"fix_commits\":[] instead of fix_commits): cmdr internal-comment --project p --bead w.9.4 --text 'workflow-review-proof@v1 {\"review_bead\":\"\u003cseparate-review-task\u003e\",\"head\":\"\u003cfull-sha\u003e\",\"fix_commits\":[\"\u003cfull-fix-sha\u003e\"]}' ; cmdr internal-close-objective --project p --bead w.9.4 ; cmdr internal-comment --project p --bead w.9.5 --text 'workflow-review-proof@v1 {\"review_bead\":\"\u003cseparate-review-task\u003e\",\"head\":\"\u003cfull-sha\u003e\",\"fix_commits\":[\"\u003cfull-fix-sha\u003e\"]}' ; cmdr internal-close-objective --project p --bead w.9.5 ; cmdr internal-close-objective --project p --bead w.9.6 ; cmdr internal-close-objective --project p --bead w.9",
+    "fix": "cmdr internal-comment --project p --bead w.9.4 --text 'workflow-review-proof@v1 {\"review_bead\":\"\u003cseparate-review-task\u003e\",\"head\":\"\u003cfull-sha\u003e\",\"fix_commits\":[\"\u003cfull-fix-sha\u003e\"]}' ; cmdr internal-close-objective --project p --bead w.9.4 ; cmdr internal-comment --project p --bead w.9.5 --text 'workflow-review-proof@v1 {\"review_bead\":\"\u003cseparate-review-task\u003e\",\"head\":\"\u003cfull-sha\u003e\",\"fix_commits\":[\"\u003cfull-fix-sha\u003e\"]}' ; cmdr internal-close-objective --project p --bead w.9.5 ; cmdr internal-close-objective --project p --bead w.9.6 ; cmdr internal-close-objective --project p --bead w.9"
+   }
+  ]
+ }
+}

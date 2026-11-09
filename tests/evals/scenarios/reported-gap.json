@@ -1,0 +1,100 @@
+{
+ "now": 1793214000,
+ "snapshot": {
+  "version": 1,
+  "generated_at": "2026-11-05T07:06:50Z",
+  "projects": [
+   {
+    "id": 1,
+    "name": "app",
+    "type": "code",
+    "path": "/tmp/app",
+    "status": "active"
+   }
+  ],
+  "live": {
+   "operators": [
+    "operator-op-live-app-w2-2"
+   ],
+   "reported": [
+    {
+     "operator": "operator-op-done-app-w2-1",
+     "project_id": 1,
+     "bead": "app-w2.1",
+     "since": 1793213980
+    }
+   ]
+  },
+  "agents": {
+   "manager-app-w2": {
+    "state": "idle"
+   },
+   "manager-app-w3": {
+    "state": "idle"
+   }
+  },
+  "unread": {},
+  "fleet": {},
+  "needs_you": [],
+  "watch": {},
+  "workstreams": [
+   {
+    "n": 2,
+    "project": "app",
+    "project_id": 1,
+    "bead_id": "app-w2",
+    "title": "Report in beside live work",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-app-w2",
+    "done": 0,
+    "total": 2,
+    "steps": [
+     {
+      "bead_id": "app-w2.1",
+      "title": "Fix the retry budget",
+      "state": "in-progress",
+      "status": "in_progress",
+      "owner": "operator-op-done-app-w2-1",
+      "owner_state": "working",
+      "viz": 3,
+      "broken": true
+     },
+     {
+      "bead_id": "app-w2.2",
+      "title": "Build the next wave",
+      "state": "in-progress",
+      "status": "in_progress",
+      "owner": "operator-op-live-app-w2-2",
+      "owner_state": "working",
+      "viz": 3
+     }
+    ]
+   },
+   {
+    "n": 3,
+    "project": "app",
+    "project_id": 1,
+    "bead_id": "app-w3",
+    "title": "Stopped with no report",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-app-w3",
+    "done": 0,
+    "total": 1,
+    "steps": [
+     {
+      "bead_id": "app-w3.1",
+      "title": "Trace the slow query",
+      "state": "in-progress",
+      "status": "in_progress",
+      "owner": "operator-op-gone-app-w3-1",
+      "owner_state": "working",
+      "viz": 3,
+      "broken": true
+     }
+    ]
+   }
+  ]
+ }
+}

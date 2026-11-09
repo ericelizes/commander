@@ -1,0 +1,7 @@
+0 Commander: monitoring (2 unread, for 3d)
+1 Format change: Needs you: Keep the old format? (0% done, next gate: Publish approved, approved by you, ⚑ 1)
+2 Interrupted: Agent stopped on interrupted work: the Manager's move (0% done, next gate: Interrupted work accepted, approved by operator, for 3h) · why: its session ended
+3 Blocked stages: Needs you: Proceed with the outer stage? (0% done, no gates, ⚑ 1, 2 working)
+Needs you (2):
+  #1 Keep the old format? (Format change)
+  #3 Proceed with the outer stage? (Blocked stages)

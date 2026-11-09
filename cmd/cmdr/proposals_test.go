@@ -1,0 +1,334 @@
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"os"
+	"slices"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/example-user/commander/internal/beads"
+	"github.com/example-user/commander/internal/decisions"
+)
+
+// proposalFixture is workstream ms-1 with an in-progress step ms-1.92 and its
+// Workflow approved gate ms-1.91 (closed when approved).
+func proposalFixture(t *testing.T, approved bool) (*beads.MemClient, *fakeMailer) {
+	t.Helper()
+	mailer := stubMail(t)
+	m := &beads.MemClient{}
+	gateStatus := "open"
+	if approved {
+		gateStatus = "closed"
+	}
+	m.Seed(beads.Bead{ID: "ms-1", Title: "Workstream one", Labels: []string{"kind:objective"}})
+	m.Seed(beads.Bead{ID: "ms-1.91", Title: "Workflow approved", Status: gateStatus, Labels: []string{"kind:objective", "gate", "approver:user"}})
+	m.Seed(beads.Bead{ID: "ms-1.92", Title: "Verify the panel", Status: "in_progress", Labels: []string{"kind:objective"}})
+	setupObjectiveProject(t, m)
+	return m, mailer
+}
+
+func proposalOf(t *testing.T, m *beads.MemClient, id string) (beads.Proposal, bool) {
+	t.Helper()
+	b, err := m.Show(context.Background(), "", id)
+	if err != nil || b == nil {
+		t.Fatalf("show %s: %v", id, err)
+	}
+	return beads.ProposalOf(b.Labels)
+}
+
+func runOK(t *testing.T, run func([]string, *os.File, *os.File) int, args ...string) string {
+	t.Helper()
+	stdout, stderr, read := withTempOutputFiles(t)
+	if code := run(args, stdout, stderr); code != 0 {
+		_, e := read()
+		t.Fatalf("%v: exit %d: %s", args, code, e)
+	}
+	out, _ := read()
+	return out
+}
+
+func askArgs(id string) []string {
+	return []string{"--project", "manifest", "--bead", id, "--state", "needs-user", "--ask", "Pick the VMs", "--decision", testDecision}
+}
+
+func TestProposal_ManagerAskIsHeldForCommanderUntilAccepted(t *testing.T) {
+	m, mailer := proposalFixture(t, true)
+	t.Setenv("COMMANDER_ROLE", "manager-ms-1")
+	out := runOK(t, runInternalSetObjective, askArgs("ms-1.92")...)
+	if !strings.Contains(out, `"proposed":"ask"`) {
+		t.Fatalf("result: %s", out)
+	}
+	p, ok := proposalOf(t, m, "ms-1.92")
+	if !ok || p.Kind != beads.ProposedAsk || p.Prev != beads.StateInProgress {
+		t.Fatalf("proposal %+v %v", p, ok)
+	}
+	if len(mailer.sent) != 1 {
+		t.Fatalf("want only the proposal mail to Commander, got %+v", mailer.sent)
+	}
+	got := mailer.sent[0]
+	if got.to[0] != "CalmCave" || !strings.HasPrefix(got.subject, "[proposed] ask on Verify the panel") || strings.Contains(got.subject, "needs you") {
+		t.Fatalf("mail %+v", got)
+	}
+	for _, want := range []string{"manager-ms-1 proposes a new ask", "does not reach the user until you accept", "cmdr proposals accept --project manifest --bead ms-1.92", "cmdr proposals overrule", "never relay it to the user"} {
+		if !strings.Contains(got.body, want) {
+			t.Fatalf("body missing %q:\n%s", want, got.body)
+		}
+	}
+
+	stdout, stderr, _ := withTempOutputFiles(t)
+	if code := runProposals([]string{"accept", "--project", "manifest", "--bead", "ms-1.92"}, stdout, stderr); code == 0 {
+		t.Fatal("a Manager accepted its own proposal")
+	}
+	t.Setenv("COMMANDER_ROLE", "commander")
+	runOK(t, runProposals, "accept", "--project", "manifest", "--bead", "ms-1.92")
+	if _, ok := proposalOf(t, m, "ms-1.92"); ok {
+		t.Fatal("accepted, but still proposed")
+	}
+	if b, _ := m.Show(context.Background(), "", "ms-1.92"); !slices.Contains(b.Labels, beads.NeedsUserLabel) || !hasCard(context.Background(), "manifest", "ms-1.92") {
+		t.Fatalf("an accepted ask stands with its card: %+v", b.Labels)
+	}
+}
+
+func TestProposal_CommanderAndUserAsksStandAsWritten(t *testing.T) {
+	m, mailer := proposalFixture(t, true)
+	t.Setenv("COMMANDER_ROLE", "commander")
+	runOK(t, runInternalSetObjective, askArgs("ms-1.92")...)
+	if _, ok := proposalOf(t, m, "ms-1.92"); ok {
+		t.Fatal("Commander's own ask became a proposal")
+	}
+	if len(mailer.sent) != 1 || !strings.Contains(mailer.sent[0].subject, "needs you") {
+		t.Fatalf("the ordinary needs-you notice: %+v", mailer.sent)
+	}
+}
+
+func TestProposal_OverruleUndoesTheAskAndTellsTheManagerWhy(t *testing.T) {
+	m, mailer := proposalFixture(t, true)
+	t.Setenv("COMMANDER_ROLE", "manager-ms-1")
+	runOK(t, runInternalSetObjective, askArgs("ms-1.92")...)
+	mailer.sent = nil
+
+	t.Setenv("COMMANDER_ROLE", "commander")
+	stdout, stderr, _ := withTempOutputFiles(t)
+	if code := runProposals([]string{"overrule", "--project", "manifest", "--bead", "ms-1.92"}, stdout, stderr); code == 0 {
+		t.Fatal("overrule without a reason")
+	}
+	runOK(t, runProposals, "overrule", "--project", "manifest", "--bead", "ms-1.92", "--reason", "the user said pick them yourself")
+	b, _ := m.Show(context.Background(), "", "ms-1.92")
+	if _, ok := beads.ProposalOf(b.Labels); ok || slices.Contains(b.Labels, beads.NeedsUserLabel) || b.Status != "in_progress" {
+		t.Fatalf("overruled ask not undone: %s %v", b.Status, b.Labels)
+	}
+	if hasCard(context.Background(), "manifest", "ms-1.92") {
+		t.Fatal("the overruled ask's card is still queued")
+	}
+	if len(mailer.sent) != 1 || mailer.sent[0].to[0] != "GoldTiger" || !strings.HasPrefix(mailer.sent[0].subject, "[overruled] ask") {
+		t.Fatalf("the Manager is mailed: %+v", mailer.sent)
+	}
+	for _, want := range []string{"the user said pick them yourself", "Do not add it again", "needs a holder now"} {
+		if !strings.Contains(mailer.sent[0].body, want) {
+			t.Fatalf("overrule mail missing %q:\n%s", want, mailer.sent[0].body)
+		}
+	}
+}
+
+func TestProposal_LongWaitAndParkAreProposedShortOnesAreNot(t *testing.T) {
+	m, mailer := proposalFixture(t, true)
+	t.Setenv("COMMANDER_ROLE", "manager-ms-1")
+	soon := time.Now().Add(2 * time.Hour).UTC().Format(time.RFC3339)
+	runOK(t, runInternalSetObjective, "--project", "manifest", "--bead", "ms-1.92", "--waiting", "until:"+soon+":the import finishes")
+	if _, ok := proposalOf(t, m, "ms-1.92"); ok || len(mailer.sent) != 0 {
+		t.Fatal("a two-hour wait is not a proposal")
+	}
+	later := time.Now().Add(48 * time.Hour).UTC().Format(time.RFC3339)
+	runOK(t, runInternalSetObjective, "--project", "manifest", "--bead", "ms-1.92", "--waiting", "until:"+later+":come back to the dev box")
+	if p, ok := proposalOf(t, m, "ms-1.92"); !ok || p.Kind != beads.ProposedWait || len(mailer.sent) != 1 {
+		t.Fatalf("a two-day wait is a proposal: %+v %+v", p, mailer.sent)
+	}
+	t.Setenv("COMMANDER_ROLE", "commander")
+	runOK(t, runProposals, "overrule", "--project", "manifest", "--bead", "ms-1.92", "--reason", "come back later means today")
+	b, _ := m.Show(context.Background(), "", "ms-1.92")
+	if len(beads.WaitsOf(b.Labels)) != 0 {
+		t.Fatalf("the overruled wait stays: %v", b.Labels)
+	}
+
+	t.Setenv("COMMANDER_ROLE", "manager-ms-1")
+	runOK(t, runInternalSetObjective, "--project", "manifest", "--bead", "ms-1.92", "--park", "--reason", "come back later")
+	if p, ok := proposalOf(t, m, "ms-1.92"); !ok || p.Kind != beads.ProposedPark {
+		t.Fatalf("a park with no time is a proposal: %+v", p)
+	}
+	t.Setenv("COMMANDER_ROLE", "commander")
+	runOK(t, runProposals, "overrule", "--project", "manifest", "--bead", "ms-1.92", "--reason", "no park")
+	if b, _ := m.Show(context.Background(), "", "ms-1.92"); b.Status == beads.StatusDeferred {
+		t.Fatal("the overruled park is still parked")
+	}
+}
+
+func TestProposal_GateAfterTheApprovedWorkflowIsProposed(t *testing.T) {
+	m, mailer := proposalFixture(t, false)
+	t.Setenv("COMMANDER_ROLE", "manager-ms-1")
+	create := func(title string) internalCreateObjectiveResult {
+		out := runOK(t, runInternalCreateObjective, "--project", "manifest", "--parent", "ms-1", "--title", title, "--gate", "--approver", "user", "--criteria", "The user says go")
+		var r internalCreateObjectiveResult
+		if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &r); err != nil {
+			t.Fatal(err)
+		}
+		return r
+	}
+	if r := create("Greenlight: merge to prod"); r.Proposed != "" || len(mailer.sent) != 0 {
+		t.Fatalf("a gate written with the workflow (not yet approved) is part of it: %+v", r)
+	}
+	m.SetStatus(context.Background(), "", "ms-1.91", "closed")
+	r := create("Greenlight: pick the VMs")
+	if r.Proposed != beads.ProposedGate || len(mailer.sent) != 1 || !strings.Contains(mailer.sent[0].body, "after the workflow was approved") {
+		t.Fatalf("a gate past the approved workflow is proposed: %+v %+v", r, mailer.sent)
+	}
+	if p, ok := proposalOf(t, m, r.BeadID); !ok || p.Kind != beads.ProposedGate {
+		t.Fatalf("label: %+v", p)
+	}
+	m.Seed(beads.Bead{ID: "ms-1.93", Title: "New track", Labels: []string{"kind:objective", beads.TrackLabel}})
+	out := runOK(t, runInternalCreateObjective, "--project", "manifest", "--parent", "ms-1.93", "--title", "Workflow approved", "--gate", "--approver", "user", "--criteria", "The user says go")
+	if strings.Contains(out, "proposed") {
+		t.Fatalf("a new track's own workflow gate is part of its workflow: %s", out)
+	}
+	out = runOK(t, runInternalCreateObjective, "--project", "manifest", "--parent", "ms-1", "--title", "Re-review the fix")
+	if !strings.Contains(out, `"proposed":"review"`) {
+		t.Fatalf("a re-review step past the approved workflow is proposed: %s", out)
+	}
+
+	t.Setenv("COMMANDER_ROLE", "commander")
+	runOK(t, runProposals, "overrule", "--project", "manifest", "--bead", r.BeadID, "--reason", "only an approval was needed")
+	b, _ := m.Show(context.Background(), "", r.BeadID)
+	if b.Status != "closed" || !slices.Contains(b.Labels, "retired") {
+		t.Fatalf("the overruled gate is retired: %s %v", b.Status, b.Labels)
+	}
+}
+
+func TestProposal_WriteContradictingAStandingDecisionIsRefusedWithItQuoted(t *testing.T) {
+	m, mailer := proposalFixture(t, true)
+	d, err := decisions.Add(appCommanderHome(), decisions.Decision{Words: "no deploy windows unless asked", Rule: "no-deploy-window", Date: "2026-10-24"}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("COMMANDER_ROLE", "manager-ms-1")
+	soon := time.Now().Add(time.Hour).UTC().Format(time.RFC3339)
+	args := []string{"--project", "manifest", "--bead", "ms-1.92", "--waiting", "until:" + soon + ":the deploy window opens"}
+	for _, want := range []string{"standing decision " + d.ID + " (global, 2026-10-24)", "no deploy windows unless asked", "[rule no-deploy-window]", "Nothing was written"} {
+		refused(t, args, want)
+	}
+	if b, _ := m.Show(context.Background(), "", "ms-1.92"); len(beads.WaitsOf(b.Labels)) != 0 || len(mailer.sent) != 0 {
+		t.Fatalf("a refused write changed the bead or mailed: %v %+v", b.Labels, mailer.sent)
+	}
+	stdout, stderr, read := withTempOutputFiles(t)
+	if code := runInternalCreateObjective([]string{"--project", "manifest", "--parent", "ms-1", "--title", "Greenlight: deploy window", "--gate", "--approver", "user", "--criteria", "The user says go"}, stdout, stderr); code == 0 {
+		t.Fatal("a gate naming the ruled-out window was created")
+	}
+	if _, e := read(); !strings.Contains(e, "retire") {
+		t.Fatalf("the refusal says how the call changes: %s", e)
+	}
+
+	t.Setenv("COMMANDER_ROLE", "")
+	runOK(t, runInternalSetObjective, args...) // the user's own write stands
+}
+
+func TestDecisionsCLI_AddScopesAManagerToItsWorkstreamAndOnlyCommanderRetires(t *testing.T) {
+	t.Setenv("COMMANDER_HOME", t.TempDir())
+	t.Setenv("COMMANDER_ROLE", "manager-ms-1")
+	out := runOK(t, runDecisions, "add", "--words", "only heavy local work waits")
+	if !strings.Contains(out, `"scope":"ms-1"`) || !strings.Contains(out, `"added_by":"manager-ms-1"`) {
+		t.Fatalf("add: %s", out)
+	}
+	stdout, stderr, _ := withTempOutputFiles(t)
+	if code := runDecisions([]string{"retire", "d1"}, stdout, stderr); code == 0 {
+		t.Fatal("a Manager retired the user's decision")
+	}
+	t.Setenv("COMMANDER_ROLE", "operator-x")
+	if code := runDecisions([]string{"add", "--words", "x"}, stdout, stderr); code == 0 {
+		t.Fatal("an Operator recorded a decision")
+	}
+	t.Setenv("COMMANDER_ROLE", "commander")
+	runOK(t, runDecisions, "retire", "d1", "--reason", "the user changed it")
+	if out := runOK(t, runDecisions, "list"); !strings.Contains(out, "no standing decisions") {
+		t.Fatalf("list after retire: %s", out)
+	}
+	if out := runOK(t, runDecisions, "list", "--all"); !strings.Contains(out, "retired") || !strings.Contains(out, "the user changed it") {
+		t.Fatalf("list --all: %s", out)
+	}
+}
+
+func TestMailHook_DeliversStandingDecisionsOncePerContext(t *testing.T) {
+	useInbox(t)
+	home := appCommanderHome()
+	if _, err := decisions.Add(home, decisions.Decision{Words: "push with --no-verify, CI is the check"}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	out, _ := runHook(t, "", "--role", "manager-x", "--event", "UserPromptSubmit")
+	if !strings.Contains(out, "standing decisions") || !strings.Contains(out, "push with --no-verify") {
+		t.Fatalf("decisions not in the turn's context: %q", out)
+	}
+	if out, _ := runHook(t, "", "--role", "manager-x", "--event", "UserPromptSubmit"); strings.Contains(out, "no-verify") {
+		t.Fatalf("delivered twice in one context: %q", out)
+	}
+	runHook(t, "", "--role", "manager-x", "--event", "SessionStart")
+	if out, _ := runHook(t, "", "--role", "manager-x", "--event", "UserPromptSubmit"); !strings.Contains(out, "no-verify") {
+		t.Fatalf("a new context gets them again: %q", out)
+	}
+}
+
+func TestProposal_GateAddPastTheApprovedWorkflowIsProposedAndOverruleRetiresIt(t *testing.T) {
+	m, mailer := proposalFixture(t, true)
+	t.Setenv("COMMANDER_ROLE", "manager-ms-1")
+	out := runOK(t, runInternalGate, "add", "--project", "manifest", "--bead", "ms-1.92", "--name", "ci-green-3-in-a-row", "--check", "true", "--verifier", "auto")
+	var r struct {
+		GateBead string `json:"gate_bead"`
+		Proposed string `json:"proposed"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &r); err != nil || r.Proposed != beads.ProposedGate || len(mailer.sent) != 1 {
+		t.Fatalf("an added gate past the approved workflow is proposed: %s %+v", out, mailer.sent)
+	}
+	t.Setenv("COMMANDER_ROLE", "commander")
+	runOK(t, runProposals, "overrule", "--project", "manifest", "--bead", r.GateBead, "--reason", "CI passing once is the check")
+	if b, _ := m.Show(context.Background(), "", r.GateBead); b.Status != "closed" || !slices.Contains(b.Labels, "retired") {
+		t.Fatalf("the overruled gate is retired: %+v", b)
+	}
+	if gs := gatesNow(t, "ms-1.92"); len(gs) != 0 {
+		t.Fatalf("the stage still has the overruled gate: %+v", gs)
+	}
+}
+
+func TestGateCardDoesNotCreateASecondProposal(t *testing.T) {
+	for _, kind := range []string{"gate", "kind:gate"} {
+		for _, pending := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/pending=%v", kind, pending), func(t *testing.T) {
+				m, _ := proposalFixture(t, true)
+				labels := []string{kind, "approver:user"}
+				if pending {
+					labels = append(labels, beads.ProposedLabel(beads.ProposedGate, time.Now().Unix(), ""))
+				}
+				m.Seed(beads.Bead{ID: "ms-1.93", ParentID: "ms-1", Title: "Register a dev key", Labels: labels})
+				t.Setenv("COMMANDER_ROLE", "manager-ms-1")
+				out := runOK(t, runInternalSetObjective, askArgs("ms-1.93")...)
+				p, ok := proposalOf(t, m, "ms-1.93")
+				if pending {
+					if !ok || p.Kind != beads.ProposedGate {
+						t.Fatalf("gate review bypassed or replaced: %+v %v", p, ok)
+					}
+				} else if ok || strings.Contains(out, `"proposed":"ask"`) {
+					t.Fatalf("accepted gate acquired another proposal: %+v %s", p, out)
+				}
+			})
+		}
+	}
+}
+
+func TestAutomaticGateQuestionStillRequiresCommanderReview(t *testing.T) {
+	m, _ := proposalFixture(t, true)
+	m.Seed(beads.Bead{ID: "ms-1.93", ParentID: "ms-1", Title: "Automatic deployment check", Labels: []string{"kind:gate", "verifier:auto"}})
+	t.Setenv("COMMANDER_ROLE", "manager-ms-1")
+	runOK(t, runInternalSetObjective, askArgs("ms-1.93")...)
+	if p, ok := proposalOf(t, m, "ms-1.93"); !ok || p.Kind != beads.ProposedAsk {
+		t.Fatalf("automatic gate introduced an unreviewed user decision: %+v %v", p, ok)
+	}
+}

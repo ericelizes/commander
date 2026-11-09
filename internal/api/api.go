@@ -1,0 +1,425 @@
+// Package api is cmdrd's local HTTP API: the cockpit state as JSON
+// (/api/snapshot), pushed over a WebSocket when it changes (/api/events), and
+// an allow-listed way to run cmdr commands (/api/cmd). It binds to loopback and
+// every /api request needs the token in $COMMANDER_HOME/api-token.
+package api
+
+import (
+	"context"
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/json"
+	"log"
+	"net/http"
+	"net/url"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/coder/websocket"
+	"github.com/coder/websocket/wsjson"
+	"github.com/example-user/commander/internal/agentmail"
+	"github.com/example-user/commander/internal/beads"
+	"github.com/example-user/commander/internal/chat"
+	"github.com/example-user/commander/internal/linearsync"
+	"github.com/example-user/commander/internal/livedata"
+	"github.com/example-user/commander/internal/overview"
+	"github.com/example-user/commander/internal/store"
+)
+
+// DefaultInterval is how often the sources are polled for a changed snapshot.
+const DefaultInterval = time.Second
+
+// pingInterval keeps idle WebSocket connections alive and detects dead peers.
+const pingInterval = 20 * time.Second
+
+// Options configures a Server.
+type Options struct {
+	OverviewGenerate overview.Generate  // optional read-only recap reader; nil uses the Commander Claude account
+	Linear           *linearsync.Client // optional injected sprint reader
+	Token            string
+	Source           func(ctx context.Context) livedata.Snapshot // Version is set by the server
+	Run              Runner                                      // runs allow-listed cmdr argv
+	Interval         time.Duration                               // poll interval; 0 = DefaultInterval
+	LiveData         func() (livedata.Data, bool)                // latest loaded Data for /api/livedata; nil = 503
+	// MailToRole delivers a message the user typed in the app to a role that has no native
+	// process yet (still a terminal chat): through the mail path, as the user. nil = none.
+	MailToRole func(ctx context.Context, role, text string) error
+	// WaitingMail lists role's unread mail (the app's "N waiting" popup). nil = 503.
+	WaitingMail func(ctx context.Context, role string) ([]agentmail.Mail, error)
+	AppDir      string // built app renderer (app/dist) served at /app/; "" = none
+	// AppDevURL is the renderer's live Vite dev server: /app/ proxies to it
+	// (HMR included) while it answers, else serves AppDir. "" = AppDir only.
+	AppDevURL string
+	Tabs      *Tabs        // inspector tabs (/api/tabs); nil = 503
+	Pitches   PitchStore   // every version of every pitch (/api/pitches); nil = 503
+	Chat      *chat.Engine // native chat engine; nil = /api/chat answers 503
+	// ShotsDir is where /api/app/screenshot writes app.png and app-text.txt;
+	// "" = 503.
+	ShotsDir string
+	// OpenTerminal runs a command in a new terminal window on the user's
+	// screen (an account's login); nil = OpenLoginTerminal.
+	OpenTerminal func(ctx context.Context, command string) error
+	// ConfigPath is config.toml, read and edited by /api/settings; "" = 503.
+	ConfigPath string
+	// UsageByAgent is token use per account, agent and model since weekSince,
+	// with the part since todaySince (unix s), for /api/usage/agents; nil = 503.
+	UsageByAgent func(ctx context.Context, todaySince, weekSince int64) ([]store.AgentUsage, error)
+	// Update serves /api/update (status, install); nil = 503.
+	Update *Updater
+	// Write runs a br write for /api/write; nil = beads.RunBr.
+	Write WriteRunner
+	// Batch runs a bd batch script for /api/write ops; nil = beads.RunBatch (bd only).
+	Batch BatchRunner
+	// Beads reads the bead state the write checks need; nil = beads.New().
+	Beads beads.Client
+}
+
+// Server holds the latest snapshot and fans changes out to WebSocket clients.
+type Server struct {
+	overviews *overview.Cache
+	signins   signins
+	opts      Options
+
+	refreshMu   sync.Mutex  // one Source call at a time
+	loadKept    atomic.Bool // the latest load was degraded, served last-good rows or was dropped
+	loadStarted time.Time   // when the latest Source call began (under refreshMu)
+
+	slowLoad      time.Duration  // the load time worth a log line
+	refreshBudget time.Duration  // bounds the load a settle starts
+	settling      sync.WaitGroup // the loads settles started, which can outlive settleWait
+
+	mu      sync.Mutex
+	cur     livedata.Snapshot
+	hash    [32]byte
+	version uint64
+	subs    map[chan struct{}]struct{}
+
+	appMu      sync.Mutex
+	appClients []*appClient // connected app windows, oldest first
+}
+
+// New returns a Server; call Poll to keep it fresh.
+func New(opts Options) *Server {
+	if opts.Interval <= 0 {
+		opts.Interval = DefaultInterval
+	}
+	if opts.Linear == nil && opts.ConfigPath != "" {
+		opts.Linear = linearsync.New(linearsync.Options{Home: filepath.Dir(opts.ConfigPath)})
+	}
+	machineHistory.start()
+	return &Server{opts: opts, subs: map[chan struct{}]struct{}{}, overviews: overview.New(overviewGenerator(opts)), slowLoad: defaultSlowLoad, refreshBudget: defaultRefreshBudget}
+}
+
+// Refresh loads a snapshot and, when its content differs from the last one,
+// bumps the version and notifies subscribers. It reports whether it changed.
+func (s *Server) Refresh(ctx context.Context) bool {
+	s.refreshMu.Lock()
+	defer s.refreshMu.Unlock()
+	return s.refreshLocked(ctx)
+}
+
+func (s *Server) refreshLocked(ctx context.Context) bool {
+	s.loadStarted = time.Now()
+	snap := s.opts.Source(ctx)
+	// Its own context ended (a settle's budget, a shutdown): what it read is not
+	// the board. Keep the one we have; a settle answers settled:false.
+	if err := ctx.Err(); err != nil {
+		s.loadKept.Store(true)
+		log.Printf("api: snapshot load ended after %s (%v), kept the last board (%s)", time.Since(s.loadStarted).Round(time.Millisecond), err, snap.LoadTimes())
+		return false
+	}
+	if took := time.Since(s.loadStarted); took > s.slowLoad {
+		log.Printf("api: snapshot load took %s (%s)", took.Round(time.Millisecond), snap.LoadTimes())
+	}
+	s.loadKept.Store(snap.PreserveVersion || snap.KeptLastGood || snap.Degraded != nil)
+	h := contentHash(snap)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.version > 0 && h == s.hash {
+		return false
+	}
+	if !snap.PreserveVersion || s.version == 0 {
+		s.version++
+	}
+	snap.Version = s.version
+	s.cur, s.hash = snap, h
+	for ch := range s.subs {
+		select {
+		case ch <- struct{}{}:
+		default: // already pending: the client will read the latest anyway
+		}
+	}
+	return true
+}
+
+const defaultSlowLoad = livedata.SlowLoad
+
+// contentHash ignores the fields that change on every load.
+func contentHash(s livedata.Snapshot) [32]byte {
+	s.Version, s.GeneratedAt = 0, time.Time{}
+	raw, _ := json.Marshal(s)
+	return sha256.Sum256(raw)
+}
+
+// Poll refreshes every interval until ctx is done.
+func (s *Server) Poll(ctx context.Context) {
+	t := time.NewTicker(s.opts.Interval)
+	defer t.Stop()
+	for {
+		s.Refresh(ctx)
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+	}
+}
+
+// current returns the latest snapshot, loading one if none exists yet.
+func (s *Server) current(ctx context.Context) livedata.Snapshot {
+	s.mu.Lock()
+	have := s.version > 0
+	s.mu.Unlock()
+	if !have {
+		// Not the request's own context: a client that hangs up mid-build would
+		// cancel it, and the failed (empty) snapshot would be served to everyone.
+		s.Refresh(context.WithoutCancel(ctx))
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.cur
+}
+
+func (s *Server) subscribe() chan struct{} {
+	ch := make(chan struct{}, 1)
+	s.mu.Lock()
+	s.subs[ch] = struct{}{}
+	s.mu.Unlock()
+	return ch
+}
+
+func (s *Server) unsubscribe(ch chan struct{}) {
+	s.mu.Lock()
+	delete(s.subs, ch)
+	s.mu.Unlock()
+}
+
+// Handler routes the API. "/" is an unauthenticated placeholder page.
+func (s *Server) Handler() http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /{$}", servePlaceholder)
+	mux.Handle("POST /api/overview", s.auth(http.HandlerFunc(s.serveOverview)))
+	mux.Handle("GET /api/snapshot", s.auth(http.HandlerFunc(s.serveSnapshot)))
+	mux.Handle("GET /api/events", s.auth(http.HandlerFunc(s.serveEvents)))
+	mux.Handle("GET /api/livedata", s.auth(http.HandlerFunc(s.serveLiveData)))
+	mux.Handle("POST "+beads.DoorPath, s.auth(http.HandlerFunc(s.serveWrite)))
+	mux.Handle("POST /api/cmd", s.auth(http.HandlerFunc(s.serveCmd)))
+	mux.Handle("GET /app", http.RedirectHandler("/app/", http.StatusMovedPermanently))
+	mux.Handle("GET /app/", appHandler(s.opts.AppDir, s.opts.AppDevURL))
+	s.registerTabs(mux)
+	s.registerAppShot(mux)
+	s.chatRoutes(mux)
+	s.settingsRoutes(mux)
+	mux.Handle("POST /api/linear/key", s.auth(http.HandlerFunc(s.serveLinearKey)))
+	mux.Handle("DELETE /api/linear/key", s.auth(http.HandlerFunc(s.serveLinearKey)))
+	mux.Handle("GET /api/linear", s.auth(http.HandlerFunc(s.serveLinear)))
+	s.machineRoutes(mux)
+	s.updateRoutes(mux)
+	mux.Handle("GET /api/usage/agents", s.auth(http.HandlerFunc(s.serveUsageAgents)))
+	mux.Handle("GET /api/pitches", s.auth(http.HandlerFunc(s.servePitches)))
+	return cors(mux)
+}
+
+// localOrigin reports whether a browser Origin is a page served from this
+// machine (http://localhost:*, http://127.0.0.1:*).
+func localOrigin(origin string) bool {
+	u, err := url.Parse(origin)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
+		return false
+	}
+	switch u.Hostname() {
+	case "localhost", "127.0.0.1":
+		return true
+	}
+	return false
+}
+
+// cors allows only local origins: their requests get CORS headers and
+// preflights succeed; any other Origin is refused outright.
+func cors(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		origin := r.Header.Get("Origin")
+		if origin != "" {
+			if !localOrigin(origin) {
+				http.Error(w, "origin not allowed", http.StatusForbidden)
+				return
+			}
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, "+OriginHeader)
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+			w.Header().Add("Vary", "Origin")
+		}
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// auth requires the token as "Authorization: Bearer <token>" or ?token=. A POST
+// takes the header only: a query string leaks into logs and proxies.
+func (s *Server) auth(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got := ""
+		if r.Method != http.MethodPost {
+			got = r.URL.Query().Get("token")
+		}
+		if h, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer "); ok {
+			got = strings.TrimSpace(h)
+		}
+		if s.opts.Token == "" || subtle.ConstantTimeCompare([]byte(got), []byte(s.opts.Token)) != 1 {
+			writeJSON(w, http.StatusUnauthorized, map[string]any{"ok": false, "error": "missing or bad token"})
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *Server) serveSnapshot(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, s.current(r.Context()))
+}
+
+// Event is one WebSocket message. Type is "snapshot" for now; more kinds
+// (chat streams) can be added without breaking clients.
+type Event struct {
+	Type     string            `json:"type"`
+	Snapshot livedata.Snapshot `json:"snapshot"`
+}
+
+// serveEvents sends the snapshot on connect and again on every change.
+func (s *Server) serveEvents(w http.ResponseWriter, r *http.Request) {
+	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+		OriginPatterns: []string{"localhost", "localhost:*", "127.0.0.1", "127.0.0.1:*"},
+	})
+	if err != nil {
+		return // Accept already wrote the error response
+	}
+	defer c.CloseNow()
+
+	sub := s.subscribe()
+	defer s.unsubscribe(sub)
+	ctx := c.CloseRead(r.Context()) // handles pings/close from the client
+
+	var sent uint64
+	var sentHash [32]byte
+	send := func() error {
+		snap := s.current(ctx)
+		hash := contentHash(snap)
+		if snap.Version == sent && hash == sentHash {
+			return nil // a notification for the version this client already has
+		}
+		wctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+		sent, sentHash = snap.Version, hash
+		return wsjson.Write(wctx, c, Event{Type: "snapshot", Snapshot: snap})
+	}
+	if send() != nil {
+		return
+	}
+	ping := time.NewTicker(pingInterval)
+	defer ping.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-sub:
+			if send() != nil {
+				return
+			}
+		case <-ping.C:
+			pctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			err := c.Ping(pctx)
+			cancel()
+			if err != nil {
+				return
+			}
+		}
+	}
+}
+
+// appFiles serves the built app renderer as a plain page. The files are not
+// secret (no token inside), so they need no auth; the page gets the token
+// from its one-time link (#token=) and every /api call still checks it.
+func appFiles(dir string) http.Handler {
+	files := http.FileServer(http.Dir(dir))
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if dir == "" {
+			http.Error(w, "app not built: run `cd app && npm i && npm run build`", http.StatusNotFound)
+			return
+		}
+		if _, err := os.Stat(filepath.Join(dir, "index.html")); err != nil {
+			http.Error(w, "app not built: run `cd app && npm i && npm run build`", http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("Referrer-Policy", "no-referrer")
+		files.ServeHTTP(w, r)
+	})
+}
+
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(v)
+}
+
+const placeholderPage = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Commander API</title>
+<style>
+:root { color-scheme: light dark; }
+body { margin: 0; padding: 24px 16px; font: 15px/1.5 ui-monospace, Menlo, monospace; background: Canvas; color: CanvasText; }
+code { font-weight: 600; }
+</style></head>
+<body>
+<h1>cockpit api up</h1>
+<p>Every <code>/api</code> request needs the token from <code>$COMMANDER_HOME/api-token</code>,
+as <code>Authorization: Bearer &lt;token&gt;</code> or <code>?token=&lt;token&gt;</code>.</p>
+<ul>
+<li><a href="/api/snapshot">GET /api/snapshot</a>: the cockpit state as JSON</li>
+<li>GET /api/events: WebSocket, the snapshot on connect and on every change</li>
+<li>POST /api/cmd <code>{"argv": [...]}</code>: run an allow-listed cmdr command</li>
+<li><a href="/app/">/app/</a>: the Commander app as a plain page (open it from <code>cmdr app --web</code>, which adds the token)</li>
+<li><a href="/api/chat">GET /api/chat</a>: native chat sessions; GET /api/chat/&lt;role&gt;/events?since=N (WebSocket); POST /api/chat/&lt;role&gt;/start|stop|send|interrupt|approve|answer|handover|popout|runtime ({"runtime":"claude|codex","continue":bool})|account ({"account":"&lt;name&gt;","continue":bool}); POST /api/chat/accounts ({"name":..}: create, open its login in Terminal); POST /api/chat/accounts/&lt;name&gt;/login; POST|GET|DELETE /api/chat/accounts/&lt;name&gt;/signin (sign in from the app: start, state, cancel); POST /api/chat/accounts/&lt;name&gt;/signin/code ({"code":..}); POST /api/chat/accounts/&lt;name&gt;/signout</li>
+</ul>
+</body></html>
+`
+
+func servePlaceholder(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = w.Write([]byte(placeholderPage))
+}
+
+// serveLiveData returns the full loaded Data (the cockpit's own sidebar, title
+// bar and inspector read this instead of each querying br and state.db).
+func (s *Server) serveLiveData(w http.ResponseWriter, r *http.Request) {
+	if s.opts.LiveData == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"ok": false, "error": "livedata not available"})
+		return
+	}
+	s.current(r.Context()) // make sure a first load happened
+	d, ok := s.opts.LiveData()
+	if !ok {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"ok": false, "error": "no data loaded yet"})
+		return
+	}
+	writeJSON(w, http.StatusOK, livedata.ToWire(d))
+}

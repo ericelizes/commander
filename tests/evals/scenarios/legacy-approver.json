@@ -1,0 +1,10 @@
+{
+  "Aliases": ["quill-old"],
+  "Cases": [
+    {"Name": "a configured retired owner name counts as the user", "Approver": "quill-old", "Refused": false},
+    {"Name": "the neutral name counts", "Approver": "user", "Refused": false},
+    {"Name": "a lookalike name does not", "Approver": "quill-older", "Refused": true},
+    {"Name": "an unlisted name does not", "Approver": "mallory", "Refused": true},
+    {"Name": "a name the Manager puts in its own environment does not", "Approver": "mallory", "EnvAlias": "mallory", "Refused": true}
+  ]
+}

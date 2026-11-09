@@ -1,0 +1,165 @@
+{
+ "commander": {
+  "kind": "working",
+  "text": "working",
+  "since": 1793021540,
+  "unread": 2
+ },
+ "asks": [
+  {
+   "key": "ask:example-app:app-h.4",
+   "text": "Sign off early?",
+   "rank": 1,
+   "workstream": "Parallel work",
+   "track": "",
+   "track_letter": "",
+   "ws_key": "example-app:app-h"
+  }
+ ],
+ "workstreams": [
+  {
+   "key": "example-app:app-h",
+   "n": 1,
+   "title": "Parallel work",
+   "project": "example-app",
+   "bead_id": "app-h",
+   "manager_role": "manager-app-h",
+   "starred": false,
+   "kind": "needs",
+   "text": "Needs you: Sign off early?",
+   "since": 0,
+   "progress": {
+    "done": 0,
+    "total": 3
+   },
+   "milestones": {
+    "done": 0,
+    "total": 1
+   },
+   "working": 4,
+   "flag": 1,
+   "unread": 0,
+   "gate": {
+    "bead_id": "app-h.4",
+    "title": "Early sign-off given",
+    "who": "you",
+    "at": false,
+    "for_you": false
+   },
+   "tracks": []
+  },
+  {
+   "key": "example-app:app-i",
+   "n": 2,
+   "title": "Sign-in",
+   "project": "example-app",
+   "bead_id": "app-i",
+   "manager_role": "manager-app-i",
+   "starred": false,
+   "kind": "working",
+   "text": "Working on dependency audit green · Sign-in change waiting on #2.1 (dependency audit green)",
+   "since": 0,
+   "progress": {
+    "done": 0,
+    "total": 4
+   },
+   "milestones": {
+    "done": 0,
+    "total": 4
+   },
+   "working": 2,
+   "flag": 0,
+   "unread": 0,
+   "gate": null,
+   "tracks": [
+    {
+     "key": "example-app:app-i.1",
+     "bead_id": "app-i.1",
+     "letter": ".1",
+     "title": "Shared dependency",
+     "kind": "working",
+     "text": "Working on dependency audit green",
+     "since": 0,
+     "progress": {
+      "done": 0,
+      "total": 2
+     },
+     "milestones": {
+      "done": 0,
+      "total": 2
+     },
+     "working": 1
+    },
+    {
+     "key": "example-app:app-i.2",
+     "bead_id": "app-i.2",
+     "letter": ".2",
+     "title": "Sign-in change",
+     "kind": "waiting",
+     "text": "Waiting on #2.1 (dependency audit green)",
+     "since": 1793020700,
+     "progress": {
+      "done": 0,
+      "total": 2
+     },
+     "milestones": {
+      "done": 0,
+      "total": 2
+     },
+     "working": 0
+    }
+   ],
+   "age_as": "working|Working on dependency audit green"
+  },
+  {
+   "key": "example-app:app-j",
+   "n": 3,
+   "title": "Finished plan",
+   "project": "example-app",
+   "bead_id": "app-j",
+   "manager_role": "manager-app-j",
+   "starred": false,
+   "kind": "quiet",
+   "text": "Nothing to do",
+   "since": 0,
+   "progress": {
+    "done": 1,
+    "total": 1
+   },
+   "milestones": {
+    "done": 1,
+    "total": 1
+   },
+   "working": 0,
+   "flag": 0,
+   "unread": 0,
+   "gate": null,
+   "tracks": []
+  },
+  {
+   "key": "example-app:app-k",
+   "n": 4,
+   "title": "Long history",
+   "project": "example-app",
+   "bead_id": "app-k",
+   "manager_role": "manager-app-k",
+   "starred": false,
+   "kind": "waiting",
+   "text": "Waiting for CI",
+   "since": 1793021000,
+   "progress": {
+    "done": 14,
+    "total": 15
+   },
+   "milestones": {
+    "done": 7,
+    "total": 8
+   },
+   "working": 0,
+   "flag": 0,
+   "unread": 0,
+   "gate": null,
+   "tracks": []
+  }
+ ]
+}

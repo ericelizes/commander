@@ -1,0 +1,2334 @@
+{
+ "now": 1793000000,
+ "snapshot": {
+  "version": 1,
+  "generated_at": "2026-10-26T12:00:00Z",
+  "projects": [
+   {
+    "id": 1,
+    "name": "p",
+    "type": "repo",
+    "path": "/tmp/p",
+    "status": "active"
+   }
+  ],
+  "fleet": {
+   "cost_usd_24h": 0,
+   "cost_usd_7d": 0,
+   "cost_series_24h": [],
+   "agents": 0,
+   "active": 0,
+   "blocked": 0,
+   "idle_ratio": 0,
+   "projects": 1,
+   "chat_cost_usd_24h": 0,
+   "roles_cost": []
+  },
+  "workstreams": [
+   {
+    "n": 1,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w1",
+    "title": "no manager",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w1",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w1.1",
+      "title": "w1.1",
+      "state": "not-started",
+      "status": "open"
+     }
+    ]
+   },
+   {
+    "n": 2,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w2",
+    "title": "needs card",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w2",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w2.1",
+      "title": "Name the service",
+      "state": "needs-user",
+      "status": "open",
+      "waiting": "you",
+      "waiting_since": 1792999700
+     },
+     {
+      "bead_id": "w2.2",
+      "title": "w2.2",
+      "state": "not-started",
+      "status": "open"
+     }
+    ]
+   },
+   {
+    "n": 3,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w3",
+    "title": "stuck",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w3",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w3.1",
+      "title": "w3.1",
+      "state": "not-started",
+      "status": "open"
+     }
+    ]
+   },
+   {
+    "n": 4,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w4",
+    "title": "working on now step",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w4",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w4.1",
+      "title": "Write the parser",
+      "state": "in-progress",
+      "status": "open"
+     },
+     {
+      "bead_id": "w4.2",
+      "title": "w4.2",
+      "state": "not-started",
+      "status": "open"
+     }
+    ],
+    "now_step": "w4.1"
+   },
+   {
+    "n": 5,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w5",
+    "title": "working operator",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w5",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w5.1",
+      "title": "Port the tests",
+      "state": "in-progress",
+      "status": "open",
+      "owner": "operator-op-port-w5-1",
+      "owner_state": "working"
+     }
+    ]
+   },
+   {
+    "n": 6,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w6",
+    "title": "working no step",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w6",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w6.1",
+      "title": "w6.1",
+      "state": "not-started",
+      "status": "open"
+     }
+    ]
+   },
+   {
+    "n": 7,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w7",
+    "title": "agent died",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w7",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w7.1",
+      "title": "Fix the build",
+      "state": "in-progress",
+      "status": "open",
+      "owner": "operator-op-fix-w7-1",
+      "owner_state": "died"
+     }
+    ]
+   },
+   {
+    "n": 8,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w8",
+    "title": "agent finished",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w8",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w8.1",
+      "title": "Fix the lint",
+      "state": "in-progress",
+      "status": "open",
+      "owner": "operator-op-lint-w8-1",
+      "owner_state": "finished"
+     }
+    ]
+   },
+   {
+    "n": 9,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w9",
+    "title": "review acted",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w9",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w9.1",
+      "title": "w9.1",
+      "state": "not-started",
+      "status": "open",
+      "waiting": "review (a-reviewer)",
+      "review_fact": {
+       "acted": true,
+       "text": "a-reviewer approved #12"
+      }
+     }
+    ]
+   },
+   {
+    "n": 10,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w10",
+    "title": "review no pr",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w10",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w10.1",
+      "title": "w10.1",
+      "state": "not-started",
+      "status": "open",
+      "waiting": "review (a-reviewer)",
+      "review_fact": {
+       "no_pr": true,
+       "text": "no PR"
+      }
+     }
+    ]
+   },
+   {
+    "n": 11,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w11",
+    "title": "review pending",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w11",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w11.1",
+      "title": "w11.1",
+      "state": "not-started",
+      "status": "open",
+      "waiting": "review (a-reviewer)",
+      "review_fact": {
+       "text": "waiting on a-reviewer (#12)"
+      }
+     }
+    ]
+   },
+   {
+    "n": 12,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w12",
+    "title": "recorded wait",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w12",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w12.1",
+      "title": "w12.1",
+      "state": "not-started",
+      "status": "open",
+      "waiting": "review (a-reviewer)",
+      "waiting_since": 1792992800
+     }
+    ]
+   },
+   {
+    "n": 13,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w13",
+    "title": "time wait today",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w13",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w13.1",
+      "title": "w13.1",
+      "state": "not-started",
+      "status": "open",
+      "waiting": "reconcile",
+      "waiting_since": 1792999940,
+      "waiting_until": 1793003600,
+      "waiting_until_as": "reconcile"
+     }
+    ]
+   },
+   {
+    "n": 14,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w14",
+    "title": "time wait another day",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w14",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w14.1",
+      "title": "w14.1",
+      "state": "not-started",
+      "status": "open",
+      "waiting": "reconcile",
+      "waiting_since": 1792999940,
+      "waiting_until": 1793259200,
+      "waiting_until_as": "reconcile"
+     }
+    ]
+   },
+   {
+    "n": 15,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w15",
+    "title": "in review",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w15",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w15.1",
+      "title": "w15.1",
+      "state": "in-progress",
+      "status": "open",
+      "review": "12"
+     }
+    ]
+   },
+   {
+    "n": 16,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w16",
+    "title": "state missing",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w16",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w16.1",
+      "title": "w16.1",
+      "state": "not-started",
+      "status": "open",
+      "broken": true
+     }
+    ]
+   },
+   {
+    "n": 17,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w17",
+    "title": "stalled",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w17",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w17.1",
+      "title": "w17.1",
+      "state": "not-started",
+      "status": "open"
+     }
+    ]
+   },
+   {
+    "n": 18,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w18",
+    "title": "nothing to do",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w18",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w18.1",
+      "title": "w18.1",
+      "state": "done",
+      "status": "closed"
+     }
+    ]
+   },
+   {
+    "n": 19,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w19",
+    "title": "picking it up",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w19",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w19.1",
+      "title": "w19.1",
+      "state": "not-started",
+      "status": "open"
+     }
+    ]
+   },
+   {
+    "n": 20,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w20",
+    "title": "waits on an operator",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w20",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w20.1",
+      "title": "w20.1",
+      "state": "not-started",
+      "status": "open",
+      "waiting": "operator-op-docs-w20-1",
+      "waiting_since": 1792999900
+     }
+    ]
+   },
+   {
+    "n": 21,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w21",
+    "title": "operator owner",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w21",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w21.1",
+      "title": "Write the docs",
+      "state": "in-progress",
+      "status": "open",
+      "owner": "operator-op-docs-w20-1",
+      "owner_state": "working"
+     }
+    ]
+   },
+   {
+    "n": 22,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w22",
+    "title": "waits on an unknown operator",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w22",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w22.1",
+      "title": "w22.1",
+      "state": "not-started",
+      "status": "open",
+      "waiting": "operator-op-gone-x-1",
+      "waiting_since": 1792999900
+     }
+    ]
+   },
+   {
+    "n": 23,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w23",
+    "title": "parked work",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w23",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w23.1",
+      "title": "w23.1",
+      "state": "not-started",
+      "status": "deferred",
+      "parked_until": 1793000600
+     },
+     {
+      "bead_id": "w23.2",
+      "title": "w23.2",
+      "state": "done",
+      "status": "closed"
+     }
+    ]
+   },
+   {
+    "n": 24,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w24",
+    "title": "needs your gate",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w24",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w24.1",
+      "title": "w24.1",
+      "state": "done",
+      "status": "closed"
+     },
+     {
+      "bead_id": "w24.9",
+      "title": "Merge approval",
+      "state": "not-started",
+      "status": "open",
+      "gate": true,
+      "approvers": [
+       "user"
+      ],
+      "blocked_by": [
+       "w24.1"
+      ]
+     }
+    ]
+   },
+   {
+    "n": 25,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w25",
+    "title": "gate waits on reviewers",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w25",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w25.1",
+      "title": "w25.1",
+      "state": "done",
+      "status": "closed"
+     },
+     {
+      "bead_id": "w25.9",
+      "title": "PR approval",
+      "state": "not-started",
+      "status": "open",
+      "gate": true,
+      "approvers": [
+       "a-reviewer"
+      ],
+      "blocked_by": [
+       "w25.1"
+      ],
+      "waiting": "review (a-reviewer)",
+      "waiting_since": 1792999500
+     }
+    ]
+   },
+   {
+    "n": 26,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w26",
+    "title": "gate others approve",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w26",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w26.1",
+      "title": "w26.1",
+      "state": "done",
+      "status": "closed"
+     },
+     {
+      "bead_id": "w26.9",
+      "title": "Deploy approval",
+      "state": "not-started",
+      "status": "open",
+      "gate": true,
+      "approvers": [
+       "a-reviewer"
+      ],
+      "blocked_by": [
+       "w26.1"
+      ]
+     }
+    ]
+   },
+   {
+    "n": 27,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w27",
+    "title": "readying manager",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w27",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w27.1",
+      "title": "w27.1",
+      "state": "in-progress",
+      "status": "open"
+     },
+     {
+      "bead_id": "w27.2",
+      "title": "w27.2",
+      "state": "done",
+      "status": "closed"
+     },
+     {
+      "bead_id": "w27.9",
+      "title": "Merge approval",
+      "state": "not-started",
+      "status": "open",
+      "gate": true,
+      "approvers": [
+       "a-reviewer"
+      ],
+      "blocked_by": [
+       "w27.1",
+       "w27.2"
+      ]
+     }
+    ]
+   },
+   {
+    "n": 28,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w28",
+    "title": "readying operator",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w28",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w28.1",
+      "title": "w28.1",
+      "state": "in-progress",
+      "status": "open",
+      "owner": "operator-op-a-w28-1",
+      "owner_state": "working"
+     },
+     {
+      "bead_id": "w28.9",
+      "title": "Merge approval",
+      "state": "not-started",
+      "status": "open",
+      "gate": true,
+      "approvers": [
+       "a-reviewer"
+      ],
+      "blocked_by": [
+       "w28.1"
+      ]
+     }
+    ]
+   },
+   {
+    "n": 29,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w29",
+    "title": "ci one",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w29",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w29.1",
+      "title": "w29.1",
+      "state": "not-started",
+      "status": "open",
+      "waiting": "CI #12",
+      "waiting_since": 1792999600
+     },
+     {
+      "bead_id": "w29.9",
+      "title": "Merge approval",
+      "state": "not-started",
+      "status": "open",
+      "gate": true,
+      "approvers": [
+       "a-reviewer"
+      ],
+      "blocked_by": [
+       "w29.1"
+      ]
+     }
+    ]
+   },
+   {
+    "n": 30,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w30",
+    "title": "ci two",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w30",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w30.1",
+      "title": "w30.1",
+      "state": "not-started",
+      "status": "open",
+      "waiting": "CI #12",
+      "waiting_since": 1792999600
+     },
+     {
+      "bead_id": "w30.2",
+      "title": "w30.2",
+      "state": "not-started",
+      "status": "open",
+      "waiting": "main CI 349a7f4",
+      "waiting_since": 1792999700
+     },
+     {
+      "bead_id": "w30.9",
+      "title": "Merge approval",
+      "state": "not-started",
+      "status": "open",
+      "gate": true,
+      "approvers": [
+       "a-reviewer"
+      ],
+      "blocked_by": [
+       "w30.1",
+       "w30.2"
+      ]
+     }
+    ]
+   },
+   {
+    "n": 31,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w31",
+    "title": "other wait",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w31",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w31.1",
+      "title": "w31.1",
+      "state": "not-started",
+      "status": "open",
+      "waiting": "review (a-reviewer)",
+      "waiting_since": 1792999200
+     },
+     {
+      "bead_id": "w31.9",
+      "title": "Merge approval",
+      "state": "not-started",
+      "status": "open",
+      "gate": true,
+      "approvers": [
+       "a-reviewer"
+      ],
+      "blocked_by": [
+       "w31.1"
+      ]
+     }
+    ]
+   },
+   {
+    "n": 32,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w32",
+    "title": "other time wait",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w32",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w32.1",
+      "title": "w32.1",
+      "state": "not-started",
+      "status": "open",
+      "waiting": "reconcile",
+      "waiting_since": 1792999200,
+      "waiting_until": 1793001800,
+      "waiting_until_as": "reconcile"
+     },
+     {
+      "bead_id": "w32.9",
+      "title": "Merge approval",
+      "state": "not-started",
+      "status": "open",
+      "gate": true,
+      "approvers": [
+       "a-reviewer"
+      ],
+      "blocked_by": [
+       "w32.1"
+      ]
+     }
+    ]
+   },
+   {
+    "n": 33,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w33",
+    "title": "ask on the workstream",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w33",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w33.1",
+      "title": "w33.1",
+      "state": "not-started",
+      "status": "open"
+     },
+     {
+      "bead_id": "w33.9",
+      "title": "Merge approval",
+      "state": "not-started",
+      "status": "open",
+      "gate": true,
+      "approvers": [
+       "a-reviewer"
+      ],
+      "blocked_by": [
+       "w33.1"
+      ]
+     }
+    ]
+   },
+   {
+    "n": 34,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w34",
+    "title": "your gate not ready",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w34",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w34.1",
+      "title": "w34.1",
+      "state": "not-started",
+      "status": "open"
+     },
+     {
+      "bead_id": "w34.9",
+      "title": "Spec approval",
+      "state": "not-started",
+      "status": "open",
+      "gate": true,
+      "approvers": [
+       "user"
+      ],
+      "blocked_by": [
+       "w34.1"
+      ]
+     }
+    ]
+   },
+   {
+    "n": 35,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w35",
+    "title": "stalled before gate",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w35",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w35.1",
+      "title": "w35.1",
+      "state": "not-started",
+      "status": "open"
+     },
+     {
+      "bead_id": "w35.9",
+      "title": "Merge approval",
+      "state": "not-started",
+      "status": "open",
+      "gate": true,
+      "approvers": [
+       "a-reviewer"
+      ],
+      "blocked_by": [
+       "w35.1"
+      ]
+     }
+    ]
+   },
+   {
+    "n": 36,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w36",
+    "title": "state missing before gate",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w36",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w36.1",
+      "title": "w36.1",
+      "state": "not-started",
+      "status": "open",
+      "broken": true
+     },
+     {
+      "bead_id": "w36.9",
+      "title": "Merge approval",
+      "state": "not-started",
+      "status": "open",
+      "gate": true,
+      "approvers": [
+       "a-reviewer"
+      ],
+      "blocked_by": [
+       "w36.1"
+      ]
+     }
+    ]
+   },
+   {
+    "n": 37,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w37",
+    "title": "decisions",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w37",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w37.1",
+      "title": "Pick a queue",
+      "state": "needs-user",
+      "status": "open"
+     },
+     {
+      "bead_id": "w37.2",
+      "title": "Pick a region",
+      "state": "needs-user",
+      "status": "open"
+     },
+     {
+      "bead_id": "w37.3",
+      "title": "w37.3",
+      "state": "in-progress",
+      "status": "open",
+      "owner": "operator-op-b-w38-3",
+      "owner_state": "working"
+     },
+     {
+      "bead_id": "w37.9",
+      "title": "Merge approval",
+      "state": "not-started",
+      "status": "open",
+      "gate": true,
+      "approvers": [
+       "a-reviewer"
+      ],
+      "blocked_by": [
+       "w37.3"
+      ]
+     }
+    ]
+   },
+   {
+    "n": 38,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w38",
+    "title": "your gate not listed",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w38",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w38.1",
+      "title": "w38.1",
+      "state": "not-started",
+      "status": "open",
+      "waiting": "CI #7",
+      "waiting_since": 1792999950
+     },
+     {
+      "bead_id": "w38.2",
+      "title": "w38.2",
+      "state": "done",
+      "status": "closed"
+     },
+     {
+      "bead_id": "w38.9",
+      "title": "Spec approval",
+      "state": "not-started",
+      "status": "open",
+      "gate": true,
+      "approvers": [
+       "user"
+      ],
+      "blocked_by": [
+       "w38.2"
+      ]
+     },
+     {
+      "bead_id": "w38.10",
+      "title": "Merge approval",
+      "state": "not-started",
+      "status": "open",
+      "gate": true,
+      "approvers": [
+       "a-reviewer"
+      ],
+      "blocked_by": [
+       "w38.1"
+      ]
+     }
+    ]
+   },
+   {
+    "n": 39,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w39",
+    "title": "stage gate first",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w39",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w39.1",
+      "title": "Build it",
+      "state": "not-started",
+      "status": "open",
+      "children": [
+       {
+        "bead_id": "w39.1.1",
+        "title": "w39.1.1",
+        "state": "done",
+        "status": "closed"
+       },
+       {
+        "bead_id": "w39.1.2",
+        "title": "w39.1.2",
+        "state": "in-progress",
+        "status": "open",
+        "owner": "operator-op-c-w40-1-2",
+        "owner_state": "working"
+       }
+      ]
+     },
+     {
+      "bead_id": "w39.2",
+      "title": "Build approved",
+      "state": "not-started",
+      "status": "open",
+      "gate": true,
+      "approvers": [
+       "a-reviewer"
+      ],
+      "blocked_by": [
+       "w39.1"
+      ]
+     },
+     {
+      "bead_id": "w39.3",
+      "title": "w39.3",
+      "state": "not-started",
+      "status": "open",
+      "blocked_by": [
+       "w39.2"
+      ]
+     },
+     {
+      "bead_id": "w39.4",
+      "title": "Ship approved",
+      "state": "not-started",
+      "status": "open",
+      "gate": true,
+      "approvers": [
+       "user"
+      ],
+      "blocked_by": [
+       "w39.3"
+      ]
+     }
+    ]
+   },
+   {
+    "n": 40,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w40",
+    "title": "two tracks",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w40",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w40.1",
+      "title": "A. Script audits",
+      "state": "not-started",
+      "status": "open",
+      "track": true,
+      "workstream": "w40",
+      "children": [
+       {
+        "bead_id": "w40.1.1",
+        "title": "w40.1.1",
+        "state": "not-started",
+        "status": "open",
+        "waiting": "CI #21",
+        "waiting_since": 1792999800
+       },
+       {
+        "bead_id": "w40.1.9",
+        "title": "Merge approval",
+        "state": "not-started",
+        "status": "open",
+        "gate": true,
+        "approvers": [
+         "a-reviewer"
+        ],
+        "blocked_by": [
+         "w40.1.1"
+        ]
+       }
+      ]
+     },
+     {
+      "bead_id": "w40.2",
+      "title": "Log audits",
+      "state": "not-started",
+      "status": "open",
+      "track": true,
+      "workstream": "w40",
+      "children": [
+       {
+        "bead_id": "w40.2.1",
+        "title": "Choose the log store",
+        "state": "needs-user",
+        "status": "open"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "n": 41,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w41",
+    "title": "one track",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w41",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w41.1",
+      "title": "Only track",
+      "state": "not-started",
+      "status": "open",
+      "track": true,
+      "workstream": "w41",
+      "children": [
+       {
+        "bead_id": "w41.1.1",
+        "title": "w41.1.1",
+        "state": "in-progress",
+        "status": "open",
+        "owner": "operator-op-d-w42-1-1",
+        "owner_state": "working"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "n": 42,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w42",
+    "title": "manager in one track",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w42",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w42.1",
+      "title": "Parser",
+      "state": "not-started",
+      "status": "open",
+      "track": true,
+      "workstream": "w42",
+      "children": [
+       {
+        "bead_id": "w42.1.1",
+        "title": "w42.1.1",
+        "state": "in-progress",
+        "status": "open"
+       },
+       {
+        "bead_id": "w42.1.9",
+        "title": "Merge approval",
+        "state": "not-started",
+        "status": "open",
+        "gate": true,
+        "approvers": [
+         "a-reviewer"
+        ],
+        "blocked_by": [
+         "w42.1.1"
+        ]
+       }
+      ]
+     },
+     {
+      "bead_id": "w42.2",
+      "title": "Docs",
+      "state": "not-started",
+      "status": "open",
+      "track": true,
+      "workstream": "w42",
+      "children": [
+       {
+        "bead_id": "w42.2.1",
+        "title": "w42.2.1",
+        "state": "not-started",
+        "status": "open"
+       }
+      ]
+     }
+    ],
+    "now_step": "w42.1.1"
+   },
+   {
+    "n": 43,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w43",
+    "title": "cards in two tracks",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w43",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w43.1",
+      "title": "Alpha",
+      "state": "not-started",
+      "status": "open",
+      "track": true,
+      "workstream": "w43",
+      "children": [
+       {
+        "bead_id": "w43.1.1",
+        "title": "Alpha choice",
+        "state": "needs-user",
+        "status": "open"
+       }
+      ]
+     },
+     {
+      "bead_id": "w43.2",
+      "title": "Beta",
+      "state": "not-started",
+      "status": "open",
+      "track": true,
+      "workstream": "w43",
+      "children": [
+       {
+        "bead_id": "w43.2.1",
+        "title": "Beta choice",
+        "state": "needs-user",
+        "status": "open"
+       }
+      ]
+     },
+     {
+      "bead_id": "w43.3",
+      "title": "Own work",
+      "state": "in-progress",
+      "status": "open",
+      "owner": "operator-op-e-w44-3",
+      "owner_state": "working"
+     }
+    ]
+   },
+   {
+    "n": 44,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w44",
+    "title": "one track beside open work",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w44",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w44.1",
+      "title": "Deploy script",
+      "state": "not-started",
+      "status": "open",
+      "track": true,
+      "workstream": "w44",
+      "children": [
+       {
+        "bead_id": "w44.1.1",
+        "title": "w44.1.1",
+        "state": "not-started",
+        "status": "open",
+        "waiting": "CI #5",
+        "waiting_since": 1792999970
+       }
+      ]
+     },
+     {
+      "bead_id": "w44.2",
+      "title": "Switch over",
+      "state": "in-progress",
+      "status": "open",
+      "owner": "operator-op-f-w45-2",
+      "owner_state": "working"
+     }
+    ]
+   },
+   {
+    "n": 45,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w45",
+    "title": "closed and parked tracks",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w45",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w45.1",
+      "title": "Done track",
+      "state": "done",
+      "status": "closed",
+      "track": true,
+      "workstream": "w45"
+     },
+     {
+      "bead_id": "w45.2",
+      "title": "Parked track",
+      "state": "not-started",
+      "status": "deferred",
+      "track": true,
+      "workstream": "w45"
+     },
+     {
+      "bead_id": "w45.3",
+      "title": "Live track",
+      "state": "not-started",
+      "status": "open",
+      "track": true,
+      "workstream": "w45",
+      "children": [
+       {
+        "bead_id": "w45.3.1",
+        "title": "w45.3.1",
+        "state": "not-started",
+        "status": "open"
+       }
+      ]
+     },
+     {
+      "bead_id": "w45.4",
+      "title": "Second live track",
+      "state": "not-started",
+      "status": "open",
+      "track": true,
+      "workstream": "w45",
+      "children": [
+       {
+        "bead_id": "w45.4.1",
+        "title": "w45.4.1",
+        "state": "done",
+        "status": "closed"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "n": 46,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w46",
+    "title": "tracks wait on your gate",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w46",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w46.1",
+      "title": "Greenlight starting the reviews",
+      "state": "needs-user",
+      "status": "open",
+      "gate": true,
+      "approvers": [
+       "user"
+      ],
+      "waiting": "you",
+      "waiting_since": 1792992800
+     },
+     {
+      "bead_id": "w46.2",
+      "title": "Review A",
+      "state": "not-started",
+      "status": "open",
+      "track": true,
+      "workstream": "w46",
+      "blocked_by": [
+       "w46.1"
+      ],
+      "children": [
+       {
+        "bead_id": "w46.2.1",
+        "title": "w46.2.1",
+        "state": "not-started",
+        "status": "open",
+        "blocked_by": [
+         "w46.1"
+        ]
+       }
+      ]
+     },
+     {
+      "bead_id": "w46.3",
+      "title": "Review B",
+      "state": "not-started",
+      "status": "open",
+      "track": true,
+      "workstream": "w46",
+      "blocked_by": [
+       "w46.1"
+      ],
+      "children": [
+       {
+        "bead_id": "w46.3.1",
+        "title": "w46.3.1",
+        "state": "not-started",
+        "status": "open",
+        "blocked_by": [
+         "w46.3.0"
+        ]
+       },
+       {
+        "bead_id": "w46.3.0",
+        "title": "w46.3.0",
+        "state": "not-started",
+        "status": "open",
+        "blocked_by": [
+         "w46.1"
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "n": 47,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w47",
+    "title": "your gate waits on a review",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w47",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w47.1",
+      "title": "w47.1",
+      "state": "done",
+      "status": "closed"
+     },
+     {
+      "bead_id": "w47.9",
+      "title": "Greenlight merging",
+      "state": "not-started",
+      "status": "open",
+      "gate": true,
+      "approvers": [
+       "user"
+      ],
+      "blocked_by": [
+       "w47.1"
+      ],
+      "waiting": "review (reviewer-a)",
+      "waiting_since": 1792996400
+     },
+     {
+      "bead_id": "w47.10",
+      "title": "Merge the PR",
+      "state": "not-started",
+      "status": "open",
+      "blocked_by": [
+       "w47.9"
+      ],
+      "owner": "manager-w47",
+      "waiting": "review (reviewer-a)",
+      "waiting_since": 1792997000
+     }
+    ]
+   },
+   {
+    "n": 48,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w48",
+    "title": "wait outside the gate's work",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w48",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w48.1",
+      "title": "w48.1",
+      "state": "not-started",
+      "status": "open"
+     },
+     {
+      "bead_id": "w48.9",
+      "title": "Rule approved",
+      "state": "not-started",
+      "status": "open",
+      "gate": true,
+      "approvers": [
+       "a-reviewer"
+      ],
+      "blocked_by": [
+       "w48.1"
+      ]
+     },
+     {
+      "bead_id": "w48.2",
+      "title": "Config step",
+      "state": "not-started",
+      "status": "open",
+      "waiting": "example-auth-config",
+      "waiting_since": 1792998800,
+      "waiting_until": 1793003600,
+      "waiting_until_as": "example-auth-config"
+     }
+    ]
+   },
+   {
+    "n": 49,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w49",
+    "title": "wait on a container",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w49",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w49.1",
+      "title": "Deliver login",
+      "state": "blocked",
+      "status": "open",
+      "waiting": "review (reviewer-a)",
+      "waiting_since": 1792999100,
+      "children": [
+       {
+        "bead_id": "w49.1.1",
+        "title": "Merge it",
+        "state": "not-started",
+        "status": "open"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "n": 50,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w50",
+    "title": "deferred gate first",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w50",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w50.8",
+      "title": "Cleanup reviewed",
+      "state": "not-started",
+      "status": "deferred",
+      "gate": true,
+      "approvers": [
+       "operator"
+      ]
+     },
+     {
+      "bead_id": "w50.7",
+      "title": "Old merge approval",
+      "state": "not-started",
+      "status": "open",
+      "gate": true,
+      "approvers": [
+       "user"
+      ],
+      "superseded": true
+     },
+     {
+      "bead_id": "w50.1",
+      "title": "w50.1",
+      "state": "in-progress",
+      "status": "open",
+      "owner": "operator-op-w50-1",
+      "owner_state": "working"
+     },
+     {
+      "bead_id": "w50.9",
+      "title": "Tier 1 passed",
+      "state": "not-started",
+      "status": "open",
+      "gate": true,
+      "approvers": [
+       "user"
+      ],
+      "blocked_by": [
+       "w50.1"
+      ]
+     },
+     {
+      "bead_id": "w50.6",
+      "title": "Parked stage",
+      "state": "not-started",
+      "status": "deferred",
+      "children": [
+       {
+        "bead_id": "w50.6.9",
+        "title": "Parked stage gate",
+        "state": "not-started",
+        "status": "open",
+        "gate": true,
+        "approvers": [
+         "user"
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "n": 51,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w51",
+    "title": "agent died before gate",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w51",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w51.1",
+      "title": "Run the audit",
+      "state": "not-started",
+      "status": "open",
+      "owner_state": "died",
+      "broken": true
+     },
+     {
+      "bead_id": "w51.9",
+      "title": "Audit reviewed",
+      "state": "not-started",
+      "status": "open",
+      "gate": true,
+      "approvers": [
+       "a-reviewer"
+      ],
+      "blocked_by": [
+       "w51.1"
+      ]
+     }
+    ]
+   },
+   {
+    "n": 52,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w52",
+    "title": "finished, manager to close",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w52",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w52.1",
+      "title": "Fix the lint",
+      "state": "review",
+      "status": "in_progress",
+      "owner": "manager-w52",
+      "waiting": "Manager to close",
+      "waiting_since": 1792999400,
+      "waiting_until": 1793003000,
+      "waiting_until_as": "Manager to close"
+     }
+    ]
+   },
+   {
+    "n": 53,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w53",
+    "title": "finished before gate, manager to close",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w53",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w53.1",
+      "title": "Build it",
+      "state": "review",
+      "status": "in_progress",
+      "owner": "manager-w53",
+      "waiting": "Manager to close",
+      "waiting_since": 1792999400,
+      "waiting_until": 1793003000,
+      "waiting_until_as": "Manager to close"
+     },
+     {
+      "bead_id": "w53.9",
+      "title": "Build reviewed",
+      "state": "not-started",
+      "status": "open",
+      "gate": true,
+      "approvers": [
+       "a-reviewer"
+      ],
+      "blocked_by": [
+       "w53.1"
+      ]
+     }
+    ]
+   },
+   {
+    "n": 54,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w54",
+    "title": "time wait passed",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w54",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w54.1",
+      "title": "w54.1",
+      "state": "not-started",
+      "status": "open"
+     },
+     {
+      "bead_id": "w54.2",
+      "title": "w54.2",
+      "state": "not-started",
+      "status": "open",
+      "waiting": "recheck",
+      "waiting_since": 1792992800,
+      "waiting_until": 1792999400,
+      "waiting_until_as": "recheck"
+     },
+     {
+      "bead_id": "w54.9",
+      "title": "Merge approval",
+      "state": "not-started",
+      "status": "open",
+      "gate": true,
+      "approvers": [
+       "a-reviewer"
+      ],
+      "blocked_by": [
+       "w54.1"
+      ]
+     }
+    ]
+   },
+   {
+    "n": 55,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w55",
+    "title": "long wait label",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w55",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w55.1",
+      "title": "w55.1",
+      "state": "not-started",
+      "status": "open",
+      "waiting": "the slow pages safety\u2026",
+      "waiting_since": 1792999400,
+      "waiting_until": 1793003600,
+      "waiting_until_as": "the slow pages safety\u2026"
+     }
+    ]
+   },
+   {
+    "n": 56,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w56",
+    "title": "long card title",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w56",
+    "done": 0,
+    "total": 0,
+    "steps": [
+     {
+      "bead_id": "w56.1",
+      "title": "Does the team approve scope for automating retries on dead imports?",
+      "state": "needs-user",
+      "status": "open"
+     }
+    ]
+   },
+   {
+    "n": 57,
+    "project": "p",
+    "project_id": 1,
+    "bead_id": "w57",
+    "title": "open card with live login",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-w57",
+    "done": 0,
+    "total": 1,
+    "steps": [
+     {
+      "bead_id": "w57.1",
+      "title": "Login track",
+      "state": "in-progress",
+      "status": "open",
+      "children": [
+       {
+        "bead_id": "w57.1.1",
+        "title": "Sign in to the service",
+        "state": "needs-user",
+        "status": "open",
+        "owner": "user",
+        "waiting": "you",
+        "children": [
+         {
+          "bead_id": "w57.1.1.1",
+          "title": "Hold interactive login",
+          "state": "in-progress",
+          "status": "in_progress",
+          "task": true,
+          "owner": "operator-login",
+          "owner_state": "working"
+         }
+        ]
+       }
+      ],
+      "track": true,
+      "workstream": "w57"
+     },
+     {
+      "bead_id": "w57.2",
+      "title": "Other track",
+      "track": true,
+      "workstream": "w57",
+      "state": "not-started",
+      "status": "open"
+     }
+    ]
+   }
+  ],
+  "needs_you": [
+   {
+    "project": "p",
+    "bead_id": "w2.1",
+    "title": "Name the service",
+    "workstream": "needs card",
+    "rank": 1,
+    "decision": {
+     "question": "Which name should the service use?"
+    }
+   },
+   {
+    "project": "p",
+    "bead_id": "w24.9",
+    "title": "Merge approval",
+    "workstream": "needs your gate",
+    "rank": 2
+   },
+   {
+    "project": "p",
+    "bead_id": "w33",
+    "title": "Is this still wanted?",
+    "workstream": "ask on the workstream",
+    "rank": 3
+   },
+   {
+    "project": "p",
+    "bead_id": "w34.9",
+    "title": "Spec approval",
+    "workstream": "your gate not ready",
+    "rank": 4
+   },
+   {
+    "project": "p",
+    "bead_id": "w37.2",
+    "title": "Pick a region",
+    "workstream": "decisions",
+    "rank": 5
+   },
+   {
+    "project": "p",
+    "bead_id": "w37.1",
+    "title": "Pick a queue",
+    "workstream": "decisions",
+    "rank": 6
+   },
+   {
+    "project": "p",
+    "bead_id": "w40.2.1",
+    "title": "Choose the log store",
+    "workstream": "two tracks",
+    "rank": 7,
+    "track": "Log audits",
+    "track_id": "w40.2"
+   },
+   {
+    "project": "p",
+    "bead_id": "w43.2.1",
+    "title": "Beta choice",
+    "workstream": "cards in two tracks",
+    "rank": 8,
+    "track": "Beta",
+    "track_id": "w43.2"
+   },
+   {
+    "project": "p",
+    "bead_id": "w43.1.1",
+    "title": "Alpha choice",
+    "workstream": "cards in two tracks",
+    "rank": 9,
+    "track": "Alpha",
+    "track_id": "w43.1"
+   },
+   {
+    "project": "p",
+    "bead_id": "w46.1",
+    "title": "Greenlight starting the reviews",
+    "workstream": "tracks wait on your gate",
+    "rank": 10,
+    "ask": "Start the reviews?"
+   },
+   {
+    "project": "p",
+    "bead_id": "w56.1",
+    "title": "Does the team approve scope for automating retries on dead imports?",
+    "workstream": "long card title",
+    "rank": 11
+   },
+   {
+    "project": "p",
+    "bead_id": "w57.1.1",
+    "title": "Sign in to the service",
+    "workstream": "open card with live login",
+    "rank": 12,
+    "track": "Login track",
+    "track_id": "w57.1"
+   }
+  ],
+  "agents": {
+   "commander": {
+    "state": "waiting",
+    "since": 1792999100,
+    "wait": "CI #40",
+    "detail": "CI #40"
+   },
+   "manager-w2": {
+    "state": "idle",
+    "since": 1792999400
+   },
+   "manager-w3": {
+    "state": "stuck",
+    "since": 1792996000,
+    "detail": "rate limited"
+   },
+   "manager-w4": {
+    "state": "working",
+    "since": 1792999880
+   },
+   "manager-w5": {
+    "state": "idle",
+    "since": 1792999400
+   },
+   "manager-w6": {
+    "state": "working",
+    "since": 1792999880
+   },
+   "manager-w7": {
+    "state": "idle",
+    "since": 1792999400
+   },
+   "manager-w8": {
+    "state": "idle",
+    "since": 1792999400
+   },
+   "manager-w9": {
+    "state": "idle",
+    "since": 1792999400
+   },
+   "manager-w10": {
+    "state": "idle",
+    "since": 1792999400
+   },
+   "manager-w11": {
+    "state": "idle",
+    "since": 1792999400
+   },
+   "manager-w12": {
+    "state": "idle",
+    "since": 1792999400
+   },
+   "manager-w13": {
+    "state": "idle",
+    "since": 1792999400
+   },
+   "manager-w14": {
+    "state": "idle",
+    "since": 1792999400
+   },
+   "manager-w15": {
+    "state": "idle",
+    "since": 1792999400
+   },
+   "manager-w16": {
+    "state": "idle",
+    "since": 1792999400
+   },
+   "manager-w17": {
+    "state": "idle",
+    "since": 1792999400
+   },
+   "manager-w18": {
+    "state": "idle",
+    "since": 1792999400
+   },
+   "manager-w19": {
+    "state": "idle",
+    "since": 1792999400
+   },
+   "manager-w20": {
+    "state": "idle",
+    "since": 1792999400
+   },
+   "manager-w21": {
+    "state": "idle",
+    "since": 1792999400
+   },
+   "manager-w22": {
+    "state": "idle",
+    "since": 1792999400
+   },
+   "manager-w23": {
+    "state": "idle",
+    "since": 1792999400
+   },
+   "manager-w24": {
+    "state": "idle",
+    "since": 1792999400
+   },
+   "manager-w25": {
+    "state": "idle",
+    "since": 1792999400
+   },
+   "manager-w26": {
+    "state": "idle",
+    "since": 1792999400
+   },
+   "manager-w27": {
+    "state": "working",
+    "since": 1792999880
+   },
+   "manager-w28": {
+    "state": "idle",
+    "since": 1792999400
+   },
+   "manager-w29": {
+    "state": "idle",
+    "since": 1792999400
+   },
+   "manager-w30": {
+    "state": "idle",
+    "since": 1792999400
+   },
+   "manager-w31": {
+    "state": "idle",
+    "since": 1792999400
+   },
+   "manager-w32": {
+    "state": "idle",
+    "since": 1792999400
+   },
+   "manager-w33": {
+    "state": "idle",
+    "since": 1792999400
+   },
+   "manager-w34": {
+    "state": "idle",
+    "since": 1792999400
+   },
+   "manager-w35": {
+    "state": "idle",
+    "since": 1792999400
+   },
+   "manager-w36": {
+    "state": "idle",
+    "since": 1792999400
+   },
+   "manager-w37": {
+    "state": "idle",
+    "since": 1792999400
+   },
+   "manager-w38": {
+    "state": "idle",
+    "since": 1792999400
+   },
+   "manager-w39": {
+    "state": "idle",
+    "since": 1792999400
+   },
+   "manager-w40": {
+    "state": "idle",
+    "since": 1792999400
+   },
+   "manager-w41": {
+    "state": "idle",
+    "since": 1792999400
+   },
+   "manager-w42": {
+    "state": "working",
+    "since": 1792999880
+   },
+   "manager-w43": {
+    "state": "idle",
+    "since": 1792999400
+   },
+   "manager-w44": {
+    "state": "idle",
+    "since": 1792999400
+   },
+   "manager-w45": {
+    "state": "idle",
+    "since": 1792999400
+   },
+   "manager-w46": {
+    "state": "idle",
+    "since": 1792999400
+   },
+   "manager-w47": {
+    "state": "idle",
+    "since": 1792999400
+   },
+   "manager-w48": {
+    "state": "idle",
+    "since": 1792999400
+   },
+   "manager-w49": {
+    "state": "idle",
+    "since": 1792999400
+   },
+   "manager-w50": {
+    "state": "idle",
+    "since": 1792999400
+   },
+   "manager-w51": {
+    "state": "idle",
+    "since": 1792999400
+   },
+   "manager-w52": {
+    "state": "idle",
+    "since": 1792999400
+   },
+   "manager-w53": {
+    "state": "idle",
+    "since": 1792999400
+   },
+   "manager-w54": {
+    "state": "idle",
+    "since": 1792999400
+   },
+   "manager-w55": {
+    "state": "idle",
+    "since": 1792999400
+   },
+   "manager-w56": {
+    "state": "idle",
+    "since": 1792999400
+   },
+   "manager-w57": {
+    "state": "idle",
+    "since": 1792999400
+   }
+  },
+  "unread": {
+   "manager-w19": 2
+  }
+ }
+}

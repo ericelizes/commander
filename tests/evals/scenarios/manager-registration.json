@@ -1,0 +1,11 @@
+{
+ "root": "sample-area.8",
+ "cases": [
+  {"id":"sample-area.8", "kind":"kind:objective", "allowed":true},
+  {"id":"sample-task", "parent":"sample-area.8", "kind":"kind:task"},
+  {"id":"sample-gate", "parent":"sample-area.8", "kind":"kind:gate"},
+  {"id":"sample-moved", "parent":"sample-area.8", "kind":"kind:objective"},
+  {"id":"sample-track", "parent":"sample-area.8", "kind":"kind:track"},
+  {"id":"sample-loose-gate", "kind":"kind:objective,gate"}
+ ]
+}

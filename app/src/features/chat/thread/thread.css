@@ -1,0 +1,539 @@
+/* The conversation (assistant-ui) uses the chat's --cc-* tokens,
+   so light, dark and glass all follow. */
+
+.ct-root {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.ct-empty {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  padding-bottom: var(--cc-floats-h, 0px);
+}
+
+.ct-viewport {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  /* Never sideways: wide code and tables scroll inside their own boxes. */
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: var(--cc-surface-2) transparent;
+  /* A size container, so the newest pair can be exactly one view tall (100cqh). */
+  container-type: size;
+  /* Text dissolves under the header instead of being cut off at an edge. */
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 28px);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 28px);
+}
+
+.ct-column {
+  max-width: var(--cc-col);
+  margin: 0 auto;
+  padding: 0 28px;
+  overflow-wrap: anywhere;
+}
+
+/* A table scrolls in its own box: its cells keep whole words and numbers. */
+.ct-column table {
+  overflow-wrap: normal;
+}
+
+/* Your message and its reply. The top padding clears the fade under the
+   header, so a pinned message is never dimmed. */
+.ct-pair {
+  padding-top: 32px;
+}
+
+/* Exactly the visible height (not 100%, which a scroller cannot resolve): the
+   pair's top can then always scroll flush to the top when you send, with the
+   reply growing into the room below. One pixel shorter and the scroll clamps
+   at the bottom with the previous turn still showing. */
+.ct-pair.last {
+  min-height: 100cqh;
+  padding-bottom: calc(var(--cc-floats-h, 0px) + 24px);
+}
+
+.ct-earlier {
+  display: block;
+  margin: 16px auto 4px;
+  padding: 6px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--cc-surface-2);
+  color: var(--cc-muted);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.ct-earlier:hover {
+  color: var(--cc-text);
+}
+
+/* ---- your messages ------------------------------------------------------ */
+
+.ct-user {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  padding: 10px 0;
+}
+
+.ct-bubble {
+  max-width: 85%;
+  width: fit-content;
+  padding: 10px 16px;
+  border-radius: 18px;
+  background: var(--cc-user-bg);
+  color: var(--cc-text);
+  font-size: 14.5px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.ct-user.pending .ct-bubble {
+  opacity: 0.7;
+}
+
+.ct-images {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--cc-muted);
+}
+
+/* ---- the reply ---------------------------------------------------------- */
+
+.ct-assistant {
+  position: relative;
+  padding: 8px 0;
+}
+
+.ct-text {
+  margin: 8px 0;
+  font-size: 14.5px;
+  line-height: 1.7;
+  user-select: text;
+}
+
+.ct-text:first-child {
+  margin-top: 0;
+}
+
+.ct-item {
+  margin: 10px 0;
+}
+
+.ct-actions {
+  position: absolute;
+  left: -6px;
+  top: 100%;
+  margin-top: -8px;
+  display: flex;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.ct-assistant:hover .ct-actions {
+  opacity: 1;
+}
+
+.ct-action {
+  display: grid;
+  place-items: center;
+  padding: 6px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--cc-muted);
+  cursor: pointer;
+}
+
+.ct-action:hover {
+  background: var(--cc-surface-2);
+  color: var(--cc-text);
+}
+
+/* ---- thinking and the activity row ------------------------------------- */
+
+.ct-thinking,
+.ct-activity-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  padding: 4px 0;
+  font-size: 13.5px;
+  color: var(--cc-muted);
+}
+
+.ct-activity {
+  margin: 6px 0;
+}
+
+.ct-activity-head {
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 13.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ct-activity-head:hover,
+.ct-activity-head.open {
+  color: var(--cc-text);
+}
+
+.ct-activity-head.attn {
+  color: var(--cc-yellow);
+}
+
+.ct-activity-head > svg {
+  flex: none;
+}
+
+.ct-chevron {
+  opacity: 0.6;
+  transition: transform 0.15s, opacity 0.15s;
+}
+
+.ct-activity-head:hover .ct-chevron {
+  opacity: 1;
+}
+
+.ct-activity-head.open .ct-chevron {
+  transform: rotate(180deg);
+}
+
+.ct-elapsed {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.8;
+}
+
+.ct-failed {
+  flex: none;
+  color: var(--cc-red);
+}
+
+/* The live label: a soft light sweeping across the words. */
+.ct-shimmer {
+  font-weight: 500;
+  background: linear-gradient(90deg, var(--cc-muted) 0%, var(--cc-muted) 40%, var(--cc-text) 50%, var(--cc-muted) 60%, var(--cc-muted) 100%);
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: ct-shimmer 3.15s linear infinite;
+}
+
+@keyframes ct-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -150% 0;
+  }
+}
+
+.ct-swap {
+  display: grid;
+  min-width: 0;
+}
+
+.ct-swap > span {
+  grid-area: 1 / 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ct-swap-in {
+  /* The old label clears first; the new one fades in after it. */
+  animation: ct-swap-in 220ms ease-out 140ms backwards;
+}
+
+.ct-swap-out {
+  animation: ct-swap-out 140ms ease-in forwards;
+}
+
+.ct-icon-swap {
+  animation: ct-icon-swap 220ms ease-out;
+}
+
+@keyframes ct-swap-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+}
+
+@keyframes ct-swap-out {
+  to {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+}
+
+@keyframes ct-icon-swap {
+  from {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+}
+
+/* ---- the timeline under an activity row --------------------------------- */
+
+.ct-steps {
+  list-style: none;
+  margin: 4px 0 4px 7px;
+  padding: 0 0 4px 15px;
+  box-shadow: inset 1px 0 0 var(--cc-border-strong);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  animation: ct-drop 160ms ease-out;
+}
+
+@keyframes ct-drop {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+}
+
+.ct-step {
+  position: relative;
+  padding-left: 28px;
+}
+
+.ct-step-dot {
+  position: absolute;
+  left: 0;
+  top: 4px;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--cc-surface);
+  color: var(--cc-muted);
+}
+
+.ct-spin {
+  color: var(--cc-accent);
+  animation: ct-spin 0.9s linear infinite;
+}
+
+@keyframes ct-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.ct-step-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--cc-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.ct-step-head.plain {
+  cursor: default;
+}
+
+.ct-step-head:not(.plain):hover {
+  color: var(--cc-accent);
+}
+
+.ct-step-label {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ct-step-label.failed {
+  color: var(--cc-red);
+}
+
+.ct-step-chevron {
+  flex: none;
+  color: var(--cc-muted);
+  opacity: 0;
+  transition: transform 0.15s, opacity 0.15s;
+}
+
+.ct-step-head:hover .ct-step-chevron,
+.ct-step-chevron.open {
+  opacity: 1;
+}
+
+.ct-step-chevron.open {
+  transform: rotate(90deg);
+}
+
+.ct-step-detail {
+  padding: 4px 0 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.ct-thought {
+  font-style: italic;
+  white-space: pre-wrap;
+  line-height: 1.6;
+  color: var(--cc-muted);
+}
+
+/* ---- jump to latest ----------------------------------------------------- */
+
+.ct-jump-wrap {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--cc-floats-h, 0px) + 8px);
+  z-index: 3;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.ct-jump {
+  pointer-events: auto;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--cc-surface);
+  color: var(--cc-muted);
+  box-shadow: 0 0 0 1px var(--cc-border), 0 4px 14px light-dark(rgba(20, 22, 30, 0.1), rgba(0, 0, 0, 0.35));
+  cursor: pointer;
+}
+
+.ct-jump:disabled {
+  visibility: hidden;
+}
+
+/* Each new word of a streaming reply fades in once. */
+.ct-fade-word {
+  animation: ct-fade-word 450ms ease-out both;
+}
+
+@keyframes ct-fade-word {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ct-fade-word,
+  .ct-shimmer,
+  .ct-spin,
+  .ct-swap-in,
+  .ct-swap-out,
+  .ct-icon-swap,
+  .ct-steps {
+    animation: none;
+  }
+
+  .ct-shimmer {
+    color: var(--cc-muted);
+    background: none;
+  }
+}
+
+/* No block cursor: the fading words already show where the reply is growing. */
+.ct-text .cc-streaming > :last-child::after {
+  content: none;
+}
+
+/* ---- while you were away: mail-driven turns folded to one row ----------- */
+.ct-away-body {
+  margin: 4px 0 8px 6px;
+  padding-left: 12px;
+  border-left: 2px solid var(--cc-surface-2);
+}
+
+/* The report: one card that keeps the last finished report. */
+.ct-report {
+  margin: 6px 0 4px;
+  padding: 12px 16px 6px;
+  border-radius: 12px;
+  background: var(--cc-surface);
+  box-shadow: inset 0 0 0 1px var(--cc-border-strong);
+}
+
+.ct-report-kicker {
+  color: var(--cc-muted);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.ct-report-body {
+  animation: ct-report-in 0.35s ease-out;
+}
+
+@keyframes ct-report-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ct-report-body {
+    animation: none;
+  }
+}
+
+/* API retries replace the thinking row; the hint wraps under the label. */
+.cc-retrying .ct-thinking:not(.ct-retry) {
+  display: none;
+}
+
+.ct-retry {
+  flex-wrap: wrap;
+}
+
+.ct-retry-icon {
+  flex: none;
+}
+
+.cw-head {
+  min-width: 0;
+}
+
+.cw-next {
+  color: var(--cc-muted);
+  font-variant-numeric: tabular-nums;
+  opacity: 0.8;
+}

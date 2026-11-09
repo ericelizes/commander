@@ -1,0 +1,240 @@
+package main
+
+import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
+	"flag"
+	"fmt"
+	"os"
+	"slices"
+	"strings"
+	"time"
+
+	"github.com/example-user/commander/internal/beads"
+	"github.com/example-user/commander/internal/spawn"
+	"github.com/example-user/commander/internal/workflowtemplate"
+)
+
+// Resolve every historical role for this exact task, including completed runs.
+// Multiple runs are expected; foreign-project or malformed rows are ambiguous.
+var workflowTaskRoles = func(ctx context.Context, project, task string) ([]string, error) {
+	st, done, err := needsYouStoreFn()
+	if err != nil {
+		return nil, err
+	}
+	defer done()
+	p, err := st.GetProjectByName(ctx, project)
+	if err != nil {
+		return nil, err
+	}
+	if p == nil {
+		return nil, fmt.Errorf("unknown project %s", project)
+	}
+	runs, err := st.ListAgentRunsByTaskBeadID(ctx, task, "")
+	if err != nil {
+		return nil, err
+	}
+	var roles []string
+	for _, r := range runs {
+		if r.ProjectID != p.ID || r.TaskBeadID != task || strings.TrimSpace(r.AgentName) == "" {
+			return nil, fmt.Errorf("ambiguous task run provenance for %s", task)
+		}
+		role := strings.ToLower(r.AgentName)
+		if role == "operator-" || role == "op-" || (!strings.HasPrefix(role, "operator-") && !strings.HasPrefix(role, "op-")) {
+			return nil, fmt.Errorf("ambiguous Operator role for task %s", task)
+		}
+		if !strings.HasPrefix(role, "operator-") {
+			role = "operator-" + role
+		}
+		role = spawn.CanonicalRole(strings.ToLower(role))
+		if !slices.Contains(roles, role) {
+			roles = append(roles, role)
+		}
+	}
+	if len(roles) == 0 {
+		return nil, fmt.Errorf("task %s matches no Operator run", task)
+	}
+	return roles, nil
+}
+
+// Follow only fresh, explicit parent edges: promoted workstreams cannot be
+// reconstructed from dotted IDs. Missing ancestry and cycles refuse the check.
+// workflowOwnerRoles are the Managers that own id: the root's (from
+// workflowRoot) while the project's nested Managers are off, else every owner
+// over it, nearest first.
+func workflowOwnerRoles(ctx context.Context, bc beads.Client, dir, id, root string) ([]string, error) {
+	if !beads.NestedManagersOn(dir) {
+		return []string{"manager-" + root}, nil
+	}
+	return ownerRoles(ctx, bc, dir, id)
+}
+
+func workflowRoot(ctx context.Context, bc beads.Client, dir, id string) (string, error) {
+	seen := map[string]bool{}
+	for id != "" {
+		if seen[id] {
+			return "", fmt.Errorf("ancestry cycle at %s", id)
+		}
+		seen[id] = true
+		b, err := bc.Show(ctx, dir, id)
+		if err != nil {
+			return "", err
+		}
+		if b == nil {
+			return "", fmt.Errorf("missing task/ancestor %s", id)
+		}
+		ds, err := workflowFreshDetails(ctx, bc, dir, []string{id})
+		if err != nil {
+			return "", err
+		}
+		d, ok := ds[id]
+		if !ok {
+			return "", fmt.Errorf("unreadable ancestry %s", id)
+		}
+		if d.Parent == "" {
+			return id, nil
+		}
+		id = d.Parent
+	}
+	return "", fmt.Errorf("missing workstream ancestry")
+}
+func workflowRolesInScope(ctx context.Context, bc beads.Client, dir, project, root, task string) ([]string, error) {
+	other, err := workflowRoot(ctx, bc, dir, task)
+	if err != nil {
+		return nil, err
+	}
+	if other != root {
+		return nil, fmt.Errorf("task %s is outside workstream %s", task, root)
+	}
+	return workflowTaskRoles(ctx, project, task)
+}
+func roleOverlap(a, b []string) bool {
+	for _, r := range a {
+		if slices.Contains(b, r) {
+			return true
+		}
+	}
+	return false
+}
+
+func bindWorkflowWriters(ctx context.Context, bc beads.Client, dir, project, blockID, head string, tasks []string) (*workflowtemplate.WriterBinding, error) {
+	if callerIsOperator("") {
+		return nil, fmt.Errorf("writer selection belongs to the owning Manager; Operators cannot bind writers")
+	}
+	bc = freshReader(bc)
+	b, err := bc.Show(ctx, dir, blockID)
+	if err != nil {
+		return nil, err
+	}
+	if b == nil || workflowtemplate.Label(*b, workflowtemplate.LabelTemplate) != "pr-review" || workflowtemplate.Label(*b, workflowtemplate.LabelStep) != "" {
+		return nil, fmt.Errorf("%s is not a pr-review block", blockID)
+	}
+	if _, err := workflowtemplate.Definition(*b); err != nil {
+		return nil, err
+	}
+	root, err := workflowRoot(ctx, bc, dir, blockID)
+	if err != nil {
+		return nil, err
+	}
+	// Agents may bind only as an owning Manager (the block's nearest owner or one
+	// above it; the root's alone while nested Managers are off). A human CLI has no role.
+	if role := os.Getenv("COMMANDER_ROLE"); role != "" {
+		owners, err := workflowOwnerRoles(ctx, bc, dir, blockID, root)
+		if err != nil {
+			return nil, err
+		}
+		if !roleAmong(role, owners) {
+			return nil, fmt.Errorf("writer selection belongs to %s", owners[0])
+		}
+	}
+	if len(tasks) == 0 {
+		return nil, fmt.Errorf("explicit original and actual fix writer tasks required")
+	}
+	slices.Sort(tasks)
+	tasks = slices.Compact(tasks)
+	for _, task := range tasks {
+		if task == "" {
+			return nil, fmt.Errorf("empty writer task")
+		}
+		if _, err := workflowRolesInScope(ctx, bc, dir, project, root, task); err != nil {
+			return nil, err
+		}
+	}
+	pr := workflowtemplate.BlockPR(*b)
+	h, err := workflowtemplate.ReadHead(ctx, workflowGH, pr)
+	if err != nil {
+		return nil, err
+	}
+	_, headErr := hex.DecodeString(head)
+	if h.SHA != head || len(head) != 40 || headErr != nil {
+		return nil, fmt.Errorf("--head must equal current full PR head %s", h.SHA)
+	}
+	if h.State != "OPEN" {
+		return nil, fmt.Errorf("writer binding requires an open PR")
+	}
+	cs, err := bc.Comments(ctx, dir, blockID)
+	if err != nil {
+		return nil, err
+	}
+	old, err := workflowtemplate.Binding(cs)
+	if err == nil && old.PR == pr && old.Head == head && slices.Equal(old.Tasks, tasks) {
+		return &old, nil
+	}
+	nonce := make([]byte, 16)
+	if _, err := rand.Read(nonce); err != nil {
+		return nil, err
+	}
+	binding := workflowtemplate.WriterBinding{Revision: hex.EncodeToString(nonce), PR: pr, Head: head, Tasks: tasks}
+	// Check head again before persisting the selection.
+	h, err = workflowtemplate.ReadHead(ctx, workflowGH, pr)
+	if err != nil {
+		return nil, err
+	}
+	if h.SHA != head {
+		return nil, fmt.Errorf("PR head changed while binding; retry")
+	}
+	if err := bc.AddComment(ctx, dir, blockID, binding.Comment()); err != nil {
+		return nil, err
+	}
+	return &binding, nil
+}
+func runWorkflowBindWriters(args []string, stdout, stderr *os.File) int {
+	if callerIsOperator("") {
+		emitErr(stderr, "writer selection belongs to the owning Manager; Operators cannot bind writers")
+		return 1
+	}
+	fs := flag.NewFlagSet("workflow bind-writers", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	project := fs.String("project", "", "project slug")
+	block := fs.String("block", "", "existing review block")
+	writers := fs.String("writers", "", "comma-separated original and actual fix task IDs, selected from commit reports")
+	head := fs.String("head", "", "current full PR head")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if *project == "" || *block == "" || *writers == "" || *head == "" || fs.NArg() != 0 {
+		emitErr(stderr, "required: --project P --block B --writers original-task,fix-task --head full-sha")
+		return 1
+	}
+	p, err := resolveProjectRecFn(*project)
+	if err != nil {
+		emitErr(stderr, err.Error())
+		return 1
+	}
+	unlock := lockPlug("writers-" + *block)
+	defer unlock()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+	b, err := bindWorkflowWriters(ctx, newBeadsClientFn(), p.Path, p.Name, *block, *head, strings.Split(*writers, ","))
+	if err != nil {
+		emitErr(stderr, err.Error())
+		return 1
+	}
+	if err := json.NewEncoder(stdout).Encode(b); err != nil {
+		emitErr(stderr, err.Error())
+		return 1
+	}
+	return 0
+}

@@ -1,0 +1,37 @@
+{
+  "argv": [
+    "internal-set-objective",
+    "--project",
+    "example",
+    "--bead",
+    "p-1",
+    "--owner",
+    "none",
+    "--until",
+    "none"
+  ],
+  "bead_labels": [
+    "kind:task",
+    "owner:manager-example",
+    "owner:operator-writer",
+    "until:approved",
+    "until:live",
+    "waiting:100:user",
+    "approver:user",
+    "writer:operator-writer"
+  ],
+  "update_contains": [
+    "--remove-label owner:manager-example",
+    "--remove-label owner:operator-writer",
+    "--remove-label until:approved",
+    "--remove-label until:live"
+  ],
+  "update_excludes": [
+    "--remove-label waiting:",
+    "--remove-label approver:",
+    "--remove-label writer:",
+    "--add-label owner:",
+    "--add-label until:"
+  ],
+  "expected_updates": 1
+}

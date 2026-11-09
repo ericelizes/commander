@@ -1,0 +1,7 @@
+0 Commander: no agent yet
+1 Stale cards: Needs you: Approve the revised plan? (+3 more) (0% done, next gate: Approve the revised plan?, approved by you, ⚑ 4)
+Needs you (4):
+  #1 Approve the revised plan? (Stale cards)
+  #2 Keep this request? · Asked 9 days ago (Stale cards)
+  #3 Resume the deferred work? · Pushed back 4 times since Tue Oct 27 (Stale cards)
+  #4 Approve the current plan? (Stale cards)

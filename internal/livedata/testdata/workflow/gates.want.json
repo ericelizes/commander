@@ -1,0 +1,168 @@
+{
+ "lab:lab-ops": {
+  "current": "lab-ops.1",
+  "steps": [
+   {
+    "id": "lab-ops.1",
+    "title": "Rotate the lab keys",
+    "kind": "working",
+    "text": "Operator working"
+   },
+   {
+    "id": "lab-ops.2",
+    "title": "Land the cleanup PR",
+    "kind": "waiting",
+    "text": "Waiting for review",
+    "since": 1792998000
+   },
+   {
+    "id": "lab-ops.3",
+    "title": "Announce the new keys",
+    "kind": "idle",
+    "text": "Not started"
+   },
+   {
+    "id": "lab-ops.4",
+    "title": "Old runner cleanup",
+    "kind": "stalled",
+    "text": "Agent stopped: the Manager's move"
+   }
+  ]
+ },
+ "lab:lab-t06": {
+  "current": "lab-t06.6",
+  "unlocks": [
+   "lab-t06.2.3",
+   "lab-t06.3.3",
+   "lab-t06.2.4",
+   "lab-t06.7"
+  ],
+  "steps": [
+   {
+    "id": "lab-t06.1",
+    "title": "Experiment 3: off-modal completed",
+    "kind": "done",
+    "text": "Done",
+    "track": true
+   },
+   {
+    "id": "lab-t06.2",
+    "title": "Experiment 2: slow pages",
+    "kind": "needs",
+    "text": "Needs you: Approve comparing sample text variants?",
+    "since": 1792996400,
+    "track": true,
+    "children": [
+     {
+      "id": "lab-t06.2.1",
+      "title": "Slow pages: design approved",
+      "kind": "done",
+      "text": "Done",
+      "gate": true,
+      "who": "you"
+     },
+     {
+      "id": "lab-t06.2.2",
+      "title": "Slow pages: run the baseline",
+      "kind": "done",
+      "text": "Done"
+     },
+     {
+      "id": "lab-t06.2.3",
+      "title": "Verify the sample list guide",
+      "kind": "idle",
+      "text": "Not started"
+     },
+     {
+      "id": "lab-t06.2.4",
+      "title": "Measure slow-page impact",
+      "kind": "idle",
+      "text": "Not started"
+     }
+    ]
+   },
+   {
+    "id": "lab-t06.3",
+    "title": "Experiment 7: slow restarts",
+    "kind": "working",
+    "text": "Working on restore the test VM",
+    "track": true,
+    "current": "lab-t06.3.2",
+    "children": [
+     {
+      "id": "lab-t06.3.1",
+      "title": "Slow restarts: baseline",
+      "kind": "done",
+      "text": "Done"
+     },
+     {
+      "id": "lab-t06.3.2",
+      "title": "Restore the test VM",
+      "kind": "working",
+      "text": "Operator working"
+     },
+     {
+      "id": "lab-t06.3.3",
+      "title": "Measure real-app startup impact",
+      "kind": "idle",
+      "text": "Not started"
+     },
+     {
+      "id": "lab-t06.3.4",
+      "title": "Wait for CI on the fixture fix",
+      "kind": "waiting",
+      "text": "Waiting for CI",
+      "since": 1792999000
+     }
+    ]
+   },
+   {
+    "id": "lab-t06.4",
+    "title": "Design work approved",
+    "kind": "done",
+    "text": "Done"
+   },
+   {
+    "id": "lab-t06.5",
+    "title": "Align both designs to one gate per tier",
+    "kind": "done",
+    "text": "Done"
+   },
+   {
+    "id": "lab-t06.6",
+    "title": "Workflow approved: compare sample text variants",
+    "kind": "needs",
+    "text": "Needs you",
+    "since": 1792996400,
+    "gate": true,
+    "who": "you",
+    "unlocks": [
+     "lab-t06.2.3",
+     "lab-t06.3.3",
+     "lab-t06.2.4",
+     "lab-t06.7"
+    ]
+   },
+   {
+    "id": "lab-t06.7",
+    "title": "Results reviewed and reports posted",
+    "kind": "idle",
+    "text": "Not reached",
+    "gate": true,
+    "who": "you"
+   },
+   {
+    "id": "lab-t06.8",
+    "title": "Write the summary post",
+    "kind": "idle",
+    "text": "Not started"
+   },
+   {
+    "id": "lab-t06.10",
+    "title": "Revisit the old fixtures",
+    "kind": "idle",
+    "text": "Parked"
+   }
+  ]
+ }
+}

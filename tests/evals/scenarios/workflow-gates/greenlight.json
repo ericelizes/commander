@@ -1,0 +1,14 @@
+{
+  "cases": [
+    {"name": "closed user gate", "title": "Greenlight adding search", "status": "closed", "approver": "user", "parent": "w1", "bead": "w1.1", "approved": true},
+    {"name": "case insensitive title", "title": "  gReEnLiGhT adding search", "status": "closed", "approver": "user", "parent": "w1", "bead": "w1.1", "approved": true},
+    {"name": "open user gate", "title": "Greenlight adding search", "status": "open", "approver": "user", "parent": "w1", "bead": "w1.1", "problem": "still open"},
+    {"name": "reviewer gate", "title": "Greenlight adding search", "status": "closed", "approver": "reviewer", "parent": "w1", "bead": "w1.1", "problem": "no Workflow approved gate"},
+    {"name": "missing approver", "title": "Greenlight adding search", "status": "closed", "parent": "w1", "bead": "w1.1", "problem": "no Workflow approved gate"},
+    {"name": "track user gate", "title": "Greenlight adding search", "status": "closed", "approver": "user", "parent": "w1.t", "bead": "w1.t.1", "approved": true},
+    {"name": "workstream gate cannot approve track", "title": "Greenlight adding search", "status": "closed", "approver": "user", "parent": "w1", "bead": "w1.t.1", "problem": "w1.t has no Workflow approved gate"},
+    {"name": "track gate cannot approve workstream", "title": "Greenlight adding search", "status": "closed", "approver": "user", "parent": "w1.t", "bead": "w1.1", "problem": "w1 has no Workflow approved gate"},
+    {"name": "title must start with Greenlight", "title": "Search Greenlight", "status": "closed", "approver": "user", "parent": "w1", "bead": "w1.1", "problem": "no Workflow approved gate"},
+    {"name": "whole word title", "title": "Greenlighter search", "status": "closed", "approver": "user", "parent": "w1", "bead": "w1.1", "problem": "no Workflow approved gate"}
+  ]
+}

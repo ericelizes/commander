@@ -1,0 +1,199 @@
+{
+ "now": 1793000000,
+ "snapshot": {
+  "version": 1,
+  "generated_at": "2026-10-26T12:00:00Z",
+  "projects": [
+   {
+    "id": 1,
+    "name": "lab",
+    "type": "repo",
+    "path": "/tmp/lab",
+    "status": "active"
+   }
+  ],
+  "fleet": {
+   "cost_usd_24h": 0,
+   "cost_usd_7d": 0,
+   "cost_series_24h": [],
+   "agents": 0,
+   "active": 0,
+   "blocked": 0,
+   "idle_ratio": 0,
+   "projects": 1,
+   "chat_cost_usd_24h": 0,
+   "roles_cost": []
+  },
+  "agents": {
+   "manager-lab-hub": {
+    "state": "idle",
+    "since": 1792990000
+   }
+  },
+  "unread": {},
+  "needs_you": [
+   {
+    "project": "lab",
+    "bead_id": "lab-hub.1.2.8",
+    "title": "Greenlight running the backfill",
+    "workstream": "Hub import",
+    "track": "Importer rollout",
+    "track_id": "lab-hub.1",
+    "rank": 1,
+    "decision": {
+     "question": "Run the backfill?",
+     "context": "The PR is approved."
+    }
+   }
+  ],
+  "workstreams": [
+   {
+    "n": 1,
+    "project": "lab",
+    "project_id": 1,
+    "bead_id": "lab-hub",
+    "title": "Hub import",
+    "state": "in-progress",
+    "status": "in_progress",
+    "manager_role": "manager-lab-hub",
+    "now_step": "lab-ops.4",
+    "done": 5,
+    "total": 11,
+    "steps": [
+     {
+      "bead_id": "lab-hub.0",
+      "title": "Workflow approved",
+      "state": "done",
+      "status": "closed",
+      "gate": true,
+      "approvers": [
+       "user"
+      ],
+      "criteria": "The user approved the stages and gates.",
+      "viz": 1
+     },
+     {
+      "bead_id": "lab-hub.1",
+      "title": "Importer rollout",
+      "state": "in-progress",
+      "status": "in_progress",
+      "owner": "manager-lab-hub",
+      "track": true,
+      "viz": 2,
+      "children": [
+       {
+        "bead_id": "lab-hub.1.2",
+        "title": "Importer ships",
+        "state": "in-progress",
+        "status": "in_progress",
+        "owner": "manager-lab-hub",
+        "viz": 2,
+        "phase_note": "4 of 9 done",
+        "children": [
+         {
+          "bead_id": "lab-hub.1.2.1",
+          "title": "Schema drafted",
+          "state": "done",
+          "status": "closed",
+          "viz": 3,
+          "owner": "operator-lab-hub-1-2-1"
+         },
+         {
+          "bead_id": "lab-hub.1.2.2",
+          "title": "Importer built",
+          "state": "done",
+          "status": "closed",
+          "viz": 3,
+          "owner": "operator-lab-hub-1-2-2"
+         },
+         {
+          "bead_id": "lab-hub.1.2.3",
+          "title": "Importer tests green",
+          "state": "done",
+          "status": "closed",
+          "viz": 3,
+          "owner": "operator-lab-hub-1-2-3"
+         },
+         {
+          "bead_id": "lab-hub.1.2.4",
+          "title": "Backfill script built",
+          "state": "done",
+          "status": "closed",
+          "viz": 3,
+          "owner": "operator-lab-hub-1-2-4"
+         },
+         {
+          "bead_id": "lab-hub.1.2.5",
+          "title": "Importer PR open",
+          "state": "in-progress",
+          "status": "in_progress",
+          "viz": 3,
+          "owner": "operator-lab-hub-1-2-5",
+          "blocked_by": [
+           "lab-hub.1.2.4"
+          ]
+         },
+         {
+          "bead_id": "lab-hub.1.2.6",
+          "title": "CI green on the importer PR",
+          "state": "blocked",
+          "status": "in_progress",
+          "viz": 3,
+          "owner": "manager-lab-hub",
+          "waiting": "CI #88",
+          "waiting_since": 1792998000,
+          "review": "88",
+          "blocked_by": [
+           "lab-hub.1.2.5"
+          ]
+         },
+         {
+          "bead_id": "lab-hub.1.2.7",
+          "title": "Importer PR approved",
+          "state": "not-started",
+          "status": "open",
+          "viz": 1,
+          "gate": true,
+          "approvers": [
+           "reviewer-a"
+          ],
+          "criteria": "The reviewer approves the PR on GitHub.",
+          "blocked_by": [
+           "lab-hub.1.2.6"
+          ]
+         },
+         {
+          "bead_id": "lab-hub.1.2.8",
+          "title": "Greenlight running the backfill",
+          "state": "not-started",
+          "status": "open",
+          "viz": 1,
+          "gate": true,
+          "approvers": [
+           "user"
+          ],
+          "criteria": "The user says run it.",
+          "blocked_by": [
+           "lab-hub.1.2.7"
+          ]
+         },
+         {
+          "bead_id": "lab-hub.1.2.9",
+          "title": "Backfill verified",
+          "state": "not-started",
+          "status": "open",
+          "viz": 3,
+          "owner": "operator-lab-hub-1-2-9",
+          "blocked_by": [
+           "lab-hub.1.2.8"
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ }
+}

@@ -1,0 +1,47 @@
+{
+ "commander": {
+  "kind": "none",
+  "text": "no agent yet",
+  "since": 0,
+  "unread": 0
+ },
+ "asks": [
+  {
+   "key": "ask:p:p-1",
+   "text": "Q p-1?",
+   "rank": 1,
+   "workstream": "WS",
+   "track": "",
+   "track_letter": "",
+   "ws_key": ""
+  },
+  {
+   "key": "ask:p:p-2",
+   "text": "Q p-2?",
+   "rank": 2,
+   "workstream": "WS",
+   "track": "",
+   "track_letter": "",
+   "ws_key": ""
+  },
+  {
+   "key": "ask:p:p-3",
+   "text": "Q p-3?",
+   "rank": 3,
+   "workstream": "WS",
+   "track": "",
+   "track_letter": "",
+   "ws_key": ""
+  },
+  {
+   "key": "ask:p:p-4",
+   "text": "Q p-4?",
+   "rank": 4,
+   "workstream": "WS",
+   "track": "",
+   "track_letter": "",
+   "ws_key": ""
+  }
+ ],
+ "workstreams": []
+}

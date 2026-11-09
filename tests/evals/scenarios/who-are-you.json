@@ -1,0 +1,26 @@
+{
+  "name": "who-are-you",
+  "turns": [
+    {
+      "input": "who are you",
+      "reply_contains": [
+        "I am Commander"
+      ],
+      "reply_excludes": [
+        "sqlite3",
+        "state.db",
+        "Activated projects",
+        "Right now the fleet has",
+        "What would you like to do?"
+      ]
+    }
+  ],
+  "expect": {
+    "action_excludes": [
+      "cmdr internal-add-project",
+      "cmdr --project",
+      "cmdr --task"
+    ],
+    "search_count": 0
+  }
+}

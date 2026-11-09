@@ -1,0 +1,31 @@
+{"seq":1,"role":"commander","kind":"session","time":"2026-10-28T09:00:00Z","source":"engine"}
+{"seq":2,"role":"commander","kind":"user_message","time":"2026-10-28T09:00:05Z","source":"transcript","origin":"transcript","text":"What is on the board?"}
+{"seq":3,"role":"commander","kind":"text","time":"2026-10-28T09:00:09Z","source":"transcript","text":"Two rows are working, nothing needs you."}
+{"seq":4,"role":"commander","kind":"user_message","time":"2026-10-28T09:10:00Z","source":"engine","origin":"user","text":"<user-screen>\nboard v12, sidebar open\n</user-screen>\n\nShip the docs fix."}
+{"seq":5,"role":"commander","kind":"hook","time":"2026-10-28T09:10:00Z","source":"live","hook":{"event":"UserPromptSubmit","output":"{\"hookSpecificOutput\":{\"additionalContext\":\"The user's board v12: unchanged.\"}}"}}
+{"seq":6,"role":"commander","kind":"thinking","time":"2026-10-28T09:10:01Z","source":"live","text":"Let me check the docs row."}
+{"seq":7,"role":"commander","kind":"text","time":"2026-10-28T09:10:02Z","source":"live","message_id":"m1","block":0,"text":"Checking the docs row first."}
+{"seq":8,"role":"commander","kind":"tool_start","time":"2026-10-28T09:10:03Z","source":"live","tool":{"id":"t1","name":"Bash"}}
+{"seq":9,"role":"commander","kind":"tool_result","time":"2026-10-28T09:10:04Z","source":"live","tool":{"id":"t1","content":"SECRET TOOL OUTPUT"}}
+{"seq":10,"role":"commander","kind":"user_message","time":"2026-10-28T09:10:05Z","source":"live","origin":"subagent","parent_tool_use_id":"t2","text":"Subagent prompt nobody saw"}
+{"seq":11,"role":"commander","kind":"text","time":"2026-10-28T09:10:06Z","source":"live","parent_tool_use_id":"t2","text":"Subagent text nobody saw"}
+{"seq":12,"role":"commander","kind":"text","time":"2026-10-28T09:10:07Z","source":"live","message_id":"m2","block":0,"text":"The docs fix is shipped."}
+{"seq":13,"role":"commander","kind":"turn_result","time":"2026-10-28T09:10:08Z","source":"live","result":{"subtype":"success","text":"The docs fix is shipped.","cost_delta_usd":0.1,"total_cost_usd":1}}
+{"seq":14,"role":"commander","kind":"user_message","time":"2026-10-28T09:20:00Z","source":"engine","origin":"mail","text":"[mail] manager-docs: Docs shipped — run cmdr internal-inbox --agent commander\n[mail] manager-ci: CI green — run cmdr internal-inbox --agent commander"}
+{"seq":15,"role":"commander","kind":"text","time":"2026-10-28T09:20:04Z","source":"live","text":"**What changed:** docs shipped, CI green."}
+{"seq":16,"role":"commander","kind":"user_message","time":"2026-10-28T09:20:05Z","source":"live","origin":"replay","text":"Stop hook feedback:\nCommander mail system: new mail for you"}
+{"seq":17,"role":"commander","kind":"text","time":"2026-10-28T09:20:09Z","source":"live","text":"**What changed:** docs shipped, CI green, and the review is in."}
+{"seq":18,"role":"commander","kind":"turn_result","time":"2026-10-28T09:20:10Z","source":"live","result":{"subtype":"success","text":"**What changed:** docs shipped, CI green, and the review is in.","cost_delta_usd":0.1,"total_cost_usd":1.1}}
+{"seq":19,"role":"commander","kind":"user_message","time":"2026-10-28T09:30:00Z","source":"engine","origin":"user","text":"Stop."}
+{"seq":20,"role":"commander","kind":"user_message","time":"2026-10-28T09:30:01Z","source":"live","origin":"replay","text":"[Request interrupted by user for tool use]"}
+{"seq":21,"role":"commander","kind":"turn_result","time":"2026-10-28T09:30:02Z","source":"live","result":{"subtype":"error_during_execution","cost_delta_usd":0,"total_cost_usd":1.1}}
+{"seq":22,"role":"commander","kind":"user_message","time":"2026-10-28T09:40:00Z","source":"engine","origin":"user","text":"What did you tell me about the docs row?"}
+{"seq":23,"role":"commander","kind":"agent_state","time":"2026-10-28T09:40:00Z","source":"engine","state":{"state":"working"}}
+{"seq":24,"role":"commander","kind":"user_message","time":"2026-10-28T09:40:01Z","source":"engine","origin":"user","text":"And the CI row."}
+{"seq":25,"role":"commander","kind":"turn_result","time":"2026-10-28T09:40:20Z","source":"live","result":{"subtype":"success","text":"I told you the docs fix shipped and CI went green.","cost_delta_usd":0.1,"total_cost_usd":1.2}}
+{"seq":26,"role":"commander","kind":"user_message","time":"2026-10-28T09:50:00Z","source":"engine","origin":"user","text":"Next?"}
+{"seq":27,"role":"commander","kind":"text","time":"2026-10-28T09:50:03Z","source":"live","text":"Looking."}
+{"seq":28,"role":"commander","kind":"tool_start","time":"2026-10-28T09:50:04Z","source":"live","tool":{"id":"t9","name":"Bash"}}
+{"seq":29,"role":"commander","kind":"tool_result","time":"2026-10-28T09:50:05Z","source":"live","tool":{"id":"t9","content":"x"}}
+{"seq":30,"role":"commander","kind":"turn_result","time":"2026-10-28T09:50:06Z","source":"live","result":{"subtype":"success","text":"","cost_delta_usd":0,"total_cost_usd":1.2}}
+{"seq":31,"role":"commander","kind":"user_message","time":"2026-10-28T10:00:00Z","source":"engine","origin":"user","text":"Are you there?"}

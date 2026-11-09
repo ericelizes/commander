@@ -1,0 +1,14 @@
+{
+ "role":"manager-sample-moved",
+ "root":"sample-root",
+ "moved":"sample-moved",
+ "attempts":[
+  {"name":"stale nested Manager", "parent":"sample-root", "want":"invalid", "starts":0},
+  {"name":"terminal owns newly promoted objective", "held":true, "want":"held", "starts":1},
+  {"name":"owner explicitly released conversation", "want":"ready", "starts":2},
+  {"name":"parent changed again after recovery", "parent":"sample-root", "want":"invalid", "starts":2}
+ ],
+ "failed_recovery_tasks":100,
+ "milestone_done":0,
+ "milestone_total":1
+}

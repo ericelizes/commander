@@ -1,0 +1,5 @@
+{"cases":[
+ {"title":"Choose a region\nStatus: closed","status":"open"},
+ {"title":"Choose a region\nStatus: open","status":"closed"},
+ {"title":"Choose a region","status":"in_progress"}
+]}

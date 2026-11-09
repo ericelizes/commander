@@ -1,0 +1,81 @@
+{
+  "project": "[mcp_servers.project-browser]\ncommand='chrome-devtools-mcp'\n[mcp_servers.search]\ncommand='fake-search'\n",
+  "steps": [
+    {
+      "trust_layer": "system",
+      "trust": "trusted",
+      "disabled": true
+    },
+    {
+      "trust_layer": "managed",
+      "trust": "trusted",
+      "disabled": true
+    },
+    {
+      "trust_layer": "managed",
+      "trust": "untrusted",
+      "disabled": false
+    },
+    {
+      "trust_layer": "none",
+      "trust": "",
+      "disabled": false
+    },
+    {
+      "trust_layer": "system",
+      "trust": "trusted",
+      "disabled": true,
+      "symlink": true,
+      "canonical": false
+    },
+    {
+      "trust_layer": "system",
+      "trust": "untrusted",
+      "disabled": false,
+      "symlink": true,
+      "canonical": false
+    },
+    {
+      "trust_layer": "system",
+      "trust": "trusted",
+      "disabled": true,
+      "symlink": true,
+      "canonical": true
+    },
+    {
+      "trust_layer": "system",
+      "trust": "untrusted",
+      "disabled": false,
+      "symlink": true,
+      "canonical": true
+    },
+    {
+      "trust_layer": "managed",
+      "trust": "trusted",
+      "disabled": true,
+      "symlink": true,
+      "canonical": false
+    },
+    {
+      "trust_layer": "managed",
+      "trust": "untrusted",
+      "disabled": false,
+      "symlink": true,
+      "canonical": false
+    },
+    {
+      "trust_layer": "managed",
+      "trust": "trusted",
+      "disabled": true,
+      "symlink": true,
+      "canonical": true
+    },
+    {
+      "trust_layer": "managed",
+      "trust": "untrusted",
+      "disabled": false,
+      "symlink": true,
+      "canonical": true
+    }
+  ]
+}

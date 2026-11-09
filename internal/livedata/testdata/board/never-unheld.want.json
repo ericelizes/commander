@@ -1,0 +1,204 @@
+{
+ "commander": {
+  "kind": "none",
+  "text": "no agent yet",
+  "since": 0,
+  "unread": 0
+ },
+ "asks": [],
+ "workstreams": [
+  {
+   "key": "p:p-c",
+   "n": 1,
+   "title": "Released by a close",
+   "project": "p",
+   "bead_id": "p-c",
+   "manager_role": "manager-p-c",
+   "starred": false,
+   "kind": "waiting",
+   "text": "Manager to start the next step",
+   "since": 1793350680,
+   "progress": {
+    "done": 1,
+    "total": 2
+   },
+   "milestones": {
+    "done": 1,
+    "total": 2
+   },
+   "working": 0,
+   "flag": 0,
+   "unread": 0,
+   "gate": null,
+   "tracks": []
+  },
+  {
+   "key": "p:p-b",
+   "n": 2,
+   "title": "Two areas",
+   "project": "p",
+   "bead_id": "p-b",
+   "manager_role": "manager-p-b",
+   "starred": false,
+   "kind": "waiting",
+   "text": "Waiting for CI",
+   "since": 1793350500,
+   "progress": {
+    "done": 0,
+    "total": 2
+   },
+   "milestones": {
+    "done": 0,
+    "total": 1
+   },
+   "working": 0,
+   "flag": 0,
+   "unread": 0,
+   "gate": null,
+   "tracks": [
+    {
+     "key": "p:p-b.1",
+     "bead_id": "p-b.1",
+     "letter": ".1",
+     "title": "Import area",
+     "kind": "waiting",
+     "text": "Waiting for CI",
+     "since": 1793350500,
+     "progress": {
+      "done": 0,
+      "total": 1
+     },
+     "milestones": {
+      "done": 0,
+      "total": 1
+     },
+     "working": 0
+    },
+    {
+     "key": "p:p-b.2",
+     "bead_id": "p-b.2",
+     "letter": ".2",
+     "title": "Export area",
+     "kind": "idle",
+     "text": "Not started: Manager to plan",
+     "since": 0,
+     "progress": {
+      "done": 0,
+      "total": 0
+     },
+     "milestones": {
+      "done": 0,
+      "total": 0
+     },
+     "working": 0
+    }
+   ]
+  },
+  {
+   "key": "p:p-a",
+   "n": 3,
+   "title": "Plan pending",
+   "project": "p",
+   "bead_id": "p-a",
+   "manager_role": "manager-p-a",
+   "starred": false,
+   "kind": "idle",
+   "text": "Not started: Manager to plan",
+   "since": 0,
+   "progress": {
+    "done": 0,
+    "total": 0
+   },
+   "milestones": {
+    "done": 0,
+    "total": 0
+   },
+   "working": 0,
+   "flag": 0,
+   "unread": 0,
+   "gate": null,
+   "tracks": []
+  },
+  {
+   "key": "p:p-d",
+   "n": 4,
+   "title": "Released and left",
+   "project": "p",
+   "bead_id": "p-d",
+   "manager_role": "manager-p-d",
+   "starred": false,
+   "kind": "stalled",
+   "text": "Next step not started; Manager recovery needed",
+   "since": 1793350680,
+   "progress": {
+    "done": 1,
+    "total": 2
+   },
+   "milestones": {
+    "done": 1,
+    "total": 2
+   },
+   "working": 0,
+   "flag": 0,
+   "unread": 0,
+   "gate": null,
+   "tracks": []
+  },
+  {
+   "key": "p:p-e",
+   "n": 5,
+   "title": "Task closed under its step",
+   "project": "p",
+   "bead_id": "p-e",
+   "manager_role": "manager-p-e",
+   "starred": false,
+   "kind": "waiting",
+   "text": "Manager to start the next step",
+   "since": 1793350680,
+   "progress": {
+    "done": 0,
+    "total": 1
+   },
+   "milestones": {
+    "done": 0,
+    "total": 1
+   },
+   "working": 0,
+   "flag": 0,
+   "unread": 0,
+   "gate": null,
+   "tracks": []
+  },
+  {
+   "key": "p:p-g",
+   "n": 6,
+   "title": "Gate linked after create",
+   "project": "p",
+   "bead_id": "p-g",
+   "manager_role": "manager-p-g",
+   "starred": false,
+   "kind": "stalled",
+   "text": "Stalled",
+   "since": 0,
+   "progress": {
+    "done": 0,
+    "total": 1
+   },
+   "milestones": {
+    "done": 0,
+    "total": 1
+   },
+   "working": 0,
+   "flag": 0,
+   "unread": 0,
+   "gate": {
+    "bead_id": "p-g.1",
+    "title": "Workflow approved",
+    "who": "you",
+    "at": false,
+    "for_you": false
+   },
+   "tracks": []
+  }
+ ]
+}

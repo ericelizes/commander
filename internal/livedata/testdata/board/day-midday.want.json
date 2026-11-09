@@ -1,0 +1,158 @@
+{
+ "commander": {
+  "kind": "working",
+  "text": "working",
+  "since": 1793010740,
+  "unread": 2
+ },
+ "asks": [
+  {
+   "key": "ask:example-app:app-f.7",
+   "text": "Approve the release?",
+   "rank": 2,
+   "workstream": "Report",
+   "track": "",
+   "track_letter": "",
+   "ws_key": "example-app:app-f"
+  }
+ ],
+ "workstreams": [
+  {
+   "key": "example-app:app-e",
+   "n": 1,
+   "title": "Stage loop",
+   "project": "example-app",
+   "bead_id": "app-e",
+   "manager_role": "manager-app-e",
+   "starred": false,
+   "kind": "waiting",
+   "text": "Waiting for until-ready",
+   "since": 1793007200,
+   "progress": {
+    "done": 0,
+    "total": 6
+   },
+   "milestones": {
+    "done": 0,
+    "total": 6
+   },
+   "working": 2,
+   "flag": 0,
+   "unread": 0,
+   "gate": null,
+   "tracks": [
+    {
+     "key": "example-app:app-e.5",
+     "bead_id": "app-e.5",
+     "letter": ".1",
+     "title": "Inner loop",
+     "kind": "waiting",
+     "text": "Waiting for until-ready",
+     "since": 1793007200,
+     "progress": {
+      "done": 0,
+      "total": 2
+     },
+     "milestones": {
+      "done": 0,
+      "total": 2
+     },
+     "working": 0
+    }
+   ]
+  },
+  {
+   "key": "example-app:app-f",
+   "n": 2,
+   "title": "Report",
+   "project": "example-app",
+   "bead_id": "app-f",
+   "manager_role": "manager-app-f",
+   "starred": false,
+   "kind": "waiting",
+   "text": "Waiting for report checked by the Manager",
+   "since": 0,
+   "progress": {
+    "done": 1,
+    "total": 2
+   },
+   "milestones": {
+    "done": 1,
+    "total": 2
+   },
+   "working": 0,
+   "flag": 1,
+   "unread": 0,
+   "gate": {
+    "bead_id": "app-f.3",
+    "title": "Report checked by the Manager",
+    "who": "manager-app-f",
+    "at": true,
+    "for_you": false
+   },
+   "tracks": []
+  },
+  {
+   "key": "example-docs:docs-g",
+   "n": 3,
+   "title": "Docs refresh",
+   "project": "example-docs",
+   "bead_id": "docs-g",
+   "manager_role": "manager-docs-g",
+   "starred": false,
+   "kind": "stalled",
+   "text": "State missing",
+   "since": 0,
+   "progress": {
+    "done": 1,
+    "total": 3
+   },
+   "milestones": {
+    "done": 0,
+    "total": 1
+   },
+   "working": 0,
+   "flag": 0,
+   "unread": 0,
+   "gate": {
+    "bead_id": "app-g.2",
+    "title": "Idle stage accepted",
+    "who": "reviewer-d",
+    "at": false,
+    "for_you": false
+   },
+   "tracks": []
+  },
+  {
+   "key": "example-docs:docs-o",
+   "n": 4,
+   "title": "Glossary",
+   "project": "example-docs",
+   "bead_id": "docs-o",
+   "manager_role": "manager-docs-o",
+   "starred": false,
+   "kind": "needs",
+   "text": "Needs you",
+   "since": 0,
+   "progress": {
+    "done": 0,
+    "total": 1
+   },
+   "milestones": {
+    "done": 0,
+    "total": 1
+   },
+   "working": 0,
+   "flag": 0,
+   "unread": 0,
+   "gate": {
+    "bead_id": "docs-o.2",
+    "title": "Glossary accepted",
+    "who": "reviewer-d",
+    "at": false,
+    "for_you": false
+   },
+   "tracks": []
+  }
+ ]
+}

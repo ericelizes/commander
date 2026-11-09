@@ -1,0 +1,239 @@
+{
+ "commander": {
+  "kind": "idle",
+  "text": "idle",
+  "since": 1792999400,
+  "unread": 0
+ },
+ "asks": [
+  {
+   "key": "ask:p:w4.2",
+   "text": "Which name should the service use?",
+   "rank": 4,
+   "workstream": "gate no pitch beside a real ask",
+   "track": "",
+   "track_letter": "",
+   "ws_key": "p:w4"
+  }
+ ],
+ "workstreams": [
+  {
+   "key": "p:w1",
+   "n": 1,
+   "title": "gate no pitch, Manager idle",
+   "project": "p",
+   "bead_id": "w1",
+   "manager_role": "manager-w1",
+   "starred": false,
+   "kind": "waiting",
+   "text": "Manager writing the pitch for greenlight merging the sample list test fix",
+   "since": 0,
+   "progress": {
+    "done": 1,
+    "total": 1
+   },
+   "milestones": {
+    "done": 1,
+    "total": 1
+   },
+   "working": 0,
+   "flag": 0,
+   "unread": 0,
+   "gate": {
+    "bead_id": "w1.9",
+    "title": "Greenlight merging the sample list test fix",
+    "who": "you",
+    "at": false,
+    "for_you": false
+   },
+   "tracks": []
+  },
+  {
+   "key": "p:w2",
+   "n": 2,
+   "title": "gate no pitch, Manager working",
+   "project": "p",
+   "bead_id": "w2",
+   "manager_role": "manager-w2",
+   "starred": false,
+   "kind": "working",
+   "text": "Manager writing the pitch for greenlight merging the sample list test fix",
+   "since": 1792999880,
+   "progress": {
+    "done": 1,
+    "total": 1
+   },
+   "milestones": {
+    "done": 1,
+    "total": 1
+   },
+   "working": 1,
+   "flag": 0,
+   "unread": 0,
+   "gate": {
+    "bead_id": "w2.9",
+    "title": "Greenlight merging the sample list test fix",
+    "who": "you",
+    "at": false,
+    "for_you": false
+   },
+   "tracks": []
+  },
+  {
+   "key": "p:w3",
+   "n": 3,
+   "title": "gate no pitch, past the deadline",
+   "project": "p",
+   "bead_id": "w3",
+   "manager_role": "manager-w3",
+   "starred": false,
+   "kind": "stalled",
+   "text": "Pitch for greenlight merging the sample list test fix still not written: the Manager's move",
+   "since": 1792996400,
+   "progress": {
+    "done": 1,
+    "total": 1
+   },
+   "milestones": {
+    "done": 1,
+    "total": 1
+   },
+   "working": 0,
+   "flag": 0,
+   "unread": 0,
+   "gate": {
+    "bead_id": "w3.9",
+    "title": "Greenlight merging the sample list test fix",
+    "who": "you",
+    "at": false,
+    "for_you": false
+   },
+   "tracks": []
+  },
+  {
+   "key": "p:w4",
+   "n": 4,
+   "title": "gate no pitch beside a real ask",
+   "project": "p",
+   "bead_id": "w4",
+   "manager_role": "manager-w4",
+   "starred": false,
+   "kind": "needs",
+   "text": "Needs you: Which name should the service use?",
+   "since": 1792999700,
+   "progress": {
+    "done": 1,
+    "total": 2
+   },
+   "milestones": {
+    "done": 1,
+    "total": 2
+   },
+   "working": 0,
+   "flag": 1,
+   "unread": 0,
+   "gate": {
+    "bead_id": "w4.9",
+    "title": "Greenlight merging the sample list test fix",
+    "who": "you",
+    "at": false,
+    "for_you": false
+   },
+   "tracks": []
+  },
+  {
+   "key": "p:w5",
+   "n": 5,
+   "title": "needs-user step with no card",
+   "project": "p",
+   "bead_id": "w5",
+   "manager_role": "manager-w5",
+   "starred": false,
+   "kind": "waiting",
+   "text": "Manager writing the pitch for pick a name",
+   "since": 0,
+   "progress": {
+    "done": 0,
+    "total": 1
+   },
+   "milestones": {
+    "done": 0,
+    "total": 1
+   },
+   "working": 0,
+   "flag": 0,
+   "unread": 0,
+   "gate": null,
+   "tracks": []
+  },
+  {
+   "key": "p:w6",
+   "n": 6,
+   "title": "track with a gate no pitch",
+   "project": "p",
+   "bead_id": "w6",
+   "manager_role": "manager-w6",
+   "starred": false,
+   "kind": "working",
+   "text": "Working on write the parser · Ship: Manager writing the pitch for greenlight merging the sample list test fix",
+   "since": 0,
+   "progress": {
+    "done": 1,
+    "total": 2
+   },
+   "milestones": {
+    "done": 1,
+    "total": 2
+   },
+   "working": 2,
+   "flag": 0,
+   "unread": 0,
+   "gate": {
+    "bead_id": "w6.2.9",
+    "title": "Greenlight merging the sample list test fix",
+    "who": "you",
+    "at": false,
+    "for_you": false
+   },
+   "tracks": [
+    {
+     "key": "p:w6.1",
+     "bead_id": "w6.1",
+     "letter": ".1",
+     "title": "Build",
+     "kind": "working",
+     "text": "Working on write the parser",
+     "since": 0,
+     "progress": {
+      "done": 0,
+      "total": 1
+     },
+     "milestones": {
+      "done": 0,
+      "total": 1
+     },
+     "working": 1
+    },
+    {
+     "key": "p:w6.2",
+     "bead_id": "w6.2",
+     "letter": ".2",
+     "title": "Ship",
+     "kind": "waiting",
+     "text": "Manager writing the pitch for greenlight merging the sample list test fix",
+     "since": 1792999700,
+     "progress": {
+      "done": 1,
+      "total": 1
+     },
+     "milestones": {
+      "done": 1,
+      "total": 1
+     },
+     "working": 0
+    }
+   ],
+   "age_as": "working|Working on write the parser"
+  }
+ ]
+}

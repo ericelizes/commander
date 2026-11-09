@@ -1,0 +1,185 @@
+#!/usr/bin/env bash
+# br stand-in for the bd cutover. A project whose task database has moved to bd
+# (.beads/dolt exists) gets bd, with the commands translated where br and bd
+# differ; any other project still gets the real br. Installed as `br` on PATH,
+# so agents' own br calls can never write to a retired br database.
+set -euo pipefail
+real_br="${COMMANDER_REAL_BR:-$HOME/.cargo/bin/br-rust}"
+
+# root_of PATH: the project root (parent of .beads) that PATH belongs to, if any.
+root_of() {
+	local p=$1 dir
+	[ -n "$p" ] || return 1
+	case "$p" in /*) ;; *) p=$PWD/$p ;; esac
+	dir=$p
+	while [ -n "$dir" ] && [ "$dir" != / ]; do
+		if [ "$(basename "$dir")" = .beads ]; then dirname "$dir"; return 0; fi
+		[ -d "$dir/.beads" ] && { echo "$dir"; return 0; }
+		dir=$(dirname "$dir")
+	done
+	return 1
+}
+
+# Where the target database lives: --db, -C/--directory, BEADS_DIR/BEADS_DB,
+# then cwd (through git's common dir, so a worktree finds its main checkout).
+beads_root() {
+	local common dir prev="" a r
+	for a in "$@"; do
+		case "$prev" in
+			--db | -C | --directory) r=$(root_of "$a") && { echo "$r"; return; } ;;
+		esac
+		case "$a" in
+			--db=* | --directory=*) r=$(root_of "${a#*=}") && { echo "$r"; return; } ;;
+		esac
+		prev=$a
+	done
+	for a in "${BEADS_DIR:-}" "${BEADS_DB:-}"; do
+		[ -n "$a" ] && r=$(root_of "$a") && { echo "$r"; return; }
+	done
+	if common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null); then
+		dir=$(dirname "$common")
+		[ -d "$dir/.beads" ] && { echo "$dir"; return; }
+	fi
+	dir=$PWD
+	while [ "$dir" != / ]; do
+		[ -d "$dir/.beads" ] && { echo "$dir"; return; }
+		dir=$(dirname "$dir")
+	done
+}
+
+# A cutover in progress moves .beads around: wait for it rather than let the
+# real br open (or create) a database in the middle of it.
+wait_cutover() {
+	local repo i
+	repo=$(dirname "$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null || echo "$PWD/.git")")
+	for i in $(seq 1 60); do
+		[ -e "$repo/.beads-cutover" ] || [ -e "$PWD/.beads-cutover" ] || return 0
+		sleep 1
+	done
+}
+
+# Agents (COMMANDER_ROLE manager-*/operator-*) write beads through the cmdr verbs
+# (cmdrd's write door), not with br. cmdr's own br children carry COMMANDER_BR_HELD=1
+# and pass; COMMANDER_AGENT_WRITE_GUARD=off lifts it. A speed bump (an agent can
+# set the variables or call bd), logged to $COMMANDER_HOME/logs/agent-write-refusals.jsonl.
+agent_write_guard() {
+	case "${COMMANDER_ROLE:-}" in manager-* | operator-*) ;; *) return 0 ;; esac
+	case "$(printf %s "${COMMANDER_AGENT_WRITE_GUARD:-}" | tr A-Z a-z)" in off | 0 | false | no) return 0 ;; esac
+	[ "${COMMANDER_BR_HELD:-}" = 1 ] && return 0
+	local a verb="" rest=() skip=0 found=0
+	for a in "$@"; do
+		if [ "$skip" = 1 ]; then skip=0; continue; fi
+		if [ "$found" = 0 ]; then
+			case "$a" in
+				-C | --db | --directory | --actor | --lock-timeout) skip=1 ;;
+				-*) ;;
+				*) verb=$a; found=1 ;;
+			esac
+		else
+			rest+=("$a")
+		fi
+	done
+	local write=0 r
+	case "$verb" in
+		create | q | update | close | reopen | delete | defer | undefer | set-state | import | edit | rename | move | promote | merge | init | assign | reparent) write=1 ;;
+		sync) write=1; for r in ${rest[@]+"${rest[@]}"}; do [ "$r" = --flush-only ] && write=0; done ;;
+		comments) for r in ${rest[@]+"${rest[@]}"}; do case "$r" in add | delete | remove | edit | update) write=1 ;; esac; done ;;
+		dep | label) case "${rest[0]:-}" in add | rm | remove | delete) write=1 ;; esac ;;
+		config) case "${rest[0]:-}" in set | unset) write=1 ;; esac ;;
+	esac
+	[ "$write" = 1 ] || return 0
+	local home=${COMMANDER_HOME:-$HOME/.commander}
+	mkdir -p "$home/logs" 2>/dev/null &&
+		printf '{"role":"%s","command":"br %s","verb":"%s","time":"%s"}\n' "$COMMANDER_ROLE" "$*" "$verb" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >>"$home/logs/agent-write-refusals.jsonl" 2>/dev/null || true
+	echo "br $verb: refused. Agents write beads only through the cmdr verbs (cmdrd's write door): cmdr internal-set-objective, internal-create-objective [--operational], internal-close-objective, internal-comment, internal-dep, internal-gate. Reads stay allowed." >&2
+	exit 2
+}
+agent_write_guard "$@"
+wait_cutover
+
+root=$(beads_root "$@" || true)
+if [ -z "$root" ] || [ ! -d "$root/.beads/dolt" ]; then
+	exec "$real_br" "$@"
+fi
+
+# br-only global flags bd does not know.
+args=()
+skip=0
+for a in "$@"; do
+	if [ "$skip" = 1 ]; then skip=0; continue; fi
+	case "$a" in
+		--db | -C | --directory) skip=1; continue ;;
+		--db=* | --directory=*) continue ;;
+		--no-auto-flush | --no-auto-import | --no-daemon | --allow-stale) continue ;;
+		--lock-timeout) skip=1; continue ;;
+		--lock-timeout=*) continue ;;
+	esac
+	args+=("$a")
+done
+set -- "${args[@]}"
+
+sub=""
+for a in "$@"; do case "$a" in -*) ;; *) sub=$a; break ;; esac; done
+
+translate_deps() {
+	local list=$1 item res=() IFS=,
+	for item in $list; do
+		case "$item" in blocks:*) item="blocked-by:${item#blocks:}" ;; esac
+		res+=("$item")
+	done
+	echo "${res[*]}"
+}
+
+out=()
+case "$sub" in
+	comments)
+		# br comments list <id>  ->  bd comments <id>
+		dropped=0
+		for a in "$@"; do
+			if [ "$a" = list ] && [ "$dropped" = 0 ]; then dropped=1; continue; fi
+			out+=("$a")
+		done
+		;;
+	delete)
+		# bd delete takes no --reason; it always needs --force to act.
+		skip=0
+		for a in "$@"; do
+			if [ "$skip" = 1 ]; then skip=0; continue; fi
+			case "$a" in --reason) skip=1; continue ;; --reason=*) continue ;; esac
+			out+=("$a")
+		done
+		[[ " ${out[*]} " == *" --force "* ]] || out+=(--force)
+		;;
+	close)
+		# br closes a blocked issue; bd needs --force for that.
+		out=("$@")
+		[[ " ${out[*]} " == *" --force "* ]] || out+=(--force)
+		;;
+	show)
+		# br show --json includes comments; bd needs --include-comments.
+		out=("$@")
+		if [[ " ${out[*]} " == *" --json "* ]] && [[ " ${out[*]} " != *" --include-comments "* ]]; then out+=(--include-comments); fi
+		;;
+	create)
+		# br's --deps 'blocks:X' means the NEW issue is blocked by X; bd's means
+		# the new issue blocks X (X depends on it). Keep br's meaning.
+		prev=""
+		for a in "$@"; do
+			case "$a" in
+				--deps=*) a="--deps=$(translate_deps "${a#--deps=}")" ;;
+				*) [ "$prev" = --deps ] && a=$(translate_deps "$a") ;;
+			esac
+			prev=$a
+			out+=("$a")
+		done
+		;;
+	sync)
+		if [[ " $* " == *" --flush-only "* ]]; then
+			exec bd -C "$root" export -o "$root/.beads/issues.jsonl"
+		fi
+		echo "br sync: this project now uses bd (Dolt); only --flush-only is supported" >&2
+		exit 2
+		;;
+	*) out=("$@") ;;
+esac
+exec bd -C "$root" "${out[@]}"

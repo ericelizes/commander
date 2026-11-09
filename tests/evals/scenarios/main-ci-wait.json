@@ -1,0 +1,22 @@
+{
+ "name":"A main-ci wait fires on a recorded short sha",
+ "note":"Run by internal/daemon:TestMainCIWaitScenario, since the waits watcher is private to cmdrd.",
+ "repo":"acme/web",
+ "commits":{
+  "349a7f4e1f0c2b6d8a9e3c5b7d1f2a4c6e8b0d13":[{"status":"completed","conclusion":"success"},{"status":"completed","conclusion":"failure"}],
+  "aa11bb22cc33dd44ee55ff6677889900aabbccdd":[{"status":"completed","conclusion":"success"}],
+  "1234567890abcdef1234567890abcdef12345678":[{"status":"completed","conclusion":"success"},{"status":"in_progress","conclusion":""}],
+  "fedcba0987654321fedcba0987654321fedcba09":[]
+ },
+ "cases":[
+  {"name":"a short sha with failed runs fires", "wait":"main-ci:349a7f4", "age_minutes":5, "subject":"[main-ci] 349a7f4 finished: 1 failing", "cleared":true},
+  {"name":"a longer short sha fires green", "wait":"main-ci:aa11bb22cc33", "age_minutes":5, "subject":"[main-ci] aa11bb2 finished: all green", "cleared":true},
+  {"name":"another repo's short sha fires", "wait":"main-ci:acme/web@aa11bb22c", "age_minutes":5, "subject":"[main-ci] aa11bb2 finished: all green", "cleared":true},
+  {"name":"a run still going holds", "wait":"main-ci:1234567", "age_minutes":5},
+  {"name":"a commit with no runs holds", "wait":"main-ci:fedcba0", "age_minutes":600},
+  {"name":"an unknown sha holds inside the grace", "wait":"main-ci:deadbee", "age_minutes":5},
+  {"name":"an unknown sha wakes after the grace", "wait":"main-ci:deadbee", "age_minutes":45, "subject":"[main-ci] deadbee not found in acme/web", "cleared":true},
+  {"name":"a repo gh cannot read wakes after the grace", "wait":"main-ci:acme/gone@349a7f4", "age_minutes":45, "subject":"[main-ci] 349a7f4 not found in acme/gone", "cleared":true},
+  {"name":"a GitHub outage is not a missing commit", "wait":"main-ci:349a7f4", "age_minutes":600, "gh_down":true}
+ ]
+}

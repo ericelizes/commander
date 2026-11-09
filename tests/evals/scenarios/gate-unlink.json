@@ -1,0 +1,24 @@
+{
+  "Gate": "p-1.7",
+  "Beads": [
+    {"id": "p-1", "title": "Release sample", "status": "open", "labels": ["kind:objective"]},
+    {"id": "p-1.7", "title": "Greenlight the release", "status": "open", "labels": ["kind:objective", "gate", "approver:user"], "parent": "p-1",
+     "notes": ["gate unlink by manager-p-1: removed the obsolete wait of p-1.5 on this gate (dropped plan). The gate stays open and unapproved."]},
+    {"id": "p-1.5", "title": "Old route D", "status": "closed", "labels": ["kind:objective", "superseded"], "parent": "p-1"},
+    {"id": "p-1.8", "title": "Old route A", "status": "closed", "close_reason": "Superseded by p-1.10", "labels": ["kind:objective"], "parent": "p-1", "blocks_on": ["p-1.7"]},
+    {"id": "p-1.9", "title": "Build the release", "status": "open", "labels": ["kind:objective"], "parent": "p-1", "blocks_on": ["p-1.7"]},
+    {"id": "p-1.6", "title": "Old route C", "status": "closed", "labels": ["kind:objective", "superseded"], "parent": "p-1"},
+    {"id": "p-2", "title": "Other workstream", "status": "open", "labels": ["kind:objective"]},
+    {"id": "p-2.3", "title": "Old route B", "status": "closed", "labels": ["kind:objective", "superseded"], "parent": "p-2", "blocks_on": ["p-1.7"]}
+  ],
+  "Cases": [
+    {"Name": "owning Manager removes the superseded wait", "Role": "manager-p-1", "Waiters": "p-1.8", "Exit": 0, "Removes": ["dep remove p-1.8 p-1.7"], "Stdout": "\"gate_status\":\"open\""},
+    {"Name": "an edge an earlier unlink note names counts as done", "Role": "manager-p-1", "Waiters": "p-1.5", "Exit": 0, "NoNote": true, "Stdout": "\"already_removed\":[\"p-1.5\"]"},
+    {"Name": "a superseded step with no wait on the gate is refused", "Role": "manager-p-1", "Waiters": "p-1.6", "Exit": 1, "Stderr": "p-1.6 has no wait on p-1.7"},
+    {"Name": "a mistyped id beside a real one writes nothing", "Role": "manager-p-1", "Waiters": "p-1.8,p-1.6", "Exit": 1, "Stderr": "p-1.6 has no wait on p-1.7"},
+    {"Name": "a live step's wait stays", "Role": "manager-p-1", "Waiters": "p-1.9", "Exit": 1, "Stderr": "is not superseded"},
+    {"Name": "another workstream's step is refused", "Role": "manager-p-1", "Waiters": "p-2.3", "Exit": 1, "Stderr": "is in workstream p-2"},
+    {"Name": "another Manager gets the owning Manager's command", "Role": "manager-p-2", "Waiters": "p-1.8", "Exit": 1, "Stderr": "cmdr internal-gate unlink --project example --bead p-1.7 --waiter p-1.8"},
+    {"Name": "an Operator is refused", "Role": "operator-op-x", "Waiters": "p-1.8", "Exit": 1, "Stderr": "Operators do not change the gate chain"}
+  ]
+}

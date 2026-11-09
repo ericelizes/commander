@@ -1,0 +1,129 @@
+{
+ "commander": {
+  "kind": "none",
+  "text": "no agent yet",
+  "since": 0,
+  "unread": 0
+ },
+ "asks": [],
+ "workstreams": [
+  {
+   "key": "app:a",
+   "n": 1,
+   "title": "Operator off the gate path",
+   "project": "app",
+   "bead_id": "a",
+   "manager_role": "manager-a",
+   "starred": false,
+   "kind": "working",
+   "text": "Working on land the polish · then: release approved",
+   "since": 0,
+   "progress": {
+    "done": 0,
+    "total": 2
+   },
+   "milestones": {
+    "done": 0,
+    "total": 2
+   },
+   "working": 2,
+   "flag": 0,
+   "unread": 0,
+   "gate": {
+    "bead_id": "a.3",
+    "title": "Release approved",
+    "who": "reviewer-a",
+    "at": false,
+    "for_you": false
+   },
+   "tracks": []
+  },
+  {
+   "key": "app:b",
+   "n": 2,
+   "title": "Operator on the gate path",
+   "project": "app",
+   "bead_id": "b",
+   "manager_role": "manager-b",
+   "starred": false,
+   "kind": "working",
+   "text": "Working on land the polish · then: release approved",
+   "since": 0,
+   "progress": {
+    "done": 0,
+    "total": 1
+   },
+   "milestones": {
+    "done": 0,
+    "total": 1
+   },
+   "working": 2,
+   "flag": 0,
+   "unread": 0,
+   "gate": {
+    "bead_id": "b.2",
+    "title": "Release approved",
+    "who": "reviewer-a",
+    "at": false,
+    "for_you": false
+   },
+   "tracks": []
+  },
+  {
+   "key": "app:c",
+   "n": 3,
+   "title": "No gates, Operator",
+   "project": "app",
+   "bead_id": "c",
+   "manager_role": "manager-c",
+   "starred": false,
+   "kind": "working",
+   "text": "Working on land the polish",
+   "since": 0,
+   "progress": {
+    "done": 0,
+    "total": 1
+   },
+   "milestones": {
+    "done": 0,
+    "total": 1
+   },
+   "working": 2,
+   "flag": 0,
+   "unread": 0,
+   "gate": null,
+   "tracks": []
+  },
+  {
+   "key": "app:d",
+   "n": 4,
+   "title": "No Operator: the Manager is the work",
+   "project": "app",
+   "bead_id": "d",
+   "manager_role": "manager-d",
+   "starred": false,
+   "kind": "working",
+   "text": "Working on write the notes · then: release approved",
+   "since": 1793170000,
+   "progress": {
+    "done": 0,
+    "total": 1
+   },
+   "milestones": {
+    "done": 0,
+    "total": 1
+   },
+   "working": 1,
+   "flag": 0,
+   "unread": 0,
+   "gate": {
+    "bead_id": "d.2",
+    "title": "Release approved",
+    "who": "reviewer-a",
+    "at": false,
+    "for_you": false
+   },
+   "tracks": []
+  }
+ ]
+}

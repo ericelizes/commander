@@ -1,0 +1,286 @@
+package chat
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/example-user/commander/internal/claudeacct"
+)
+
+// accountHarness is a harness whose roles resolve their account like the real
+// resolver, with a fake HOME and Keychain: "default" and every account in
+// loggedIn count as logged in.
+func accountHarness(t *testing.T, loggedIn ...string) *harness {
+	h := codexHarness(t)
+	user := t.TempDir()
+	t.Setenv("HOME", user)
+	os.Unsetenv("CLAUDE_CONFIG_DIR")
+	os.MkdirAll(filepath.Join(user, ".claude", "skills"), 0o755)
+	held := map[string]bool{claudeacct.KeychainService(""): true}
+	for _, name := range loggedIn {
+		if _, err := claudeacct.Create(h.home, name); err != nil {
+			t.Fatal(err)
+		}
+		held[claudeacct.KeychainService(claudeacct.Dir(h.home, name))] = true
+	}
+	prev := claudeacct.KeychainHas
+	claudeacct.KeychainHas = func(s string) bool { return held[s] }
+	claudeacct.ForgetProbes()
+	t.Cleanup(func() { claudeacct.KeychainHas = prev; claudeacct.ForgetProbes() })
+	base := h.opts.Resolver
+	h.opts.Resolver = ResolverFunc(func(ctx context.Context, role string) (Spec, error) {
+		spec, err := base.Resolve(ctx, role)
+		return WithAccount(spec, h.home), err
+	})
+	h.e = New(h.opts)
+	return h
+}
+
+func TestSetAccountResumesTheSameSessionOnTheOtherAccount(t *testing.T) {
+	h := accountHarness(t, "work")
+	id := h.role("manager-a")
+	h.start("manager-a")
+	sub := h.subscribe("manager-a")
+	if err := h.e.Send(context.Background(), "manager-a", "remember 42"); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, sub, isKind(KindResult))
+
+	st, err := h.e.SetAccount(context.Background(), "manager-a", "work", SwitchOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !st.Running || st.Account != "work" || ReadAccount(h.home, "manager-a") != "work" {
+		t.Fatalf("after switch: %+v", st)
+	}
+	workDir := claudeacct.Dir(h.home, "work")
+	// The restarted claude writes its record a moment after Start returns: wait
+	// for it, or the first run's record (no account, not resumed) is read.
+	rec := h.fakeRecord("argv-" + id)
+	for deadline := time.Now().Add(5 * time.Second); rec["config_dir"] != workDir && time.Now().Before(deadline); {
+		time.Sleep(20 * time.Millisecond)
+		rec = h.fakeRecord("argv-" + id)
+	}
+	if rec["config_dir"] != workDir {
+		t.Errorf("claude ran with CLAUDE_CONFIG_DIR=%v, want %s", rec["config_dir"], workDir)
+	}
+	if argv := strings.Join(toStrings(rec["argv"]), " "); !strings.Contains(argv, "--resume "+id) {
+		t.Errorf("not resumed: %s", argv)
+	}
+	copied := FindTranscript(filepath.Join(workDir, "projects"), id)
+	if copied == "" {
+		t.Fatal("transcript not carried into the account")
+	}
+	if raw, _ := os.ReadFile(copied); !strings.Contains(string(raw), "remember 42") {
+		t.Errorf("carried transcript lacks the conversation: %s", raw)
+	}
+	sub = h.subscribe("manager-a")
+	if err := h.e.Send(context.Background(), "manager-a", "still there"); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, sub, isKind(KindResult))
+	// The fake claude appends to its transcript just after the result: wait for
+	// it, as a real turn would be on disk before anyone switches.
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+		if raw, _ := os.ReadFile(FindTranscript(filepath.Join(workDir, "projects"), id)); strings.Contains(string(raw), "still there") {
+			break
+		}
+	}
+
+	// And back: the default account gets the newer transcript.
+	if _, err := h.e.SetAccount(context.Background(), "manager-a", claudeacct.Default, SwitchOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if raw, _ := os.ReadFile(FindTranscript(h.projects, id)); !strings.Contains(string(raw), "still there") {
+		t.Errorf("default transcript not refreshed: %s", raw)
+	}
+	rec = h.fakeRecord("argv-" + id)
+	for deadline := time.Now().Add(5 * time.Second); rec["config_dir"] != "" && time.Now().Before(deadline); {
+		time.Sleep(20 * time.Millisecond)
+		rec = h.fakeRecord("argv-" + id)
+	}
+	if rec["config_dir"] != "" {
+		t.Errorf("default account must not set CLAUDE_CONFIG_DIR: %v", rec["config_dir"])
+	}
+}
+
+func TestSetAccountRefusesMidTurnAndLoggedOutAccounts(t *testing.T) {
+	h := accountHarness(t, "work")
+	if _, err := claudeacct.Create(h.home, "spare"); err != nil {
+		t.Fatal(err)
+	}
+	h.role("manager-b")
+	h.start("manager-b")
+	sub := h.subscribe("manager-b")
+	if err := h.e.Send(context.Background(), "manager-b", "long"); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, sub, isKind(KindTextDelta))
+	if _, err := h.e.SetAccount(context.Background(), "manager-b", "work", SwitchOptions{}); !errors.Is(err, ErrBusy) {
+		t.Fatalf("mid-turn switch: %v", err)
+	}
+	if ReadAccount(h.home, "manager-b") != claudeacct.Default {
+		t.Fatal("a refused switch must not record the account")
+	}
+	if _, err := h.e.SetAccount(context.Background(), "manager-b", "spare", SwitchOptions{}); err == nil || !strings.Contains(err.Error(), "claude auth login") {
+		t.Fatalf("logged-out account: %v", err)
+	}
+	if _, err := h.e.SetAccount(context.Background(), "manager-b", "nope", SwitchOptions{}); err == nil {
+		t.Fatal("unknown account accepted")
+	}
+}
+
+func TestSetAccountFromCodexRunsClaudeOnThatAccount(t *testing.T) {
+	h := accountHarness(t, "work")
+	h.role("manager-c")
+	if err := WriteRuntime(h.home, "manager-c", RuntimeCodex); err != nil {
+		t.Fatal(err)
+	}
+	h.start("manager-c")
+	st, err := h.e.SetAccount(context.Background(), "manager-c", "work", SwitchOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ReadRuntimePin(h.home, "manager-c") != RuntimeCodex {
+		t.Fatal("account switch overwrote explicit runtime intent")
+	}
+	if st.Runtime != RuntimeClaude || st.Account != "work" {
+		t.Fatalf("status = %+v", st)
+	}
+}
+
+func TestUsageLimitShowsANoticeAndContinueSwitchesAccount(t *testing.T) {
+	h := accountHarness(t, "work")
+	h.role("manager-d")
+	h.start("manager-d")
+	sub := h.subscribe("manager-d")
+	if err := h.e.Send(context.Background(), "manager-d", "usagelimit"); err != nil {
+		t.Fatal(err)
+	}
+	seen := waitFor(t, sub, func(e Event) bool { return e.Kind == KindNotice && e.Subtype == "usage_limit" })
+	if n := seen[len(seen)-1]; !strings.Contains(n.Text, "default") || !strings.Contains(n.Text, "You've hit your limit") {
+		t.Errorf("notice = %q", n.Text)
+	}
+	st, _ := h.e.Status("manager-d")
+	if st.UsageLimit == nil || st.UsageLimit.Account != "default" || st.UsageLimit.ResetsAt != 4102444800 {
+		t.Fatalf("status usage limit = %+v", st.UsageLimit)
+	}
+	if u, _ := h.e.Usage().Get(UsageKey(RuntimeClaude, "default")); u.Status != UsageOut || u.FiveHour == nil || u.FiveHour.Utilization != 1 {
+		t.Errorf("usage = %+v", u)
+	}
+	if got := h.e.NextAccount("default"); got != "work" {
+		t.Errorf("next account = %q", got)
+	}
+
+	// The notice's one click: switch and continue.
+	sub = h.subscribe("manager-d")
+	st, err := h.e.SetAccount(context.Background(), "manager-d", "work", SwitchOptions{Continue: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.UsageLimit != nil {
+		t.Error("the limit stays after switching")
+	}
+	seen = waitFor(t, sub, isKind(KindResult))
+	var cont bool
+	for _, e := range seen {
+		cont = cont || (e.Kind == KindUser && e.Text == ContinueMessage)
+	}
+	if !cont {
+		t.Fatalf("no continue message: %s", summarize(seen))
+	}
+}
+
+func TestAutoSwitchMovesToTheNextAccountWithUsageLeft(t *testing.T) {
+	h := accountHarness(t, "work", "zeta")
+	// zeta ran out earlier and has not reset: auto-switch must skip it.
+	h.e.Usage().MarkOut(RuntimeClaude, "zeta", "manager-x", time.Now().Add(time.Hour).Unix(), time.Now())
+	h.role("manager-e")
+	if err := SetAutoSwitch(h.home, "manager-e", true); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteAccount(h.home, "manager-e", "work"); err != nil {
+		t.Fatal(err)
+	}
+	h.start("manager-e")
+	sub := h.subscribe("manager-e")
+	if err := h.e.Send(context.Background(), "manager-e", "usagelimit"); err != nil {
+		t.Fatal(err)
+	}
+	seen := waitFor(t, sub, func(e Event) bool { return e.Kind == KindNotice && e.Subtype == "usage_limit_switch" })
+	if n := seen[len(seen)-1]; !strings.Contains(n.Text, "from Claude account work to default") {
+		t.Fatalf("switch notice = %q", n.Text)
+	}
+	if ReadAccount(h.home, "manager-e") != claudeacct.Default {
+		t.Error("account not switched")
+	}
+}
+
+func TestUsageStoreMergesSparseReportsAndPersists(t *testing.T) {
+	home := t.TempDir()
+	s := OpenUsage(home)
+	now := time.Unix(1792690000, 0)
+	s.Record(RuntimeClaude, "", "commander", json.RawMessage(`{"status":"allowed_warning","rateLimitType":"five_hour","utilization":0.99,"resetsAt":1792699200,
+		"unifiedWindows":{"five_hour":{"utilization":0.99,"resetsAt":1792699200},"seven_day":{"utilization":0.39,"resetsAt":1793203200}},"overageStatus":"rejected"}`), now)
+	s.Record(RuntimeClaude, "", "manager-x", json.RawMessage(`{"status":"rejected","rateLimitType":"five_hour","resetsAt":1792699200,"overageStatus":"rejected"}`), now.Add(time.Minute))
+	u, _ := OpenUsage(home).Get("claude:default") // reloaded from disk
+	if u.Status != UsageOut || u.OutUntil != 1792699200 || u.Role != "manager-x" || u.SevenDay == nil || u.SevenDay.Utilization != 0.39 {
+		t.Fatalf("usage = %+v", u)
+	}
+	if !u.Out(now) || u.Out(time.Unix(1792699200, 0)) {
+		t.Error("out must last until the reset")
+	}
+	if c := u.Current(time.Unix(1792699300, 0)); c.FiveHour.Utilization != 0 || c.SevenDay.Utilization != 0.39 {
+		t.Errorf("after the 5h reset: %+v %+v", c.FiveHour, c.SevenDay)
+	}
+	// Overage taking over is not "out".
+	s.Record(RuntimeClaude, "work", "manager-y", json.RawMessage(`{"status":"rejected","overageStatus":"allowed","isUsingOverage":true}`), now)
+	if u, _ := s.Get("claude:work"); u.Status != UsageOK {
+		t.Errorf("overage = %+v", u)
+	}
+}
+
+func TestCodexRateLimitsBecomeARateLimitLine(t *testing.T) {
+	info := codexRateLimitInfo(json.RawMessage(`{"rateLimits":{"primary":{"usedPercent":85,"windowDurationMins":300,"resetsAt":1792699200},
+		"secondary":{"usedPercent":30,"windowDurationMins":10080,"resetsAt":1793203200},"planType":"pro"}}`))
+	raw, _ := json.Marshal(info)
+	s := OpenUsage(t.TempDir())
+	s.Record(RuntimeCodex, "", "operator-x", raw, time.Unix(1792690000, 0))
+	u, _ := s.Get("codex")
+	if u.Status != UsageWarning || u.FiveHour.Utilization != 0.85 || u.SevenDay.ResetsAt != 1793203200 || u.Account != "" {
+		t.Fatalf("codex usage = %+v (%s)", u, raw)
+	}
+	raw, _ = json.Marshal(codexRateLimitInfo(json.RawMessage(`{"rateLimits":{"primary":{"usedPercent":100,"windowDurationMins":300,"resetsAt":1792699200},"rateLimitReachedType":"rate_limit_reached"}}`)))
+	s.Record(RuntimeCodex, "", "operator-x", raw, time.Unix(1792690100, 0))
+	if u, _ := s.Get("codex"); u.Status != UsageOut || u.OutUntil != 1792699200 || u.SevenDay == nil {
+		t.Fatalf("codex out = %+v", u)
+	}
+	if codexRateLimitInfo(json.RawMessage(`{"rateLimits":{}}`)) != nil {
+		t.Error("an empty update must not report")
+	}
+}
+
+func TestUsageLimitOfReadsBothSignals(t *testing.T) {
+	for _, tc := range []struct {
+		ev   Event
+		want bool
+	}{
+		{Event{Kind: KindRateLimit, RateLimit: json.RawMessage(`{"status":"rejected","overageStatus":"rejected"}`)}, true},
+		{Event{Kind: KindRateLimit, RateLimit: json.RawMessage(`{"status":"allowed_warning"}`)}, false},
+		{Event{Kind: KindRateLimit, RateLimit: json.RawMessage(`{"status":"rejected","isUsingOverage":true}`)}, false},
+		{Event{Kind: KindText, Error: "rate_limit", Text: "You've hit your limit · resets 3pm"}, true},
+		{Event{Kind: KindText, Error: "billing_error", Text: "You've hit your monthly spend limit"}, true},
+		{Event{Kind: KindText, Error: "server_error", Text: "API Error: 529 Overloaded"}, false},
+		{Event{Kind: KindText, Text: "I hit your usage limit joke"}, false},
+	} {
+		if got := usageLimitOf(tc.ev) != nil; got != tc.want {
+			t.Errorf("%+v: %v", tc.ev, got)
+		}
+	}
+}

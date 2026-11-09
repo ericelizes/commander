@@ -1,0 +1,12 @@
+0 Commander: idle (3 unread, for 2m)
+1 Cleanup: Nothing to do (100% done, no gates)
+2 Importer: Waiting for review (50% done, next gate: Reviewers signed off on the importer PR, approved by manager-app-b, ⚑ 1, for 2h)
+3 Login cleanup: Needs you: Which wording should the page use? (29% done, no gates, ⚑ 1, 2 working)
+  3.1 Shared login page: Needs you: Which wording should the page use? (50% done)
+  3.2 Password reset mail: Working on send the new mail (0% done, 1 working)
+  3.3 Session timeout: Needs you: Which wording should the page use? (0% done)
+4 Table migration: Working on back up the table +1 more · then: copy approved (25% done, next gate: Copy approved, approved by you, ⚑ 1, 2 working) · why: An Operator is still on it; the ask waits for its report
+Needs you (3):
+  #3.1 Which wording should the page use? (Login cleanup › Shared login page)
+  #2 Enable the importer for everyone? (Importer)
+  #4 Is the row count acceptable? (Table migration)

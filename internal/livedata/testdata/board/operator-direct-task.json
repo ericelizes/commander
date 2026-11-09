@@ -1,0 +1,98 @@
+{
+ "now": 1793214500,
+ "snapshot": {
+  "version": 1,
+  "generated_at": "2026-10-28T19:08:20Z",
+  "projects": [
+   {
+    "id": 1,
+    "name": "app",
+    "type": "code",
+    "path": "/work/app",
+    "status": "active"
+   }
+  ],
+  "live": {
+   "operators": [
+    "operator-op-a-1",
+    "operator-op-b-1"
+   ]
+  },
+  "agents": {
+   "manager-t": {
+    "state": "idle",
+    "since": 1793170000
+   }
+  },
+  "unread": {},
+  "fleet": {
+   "cost_usd_24h": 0,
+   "cost_usd_7d": 0,
+   "cost_series_24h": [],
+   "agents": 0,
+   "active": 0,
+   "blocked": 0,
+   "idle_ratio": 0,
+   "projects": 1,
+   "chat_cost_usd_24h": 0,
+   "roles_cost": []
+  },
+  "needs_you": [],
+  "workstreams": [
+   {
+    "n": 1,
+    "project": "app",
+    "project_id": 1,
+    "bead_id": "t",
+    "title": "Two tracks, a direct task each",
+    "state": "in-progress",
+    "status": "open",
+    "manager_role": "manager-t",
+    "done": 0,
+    "total": 2,
+    "steps": [
+     {
+      "bead_id": "t.1",
+      "title": "Track A",
+      "state": "in-progress",
+      "status": "open",
+      "viz": 2,
+      "track": true,
+      "children": [
+       {
+        "bead_id": "t.1.1",
+        "title": "Task A",
+        "state": "in-progress",
+        "status": "in_progress",
+        "owner": "operator-op-a-1",
+        "owner_state": "working",
+        "task": true,
+        "viz": 3
+       }
+      ]
+     },
+     {
+      "bead_id": "t.2",
+      "title": "Track B",
+      "state": "in-progress",
+      "status": "open",
+      "viz": 2,
+      "track": true,
+      "children": [
+       {
+        "bead_id": "t.2.1",
+        "title": "Task B",
+        "state": "in-progress",
+        "status": "in_progress",
+        "owner": "operator-op-b-1",
+        "owner_state": "working",
+        "task": true,
+        "viz": 3
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ }
+}

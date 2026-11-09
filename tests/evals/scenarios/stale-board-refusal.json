@@ -1,0 +1,25 @@
+{
+  "description": "cmdrd's board can lag a write by minutes. It still says demo-flow.2 waits on demo-flow.1; the door refuses only what a fresh read confirms.",
+  "board": {
+    "workstreams": [{
+      "project": "example", "bead_id": "demo-flow", "title": "Demo flow",
+      "steps": [
+        {"bead_id": "demo-flow.1", "title": "First step", "state": "not-started", "status": "open"},
+        {"bead_id": "demo-flow.2", "title": "Second step", "state": "not-started", "status": "open", "blocked_by": ["demo-flow.1"]}
+      ]
+    }]
+  },
+  "db": {
+    "demo-flow": {"status": "open", "labels": ["kind:objective"]},
+    "demo-flow.1": {"status": "open", "labels": ["kind:objective"], "parent": "demo-flow"},
+    "demo-flow.2": {"status": "open", "labels": ["kind:objective"], "parent": "demo-flow", "blocks_on": ["demo-flow.1"]}
+  },
+  "state_args": ["internal-set-objective", "--project", "example", "--bead", "demo-flow.2", "--state", "in-progress", "--owner", "manager-demo-flow"],
+  "spawn_args": ["internal-spawn-operator", "--project", "example", "--step", "demo-flow.2", "--title", "Second step work"],
+  "cases": [
+    {"name": "the edge is still there and the blocker open", "refused": true},
+    {"name": "the edge was removed after the board was built", "edit": {"demo-flow.2": {"status": "open", "labels": ["kind:objective"], "parent": "demo-flow"}}, "refused": false},
+    {"name": "the blocker was closed after the board was built", "edit": {"demo-flow.1": {"status": "closed", "labels": ["kind:objective"], "parent": "demo-flow"}}, "refused": false},
+    {"name": "the fresh read fails", "show_fails": "demo-flow.1", "only": "state write", "refused": true}
+  ]
+}

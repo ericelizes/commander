@@ -1,0 +1,4 @@
+{
+  "name": "hung-fake-must-fail",
+  "turns": [{"input": "who are you", "reply_contains": ["Commander"]}]
+}

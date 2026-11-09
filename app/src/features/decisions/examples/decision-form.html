@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Pick a pricing tier</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px 28px;
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', sans-serif;
+    color: #cdd6f4; background: #1e1e2e;
+  }
+  h1 { margin: 0 0 6px; font-size: 20px; font-weight: 650; }
+  p { margin: 0 0 16px; color: #a6adc8; }
+  .tiers { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-bottom: 16px; }
+  .tier { padding: 14px; text-align: left; font: inherit; color: inherit; background: #181825; border: 1px solid #313244; border-radius: 10px; cursor: pointer; }
+  .tier[aria-pressed="true"] { border-color: #cba6f7; background: rgba(203, 166, 247, .08); }
+  .tier b { display: block; font-size: 15px; }
+  .tier span { color: #a6adc8; font-size: 12.5px; }
+  textarea { width: 100%; padding: 10px 12px; font: inherit; color: inherit; background: #181825; border: 1px solid #313244; border-radius: 8px; }
+  .row { display: flex; gap: 10px; align-items: center; margin-top: 14px; }
+  button.go { padding: 9px 18px; font-family: inherit; font-size: 14px; font-weight: 650; color: #11111b; background: #cba6f7; border: 0; border-radius: 8px; cursor: pointer; }
+  button.go:disabled { color: #7f849c; background: #313244; cursor: not-allowed; }
+  button.ghost { padding: 8px 12px; font: inherit; font-size: 13px; color: #a6adc8; background: transparent; border: 1px solid #313244; border-radius: 8px; cursor: pointer; }
+  a { color: #cba6f7; }
+  #status { font-size: 13px; color: #a6adc8; }
+  #status.ok { color: #a6e3a1; } #status.err { color: #f38ba8; }
+</style>
+</head>
+<body>
+  <h1>Which pricing tier ships first?</h1>
+  <p>Comparison in the <a id="spec" href="https://www.notion.so/Pricing-spec-123">pricing spec</a>.</p>
+  <div class="tiers" role="group" aria-label="Tiers">
+    <button class="tier" data-choice="Starter" aria-pressed="false"><b>Starter</b><span>$0, 3 seats</span></button>
+    <button class="tier" data-choice="Team" aria-pressed="false"><b>Team</b><span>$12/seat</span></button>
+    <button class="tier" data-choice="Enterprise" aria-pressed="false"><b>Enterprise</b><span>Sales-led</span></button>
+  </div>
+  <textarea id="note" rows="2" placeholder="Note for the Manager (optional)"></textarea>
+  <div class="row">
+    <button class="go" id="submit" disabled>Submit</button>
+    <button class="ghost" id="copy">Copy summary</button>
+    <span id="status" role="status"></span>
+  </div>
+<script>
+(function () {
+  var choice = ''
+  var tiers = document.querySelectorAll('.tier')
+  var submit = document.getElementById('submit')
+  var statusEl = document.getElementById('status')
+  tiers.forEach(function (t) {
+    t.addEventListener('click', function () {
+      choice = t.dataset.choice
+      tiers.forEach(function (o) { o.setAttribute('aria-pressed', String(o === t)) })
+      submit.disabled = false
+    })
+  })
+  submit.addEventListener('click', function () {
+    submit.disabled = true
+    statusEl.className = ''
+    statusEl.textContent = 'Sending…'
+    window.cmdr.submitDecision({ choice: choice, text: document.getElementById('note').value })
+      .then(function () { statusEl.className = 'ok'; statusEl.textContent = '✓ Sent to the Manager' })
+      .catch(function (e) { statusEl.className = 'err'; statusEl.textContent = e.message; submit.disabled = false })
+  })
+  document.getElementById('copy').addEventListener('click', function () {
+    window.cmdr.copy('Pricing tier: ' + (choice || 'undecided'))
+  })
+})()
+</script>
+</body>
+</html>

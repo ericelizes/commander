@@ -1,0 +1,380 @@
+{
+ "now": 1793036000,
+ "snapshot": {
+  "version": 1,
+  "generated_at": "2026-10-26T12:00:00Z",
+  "projects": [
+   {
+    "id": 1,
+    "name": "example-app",
+    "type": "code",
+    "path": "/work/example-app",
+    "status": "active"
+   },
+   {
+    "id": 2,
+    "name": "example-docs",
+    "type": "knowledge",
+    "path": "/work/example-docs",
+    "status": "active"
+   }
+  ],
+  "workstreams": [
+   {
+    "n": 1,
+    "project": "example-app",
+    "project_id": 1,
+    "bead_id": "app-l",
+    "title": "Format change",
+    "state": "in-progress",
+    "status": "in_progress",
+    "owner": "manager-app-l",
+    "manager_role": "manager-app-l",
+    "done": 0,
+    "total": 5,
+    "steps": [
+     {
+      "bead_id": "app-l.1",
+      "title": "Prerequisite choice",
+      "state": "needs-user",
+      "status": "open",
+      "viz": 3,
+      "owner": "user",
+      "ask": "Keep the old format?",
+      "blocked_by": []
+     },
+     {
+      "bead_id": "app-l.2",
+      "title": "Convert the files",
+      "state": "not-started",
+      "status": "open",
+      "viz": 3,
+      "owner": "manager-app-l",
+      "blocked_by": [
+       "app-l.1",
+       "app-gone.1"
+      ]
+     },
+     {
+      "bead_id": "app-l.3",
+      "title": "Publish the files",
+      "state": "not-started",
+      "status": "open",
+      "viz": 3,
+      "owner": "manager-app-l",
+      "blocked_by": [
+       "app-l.2"
+      ]
+     },
+     {
+      "bead_id": "app-l.4",
+      "title": "Publish approved",
+      "state": "not-started",
+      "status": "open",
+      "viz": 1,
+      "gate": true,
+      "approvers": [
+       "you"
+      ],
+      "criteria": "The change is checked",
+      "blocked_by": [
+       "app-l.3",
+       "app-l.2"
+      ],
+      "waiting": "review (reviewer-c)",
+      "review": "?",
+      "waiting_since": 1792690400
+     },
+     {
+      "bead_id": "app-l.5",
+      "title": "Tell the team",
+      "state": "not-started",
+      "status": "open",
+      "viz": 3,
+      "owner": "manager-app-l",
+      "blocked_by": [
+       "app-l.4"
+      ]
+     },
+     {
+      "bead_id": "app-l.6",
+      "title": "Parked follow-up",
+      "state": "not-started",
+      "status": "deferred",
+      "viz": 3,
+      "owner": "manager-app-l",
+      "children": [
+       {
+        "bead_id": "app-l.6.1",
+        "title": "Parked follow-up work",
+        "state": "not-started",
+        "status": "open",
+        "viz": 3,
+        "owner": "manager-app-l"
+       }
+      ]
+     },
+     {
+      "bead_id": "app-l.7",
+      "title": "Archive the old files",
+      "state": "not-started",
+      "status": "open",
+      "viz": 3,
+      "owner": "manager-app-l",
+      "blocked_by": [
+       "app-l.1",
+       "app-l.6.1"
+      ]
+     }
+    ]
+   },
+   {
+    "n": 2,
+    "project": "example-app",
+    "project_id": 1,
+    "bead_id": "app-m",
+    "title": "Interrupted",
+    "state": "in-progress",
+    "status": "in_progress",
+    "owner": "manager-app-m",
+    "manager_role": "manager-app-m",
+    "done": 0,
+    "total": 3,
+    "steps": [
+     {
+      "bead_id": "app-m.1",
+      "title": "Interrupted work",
+      "state": "in-progress",
+      "status": "in_progress",
+      "viz": 3,
+      "owner": "operator-op-gone-app-m.1",
+      "owner_state": "died",
+      "owner_why": "its session ended",
+      "owner_since": 1793025200,
+      "restarts": 1
+     },
+     {
+      "bead_id": "app-m.2",
+      "title": "Interrupted work accepted",
+      "state": "not-started",
+      "status": "open",
+      "viz": 1,
+      "gate": true,
+      "approvers": [
+       "operator"
+      ],
+      "criteria": "The change is checked",
+      "blocked_by": [
+       "app-m.1"
+      ]
+     },
+     {
+      "bead_id": "app-m.3",
+      "title": "Task bead",
+      "state": "in-progress",
+      "status": "in_progress",
+      "viz": 3,
+      "task": true,
+      "owner": "operator-op-task-app-m.3",
+      "owner_state": "finished"
+     }
+    ]
+   },
+   {
+    "n": 3,
+    "project": "example-app",
+    "project_id": 1,
+    "bead_id": "app-n",
+    "title": "Blocked stages",
+    "state": "in-progress",
+    "status": "in_progress",
+    "owner": "manager-app-n",
+    "manager_role": "manager-app-n",
+    "done": 0,
+    "total": 5,
+    "steps": [
+     {
+      "bead_id": "app-n.1",
+      "title": "Outer stage",
+      "state": "in-progress",
+      "status": "in_progress",
+      "viz": 3,
+      "owner": "manager-app-n",
+      "blocked_by": [
+       "app-n.2"
+      ],
+      "children": [
+       {
+        "bead_id": "app-n.1.1",
+        "title": "Waits above",
+        "state": "not-started",
+        "status": "open",
+        "viz": 3,
+        "owner": "manager-app-n"
+       },
+       {
+        "bead_id": "app-n.1.2",
+        "title": "Asks above",
+        "state": "needs-user",
+        "status": "open",
+        "viz": 3,
+        "owner": "user",
+        "ask": "Proceed with the outer stage?"
+       }
+      ]
+     },
+     {
+      "bead_id": "app-n.2",
+      "title": "Earlier stage",
+      "state": "in-progress",
+      "status": "in_progress",
+      "viz": 3,
+      "owner": "operator-op-early-app-n.2",
+      "owner_state": "working",
+      "working": true,
+      "children": [
+       {
+        "bead_id": "app-n.2.1",
+        "title": "Earlier leaf",
+        "state": "in-progress",
+        "status": "in_progress",
+        "viz": 3,
+        "owner": "operator-op-early-app-n.2",
+        "owner_state": "working",
+        "working": true
+       }
+      ]
+     }
+    ],
+    "starred": true
+   }
+  ],
+  "needs_you": [
+   {
+    "project": "example-app",
+    "bead_id": "app-l.1",
+    "title": "Prerequisite choice",
+    "workstream": "Format change",
+    "rank": 1,
+    "ask": "Keep the old format?",
+    "decision": {
+     "question": "Keep the old format?",
+     "context": "A short summary of the choice.",
+     "options": [
+      {
+       "label": "Approve",
+       "implications": "The work starts.",
+       "recommended": true,
+       "approves": true
+      },
+      {
+       "label": "Change",
+       "implications": "The Manager reworks it."
+      }
+     ]
+    },
+    "since": 1792517600
+   },
+   {
+    "project": "example-app",
+    "bead_id": "app-n.1.2",
+    "title": "Asks above",
+    "workstream": "Blocked stages",
+    "rank": 3,
+    "ask": "Proceed with the outer stage?",
+    "decision": {
+     "question": "Proceed with the outer stage?",
+     "context": "A short summary of the choice.",
+     "options": [
+      {
+       "label": "Approve",
+       "implications": "The work starts.",
+       "recommended": true,
+       "approves": true
+      },
+      {
+       "label": "Change",
+       "implications": "The Manager reworks it."
+      }
+     ]
+    },
+    "since": 1792863200
+   }
+  ],
+  "agents": {
+   "commander": {
+    "state": "idle",
+    "since": 1792776800
+   },
+   "manager-app-l": {
+    "state": "idle",
+    "since": 1792690400
+   },
+   "manager-app-m": {
+    "state": "idle",
+    "since": 1793025200
+   },
+   "manager-app-n": {
+    "state": "working",
+    "since": 1793035400
+   }
+  },
+  "fleet": {
+   "cost_usd_24h": 2.5,
+   "cost_usd_7d": 10,
+   "cost_series_24h": [
+    0,
+    1,
+    1.5
+   ],
+   "agents": 3,
+   "active": 2,
+   "blocked": 0,
+   "idle_ratio": 0,
+   "projects": 2,
+   "chat_cost_usd_24h": 1,
+   "roles_cost": [
+    {
+     "role": "commander",
+     "today_usd": 1,
+     "session_usd": 2,
+     "total_usd": 3,
+     "input_tokens": 100,
+     "output_tokens": 200
+    }
+   ]
+  },
+  "unread": {
+   "commander": 2
+  },
+  "watch": {
+   "manager-app-n": {
+    "checked_at": 1793035980,
+    "operators": [
+     {
+      "role": "operator-op-early-app-n.2",
+      "bead_id": "app-n.2",
+      "active_at": 1793035970,
+      "since": 1793035700
+     }
+    ]
+   },
+   "commander": {
+    "checked_at": 1793035980,
+    "operators": [],
+    "issues": [
+     {
+      "workstream": "app-m",
+      "text": "stalled: nobody on its open work",
+      "since": 1793025200
+     }
+    ]
+   }
+  },
+  "live": {
+   "operators": [
+    "operator-op-early-app-n.2"
+   ]
+  }
+ }
+}

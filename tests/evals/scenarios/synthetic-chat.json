@@ -1,0 +1,28 @@
+{
+  "goal": "Invented chat fixtures retain denied/allowed tools, interruption, compaction and a resumed cumulative cost baseline without account or session recordings. Shared-message thinking and tool blocks retain split live deltas and final attribution.",
+  "stream": "../../internal/chat/testdata/stream_synthetic.jsonl",
+  "transcript": "../../internal/chat/testdata/transcript_synthetic.jsonl",
+  "tools": [
+    "Write",
+    "Bash",
+    "Bash"
+  ],
+  "stream_cost": 0.03,
+  "transcript_cost": 0.04,
+  "resume_result": {
+    "type": "result",
+    "subtype": "success",
+    "total_cost_usd": 0.05,
+    "session_id": "00000000-0000-4000-8000-000000000001"
+  },
+  "resume_delta": 0.01,
+  "shared_message": {
+    "id": "message-tool-1",
+    "thinking": "Check the sample tool result.",
+    "tool_id": "tool-sample-1",
+    "input": {
+      "file_path": "/tmp/work/sample.txt",
+      "content": "sample"
+    }
+  }
+}

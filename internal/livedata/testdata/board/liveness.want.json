@@ -1,0 +1,182 @@
+{
+ "commander": {
+  "kind": "none",
+  "text": "no agent yet",
+  "since": 0,
+  "unread": 0
+ },
+ "asks": [
+  {
+   "key": "ask:app:app-w3.1",
+   "text": "Run the classifier on the real job list?",
+   "rank": 1,
+   "workstream": "Classify the nightly jobs",
+   "track": "",
+   "track_letter": "",
+   "ws_key": "app:app-w3"
+  }
+ ],
+ "workstreams": [
+  {
+   "key": "app:app-w1",
+   "n": 1,
+   "title": "Move background jobs to the queue",
+   "project": "app",
+   "bead_id": "app-w1",
+   "manager_role": "manager-app-w1",
+   "starred": false,
+   "kind": "stalled",
+   "text": "Agent stopped on build wave 2 of the job moves: the Manager's move",
+   "since": 0,
+   "progress": {
+    "done": 1,
+    "total": 2
+   },
+   "milestones": {
+    "done": 1,
+    "total": 2
+   },
+   "working": 0,
+   "flag": 0,
+   "unread": 0,
+   "gate": null,
+   "tracks": [],
+   "why": "Operator is no longer running and has not reported"
+  },
+  {
+   "key": "app:app-w2",
+   "n": 2,
+   "title": "Fix the flaky login test",
+   "project": "app",
+   "bead_id": "app-w2",
+   "manager_role": "manager-app-w2",
+   "starred": false,
+   "kind": "stalled",
+   "text": "Agent stopped on find why the login test fails on CI: the Manager's move",
+   "since": 1793213800,
+   "progress": {
+    "done": 0,
+    "total": 1
+   },
+   "milestones": {
+    "done": 0,
+    "total": 1
+   },
+   "working": 0,
+   "flag": 0,
+   "unread": 0,
+   "gate": null,
+   "tracks": [],
+   "why": "Operator stopped without a report; restarted once, stopped again"
+  },
+  {
+   "key": "app:app-w3",
+   "n": 3,
+   "title": "Classify the nightly jobs",
+   "project": "app",
+   "bead_id": "app-w3",
+   "manager_role": "manager-app-w3",
+   "starred": false,
+   "kind": "working",
+   "text": "Working on classify wave 1 against the read-only rule · then: classifier PR approved",
+   "since": 0,
+   "progress": {
+    "done": 1,
+    "total": 2
+   },
+   "milestones": {
+    "done": 0,
+    "total": 1
+   },
+   "working": 2,
+   "flag": 1,
+   "unread": 0,
+   "gate": {
+    "bead_id": "app-w3.2",
+    "title": "Classifier PR approved",
+    "who": "reviewer-a",
+    "at": false,
+    "for_you": false
+   },
+   "tracks": [],
+   "why": "An Operator is still on it; the ask waits for its report"
+  },
+  {
+   "key": "app:app-w4",
+   "n": 4,
+   "title": "Tidy the deploy scripts",
+   "project": "app",
+   "bead_id": "app-w4",
+   "manager_role": "manager-app-w4",
+   "starred": false,
+   "kind": "stalled",
+   "text": "State missing",
+   "since": 0,
+   "progress": {
+    "done": 1,
+    "total": 2
+   },
+   "milestones": {
+    "done": 1,
+    "total": 2
+   },
+   "working": 0,
+   "flag": 0,
+   "unread": 0,
+   "gate": null,
+   "tracks": []
+  },
+  {
+   "key": "app:app-w5",
+   "n": 5,
+   "title": "Shrink the build image",
+   "project": "app",
+   "bead_id": "app-w5",
+   "manager_role": "manager-app-w5",
+   "starred": false,
+   "kind": "working",
+   "text": "Operator working",
+   "since": 0,
+   "progress": {
+    "done": 2,
+    "total": 2
+   },
+   "milestones": {
+    "done": 2,
+    "total": 2
+   },
+   "working": 0,
+   "flag": 0,
+   "unread": 0,
+   "gate": null,
+   "tracks": [],
+   "why": "Its step was closed while it still runs (app-w5.2.1)"
+  },
+  {
+   "key": "app:app-w6",
+   "n": 6,
+   "title": "Cut over the dev database",
+   "project": "app",
+   "bead_id": "app-w6",
+   "manager_role": "manager-app-w6",
+   "starred": false,
+   "kind": "stalled",
+   "text": "Agent stopped on switch dev to the new database at a quiet window: the Manager's move",
+   "since": 0,
+   "progress": {
+    "done": 0,
+    "total": 1
+   },
+   "milestones": {
+    "done": 0,
+    "total": 1
+   },
+   "working": 0,
+   "flag": 0,
+   "unread": 0,
+   "gate": null,
+   "tracks": [],
+   "why": "The Operator it waited on is no longer running"
+  }
+ ]
+}

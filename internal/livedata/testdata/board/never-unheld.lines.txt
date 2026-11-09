@@ -1,0 +1,9 @@
+0 Commander: no agent yet
+1 Released by a close: Manager to start the next step (50% done, no gates, for 2m)
+2 Two areas: Waiting for CI (0% done, no gates, for 5m)
+  2.1 Import area: Waiting for CI (0% done, for 5m)
+  2.2 Export area: Not started: Manager to plan (0% done)
+3 Plan pending: Not started: Manager to plan (0% done, no gates)
+4 Released and left: Next step not started; Manager recovery needed (50% done, no gates, for 2m)
+5 Task closed under its step: Manager to start the next step (0% done, no gates, for 2m)
+6 Gate linked after create: Stalled (0% done, next gate: Workflow approved, approved by you)

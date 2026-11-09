@@ -1,0 +1,139 @@
+{
+ "lab:lab-hub": {
+  "id": "lab-hub",
+  "title": "Hub import",
+  "current": "lab-hub.1",
+  "steps": [
+   {
+    "id": "lab-hub.0",
+    "title": "Workflow approved",
+    "kind": "done",
+    "text": "Done",
+    "lane": "you",
+    "actor": "you",
+    "gate": true,
+    "approvers": "you",
+    "criteria": "The user approved the stages and gates."
+   },
+   {
+    "id": "lab-hub.1",
+    "title": "Importer rollout",
+    "kind": "working",
+    "text": "Working on importer PR open +1 more · then: importer PR approved",
+    "lane": "elsewhere",
+    "actor": "automatic",
+    "who": "CI, runs on each push to the PR",
+    "track": true
+   }
+  ],
+  "tracks": [
+   {
+    "id": "lab-hub.1",
+    "title": "Importer rollout",
+    "current": "lab-hub.1.2.5",
+    "steps": [
+     {
+      "id": "lab-hub.1.2",
+      "title": "Importer ships",
+      "kind": "working",
+      "text": "Working on importer PR open +1 more · then: importer PR approved",
+      "lane": "elsewhere",
+      "actor": "automatic",
+      "who": "CI, runs on each push to the PR",
+      "progress": "4 of 9 done",
+      "children": [
+       {
+        "id": "lab-hub.1.2.2",
+        "title": "Importer built",
+        "kind": "done",
+        "text": "Done",
+        "lane": "agents",
+        "actor": "operators"
+       },
+       {
+        "id": "lab-hub.1.2.3",
+        "title": "Importer tests green",
+        "kind": "done",
+        "text": "Done",
+        "lane": "agents",
+        "actor": "operators"
+       },
+       {
+        "id": "lab-hub.1.2.4",
+        "title": "Backfill script built",
+        "kind": "done",
+        "text": "Done",
+        "lane": "agents",
+        "actor": "operators"
+       },
+       {
+        "id": "lab-hub.1.2.5",
+        "title": "Importer PR open",
+        "kind": "working",
+        "text": "Operator working",
+        "lane": "agents",
+        "actor": "operators",
+        "after": [
+         "lab-hub.1.2.4"
+        ]
+       },
+       {
+        "id": "lab-hub.1.2.6",
+        "title": "CI green on the importer PR",
+        "kind": "waiting",
+        "text": "Waiting for CI",
+        "since": 1792998000,
+        "lane": "elsewhere",
+        "actor": "automatic",
+        "who": "CI, runs on each push to the PR",
+        "after": [
+         "lab-hub.1.2.5"
+        ]
+       },
+       {
+        "id": "lab-hub.1.2.7",
+        "title": "Importer PR approved",
+        "kind": "idle",
+        "text": "Not reached",
+        "lane": "elsewhere",
+        "actor": "reviewers",
+        "who": "reviewer-a",
+        "gate": true,
+        "approvers": "reviewer-a",
+        "criteria": "The reviewer approves the PR on GitHub.",
+        "after": [
+         "lab-hub.1.2.6"
+        ]
+       },
+       {
+        "id": "lab-hub.1.2.8",
+        "title": "Greenlight running the backfill",
+        "kind": "idle",
+        "text": "Not reached",
+        "lane": "you",
+        "actor": "you",
+        "gate": true,
+        "approvers": "you",
+        "criteria": "The user says run it.",
+        "after": [
+         "lab-hub.1.2.7"
+        ]
+       },
+       {
+        "id": "lab-hub.1.2.9",
+        "title": "Backfill verified",
+        "kind": "working",
+        "text": "Operator working",
+        "lane": "agents",
+        "actor": "operators",
+        "after": [
+         "lab-hub.1.2.8"
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ }
+}

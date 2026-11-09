@@ -1,0 +1,5 @@
+{
+  "argv": ["internal-set-objective", "--project", "example", "--bead", "p-1", "--state", "in-progress", "--writes-workflow", "--star", "true", "--owner", "operator-x", "--viz", "2", "--waiting", "ci:#8"],
+  "update_contains": ["--status in_progress", "--add-label star", "--add-label owner:operator-x", "--add-label viz:2", ":ci:8"],
+  "expected_updates": 1
+}

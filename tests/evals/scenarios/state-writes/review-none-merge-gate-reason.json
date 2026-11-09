@@ -1,0 +1,7 @@
+{
+  "argv": ["internal-set-objective", "--project", "example", "--bead", "p-1", "--review", "none", "--reason", "the label went on the wrong gate"],
+  "bead_labels": ["gate", "gate-name:merged", "pr:12"],
+  "update_contains": ["--remove-label pr:12"],
+  "comment_contains": ["review labels cleared by", "pr:12", "the label went on the wrong gate"],
+  "expected_updates": 1
+}

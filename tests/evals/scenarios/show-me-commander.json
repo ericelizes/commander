@@ -1,0 +1,23 @@
+{
+  "name": "show-me-commander",
+  "setup": {
+    "activate_project": true
+  },
+  "turns": [
+    {
+      "input": "show me commander",
+      "reply_contains": [
+        "refusing to open the cockpit"
+      ]
+    }
+  ],
+  "expect": {
+    "action_contains": [
+      "cmdr --project commander"
+    ],
+    "projects": [
+      "commander"
+    ],
+    "lead_session": true
+  }
+}

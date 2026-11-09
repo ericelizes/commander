@@ -1,0 +1,83 @@
+{
+ "commander": {
+  "kind": "none",
+  "text": "no agent yet",
+  "since": 0,
+  "unread": 0
+ },
+ "asks": [],
+ "workstreams": [
+  {
+   "key": "app:app-w1",
+   "n": 1,
+   "title": "Parent coordinating two nested Managers",
+   "project": "app",
+   "bead_id": "app-w1",
+   "manager_role": "manager-app-w1",
+   "starred": false,
+   "kind": "working",
+   "text": "Working on write the importer +1 more · Cutover track waiting for soak-period · 05:40 PM",
+   "since": 0,
+   "progress": {
+    "done": 0,
+    "total": 3
+   },
+   "milestones": {
+    "done": 0,
+    "total": 3
+   },
+   "working": 3,
+   "flag": 0,
+   "unread": 0,
+   "gate": {
+    "bead_id": "app-w1.2.2",
+    "title": "Cutover approved",
+    "who": "reviewer-a",
+    "at": false,
+    "for_you": false
+   },
+   "tracks": [
+    {
+     "key": "app:app-w1.1",
+     "bead_id": "app-w1.1",
+     "letter": ".1",
+     "title": "Build track",
+     "kind": "working",
+     "text": "Working on write the importer +1 more",
+     "since": 0,
+     "progress": {
+      "done": 0,
+      "total": 2
+     },
+     "milestones": {
+      "done": 0,
+      "total": 2
+     },
+     "working": 2,
+     "age_as": "working|Working on write the importer",
+     "manager_role": "manager-app-w1.1"
+    },
+    {
+     "key": "app:app-w1.2",
+     "bead_id": "app-w1.2",
+     "letter": ".2",
+     "title": "Cutover track",
+     "kind": "waiting",
+     "text": "Waiting for soak-period · 05:40 PM",
+     "since": 1793290000,
+     "progress": {
+      "done": 0,
+      "total": 1
+     },
+     "milestones": {
+      "done": 0,
+      "total": 1
+     },
+     "working": 0,
+     "manager_role": "manager-app-w1.2"
+    }
+   ],
+   "age_as": "working|Working on write the importer"
+  }
+ ]
+}

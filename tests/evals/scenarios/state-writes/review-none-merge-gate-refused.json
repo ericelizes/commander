@@ -1,0 +1,6 @@
+{
+  "argv": ["internal-set-objective", "--project", "example", "--bead", "p-1", "--review", "none"],
+  "bead_labels": ["gate", "gate-name:merged", "pr:12"],
+  "refused_contains": "--reason",
+  "expected_updates": 0
+}

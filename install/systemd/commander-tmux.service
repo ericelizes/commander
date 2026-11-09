@@ -1,0 +1,19 @@
+[Unit]
+Description=commander tmux server for Operator sessions (tmux -L commander-ops)
+
+[Service]
+Type=simple
+# Not `tmux -D`: it joins a running server as a client and fails "open terminal failed".
+# Start the server detached with a keeper session, exit-empty off, and poll.
+ExecStart=/bin/sh -c 'while :; do tmux -L commander-ops has-session -t =keeper 2>/dev/null || tmux -L commander-ops new-session -d -s keeper; tmux -L commander-ops set -s exit-empty off; while tmux -L commander-ops ls >/dev/null 2>&1; do sleep 20; done; sleep 2; done'
+KillMode=process
+# Fork-storm cap: TasksMax bounds this unit's cgroup (children included). No
+# LimitNPROC: on Linux RLIMIT_NPROC counts every thread the user owns, and a
+# desktop session (browsers, Electron) passes 3000 on its own, so cmdrd could
+# not start a thread or fork br/tmux.
+TasksMax=3000
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

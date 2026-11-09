@@ -1,0 +1,9 @@
+{
+  "fixture": "../../internal/livedata/testdata/board/stale-dependencies.json",
+  "contains": [
+    "A step named in this card changed state",
+    "PR #12 merged",
+    "PR #13 closed",
+    "A newer decision on this step or its gate was answered"
+  ]
+}
