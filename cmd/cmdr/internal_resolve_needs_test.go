@@ -45,6 +45,17 @@ func (c *decidedCardClient) SetStatus(ctx context.Context, dir, id, status strin
 func (c *decidedCardClient) Close(ctx context.Context, dir, id string) error {
 	return c.SetStatus(ctx, dir, id, "closed")
 }
+func (c *decidedCardClient) UpdateFields(ctx context.Context, dir, id string, f beads.Fields) error {
+	if err := c.MockClient.UpdateFields(ctx, dir, id, f); err != nil {
+		return err
+	}
+	for i := range c.ListResult {
+		if c.ListResult[i].ID == id && f.Description != nil {
+			c.ListResult[i].Description = *f.Description
+		}
+	}
+	return nil
+}
 func (c *decidedCardClient) Show(_ context.Context, _, id string) (*beads.Bead, error) {
 	for i := range c.ListResult {
 		if c.ListResult[i].ID == id {
@@ -281,5 +292,47 @@ func TestGateCardApproves_ResumeClosesAnsweredOpenGate(t *testing.T) {
 	}
 	if len(mailer.sent) != 0 {
 		t.Fatalf("resume mailed again: %d", len(mailer.sent))
+	}
+}
+
+// An approved gate with no description keeps what the user approved, so
+// --prod-gate (which needs the exact scope) can accept it. One that has a
+// description, or a card that does not approve, keeps it as it was.
+func TestApprovedGateKeepsTheCardAsItsDescription(t *testing.T) {
+	const card = `{"question":"Run the prod migration on the VM?","options":[{"label":"Run it","approves":true,"implications":"Applies migration 12 to the prod database once."},{"label":"Not yet"}]}`
+	for _, tc := range []struct {
+		name, choice, existing string
+		want                   []string
+	}{
+		{"empty description", "Run it", "", []string{"Approved by the user: Run the prod migration on the VM?", "Chosen: Run it", "Implications: Applies migration 12 to the prod database once.", "The user's words: tonight only"}},
+		{"kept description", "Run it", "Deploy tag v3 to the VM.", []string{"Deploy tag v3 to the VM."}},
+		{"not approved", "Not yet", "", nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			stubMail(t)
+			bc, _, _ := approvingChoiceSetup(t, card)
+			bc.ListResult[1].Description = tc.existing
+			stdout, stderr, output := withTempOutputFiles(t)
+			args := []string{"--project", "manifest", "--bead", "ms-1.1", "--action", "decide", "--choice", tc.choice, "--text", "tonight only"}
+			if code := runInternalResolveNeeds(args, stdout, stderr); code != 0 {
+				_, errOut := output()
+				t.Fatalf("exit %d: %s", code, errOut)
+			}
+			b, _ := bc.Show(context.Background(), "", "ms-1.1")
+			if tc.want == nil {
+				if b.Description != "" {
+					t.Fatalf("an unapproved gate got a description: %q", b.Description)
+				}
+				return
+			}
+			for _, w := range tc.want {
+				if !strings.Contains(b.Description, w) {
+					t.Fatalf("description %q lacks %q", b.Description, w)
+				}
+			}
+			if b.Status != "closed" {
+				t.Fatalf("gate not closed: %s", b.Status)
+			}
+		})
 	}
 }

@@ -236,6 +236,23 @@ func runInternalResolveNeeds(args []string, stdout, stderr *os.File) int {
 					return result, err
 				}
 			}
+			if closing && b != nil && slices.Contains(b.Labels, beads.GateLabel) && strings.TrimSpace(b.Description) == "" {
+				// --prod-gate takes only a gate whose description names the
+				// action: keep what the user approved, from the card itself.
+				n, err := st.GetNeedsYou(ctx, p.ID, *bead)
+				if err != nil {
+					return result, err
+				}
+				fresh, err := beads.FreshShow(ctx, bc, dir, *bead)
+				if err != nil {
+					return result, err
+				}
+				if desc := approvedGateDescription(n, r.Choice, r.Text); desc != "" && fresh != nil && strings.TrimSpace(fresh.Description) == "" {
+					if err := bc.UpdateFields(ctx, dir, *bead, beads.Fields{Description: &desc}); err != nil {
+						return result, err
+					}
+				}
+			}
 			if err := writes.Flush(ctx); err != nil {
 				return result, err
 			}
@@ -275,6 +292,44 @@ func runInternalResolveNeeds(args []string, stdout, stderr *os.File) int {
 		}
 		return result, nil
 	})
+}
+
+// approvedGateDescription is what the user approved on a gate's card, for a
+// gate bead with no description: the question, the chosen option and its
+// implications, and the user's own words. "" when there is no card.
+func approvedGateDescription(n *store.NeedsYou, choice, text string) string {
+	if n == nil {
+		return ""
+	}
+	question := strings.TrimSpace(n.Ask)
+	var picked *store.DecisionOption
+	if n.Decision != "" {
+		if d, err := store.ParseDecision(n.Decision); err == nil {
+			if q := strings.TrimSpace(d.Question); q != "" {
+				question = q
+			}
+			for i, o := range d.Options {
+				if strings.EqualFold(strings.TrimSpace(o.Label), strings.TrimSpace(choice)) {
+					picked = &d.Options[i]
+				}
+			}
+		}
+	}
+	if question == "" {
+		return ""
+	}
+	chosen := strings.TrimSpace(choice)
+	if chosen == "" {
+		chosen = "Approve"
+	}
+	parts := []string{"Approved by the user: " + question, "Chosen: " + chosen}
+	if picked != nil && strings.TrimSpace(picked.Implications) != "" {
+		parts = append(parts, "Implications: "+strings.TrimSpace(picked.Implications))
+	}
+	if t := strings.TrimSpace(text); t != "" {
+		parts = append(parts, "The user's words: "+t)
+	}
+	return strings.Join(parts, "\n\n")
 }
 
 // legacyApprovals are the exact labels (normalised) that approve on a card
