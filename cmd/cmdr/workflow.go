@@ -50,8 +50,11 @@ func runWorkflow(args []string, stdout, stderr *os.File) int {
 	if len(args) > 0 && args[0] == "bind-writers" {
 		return runWorkflowBindWriters(args[1:], stdout, stderr)
 	}
+	if len(args) > 0 && args[0] == "settle-block" {
+		return runWorkflowSettleBlock(args[1:], stdout, stderr)
+	}
 	if len(args) == 0 || args[0] != "plug" {
-		emitErr(stderr, "usage: workflow plug <template> --project P --parent B --before M --pr URL | workflow bind-writers --project P --block B --writers original-task,fix-task --head full-sha")
+		emitErr(stderr, "usage: workflow plug <template> --project P --parent B --before M --pr URL | workflow bind-writers --project P --block B --writers original-task,fix-task --head full-sha | workflow settle-block --project P --block B --reason R")
 		return 1
 	}
 	return runWorkflowPlug(args[1:], stdout, stderr)
@@ -67,7 +70,7 @@ func canonicalPR(raw string) (string, error) {
 func runWorkflowPlug(args []string, stdout, stderr *os.File) int {
 	// The template name comes first, flags after.
 	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
-		emitErr(stderr, "usage: workflow plug <template> --project P --parent B --before M --pr URL | workflow bind-writers --project P --block B --writers original-task,fix-task --head full-sha")
+		emitErr(stderr, "usage: workflow plug <template> --project P --parent B --before M --pr URL | workflow bind-writers --project P --block B --writers original-task,fix-task --head full-sha | workflow settle-block --project P --block B --reason R")
 		return 1
 	}
 	name, args := args[0], args[1:]

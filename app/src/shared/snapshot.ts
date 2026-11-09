@@ -123,6 +123,7 @@ export interface ReviewBlock {
   done: number
   total: number
   stale?: number
+  settled?: number // checks closed by settle-block after the PR merged outside the review (not in done)
   checks: ReviewCheck[]
 }
 
@@ -136,6 +137,7 @@ export interface ReviewCheck {
   head?: string // the head its evidence was recorded on
   finding?: string // what the check found
   stale?: boolean // closed, but the PR moved since its check
+  settled?: boolean // closed by settle-block: the PR merged, this check never ran
 }
 
 export interface DiagramFinding {

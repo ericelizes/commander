@@ -502,3 +502,13 @@ func threads(ctx context.Context, run GHRunner, pr string) error {
 		seen[cursor] = true
 	}
 }
+
+// SettledVerifier marks a step closed by `cmdr workflow settle-block` after its
+// PR merged outside the review: the step was never checked, and its evidence
+// says so. Only that verb writes it; internal-comment refuses the prefix.
+const SettledVerifier = "settled"
+
+// SettledFinding is what a settled step records: the merge, never a review.
+func SettledFinding(head, reason string) string {
+	return "settled: PR merged at " + head + ", review not completed. Reason: " + reason
+}

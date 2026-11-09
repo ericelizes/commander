@@ -192,6 +192,37 @@ func workflowNode(b beads.Bead, d beads.Detail) workflowtemplate.Node {
 // export; evidence is recorded before the close and never inferred from closed status.
 func checkWorkflowClose(ctx context.Context, bc beads.Client, dir, project, id string) error {
 	bc = freshReader(bc)
+	err := checkWorkflowCloseOnce(ctx, bc, dir, project, id)
+	if err == nil {
+		return nil
+	}
+	return settleHint(ctx, bc, dir, project, id, err)
+}
+
+// settleHint names settle-block when a refused step's block PR has merged: no
+// check of a merged PR can pass anymore, so only the owning Manager's settle is left.
+// Any read that fails leaves the refusal as it was.
+func settleHint(ctx context.Context, bc beads.Client, dir, project, id string, refused error) error {
+	b, err := bc.Show(ctx, dir, id)
+	if err != nil || b == nil || workflowtemplate.Label(*b, workflowtemplate.LabelStep) == "" {
+		return refused
+	}
+	ds, err := workflowFreshDetails(ctx, bc, dir, []string{id})
+	if err != nil || ds[id].Parent == "" {
+		return refused
+	}
+	block, err := bc.Show(ctx, dir, ds[id].Parent)
+	if err != nil || block == nil || !workflowtemplate.IsReviewBlock(*block) {
+		return refused
+	}
+	pr := workflowtemplate.BlockPR(*block)
+	if h, err := workflowtemplate.ReadHead(ctx, workflowGH, pr); err != nil || h.State != "MERGED" {
+		return refused
+	}
+	return fmt.Errorf("%w. %s merged outside the review: if it will not be reviewed, the owning Manager settles the block (closes its open steps as settled, not reviewed, keeping earlier checks): cmdr workflow settle-block --project %s --block %s --reason '<why the review was not completed>'", refused, pr, project, block.ID)
+}
+
+func checkWorkflowCloseOnce(ctx context.Context, bc beads.Client, dir, project, id string) error {
 	b, err := bc.Show(ctx, dir, id)
 	if err != nil {
 		return err

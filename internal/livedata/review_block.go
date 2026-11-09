@@ -18,11 +18,14 @@ type ReviewBlock struct {
 	PR       string `json:"pr,omitempty"`
 	// Head is the PR head the display knows ("" until the first read): a check
 	// recorded on another head is stale.
-	Head   string        `json:"head,omitempty"`
-	Done   int           `json:"done"`  // checks closed with evidence on Head
-	Total  int           `json:"total"` // the template's steps
-	Stale  int           `json:"stale,omitempty"`
-	Checks []ReviewCheck `json:"checks"`
+	Head  string `json:"head,omitempty"`
+	Done  int    `json:"done"`  // checks closed with evidence on Head
+	Total int    `json:"total"` // the template's steps
+	Stale int    `json:"stale,omitempty"`
+	// Settled counts checks closed by settle-block once the PR merged outside
+	// the review: closed, never checked (not in Done).
+	Settled int           `json:"settled,omitempty"`
+	Checks  []ReviewCheck `json:"checks"`
 }
 
 // ReviewCheck is one step of a block: its state in the board's words and
@@ -37,6 +40,7 @@ type ReviewCheck struct {
 	Head     string `json:"head,omitempty"`    // the head its evidence was recorded on
 	Finding  string `json:"finding,omitempty"` // what the check found
 	Stale    bool   `json:"stale,omitempty"`   // closed, but current bound evidence is missing
+	Settled  bool   `json:"settled,omitempty"` // closed by settle-block: the PR merged, this was never checked
 }
 
 // isReviewBlock: s is a plugged review container (not one of its steps).
@@ -105,11 +109,13 @@ func (f flow) reviewBlock(s SnapStep) *ReviewBlock {
 		if n.Bead.Title != "" {
 			c.Title = plainTitle(n.Bead.Title)
 		}
+		settledHere := false
 		if e, ok := lastEvidence(n, key, ts.id); ok {
 			c.Head, c.Finding = e.Head, e.Finding
 			if c.Verifier == "" {
 				c.Verifier = e.Verifier
 			}
+			settledHere = e.Verifier == workflowtemplate.SettledVerifier
 		}
 		closed := n.Bead.Status == "closed"
 		current := settled || (definitionErr == nil && workflowtemplate.CheckCurrent(n, *s.WorkflowCheck, t, ts.id, ts.verifier, rb.PR, rb.Head))
@@ -136,6 +142,10 @@ func (f flow) reviewBlock(s SnapStep) *ReviewBlock {
 			case c.Head == rb.Head:
 				c.Text = "Stale: no check recorded for the current writer binding"
 			}
+		case closed && settledHere:
+			c.Settled = true
+			rb.Settled++
+			c.Kind, c.Text = "done", "Settled: PR merged, not reviewed"
 		case closed:
 			rb.Done++
 			c.Kind, c.Text = "done", "Done"
@@ -215,15 +225,22 @@ func reviewLine(rb *ReviewBlock, closed bool, l line) line {
 	if rb.Stale > 0 {
 		return line{kind: "stalled", text: "Checks need renewal: " + strconv.Itoa(rb.Stale) + " to rerun, the Manager's move"}
 	}
-	if rb.Done < rb.Total {
-		return line{kind: "stalled", text: "Closed with " + strconv.Itoa(rb.Total-rb.Done) + " checks missing, the Manager's move"}
+	if rb.Done+rb.Settled < rb.Total {
+		return line{kind: "stalled", text: "Closed with " + strconv.Itoa(rb.Total-rb.Done-rb.Settled) + " checks missing, the Manager's move"}
+	}
+	if rb.Settled > 0 {
+		return line{kind: "done", text: "Settled: PR merged, review not completed"}
 	}
 	return l
 }
 
 // progress is the block's count, as a step with work under it reads.
 func (rb *ReviewBlock) progress() string {
-	return strconv.Itoa(rb.Done) + " of " + strconv.Itoa(rb.Total) + " checks done"
+	p := strconv.Itoa(rb.Done) + " of " + strconv.Itoa(rb.Total) + " checks done"
+	if rb.Settled > 0 {
+		p += ", " + strconv.Itoa(rb.Settled) + " settled: PR merged, not reviewed"
+	}
+	return p
 }
 
 // ReviewCheckLines are a block's checks as text, one line each, for agents:
