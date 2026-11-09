@@ -283,6 +283,18 @@ func (c *exportClient) coldFlush(ctx context.Context, dir string) error {
 	}
 	call := c.startFlush(dir, coldFlushBudget, false)
 	if call == nil {
+		// A flush may have ended since the look above: one that failed holds
+		// the retry back (startFlush starts none), which is not "no flusher".
+		c.mu.Lock()
+		failed = c.failed[dir]
+		_, flushed = c.seen[dir]
+		c.mu.Unlock()
+		switch {
+		case flushed:
+			return nil
+		case failed.n > 0:
+			return fmt.Errorf("%d failed in a row: %w", failed.n, failed.err)
+		}
 		return errNoExport
 	}
 	return call.wait(ctx)
@@ -476,27 +488,35 @@ func (c *exportClient) Details(ctx context.Context, dir string, ids []string) (m
 	return out, nil
 }
 
-// seedCache offers f to an empty detail cache under this client (il9.202.29.5).
-// A cold load answers from the export alone and left the cache empty, so once
-// the project was quiet past maxExportAge, the first write's load (warm branch:
-// answer from bd) made the cache's first read and sent every bead to bd show
-// (6 min for 5,600 beads). Tried once per export file, and only on a Dolt
-// project this client flushed, where the journals say whether the database
-// has moved past the export.
+// seedCache offers f, the export a load answered from, to the detail cache
+// under this client. An empty cache is filled from it (il9.202.29.5): a cold load
+// answered from the export alone and left the cache empty, so once the project
+// was quiet past maxExportAge, the first write's load (warm branch: answer from
+// bd) made the cache's first read and sent every bead to bd show (6 min for
+// 5,600 beads). A filled cache has its unchanged export-sourced entries
+// re-stamped to f (il9.202.29.7): later loads answer from the newer file, so
+// entries kept the old stamp and, once that file too was past maxExportAge, the
+// next write's load sent every one to bd show. Tried once per export file, and
+// only on a Dolt project this client flushed, where the journals say whether the
+// database has moved past the export. A cache busy with another read is not
+// waited for (the load does not stall on it); a later load offers the file again.
 func (c *exportClient) seedCache(ctx context.Context, dir string, f *exportFile) {
 	inner, ok := c.Client.(*CachedClient)
-	if !ok || inner.hasDetails(dir) {
+	if !ok {
 		return
 	}
 	c.mu.Lock()
 	seen := c.seen[dir]
 	tried := c.seeded[dir].Equal(f.mtime)
-	c.seeded[dir] = f.mtime
 	c.mu.Unlock()
 	if len(seen) == 0 || tried {
 		return
 	}
-	inner.seedFromExport(ctx, dir, f, seen)
+	if inner.seedFromExport(ctx, dir, f, seen) {
+		c.mu.Lock()
+		c.seeded[dir] = f.mtime
+		c.mu.Unlock()
+	}
 }
 
 // details answers ids from the export, listing those it lacks.

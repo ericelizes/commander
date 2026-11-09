@@ -395,6 +395,65 @@ func TestColdDoltLoadFillsTheDetailCacheSoTheFirstWriteShowsOneBead(t *testing.T
 	if n := inner.shown.Load(); n != 1 || len(got) != len(ids) || got["demo-w.7.2"].Parent != "demo-w.7" {
 		t.Fatalf("first write after a quiet cold start: %d of %d beads through bd show (want 1), details=%d", n, len(ids), len(got))
 	}
+
+	// il9.202.29.7: each write's background flush lands, a load answers from
+	// the new export, and the project is quiet again past maxExportAge before
+	// the next write. Entries kept the cold export's stamp, so the second write
+	// sent every bead to bd show (121 of 121). Each write now shows only its bead.
+	for w, bead := range []int{11, 23} {
+		quietWrite(t, ctx, c, inner, dir, ids, j, w+2, bead, int64(w+2))
+	}
+}
+
+// quietWrite lets the previous write's background flush run, held until that
+// write's load has answered from bd (so no load re-takes from the new export on
+// the way), then one load answers from the export it made, as the board's next
+// poll does. The project is quiet past maxExportAge; one write lands on bead and
+// its load must bring the beads read through bd show to want in all.
+func quietWrite(t *testing.T, ctx context.Context, c Client, inner *showCountingFlusher, dir string, ids []string, j string, write, bead int, want int64) {
+	t.Helper()
+	e := c.(*exportClient)
+	inflight := func() bool {
+		e.mu.Lock()
+		defer e.mu.Unlock()
+		return e.inflight[dir] != nil
+	}
+	e.mu.Lock()
+	last := e.flushed[dir]
+	e.mu.Unlock()
+	time.Sleep(time.Until(last.Add(flushEvery)))
+	release := make(chan struct{})
+	inner.release = release // no flush runs now: the last one was throttled
+	if _, err := c.Details(ctx, dir, ids); err != nil {
+		t.Fatal(err)
+	}
+	if !inflight() {
+		t.Fatalf("write %d: the previous write's load started no flush", write)
+	}
+	close(release)
+	deadline := time.Now().Add(5 * time.Second)
+	for inflight() {
+		if time.Now().After(deadline) {
+			t.Fatalf("write %d: the flush never ended", write)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if _, err := c.Details(ctx, dir, ids); err != nil { // answered from the new export
+		t.Fatal(err)
+	}
+	if n := inner.shown.Load(); n != want-1 {
+		t.Fatalf("write %d: loads before it showed %d beads in all, want %d", write, n, want-1)
+	}
+	fi, _ := os.Stat(filepath.Join(dir, ".beads", "issues.jsonl"))
+	time.Sleep(time.Until(fi.ModTime().Add(2 * maxExportAge)))
+	inner.MemClient.Beads[bead].UpdatedAt = fmt.Sprintf("2026-11-%02dT00:00:00Z", 9+write)
+	appendJournal(t, j, time.Now())
+	if _, err := c.Details(ctx, dir, ids); err != nil {
+		t.Fatal(err)
+	}
+	if n := inner.shown.Load(); n != want {
+		t.Fatalf("write %d after a quiet period: %d beads through bd show in all (want %d of %d)", write, n, want, len(ids))
+	}
 }
 
 // A write landing while the first cold flush runs: the export it makes is
@@ -426,5 +485,43 @@ func TestColdDoltLoadWithAWriteDuringTheFlushShowsNoBead(t *testing.T) {
 	}
 	if n := inner.shown.Load(); n != 0 || len(got) != len(ids) {
 		t.Fatalf("write during the cold flush: %d beads through bd show, details=%d", n, len(got))
+	}
+}
+
+// A load answered from the export does not wait for the detail cache's reread
+// slot (the invariant pass's read can hold it for minutes on a cold store) to
+// seed it: it answers at once and a later load seeds the cache.
+func TestExportLoadDoesNotWaitOnABusyCacheToSeedIt(t *testing.T) {
+	ctx := context.Background()
+	dir, ids, _ := coldProject(t)
+	inner := &showCountingFlusher{MemClient: memBeads(ids)}
+	cached := NewCached(inner)
+	c := ExportReads(cached)
+	defer StopBackground(c)
+
+	release, ok := cached.tryAcquireReread(dir)
+	if !ok {
+		t.Fatal("slot busy")
+	}
+	done := make(chan error, 1)
+	go func() { _, err := c.Details(ctx, dir, ids); done <- err }()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		release()
+		t.Fatal("the load waited for the busy cache")
+	}
+	release()
+	if seeded := func() bool { cached.mu.Lock(); defer cached.mu.Unlock(); return len(cached.details[dir]) > 0 }(); seeded {
+		t.Fatal("seeded while the slot was held")
+	}
+	if _, err := c.Details(ctx, dir, ids); err != nil {
+		t.Fatal(err)
+	}
+	if seeded := func() bool { cached.mu.Lock(); defer cached.mu.Unlock(); return len(cached.details[dir]) == len(ids) }(); !seeded {
+		t.Fatal("a later load did not seed the cache")
 	}
 }

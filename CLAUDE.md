@@ -1510,8 +1510,8 @@ starts only when a load arrives. A client that cannot flush (or a stopped one) r
 (il9.202.29.5):** a load answered from the export fills an EMPTY detail cache from that file (`seedCache` ->
 `CachedClient.seedFromExport`): one bd list keys each bead, kept only while the Dolt journals and the file stand where
 they were at the flush (else nothing is seeded); entries are export-sourced, so the re-take/show rules above hold.
-Without it, the first write after 30s+ of quiet sent every bead to bd show (bench 5,601 shows / 36.7s -> 1 / 0.2s;
-`TestColdDoltLoadFillsTheDetailCacheSoTheFirstWriteShowsOneBead`). The test fake models `exportDetails`. cmdrd's
+Each later export a load answers from re-stamps the filled cache's export-sourced entries whose key is unchanged (never one from bd show or owing a show; same standing check, one cached list, once per file; il9.202.29.7), or the SECOND write after a flush and 30s+ of quiet showed every bead (121 of 121). The seed never waits for the cache's reread slot: a busy cache is offered the file again by a later load. Without it, the first write after 30s+ of quiet sent every bead to bd show (bench 5,601 shows / 36.7s -> 1 / 0.2s;
+`TestColdDoltLoadFillsTheDetailCacheSoTheFirstWriteShowsOneBead`, now through three quiet writes: 1, 2, 3 shows in all; `TestExportLoadDoesNotWaitOnABusyCacheToSeedIt`). The test fake models `exportDetails`. cmdrd's
 board and invariant pass have separate ExportReads clients, so each makes its own first export at a start. Flushes
 are owned by the client: `beads.StopBackground` cancels them and waits, called by `Daemon.Run` on exit. Tests
 `TestColdDolt*`; measure with `COMMANDER_COLD_BENCH=1 go test ./internal/beads -run TestColdLoadBench -v` (5,600

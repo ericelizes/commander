@@ -453,25 +453,42 @@ func (c *CachedClient) acquireReread(ctx context.Context, dir string) (func(), e
 	}
 }
 
-// hasDetails reports whether dir's detail cache holds any bead.
-func (c *CachedClient) hasDetails(dir string) bool {
+// tryAcquireReread takes dir's reread slot only when it is free.
+func (c *CachedClient) tryAcquireReread(dir string) (func(), bool) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	return len(c.details[dir]) > 0
+	if c.reread == nil {
+		c.reread = map[string]chan struct{}{}
+	}
+	slot, ok := c.reread[dir]
+	if !ok {
+		slot = make(chan struct{}, 1)
+		c.reread[dir] = slot
+	}
+	c.mu.Unlock()
+	select {
+	case slot <- struct{}{}:
+		return func() { <-slot }, true
+	default:
+		return nil, false
+	}
 }
 
-// seedFromExport fills dir's empty detail cache from f, an export holding at
-// least the state of the Dolt journals seen (stat'ed before the flush that
-// wrote it). Each bead is keyed by one bd list, read only while the journals
-// and the file still stand where they were: then the list, the export and the
-// database are one state. The entries are export-sourced (export = f's mtime),
-// so the rules for those hold: trusted while that file stands, re-taken from a
-// newer one under maxExportAge, else shown. A write anywhere in the meantime
-// seeds nothing; the cache's own first read then runs as before.
-func (c *CachedClient) seedFromExport(ctx context.Context, dir string, f *exportFile, seen map[string]fileStamp) {
-	release, err := c.acquireReread(ctx, dir)
-	if err != nil {
-		return
+// seedFromExport offers f, an export holding at least the state of the Dolt
+// journals seen (stat'ed before the flush that wrote it), to dir's detail cache.
+// Each bead is keyed by one bd list, read only while the journals and the file
+// still stand where they were: then the list, the export and the database are
+// one state. An empty cache is filled with export-sourced entries (export = f's
+// mtime), so the rules for those hold: trusted while that file stands, re-taken
+// from a newer one under maxExportAge, else shown. In a filled cache an
+// export-sourced entry from an older file whose list key did not move takes its
+// Detail and stamp from f; an entry read through br show (no export stamp, or
+// owing a show) is never replaced. A write anywhere in the meantime changes
+// nothing. It returns false when another read holds the cache (not waited for),
+// so the caller offers f again later.
+func (c *CachedClient) seedFromExport(ctx context.Context, dir string, f *exportFile, seen map[string]fileStamp) bool {
+	release, ok := c.tryAcquireReread(dir)
+	if !ok {
+		return false
 	}
 	defer release()
 	export := filepath.Join(dir, ".beads", "issues.jsonl")
@@ -480,27 +497,42 @@ func (c *CachedClient) seedFromExport(ctx context.Context, dir string, f *export
 		return err == nil && fi.Size() == f.size && fi.ModTime().Equal(f.mtime) &&
 			maps.EqualFunc(doltJournals(dir), seen, func(a, b fileStamp) bool { return a.size == b.size && a.mtime.Equal(b.mtime) })
 	}
-	if c.hasDetails(dir) || !standing() {
-		return
+	if !standing() {
+		return true
 	}
 	all, err := c.List(ctx, dir, ListOptions{Status: "all"})
 	if err != nil || !standing() {
-		return
-	}
-	store := make(map[string]detailEntry, len(all))
-	for _, b := range all {
-		if d, ok := f.detail(b.ID); ok {
-			store[b.ID] = detailEntry{key: detailKey(b), detail: d, export: f.mtime}
-		}
+		return true
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.details == nil {
 		c.details = map[string]map[string]detailEntry{}
 	}
-	if len(c.details[dir]) == 0 {
+	store := c.details[dir]
+	if len(store) == 0 {
+		store = make(map[string]detailEntry, len(all))
+		for _, b := range all {
+			if d, ok := f.detail(b.ID); ok {
+				store[b.ID] = detailEntry{key: detailKey(b), detail: d, export: f.mtime}
+			}
+		}
 		c.details[dir] = store
+		return true
 	}
+	// A new map: a read holding an earlier copy of it reads on unlocked.
+	store = maps.Clone(store)
+	c.details[dir] = store
+	for _, b := range all {
+		e, ok := store[b.ID]
+		if !ok || e.export.IsZero() || e.owesShow || !e.export.Before(f.mtime) || e.key != detailKey(b) {
+			continue
+		}
+		if d, ok := f.detail(b.ID); ok {
+			store[b.ID] = detailEntry{key: e.key, detail: d, export: f.mtime}
+		}
+	}
+	return true
 }
 
 // Incremental reads Details through c's shared per-bead store like a display
