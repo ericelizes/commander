@@ -15,6 +15,7 @@ import (
 
 	"github.com/example-user/commander/internal/agentmail"
 	"github.com/example-user/commander/internal/beads"
+	"github.com/example-user/commander/internal/holding"
 	"github.com/example-user/commander/internal/livedata"
 	"github.com/example-user/commander/internal/spawn"
 	"github.com/example-user/commander/internal/store"
@@ -235,6 +236,27 @@ func runInternalSetObjective(args []string, stdout, stderr *os.File) int {
 				return result, err
 			}
 		}
+		var owed custodyOwed
+		if *state == beads.StateNotStarted || *owner == "none" || (len(waiting) > 0 && len(waits) == 0) {
+			dropped := func(b *holding.Bead) {
+				if *state == beads.StateNotStarted {
+					// applyStepState opens the bead and takes needs-user off it (the card goes with
+					// it, syncNeedsYou): simulate all of it, not just the owner (M5).
+					b.Owner, b.Status, b.NeedsUser = "", "open", false
+				}
+				if *owner == "none" {
+					b.Owner = ""
+				} else if *owner != "" {
+					b.Owner = *owner
+				}
+				if len(waiting) > 0 {
+					b.Waits, b.Untyped, b.Until = len(waits), "", false
+				}
+			}
+			if owed, err = requireHeldAfter(ctx, bc, dir, *beadID, "internal-set-objective on "+*beadID, holdFlags, map[string]holding.Edit{*beadID: dropped}); err != nil {
+				return result, err
+			}
+		}
 		if *status != "" {
 			if err := checkReopenPlacement(ctx, bc, dir, *beadID); err != nil {
 				return result, err
@@ -418,12 +440,18 @@ func runInternalSetObjective(args []string, stdout, stderr *os.File) int {
 				return result, err
 			}
 		}
+		if (*state == beads.StateInProgress || strings.HasPrefix(*owner, "manager-")) && len(waits) == 0 && *state != beads.StateNeedsUser {
+			if err := holdManagerOwner(ctx, bc, dir, *beadID, *owner, time.Now()); err != nil {
+				return result, err
+			}
+		}
 		if reviewRecord != "" {
 			if err := bc.AddComment(ctx, dir, *beadID, reviewRecord); err != nil {
 				return result, err
 			}
 		}
-		if err := writes.Flush(ctx); err != nil {
+		// The state flush is the verb's decisive write (door intent, M3; see verbIntent).
+		if err := writes.Flush(beads.WithIntent(ctx, verbIntent(*beadID, "internal-set-objective on "+*beadID))); err != nil {
 			return result, err
 		}
 		if proposed != nil {
@@ -451,7 +479,15 @@ func runInternalSetObjective(args []string, stdout, stderr *os.File) int {
 			}
 			result.Card = "replaced"
 		}
-
+		// The user's write that left the step with no holder hands it to its Manager now that it landed.
+		held, err := owed.settle(ctx, "")
+		if err == nil {
+			err = writes.Flush(ctx) // owed.bc is this command's batched writer
+		}
+		if err != nil {
+			return result, err
+		}
+		result.Custody = held
 		return result, nil
 	})
 }
@@ -838,8 +874,7 @@ func runInternalCloseObjective(args []string, stdout, stderr *os.File) int {
 		if err := requireGatesPassed(ctx, *projectName, *beadID); err != nil {
 			return result, err
 		}
-		snap, _ := closeSnapshotFn() // unreadable: nothing to check against, do not block the close
-		targets, custody, err := checkCloseLeavesWorkHeld(snap, *beadID, closeDoorRole(ctx, newBeadsClientFn(), dir, *beadID), hold)
+		targets, custody, err := checkCloseLeavesWorkHeld(ctx, newBeadsClientFn(), dir, *beadID, closeDoorRole(ctx, newBeadsClientFn(), dir, *beadID), hold)
 		if err != nil {
 			return result, err
 		}
@@ -853,18 +888,21 @@ func runInternalCloseObjective(args []string, stdout, stderr *os.File) int {
 		}
 		result.Then = targets
 		custodyAt := time.Now()
-		if ids := custodyIDs(custody); len(ids) > 0 {
+		if ids := custody; len(ids) > 0 {
 			held, err := holdForManager(ctx, newBeadsClientFn(), dir, ids, *beadID, custodyAt)
 			if err != nil {
 				return result, custodyErr(ids, *beadID, err)
 			}
 			result.Custody = held
 		}
+		// The close is the verb's decisive write: cmdrd judges it again on fresh reads and lays it
+		// on the board at once (door intent, M3).
+		closeCtx := beads.WithIntent(ctx, verbIntent(*beadID, "closing "+*beadID))
 		var closeErr error
 		if strings.TrimSpace(*reason) != "" {
-			closeErr = newBeadsClientFn().CloseWithReason(ctx, dir, *beadID, strings.TrimSpace(*reason))
+			closeErr = newBeadsClientFn().CloseWithReason(closeCtx, dir, *beadID, strings.TrimSpace(*reason))
 		} else {
-			closeErr = newBeadsClientFn().Close(ctx, dir, *beadID)
+			closeErr = newBeadsClientFn().Close(closeCtx, dir, *beadID)
 		}
 		if err := closeErr; err != nil {
 			// The close did not happen: the steps it would have released stay behind it.
@@ -1356,9 +1394,55 @@ func runParkEdit(project, beadID string, park bool, until, reason, pushReason st
 			}
 			return result, nil
 		}
-		if _, err := beads.Unpark(ctx, bc, dir, beadID, who); err != nil {
+		owed, err := requireHeldAfter(ctx, bc, dir, beadID, "internal-set-objective --unpark "+beadID, holdFlags+"; put it on the bead first, then unpark",
+			map[string]holding.Edit{beadID: func(b *holding.Bead) { b.Status = "open" }})
+		if err != nil {
+			return result, err
+		}
+		// The user's unpark of a step nothing else holds: it comes out of the park carrying the
+		// Manager's receipt (Unpark's hold labels); anything else it leaves unheld is settled after.
+		var hold []string
+		if i := slices.Index(owed.ids, beadID); i >= 0 {
+			hold = []string{custodyLabel(time.Now())}
+			owed.ids = slices.Delete(slices.Clone(owed.ids), i, i+1)
+			result.Custody = []string{beadID}
+		}
+		if _, err := beads.Unpark(ctx, bc, dir, beadID, who, hold...); err != nil {
+			return result, err
+		}
+		held, err := owed.settle(ctx, "")
+		result.Custody = append(result.Custody, held...)
+		if err != nil {
 			return result, err
 		}
 		return result, nil
 	})
+}
+
+// holdManagerOwner makes a Manager's name a real holder. A Manager owner is only accountability,
+// so a step it owns with no other holder gets the Manager dispatch wait, which cmdrd wakes and
+// escalates (the same custody holdApprovedWork records). Any wait, user card or Operator already on
+// the step is the holder and nothing is added.
+func holdManagerOwner(ctx context.Context, bc beads.Client, dir, beadID, newOwner string, now time.Time) error {
+	b, err := bc.Show(ctx, dir, beadID)
+	if err != nil || b == nil {
+		return err
+	}
+	_, owner := beads.StepState(b.Status, b.Labels)
+	if newOwner != "" && newOwner != "none" {
+		owner = newOwner
+	}
+	if !strings.HasPrefix(owner, "manager-") {
+		return nil
+	}
+	for _, l := range b.Labels {
+		if _, ok := beads.ParseWaitLabel(l); ok {
+			return nil
+		}
+	}
+	if st, _ := beads.StepState(b.Status, b.Labels); st == beads.StateNeedsUser {
+		return nil
+	}
+	w := beads.Wait{Kind: beads.WaitUntil, Since: now, Until: now.Add(2 * time.Minute), Ref: beads.ManagerDispatchWait}
+	return bc.SetLabel(ctx, dir, beadID, w.Label(), true)
 }

@@ -97,7 +97,7 @@ func TestRunInternalCreateObjective_WithParent(t *testing.T) {
 	setupObjectiveProject(t, mock)
 
 	stdout, stderr, readOutput := withTempOutputFiles(t)
-	code := runInternalCreateObjective([]string{"--project", "manifest", "--title", "child", "--parent", "obj-1"}, stdout, stderr)
+	code := runInternalCreateObjective([]string{"--project", "manifest", "--title", "child", "--parent", "obj-1", "--waiting", "review:rev"}, stdout, stderr)
 	out, errOut := readOutput()
 	if code != 0 {
 		t.Fatalf("exit=%d stderr=%s", code, errOut)
@@ -143,9 +143,17 @@ func TestRunInternalCloseObjective(t *testing.T) {
 		t.Fatalf("exit=%d stderr=%s", code, errOut)
 	}
 	// the workflow door reads the bead and its own edges (a plugged review block), the stage's
-	// gate beads are looked up, then the close, then a read for push labels to clear
-	if len(mock.Calls) != 5 || !strings.HasPrefix(mock.Calls[0], "Show:") || !strings.HasPrefix(mock.Calls[1], "Deps:obj-1") || !strings.HasPrefix(mock.Calls[2], "List:") || !strings.HasPrefix(mock.Calls[3], "Close:obj-1") || !strings.HasPrefix(mock.Calls[4], "Show:obj-1") {
+	// gate beads are looked up, the holder check reads the closure fresh (batched List by id,
+	// Show, Details, Dependents), then the close, then a read for push labels to clear; the close
+	// is the only write
+	n := len(mock.Calls)
+	if n < 5 || !strings.HasPrefix(mock.Calls[0], "Show:") || !strings.HasPrefix(mock.Calls[1], "Deps:obj-1") || !strings.HasPrefix(mock.Calls[2], "List:") || !strings.HasPrefix(mock.Calls[n-2], "Close:obj-1") || !strings.HasPrefix(mock.Calls[n-1], "Show:obj-1") {
 		t.Fatalf("unexpected beads calls: %v", mock.Calls)
+	}
+	for _, c := range mock.Calls[3 : n-2] {
+		if !strings.HasPrefix(c, "Show:") && !strings.HasPrefix(c, "Details:") && !strings.HasPrefix(c, "Dependents:") && !strings.HasPrefix(c, "List:") {
+			t.Fatalf("the holder check wrote: %v", mock.Calls)
+		}
 	}
 	if !strings.Contains(out, `"closed":true`) {
 		t.Fatalf("unexpected output: %s", out)

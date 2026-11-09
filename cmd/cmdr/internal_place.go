@@ -11,6 +11,7 @@ import (
 
 	"github.com/example-user/commander/internal/agentmail"
 	"github.com/example-user/commander/internal/beads"
+	"github.com/example-user/commander/internal/holding"
 	"github.com/example-user/commander/internal/store"
 	"github.com/example-user/commander/internal/tui"
 	"github.com/example-user/commander/internal/wsmgr"
@@ -118,12 +119,24 @@ func unwrapSteps(ctx context.Context, bc beads.Client, dir, parent string) error
 	if err != nil {
 		return err
 	}
+	edits := map[string]holding.Edit{children[0].ID: func(b *holding.Bead) { b.Status = holding.StatusClosed }}
+	for _, k := range steps {
+		edits[k.ID] = func(b *holding.Bead) { b.Parent = parent }
+	}
+	owed, err := requireHeldAfter(ctx, bc, dir, children[0].ID, "folding "+children[0].ID+" back into "+parent, moveFix, edits)
+	if err != nil {
+		return err
+	}
 	for _, k := range steps {
 		if err := bc.SetParent(ctx, dir, k.ID, parent); err != nil {
 			return err
 		}
 	}
-	return bc.CloseWithReason(ctx, dir, children[0].ID, "Held its parent's steps while another workstream sat beside it; they are back under "+parent)
+	if err := bc.CloseWithReason(ctx, dir, children[0].ID, "Held its parent's steps while another workstream sat beside it; they are back under "+parent); err != nil {
+		return err
+	}
+	_, err = owed.settle(ctx, "")
+	return err
 }
 
 func moveBead(ctx context.Context, bc beads.Client, dir, bead, parent string) (bool, string, error) {
@@ -138,6 +151,9 @@ func moveBead(ctx context.Context, bc beads.Client, dir, bead, parent string) (b
 		return false, "", nil
 	}
 	if parent == "" {
+		if err := requireMoveHeld(ctx, bc, dir, bead, "", "moving "+bead+" to the top level"); err != nil {
+			return false, "", err
+		}
 		if err := bc.SetParent(ctx, dir, bead, ""); err != nil {
 			return false, "", err
 		}

@@ -308,3 +308,26 @@ func TestLegacyAliasFileProtection(t *testing.T) {
 		}
 	}
 }
+
+// Worktrees share one stash list: an Operator may not stash, pop, apply or drop (it could take
+// another task's stash); reading the list is allowed.
+func TestOperatorGuardRefusesGitStash(t *testing.T) {
+	for _, c := range []string{
+		"git stash", "git stash pop", "git stash apply stash@{0}", "git stash push -u -m wip", "git stash drop",
+		"git -C /some/worktree stash pop", "cd x && git stash", "bash -c 'git stash pop'", "env GIT_DIR=x git stash",
+		"git --attr-source HEAD stash pop", "git --super-prefix x/ stash", "git --namespace n stash apply", // m5
+	} {
+		v := Classify(c)
+		if !v.Deny || !v.Stash {
+			t.Errorf("%q not refused: %+v", c, v)
+		}
+		if out := string(HookOutputFor(v)); !strings.Contains(out, "WIP commit") {
+			t.Errorf("%q: reason %s", c, out)
+		}
+	}
+	for _, c := range []string{"git stash list", "git stash show -p", "git status", "git commit -m 'wip: stash this later'", "echo git stash"} {
+		if v := Classify(c); v.Deny {
+			t.Errorf("%q refused: %+v", c, v)
+		}
+	}
+}

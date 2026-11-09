@@ -174,7 +174,7 @@ func TestSourceSnapshotChecksClaimsAgainstLiveness(t *testing.T) {
 	}
 	// The same claim with a report in: the Manager's move, nothing broken, the bead's claim kept in the loaded rows.
 	src.Reported = func() []SnapReported {
-		return []SnapReported{{Operator: "operator-op-x-app-1-1", ProjectID: s.Workstreams[0].ProjectID, Bead: "app-1.1", Since: 1793214000}}
+		return []SnapReported{{Operator: "operator-op-x-app-1-1", ProjectID: s.Workstreams[0].ProjectID, Bead: "app-1.1", Since: time.Now().Unix()}} // a report minutes old: its handoff wait is not overdue
 	}
 	s = src.Snapshot(ctx)
 	if st := step(s); st.Owner != "manager-app-1" || st.State != "review" || st.Waiting != "Manager to close" || len(s.Broken) != 0 || len(SnapshotViolations(s)) != 0 {

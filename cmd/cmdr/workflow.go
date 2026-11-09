@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -254,7 +255,14 @@ func plugWorkflow(ctx context.Context, bc beads.Client, dir string, inst *workfl
 	for _, s := range inst.Steps {
 		b, ok := steps[s.ID]
 		if !ok {
-			id, err := bc.Create(ctx, dir, s.Title, beads.CreateOptions{Parent: container.ID, Labels: s.Labels, Silent: true})
+			labels := s.Labels
+			if len(s.After) == 0 {
+				// A step nothing precedes is born held: the Manager dispatches it (atomic birth).
+				now := time.Now()
+				w := beads.Wait{Kind: beads.WaitUntil, Since: now, Until: now.Add(2 * time.Minute), Ref: beads.ManagerDispatchWait}
+				labels = append(slices.Clone(labels), w.Label())
+			}
+			id, err := bc.Create(ctx, dir, s.Title, beads.CreateOptions{Parent: container.ID, Labels: labels, Silent: true})
 			if err != nil {
 				return res, fmt.Errorf("creating step %s failed (%v); %d created so far, rerun the same command to resume", s.ID, err, len(res.Created))
 			}

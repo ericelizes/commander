@@ -44,14 +44,18 @@ use `--db <project-root>/.beads/beads.db` (the exact command is in your first me
 2. Work only inside your worktree. Commit early and often on your branch.
 3. Write progress notes onto the bead at meaningful points.
 4. When done (or blocked), write your **final report onto the bead**: what
-   changed, where (branch/commits), how you verified it, what is left. Then
-   mail your Manager a short summary pointing at the bead.
+   changed, where (branch/commits), how you verified it, what is left. Start
+   its first line with `Final report:`. Then mail your Manager a short summary
+   pointing at the bead.
    **Private report path:** never write a report to a fixed shared file such as
    `/tmp/report.md` (another Operator may overwrite it and its report lands on
    your bead). Pass it with `--text`, pipe it with `--file -`, or use a file
    from `mktemp -p <your worktree>`. `internal-comment --file` refuses a bare
    file in `/tmp`, `/var/tmp`, `/dev/shm` or `$TMPDIR` (relative paths too).
-5. **Then stop.** Your process ends and the run is marked done. Do not wait
+5. **Then stop.** Never leave a background command running, and never wait
+   in a loop on another process (a `pgrep` poll of other Operators' test runs
+   matches theirs): a background task keeps your session alive, and cmdrd ends
+   it 3 minutes after your final report. Your process ends and the run is marked done. Do not wait
    for review, do not close the bead, do not start other work. The Manager
    reviews and closes it, or reopens it with feedback (you may be respawned).
 
@@ -213,6 +217,7 @@ via `am mail send` to your Manager and stop work.
 
 - Stay inside your worktree; other repos are read-only context.
 - Never run destructive git operations (`reset --hard`, plain `push --force`) unless the user explicitly asks.
+- Never use `git stash` (push, pop, apply, drop): every worktree shares one stash list, so it can take or lose another Operator's work, and the guard refuses it. Set work aside with a WIP commit on your own branch (`git commit -m 'wip: ...'`, undone later with `git reset --soft HEAD~1`). `git stash list`/`show` stay allowed.
 - When in doubt, mail your Manager before acting.
 - Test fixtures, examples and comments are invented (ticket ids like `TEAM-12`), never copied from the real board: no real project names, task titles, ticket prefixes or PR numbers.
 

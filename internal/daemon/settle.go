@@ -59,6 +59,10 @@ type runSettler struct {
 	// restarts bounds crash restarts per step and per hour; nil allows each
 	// bead's one.
 	restarts *restartBudget
+	// lastOutput is when a run's pane last printed; nil stats spawn.RunOutputPath.
+	lastOutput func(run store.AgentRun, projectPath string) time.Time
+	// mailShownAt is when mail was last shown to a run's Operator; nil reads its mail cursor.
+	mailShownAt func(run store.AgentRun) time.Time
 	// outputTail is the end of a run's pane output; nil reads spawn.OutputTail.
 	outputTail func(run store.AgentRun, projectPath string) string
 	// reported holds what the board reads of a finished run until its settle has landed; nil = not tracked.
@@ -105,15 +109,11 @@ func (s runSettler) exited(ctx context.Context, run store.AgentRun) error {
 		return s.diedBecause(ctx, run, false, "exited without writing a final report on the bead")
 	}
 	s.reported.settling(run, s.clock())
-	moved, err := s.move(ctx, run, "in_progress", manager, true)
+	moved, err := s.move(ctx, run, "in_progress", manager, true, s.handoffWait(beads.ManagerCloseWait))
 	if err != nil {
 		return err
 	}
-	if moved {
-		if err := s.awaitManager(ctx, run); err != nil {
-			return err
-		}
-	}
+	_ = moved
 	s.freeze(ctx, run)
 	s.record(ctx, run, store.EventOperatorExited, report)
 	return s.tell(ctx, manager, fmt.Sprintf("[operator] %s finished %s: %s", run.AgentName, run.TaskBeadID, report),
@@ -230,7 +230,7 @@ func (s runSettler) died(ctx context.Context, run store.AgentRun, restart bool) 
 
 func (s runSettler) diedBecause(ctx context.Context, run store.AgentRun, restart bool, why string) error {
 	return s.diedWith(ctx, run, restart, why, fmt.Sprintf("Operator died on %s", run.TaskBeadID),
-		fmt.Sprintf("%s's session %s. %s is open again with no owner. Read what it left on the bead (bd show %s), then spawn again or take another path.", run.AgentName, why, run.TaskBeadID, run.TaskBeadID))
+		fmt.Sprintf("%s's session %s. %s is open again and waits on you (Manager to recover). Read what it left on the bead (bd show %s), then spawn again or take another path.", run.AgentName, why, run.TaskBeadID, run.TaskBeadID))
 }
 
 // stoppedOnRequest settles a run someone stopped (spawn.StopHostRun): it is not
@@ -251,13 +251,13 @@ func (s runSettler) stoppedOnRequest(ctx context.Context, stop spawn.StoppedRun)
 		}
 	}
 	manager := s.managerOf(ctx, run)
-	moved, err := s.move(ctx, run, "open", "", false)
+	moved, err := s.move(ctx, run, "open", manager, false, s.handoffWait(beads.ManagerRecoverWait))
 	if err != nil {
 		return err
 	}
 	why := "stopped by " + stop.By
 	return s.stopped(ctx, run, moved, manager, why, fmt.Sprintf("Operator stopped on %s", run.TaskBeadID),
-		fmt.Sprintf("%s was %s and has ended. %s is open again with no owner. It did not read any mail sent with the stop: to go on, spawn again with the new direction in the brief.", run.AgentName, why, run.TaskBeadID), "")
+		fmt.Sprintf("%s was %s and has ended. %s is open again and waits on you (Manager to recover). It did not read any mail sent with the stop: to go on, spawn again with the new direction in the brief.", run.AgentName, why, run.TaskBeadID), "")
 }
 
 // diedWith reopens the bead and starts the Operator again within the caps
@@ -265,7 +265,9 @@ func (s runSettler) stoppedOnRequest(ctx context.Context, stop spawn.StoppedRun)
 // once); otherwise, or when that fails, the step goes back to the Manager.
 func (s runSettler) diedWith(ctx context.Context, run store.AgentRun, restart bool, why, subject, body string) error {
 	manager := s.managerOf(ctx, run)
-	moved, err := s.move(ctx, run, "open", "", false)
+	// Make before break: the Manager to recover wait (and the Manager's name) replaces the dead
+	// claim in the same write; a respawn replaces both with the new run.
+	moved, err := s.move(ctx, run, "open", manager, false, s.handoffWait(beads.ManagerRecoverWait))
 	if err != nil {
 		return err
 	}
@@ -285,6 +287,8 @@ func (s runSettler) diedWith(ctx context.Context, run store.AgentRun, restart bo
 func (s runSettler) stopped(ctx context.Context, run store.AgentRun, moved bool, manager, why, subject, body, fact string) error {
 	var steps []func() error
 	if moved {
+		// The move already wrote the Manager to recover wait with the reopen (one write); the died
+		// marker follows.
 		steps = append(steps, func() error { return s.setLabel(ctx, run, beads.OperatorDiedLabel, true) })
 	}
 	steps = append(steps,
@@ -303,6 +307,22 @@ func (s runSettler) stopped(ctx context.Context, run store.AgentRun, moved bool,
 		func() error { return s.tell(ctx, manager, subject, body+s.facts(ctx, run, fact)) },
 	)
 	return runSteps(steps)
+}
+
+// holdForManager records the Manager to recover wait (and its owner label) on the run's bead.
+func (s runSettler) holdForManager(ctx context.Context, run store.AgentRun, manager string) error {
+	p, err := s.projects.GetProjectByID(ctx, run.ProjectID)
+	if err != nil || p == nil {
+		return fmt.Errorf("hold %s: project %d: %v", run.TaskBeadID, run.ProjectID, err)
+	}
+	if manager != "" {
+		if err := s.beads.SetLabel(ctx, p.Path, run.TaskBeadID, beads.OwnerLabelPrefix+beads.OwnerLabelName(manager), true); err != nil {
+			return err
+		}
+	}
+	now := s.clock()
+	w := beads.Wait{Kind: beads.WaitUntil, Since: now, Until: now.Add(managerCloseWithin), Ref: beads.ManagerRecoverWait}
+	return s.beads.SetLabel(ctx, p.Path, run.TaskBeadID, w.Label(), true)
 }
 
 // facts is what cmdrd saw of a run's end, for the Manager: why it was not
@@ -427,10 +447,16 @@ func (s runSettler) afterRespawn(ctx context.Context, p *store.Project, run stor
 	// The Operator is running now: a failure below must not run diedWith (and
 	// so Spawn) again, so only the steps not yet done are retried (partialErr).
 	steps := []func() error{
-		func() error { return s.beads.SetLabel(ctx, p.Path, run.TaskBeadID, label, true) },
-		func() error { return s.beads.SetStatus(ctx, p.Path, run.TaskBeadID, "in_progress") },
 		func() error {
-			return s.beads.SetLabel(ctx, p.Path, run.TaskBeadID, beads.OwnerLabelPrefix+beads.OwnerLabelName(res.AgentName), true)
+			// The new run replaces the Manager's recover hold in one write (never a moment with neither).
+			b, err := s.beads.Show(ctx, p.Path, run.TaskBeadID)
+			if err != nil {
+				return err
+			}
+			if b == nil {
+				return nil
+			}
+			return s.moveBead(ctx, p.Path, *b, "in_progress", res.AgentName, false, label)
 		},
 		func() error {
 			s.note(ctx, run, fmt.Sprintf("%s%s %s at %s; restarted on branch %s, same worktree, session resumed.", noteMark, run.AgentName, why, s.clock().Format(time.RFC3339), branch))
@@ -542,11 +568,10 @@ func gitBranchOf(worktree string) (string, error) {
 	return strings.TrimSpace(string(out)), err
 }
 
-// awaitManager records the time wait a finished step holds on its Manager.
-func (s runSettler) awaitManager(ctx context.Context, run store.AgentRun) error {
+// handoffWait is the label of a Manager handoff wait (Manager to close, Manager to recover) from now.
+func (s runSettler) handoffWait(kind string) string {
 	now := s.clock()
-	w := beads.Wait{Kind: beads.WaitUntil, Since: now, Until: now.Add(managerCloseWithin), Ref: beads.ManagerCloseWait}
-	return s.setLabel(ctx, run, w.Label(), true)
+	return beads.Wait{Kind: beads.WaitUntil, Since: now, Until: now.Add(managerCloseWithin), Ref: kind}.Label()
 }
 
 func (s runSettler) setLabel(ctx context.Context, run store.AgentRun, label string, on bool) error {
@@ -563,7 +588,7 @@ func (s runSettler) setLabel(ctx context.Context, run store.AgentRun, label stri
 // move sets the bead's status, its one owner (none when owner is ""), and the
 // review marker, and clears an earlier run's died marker or Manager wait.
 // moved is false when the bead is gone or already closed.
-func (s runSettler) move(ctx context.Context, run store.AgentRun, status, owner string, review bool) (moved bool, err error) {
+func (s runSettler) move(ctx context.Context, run store.AgentRun, status, owner string, review bool, hold ...string) (moved bool, err error) {
 	p, err := s.projects.GetProjectByID(ctx, run.ProjectID)
 	if err != nil || p == nil {
 		return false, fmt.Errorf("settle %s: project %d: %v", run.TaskBeadID, run.ProjectID, err)
@@ -575,7 +600,7 @@ func (s runSettler) move(ctx context.Context, run store.AgentRun, status, owner 
 	if !settlable(b, run, review) {
 		return false, nil // closed, accepted, claimed by another run or already handed on
 	}
-	return true, s.moveBead(ctx, p.Path, *b, status, owner, review)
+	return true, s.moveBead(ctx, p.Path, *b, status, owner, review, hold...)
 }
 
 // settlable reports whether the end of run may still be written onto b. A late
@@ -612,30 +637,27 @@ func (s runSettler) stillOpen(ctx context.Context, dir, id string) bool {
 	return err != nil || b == nil || (b.Status != "closed" && b.Status != beads.StatusDeferred)
 }
 
-func (s runSettler) moveBead(ctx context.Context, dir string, b beads.Bead, status, owner string, review bool) error {
+func (s runSettler) moveBead(ctx context.Context, dir string, b beads.Bead, status, owner string, review bool, hold ...string) error {
 	if !s.stillOpen(ctx, dir, b.ID) {
 		return nil
 	}
+	// One update (one transaction): the next holder (owner, hold waits) goes in with the old
+	// claim going out, so no read ever sees the bead with nobody on it (I3, make before break).
+	f := beads.Fields{Status: &status, AddLabels: append([]string(nil), hold...)}
 	want := ""
 	if owner != "" {
 		want = beads.OwnerLabelPrefix + beads.OwnerLabelName(owner)
+		f.AddLabels = append(f.AddLabels, want)
+	}
+	if review {
+		f.AddLabels = append(f.AddLabels, beads.ReviewLabel)
 	}
 	for _, l := range b.Labels {
-		if (strings.HasPrefix(l, beads.OwnerLabelPrefix) && l != want) || beads.IsSettleMarker(l) {
-			if err := s.beads.SetLabel(ctx, dir, b.ID, l, false); err != nil {
-				return err
-			}
+		if (strings.HasPrefix(l, beads.OwnerLabelPrefix) && l != want) || beads.IsSettleMarker(l) || (!review && l == beads.ReviewLabel) {
+			f.RemoveLabels = append(f.RemoveLabels, l)
 		}
 	}
-	if want != "" {
-		if err := s.beads.SetLabel(ctx, dir, b.ID, want, true); err != nil {
-			return err
-		}
-	}
-	if err := s.beads.SetLabel(ctx, dir, b.ID, beads.ReviewLabel, review); err != nil {
-		return err
-	}
-	return s.beads.SetStatus(ctx, dir, b.ID, status)
+	return s.beads.UpdateFields(ctx, dir, b.ID, f)
 }
 
 func (s runSettler) tell(ctx context.Context, role, subject, body string) error {
@@ -705,10 +727,7 @@ func (s runSettler) settleOrphan(ctx context.Context, dir string, b beads.Bead, 
 	manager := s.managerOf(ctx, run)
 	report := s.finalReport(ctx, run)
 	if review || report != "" {
-		if err := s.moveBead(ctx, dir, b, "in_progress", manager, true); err != nil {
-			return err
-		}
-		if err := s.awaitManager(ctx, run); err != nil {
+		if err := s.moveBead(ctx, dir, b, "in_progress", manager, true, s.handoffWait(beads.ManagerCloseWait)); err != nil {
 			return err
 		}
 		if report == "" {
@@ -717,14 +736,12 @@ func (s runSettler) settleOrphan(ctx context.Context, dir string, b beads.Bead, 
 		return s.tell(ctx, manager, fmt.Sprintf("[operator] %s finished %s: %s", run.AgentName, b.ID, report),
 			fmt.Sprintf("cmdrd found %s still claimed by %s, which is no longer running, and handed it to you for review. Read the report (bd show %s), then close the bead (cmdr internal-close-objective) or reopen it with feedback (--state not-started --owner none). The step waits on you until %s; past that the board flags it.", b.ID, run.AgentName, b.ID, s.clock().Add(managerCloseWithin).Format(time.RFC3339)))
 	}
-	if err := s.moveBead(ctx, dir, b, "open", "", false); err != nil {
-		return err
-	}
-	if err := s.beads.SetLabel(ctx, dir, b.ID, beads.OperatorDiedLabel, true); err != nil {
+	// One write: reopened, the Manager's recover hold and the died marker in, the dead claim out.
+	if err := s.moveBead(ctx, dir, b, "open", manager, false, s.handoffWait(beads.ManagerRecoverWait), beads.OperatorDiedLabel); err != nil {
 		return err
 	}
 	return s.tell(ctx, manager, fmt.Sprintf("Operator died on %s", b.ID),
-		fmt.Sprintf("cmdrd found %s still claimed by %s, which is no longer running and left no report. %s is open again with no owner. Read what it left on the bead (bd show %s), then spawn again or take another path.", b.ID, run.AgentName, b.ID, b.ID))
+		fmt.Sprintf("cmdrd found %s still claimed by %s, which is no longer running and left no report. %s is open again and waits on you (Manager to recover). Read what it left on the bead (bd show %s), then spawn again or take another path.", b.ID, run.AgentName, b.ID, b.ID))
 }
 
 // brCommentsArgs is the comments read for the configured CLI: bd takes

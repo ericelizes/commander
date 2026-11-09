@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/example-user/commander/internal/beads"
+	"github.com/example-user/commander/internal/holding"
+	"github.com/example-user/commander/internal/holdread"
 	"github.com/example-user/commander/internal/livedata"
 	"github.com/example-user/commander/internal/spawn"
 	"github.com/example-user/commander/internal/store"
@@ -228,7 +230,14 @@ func (w *waitWatcher) unparkDue(ctx context.Context, p store.Project) {
 		if !w.woken[key] && !hasLabelPrefix(b.Labels, beads.ParkedNotifiedPrefix) {
 			continue // its Manager's mail failed: try again next tick
 		}
-		if _, err := beads.Unpark(ctx, w.beads, p.Path, b.ID, "cmdrd"); err != nil {
+		// The Manager was told it is due: unless something of its own holds it (a card, a wait, an
+		// Operator), it comes out of the park held by the Manager dispatch wait, in the same write.
+		var hold []string
+		if w.onlyHolder(b, "") {
+			now := w.now()
+			hold = append(hold, beads.Wait{Kind: beads.WaitUntil, Since: now, Until: now.Add(2 * time.Minute), Ref: beads.ManagerDispatchWait}.Label())
+		}
+		if _, err := beads.Unpark(ctx, w.beads, p.Path, b.ID, "cmdrd", hold...); err != nil {
 			log.Printf("daemon: waits: unpark %s: %v", b.ID, err)
 			continue
 		}
@@ -282,9 +291,48 @@ func (w *waitWatcher) wake(ctx context.Context, p store.Project, b beads.Bead, w
 		}
 		return
 	}
-	if err := w.beads.SetLabel(ctx, p.Path, b.ID, label, false); err != nil {
+	// Clear and hand on in one write: a wait that was the bead's only holder is replaced by the
+	// Manager dispatch wait (the Manager was just mailed), so no read sees it unheld (I3).
+	f := beads.Fields{RemoveLabels: []string{label}}
+	if w.onlyHolder(b, label) {
+		now := w.now()
+		f.AddLabels = []string{beads.Wait{Kind: beads.WaitUntil, Since: now, Until: now.Add(2 * time.Minute), Ref: beads.ManagerDispatchWait}.Label()}
+	}
+	if err := w.beads.UpdateFields(ctx, p.Path, b.ID, f); err != nil {
 		log.Printf("daemon: waits: clear %s on %s: %v", label, b.ID, err)
 	}
+}
+
+// onlyHolder reports whether nothing of b's own holds it once label is gone, judged by the one
+// predicate (holding.Held over the bead's own fields: a gate, a user card, a wait that still holds
+// (an expired handoff does not, beads.WaitHolds), a running Operator). Open children or blockers
+// may still hold it; a dispatch wait beside them is never wrong (two holders are legal, none is not).
+func (w *waitWatcher) onlyHolder(b beads.Bead, label string) bool {
+	after := b
+	after.Labels = slices.DeleteFunc(slices.Clone(b.Labels), func(l string) bool { return l == label })
+	if after.Status == beads.StatusDeferred {
+		after.Status = "open" // judged as it comes out of the park
+	}
+	_, held, _ := holding.Held(holdread.Bead(&after, "", nil), ownOnly{running: w.runningNow})
+	return !held
+}
+
+// ownOnly is a holding.World that knows only who runs: onlyHolder judges a bead by what it carries.
+type ownOnly struct{ running map[string]bool }
+
+func (ownOnly) Bead(string) (holding.Bead, bool) { return holding.Bead{}, false }
+func (ownOnly) HasOpenChild(string) bool         { return false }
+func (o ownOnly) OwnerLive(owner string) (string, bool) {
+	if holding.IsManager(owner) {
+		return "idle", true // a Manager's name holds nothing between turns
+	}
+	if o.running == nil {
+		return "", false // unknown: taken as live
+	}
+	if o.running[spawn.CanonicalRole(owner)] {
+		return "working", true
+	}
+	return "", true
 }
 
 // storedLabel is the label on the bead that wt was parsed from. Label() may

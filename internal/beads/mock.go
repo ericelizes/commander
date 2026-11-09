@@ -117,7 +117,18 @@ func (m *MockClient) UpdateFields(_ context.Context, projectDir, issueID string,
 	if err != nil {
 		return err
 	}
-	m.record(fmt.Sprintf("UpdateFields:%s|%s|dir=%s", issueID, strings.Join(args, " "), projectDir))
+	// One call; its label and status parts read as SetLabel/SetStatus do, so a test can find them.
+	line := fmt.Sprintf("UpdateFields:%s|%s", issueID, strings.Join(args, " "))
+	for _, l := range f.AddLabels {
+		line += fmt.Sprintf("|label=%s|on=true", l)
+	}
+	for _, l := range f.RemoveLabels {
+		line += fmt.Sprintf("|label=%s|on=false", l)
+	}
+	if f.Status != nil {
+		line += "|status=" + *f.Status
+	}
+	m.record(line + "|dir=" + projectDir)
 	return m.SetErr
 }
 

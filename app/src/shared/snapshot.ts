@@ -19,6 +19,7 @@ export interface Snapshot {
   error?: string
   // Set when cmdrd cannot read its state: the rest of the snapshot is stale or empty.
   degraded?: { reason: string }
+  pending?: string[] // steps shown as a write the door answered left them, before a load read them back
   // What keeps failing in cmdrd right now (mail that cannot reach an agent, a
   // plan that breaks the rules): each a problem until it clears.
   health?: { key: string; detail: string; since: number }[]

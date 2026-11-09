@@ -294,3 +294,26 @@ func TestWorkflowLabelsAreReserved(t *testing.T) {
 		t.Fatal("create verb took a --labels flag")
 	}
 }
+
+// The first step of a block has no predecessor: it is born with the Manager's dispatch wait.
+func TestPlugFirstStepHeld(t *testing.T) {
+	g := newFakeGraph("B", "M")
+	res, err := plugWorkflow(context.Background(), g, "/d", plugInstance(t, testPR))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, s := range res.Remaining {
+		var waits []beads.Wait
+		for _, l := range g.beads[s.BeadID].Labels {
+			if w, ok := beads.ParseWaitLabel(l); ok {
+				waits = append(waits, w)
+			}
+		}
+		if i == 0 && (len(waits) != 1 || waits[0].Ref != beads.ManagerDispatchWait) {
+			t.Fatalf("first step waits %+v, want Manager dispatch", waits)
+		}
+		if i > 0 && len(waits) != 0 {
+			t.Fatalf("step %d carries waits %+v", i, waits)
+		}
+	}
+}

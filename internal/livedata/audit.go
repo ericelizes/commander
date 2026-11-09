@@ -2,6 +2,7 @@ package livedata
 
 import (
 	"fmt"
+	"github.com/example-user/commander/internal/holding"
 	"slices"
 	"strings"
 )
@@ -234,65 +235,15 @@ func earlierOpenGate(ws SnapWorkstream, id string, byBead map[string]SnapStep) s
 // gate, the user's, has a recorded wait or `until`, a live owner, an open child,
 // is parked, or is not in progress and waits behind an open step (not parked or superseded).
 func openWithoutOwner(ws SnapWorkstream) []SnapStep {
-	byID := map[string]SnapStep{}
-	for _, st := range flattenSteps(ws.Steps) {
-		byID[st.BeadID] = st
-	}
-	for _, g := range ws.GateNodes {
-		status := "open"
-		if g.Status == "passed" {
-			status = "closed"
-		}
-		byID[g.BeadID] = SnapStep{BeadID: g.BeadID, Status: status}
-	}
-	own := func(st SnapStep) bool {
-		switch {
-		case st.Gate, st.State == "needs-user", st.Waiting != "", st.Until != "", st.Status == statusDeferred:
-			return true
-		}
-		for _, c := range st.Children {
-			if !stepClosed(c) && c.Status != "closed" {
-				return true
-			}
-		}
-		return st.Owner != "" && stepAlive(st)
-	}
-	memo := map[string]bool{}
-	var fine func(id string) bool
-	fine = func(id string) bool {
-		if v, ok := memo[id]; ok {
-			return v
-		}
-		st, ok := byID[id]
-		if !ok || st.Status == "closed" {
-			return false
-		}
-		if own(st) {
-			memo[id] = true
-			return true
-		}
-		if st.Status != "in_progress" {
-			for _, b := range st.BlockedBy {
-				if blocker, ok := byID[b]; ok && stepBlocks(blocker) {
-					memo[id] = true
-					return true
-				}
-			}
-		}
-		memo[id] = false
-		return false
-	}
+	w := newRowWorld(workstreamRows(ws), nil)
 	var out []SnapStep
 	for _, st := range flattenSteps(ws.Steps) {
-		if st.Status == "closed" || st.Status == statusDeferred || fine(st.BeadID) {
+		if st.Status == "closed" || st.Status == statusDeferred {
 			continue
 		}
-		out = append(out, st)
+		if _, held, _ := holding.Held(rowBead(w.rows[st.BeadID], w.now), w); !held {
+			out = append(out, st)
+		}
 	}
 	return out
-}
-
-// stepBlocks mirrors rowBlocks for the snapshot form.
-func stepBlocks(st SnapStep) bool {
-	return st.Status != "closed" && st.Status != statusDeferred && !st.Superseded
 }

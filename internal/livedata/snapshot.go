@@ -26,6 +26,9 @@ type Snapshot struct {
 	// KeptLastGood marks a read that overlapped writes, served quietly from last-good
 	// rows: not degraded and no mail, but the rows may not show a write just made.
 	KeptLastGood bool `json:"-"`
+	// Pending lists steps the board shows as a write the door answered left them, before a load
+	// has read them back (Patched); a load that shows the write clears it.
+	Pending []string `json:"pending,omitempty"`
 	// ProjectTimes is how long each project's beads read took in this load.
 	ProjectTimes map[string]time.Duration `json:"-"`
 	// Phases is where this load's time went.
@@ -246,7 +249,7 @@ type SnapStep struct {
 	NoGates     bool             `json:"no_gates,omitempty"`         // an open stage (top-level step) with no gates
 	Viz         int              `json:"viz"`                        // its level in the Graph: 1 gates, 2 stages, 3 everything (label viz:<n>, else gate 1, stage 2, task 3)
 	Superseded  bool             `json:"superseded,omitempty"`       // dropped from the plan: not drawn, never approved
-	Broken      bool             `json:"broken,omitempty"`           // open with no agent, wait or the user on it: "Needs a wait or an owner"
+	Broken      bool             `json:"broken,omitempty"`           // open with no agent, wait or the user on it: "State missing"
 	Task        bool             `json:"task,omitempty"`             // an Operator task bead: agent-internal, left out of the workflow and diagram (its step shows its state)
 	Track       bool             `json:"track,omitempty"`            // a track of its workstream: a separate outcome with its own gate chain and status line
 	// ManagerRole is set on a nested workstream that has a Manager of its own
@@ -347,7 +350,7 @@ func BuildSnapshot(data Data, unread map[string]int) Snapshot {
 		s.Agents[role] = SnapAgent{State: EffectiveState(a, data.LoadedAt), Detail: a.Detail, Since: a.Since}
 	}
 	foldWaits(&s, Workstreams(data))
-	s.Broken = OpenBeadInvariant(data.Objectives, live)
+	s.Broken = OpenBeadInvariantAt(data.Objectives, live, data.LoadedAt)
 	markBroken(s.Workstreams, s.Broken)
 	s.Watch = watchOf(data)
 	for role, n := range unread {
@@ -763,6 +766,9 @@ func (s *Source) build(ctx context.Context, data Data) Snapshot {
 			s.chatSince = map[string]SnapAgent{}
 		}
 		overlayChats(&snap, s.Chats(), s.chatSince, now)
+		// The predicate reads the agent state the board shows: a Manager the overlay has mid-turn
+		// holds what it owns, as on the board's line and in StalledWork.
+		markOverlaid(&snap, data.Objectives, data.LoadedAt)
 	}
 	d := Board(snap, now)
 	if err := s.since.fill(ctx, s.Deps.Store, &d, now, data.LoadErr != nil); err != nil {

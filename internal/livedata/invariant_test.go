@@ -1,6 +1,8 @@
 package livedata
 
 import (
+	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -288,5 +290,31 @@ func TestInvariantFlagsAnUntypedWait(t *testing.T) {
 	}
 	if got[0].Why == "" {
 		t.Error("an untyped wait's violation should say why")
+	}
+}
+
+// Every reader of "held" goes through holding.Held (invariant I5); a new
+// predicate written beside it fails here.
+func TestEveryHeldReaderCallsTheOnePredicate(t *testing.T) {
+	for _, f := range []string{"invariant.go", "audit.go"} {
+		src, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(src), "holding.Held(") {
+			t.Errorf("%s does not call holding.Held", f)
+		}
+	}
+}
+
+func TestInvariantBlockedThroughParentIsHeld(t *testing.T) {
+	rows := []ObjectiveRow{
+		{BeadID: "p-1", Status: "open"},
+		{BeadID: "p-1.1", ParentBeadID: "p-1", Status: "open", Waits: []beads.Wait{{}}},
+		{BeadID: "p-1.2", ParentBeadID: "p-1", Status: "open", BlockedBy: []string{"p-1.1"}},
+		{BeadID: "p-1.2.1", ParentBeadID: "p-1.2", Status: "open"},
+	}
+	if got := ids(OpenBeadInvariant(rows, nil)); len(got) != 0 {
+		t.Fatalf("violations = %v, want none", got)
 	}
 }

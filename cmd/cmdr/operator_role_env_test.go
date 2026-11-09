@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/example-user/commander/internal/beads"
-	"github.com/example-user/commander/internal/livedata"
 )
 
 // operatorRole has the shape a launcher sets (spawn.hostOperatorCommand): the
@@ -94,7 +93,7 @@ func TestCloseDoor_OperatorClosingItsOwnWorkPasses(t *testing.T) {
 				m.Seed(b)
 			}
 			setupObjectiveProject(t, m)
-			withCloseSnapshot(t, gateSnapshot(livedata.SnapStep{}), operatorRole)
+			t.Setenv("COMMANDER_ROLE", operatorRole)
 			stdout, stderr, read := withTempOutputFiles(t)
 			if code := runInternalCloseObjective([]string{"--project", "manifest", "--bead", "w.9"}, stdout, stderr); code != 0 {
 				_, e := read()
@@ -108,8 +107,10 @@ func TestCloseDoor_OperatorClosingAnotherBeadIsJudged(t *testing.T) {
 	m := &beads.MemClient{}
 	m.Seed(beads.Bead{ID: "w", Status: "open"})
 	m.Seed(beads.Bead{ID: "w.9", Title: "Report", Status: "in_progress", Labels: []string{"owner:operator-someone-else"}})
+	m.Seed(beads.Bead{ID: "w.2", Title: "Send it", Status: "open"})
+	m.Edges = []beads.Dep{{IssueID: "w.2", DependsOnID: "w.9", Type: "blocks"}}
 	setupObjectiveProject(t, m)
-	withCloseSnapshot(t, gateSnapshot(livedata.SnapStep{}), operatorRole)
+	t.Setenv("COMMANDER_ROLE", operatorRole)
 	stdout, stderr, read := withTempOutputFiles(t)
 	if code := runInternalCloseObjective([]string{"--project", "manifest", "--bead", "w.9"}, stdout, stderr); code == 0 {
 		t.Fatal("a close of someone else's bead that leaves w.2 unheld passed")

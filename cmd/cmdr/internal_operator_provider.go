@@ -163,7 +163,9 @@ func runInternalOperatorProvider(args []string, stdout, stderr io.Writer) int {
 		Runtime: *runtime, Account: *account,
 	})
 	if err != nil {
-		// The old process is gone: leave the bead open for its Manager, like a death.
+		// The old process is gone: the bead goes to its Manager, like a death (Manager to recover,
+		// written before the status drops the running claim).
+		_ = holdWithManager(ctx, deps.Beads, p.Path, run.TaskBeadID, owner, beads.ManagerRecoverWait)
 		_ = deps.Beads.SetStatus(ctx, p.Path, run.TaskBeadID, "open")
 		fmt.Fprintf(stderr, "internal-operator-provider: respawn %s: %v (its bead %s is open again)\n", role, err, run.TaskBeadID)
 		return 1

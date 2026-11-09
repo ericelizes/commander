@@ -251,3 +251,18 @@ func TestRunStartBoundsACursorlessOperator(t *testing.T) {
 		t.Fatalf("after MarkRunStart: unread=%d hidden=%d", got, HiddenByAge(role, mails))
 	}
 }
+
+// CursorAt says when mail was last shown to a role (endFinishedRuns reads it as a resume).
+func TestCursorAtMovesWhenMailIsShown(t *testing.T) {
+	t.Setenv("COMMANDER_HOME", t.TempDir())
+	if _, ok := CursorAt("operator-x"); ok {
+		t.Fatal("a role with no cursor has a time")
+	}
+	before := time.Now().Add(-time.Second)
+	if err := MarkRead("operator-x", agentmail.Mail{ID: "7"}); err != nil {
+		t.Fatal(err)
+	}
+	if at, ok := CursorAt("operator-x"); !ok || at.Before(before) {
+		t.Fatalf("cursor at %v ok=%v", at, ok)
+	}
+}

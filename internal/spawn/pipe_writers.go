@@ -92,6 +92,11 @@ func (r pipeWriterReaper) reap(ctx context.Context) ([]int, error) {
 	return killed, firstErr
 }
 
+// RunOutputPath is where a host run's pane output goes (exported for cmdrd's finished-run check).
+func RunOutputPath(run store.AgentRun, projectPath string) string {
+	return runOutputPath(run, projectPath)
+}
+
 // runOutputPath is where a host run's pane output goes, the same derivation
 // as the ceilings watchdog (runState.fifoPath).
 func runOutputPath(run store.AgentRun, projectPath string) string {

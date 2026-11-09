@@ -76,6 +76,9 @@ type Options struct {
 	Batch BatchRunner
 	// Beads reads the bead state the write checks need; nil = beads.New().
 	Beads beads.Client
+	// LiveOwner answers whether an agent role runs, for an intent's holder check; nil = every
+	// owner is taken as live (the check cannot say otherwise).
+	LiveOwner func(owner string) (state string, known bool)
 }
 
 // Server holds the latest snapshot and fans changes out to WebSocket clients.
@@ -94,6 +97,7 @@ type Server struct {
 	settling      sync.WaitGroup // the loads settles started, which can outlive settleWait
 
 	mu      sync.Mutex
+	pending map[string]pendingPatch // writes the door answered that no load has read back yet
 	cur     livedata.Snapshot
 	hash    [32]byte
 	version uint64
@@ -136,11 +140,20 @@ func (s *Server) refreshLocked(ctx context.Context) bool {
 	if took := time.Since(s.loadStarted); took > s.slowLoad {
 		log.Printf("api: snapshot load took %s (%s)", took.Round(time.Millisecond), snap.LoadTimes())
 	}
-	s.loadKept.Store(snap.PreserveVersion || snap.KeptLastGood || snap.Degraded != nil)
-	h := contentHash(snap)
+	kept := snap.PreserveVersion || snap.KeptLastGood || snap.Degraded != nil
+	s.loadKept.Store(kept)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// A clean load that began after a write has read it: its patch is done. A load that kept the
+	// last rows (or any load begun before the write) shows the patched rows, not the pre-write ones.
+	for id, p := range s.pending {
+		if !kept && p.at.Before(s.loadStarted) || time.Since(p.at) > pendingPatchTTL {
+			delete(s.pending, id)
+		}
+	}
+	snap = livedata.Patched(snap, s.pendingPatches(), time.Now().Unix())
+	h := contentHash(snap)
 	if s.version > 0 && h == s.hash {
 		return false
 	}
@@ -159,6 +172,60 @@ func (s *Server) refreshLocked(ctx context.Context) bool {
 }
 
 const defaultSlowLoad = livedata.SlowLoad
+
+// pendingPatchTTL bounds how long a patch outlives loads that kept the last rows (degraded, busy):
+// past it the bead reads as the loads show it, so a later write to it (one with no intent, no patch
+// of its own) can never stay hidden behind an old patch (m7).
+const pendingPatchTTL = 2 * time.Minute
+
+// pendingPatch is one bead's state after a write the door answered, and when.
+type pendingPatch struct {
+	patch livedata.StepPatch
+	at    time.Time
+}
+
+func (s *Server) pendingPatches() map[string]livedata.StepPatch {
+	out := make(map[string]livedata.StepPatch, len(s.pending))
+	for id, p := range s.pending {
+		out[id] = p.patch
+	}
+	return out
+}
+
+// patchNow lays a write's result on the current board and publishes it (a new version), so no
+// reader after the door's answer sees the board from before the write. Pending until a clean load
+// that began after it.
+func (s *Server) patchNow(after map[string]livedata.StepPatch) {
+	if len(after) == 0 {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.pending == nil {
+		s.pending = map[string]pendingPatch{}
+	}
+	now := time.Now()
+	for id, p := range after {
+		s.pending[id] = pendingPatch{patch: p, at: now}
+	}
+	if s.version == 0 {
+		return // nothing published yet: the first load shows it
+	}
+	snap := livedata.Patched(s.cur, s.pendingPatches(), now.Unix())
+	h := contentHash(snap)
+	if h == s.hash {
+		return
+	}
+	s.version++
+	snap.Version = s.version
+	s.cur, s.hash = snap, h
+	for ch := range s.subs {
+		select {
+		case ch <- struct{}{}:
+		default:
+		}
+	}
+}
 
 // contentHash ignores the fields that change on every load.
 func contentHash(s livedata.Snapshot) [32]byte {

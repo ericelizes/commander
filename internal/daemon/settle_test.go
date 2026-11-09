@@ -48,7 +48,7 @@ func TestSettleExitedPutsTheBeadInReview(t *testing.T) {
 		t.Fatal(err)
 	}
 	calls := strings.Join(b.Calls, "\n")
-	for _, want := range []string{"label=owner:operator-x|on=false", "label=owner:manager-p-ws|on=true", "label=review|on=true", "SetStatus:p-ws.2.1"} {
+	for _, want := range []string{"label=owner:operator-x|on=false", "label=owner:manager-p-ws|on=true", "label=review|on=true", "status=in_progress"} {
 		if !strings.Contains(calls, want) {
 			t.Fatalf("missing %q in:\n%s", want, calls)
 		}
@@ -61,7 +61,7 @@ func TestSettleExitedPutsTheBeadInReview(t *testing.T) {
 	}
 }
 
-// An Operator that died leaves its bead open with nobody on it.
+// An Operator that died leaves its bead open, held by its Manager's recover wait (never no owner).
 func TestSettleDiedReopensTheBead(t *testing.T) {
 	b := &beads.MockClient{ShowResult: &beads.Bead{ID: "p-ws.2.1", Status: "in_progress", Labels: []string{"owner:operator-x"}}}
 	var sent []sentMail
@@ -69,8 +69,26 @@ func TestSettleDiedReopensTheBead(t *testing.T) {
 		t.Fatal(err)
 	}
 	calls := strings.Join(b.Calls, "\n")
-	if !strings.Contains(calls, "label=owner:operator-x|on=false") || strings.Count(calls, "on=true") != 1 || !strings.Contains(calls, "label="+beads.OperatorDiedLabel+"|on=true") {
+	if !strings.Contains(calls, "label=owner:operator-x|on=false") || !strings.Contains(calls, "label="+beads.OperatorDiedLabel+"|on=true") {
 		t.Fatalf("calls:\n%s", calls)
+	}
+	// One write hands the step on: the Manager's owner label and the Manager to recover wait go in
+	// with the dead Operator's claim going out and the reopen, so no read sees it unheld.
+	one := ""
+	for _, c := range b.Calls {
+		if strings.HasPrefix(c, "UpdateFields:p-ws.2.1|") {
+			one = c
+		}
+	}
+	for _, want := range []string{"label=owner:manager-p-ws|on=true", "Manager_20to_20recover", "label=owner:operator-x|on=false", "status=open"} {
+		if !strings.Contains(one, want) {
+			t.Fatalf("the hand-on must be one write with %q:\n%s", want, calls)
+		}
+	}
+	for _, c := range b.Calls {
+		if strings.HasPrefix(c, "SetLabel:p-ws.2.1|label=owner:") || strings.HasPrefix(c, "SetStatus:") {
+			t.Fatalf("a separate owner/status write leaves a window:\n%s", calls)
+		}
 	}
 	if len(sent) != 1 || !strings.Contains(sent[0].subject, "Operator died") {
 		t.Fatalf("mail: %+v", sent)
@@ -131,7 +149,7 @@ func TestSettleDiedInARestartRespawns(t *testing.T) {
 		t.Fatalf("spawn requests: %+v", sp.reqs)
 	}
 	calls := strings.Join(b.Calls, "\n")
-	for _, want := range []string{"label=auto-respawn:1|on=true", "label=owner:operator-op-x|on=true", "SetStatus:p-ws.2.1"} {
+	for _, want := range []string{"label=auto-respawn:1|on=true", "label=owner:operator-op-x|on=true", "status=in_progress"} {
 		if !strings.Contains(calls, want) {
 			t.Fatalf("missing %q in:\n%s", want, calls)
 		}
@@ -234,7 +252,7 @@ func TestSettleExitedWithoutAReportIsDied(t *testing.T) {
 		t.Fatal(err)
 	}
 	calls := strings.Join(b.Calls, "\n")
-	if strings.Contains(calls, "label=review|on=true") || !strings.Contains(calls, "SetStatus:p-ws.2.1|status=open") {
+	if strings.Contains(calls, "label=review|on=true") || !strings.Contains(calls, "|status=open|") {
 		t.Fatalf("calls:\n%s", calls)
 	}
 	if len(sent) != 1 || !strings.Contains(sent[0].subject, "Operator died") {

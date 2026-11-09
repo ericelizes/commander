@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"syscall"
+	"time"
 	"unicode"
 
 	"github.com/example-user/commander/internal/agentmail"
@@ -198,6 +199,19 @@ func runInternalResolveNeeds(args []string, stdout, stderr *os.File) int {
 						return result, err
 					}
 					result.Owner = r.Manager
+				}
+				// The Manager's name is accountability, not a holder: the answered step waits on its dispatch.
+				if (r.Action == "decide" || r.Action == "defer") && r.GateChoice != beads.GateDrop && r.Manager != "" && b != nil && !slices.Contains(b.Labels, beads.GateLabel) && !hasHoldingWait(b) {
+					if r.Action == "defer" {
+						if err := applyStepOwner(ctx, writes, dir, *bead, r.Manager); err != nil {
+							return result, err
+						}
+						result.Owner = r.Manager
+					}
+					w := beads.Wait{Kind: beads.WaitUntil, Since: time.Now(), Until: time.Now().Add(2 * time.Minute), Ref: beads.ManagerDispatchWait}
+					if err := writes.SetLabel(ctx, dir, *bead, w.Label(), true); err != nil {
+						return result, err
+					}
 				}
 			}
 			if b != nil {
@@ -429,4 +443,17 @@ func decisionMailBody(question, bead, choice, text string) string {
 	}
 	fmt.Fprintf(&b, "\n\nUser answered your decision card %q on step %s. The flag is cleared and the step is in-progress again: act on his answer, then update or close the step.", question, bead)
 	return b.String()
+}
+
+// hasHoldingWait: b already carries a wait other than the user's, which the answer is removing.
+func hasHoldingWait(b *beads.Bead) bool {
+	if b == nil {
+		return false
+	}
+	for _, l := range b.Labels {
+		if w, ok := beads.ParseWaitLabel(l); ok && w.Kind != beads.WaitUser {
+			return true
+		}
+	}
+	return false
 }

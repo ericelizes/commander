@@ -119,6 +119,9 @@ func gateApply(ctx context.Context, st *store.Store, projectName, beadID, templa
 			if err := checkWorkflowClose(ctx, bc, p.Path, p.Name, e.ID); err != nil {
 				return nil, err
 			}
+			if err := requireGateClosesHeld(ctx, bc, p.Path, e.ID, "internal-gate apply (it retires "+e.Gate.Name+")"); err != nil {
+				return nil, err
+			}
 			if err := gates.Remove(ctx, bc, p.Path, p.ID, beadID, e.Gate.Name); err != nil {
 				return nil, err
 			}

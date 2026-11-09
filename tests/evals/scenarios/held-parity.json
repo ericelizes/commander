@@ -1,0 +1,19 @@
+{
+  "projects": [{"name": "demo", "path": "/tmp/demo"}],
+  "workstreams": [
+    {
+      "project": "demo",
+      "bead_id": "demo-hp",
+      "title": "Holding parity sample",
+      "status": "open",
+      "state": "in-progress",
+      "steps": [
+        {"bead_id": "demo-hp.1", "title": "Prerequisite", "status": "open", "state": "not-started", "waiting": "CI #7"},
+        {"bead_id": "demo-hp.2", "title": "Container blocked by the prerequisite", "status": "open", "state": "not-started", "blocked_by": ["demo-hp.1"],
+         "children": [{"bead_id": "demo-hp.2.1", "title": "Child blocked only through its parent", "status": "open", "state": "not-started"}]},
+        {"bead_id": "demo-hp.3", "title": "Soak with a slug wait", "status": "open", "state": "not-started", "until": "", "waiting": "soak-period"},
+        {"bead_id": "demo-hp.4", "title": "Unheld step", "status": "open", "state": "not-started"}
+      ]
+    }
+  ]
+}

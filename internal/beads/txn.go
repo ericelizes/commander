@@ -225,11 +225,17 @@ func notAtomicWhy(batchOK bool) string {
 // Txn is the client side: apply ops through the door (else directly, logged) as
 // one change. With atomic set it refuses rather than apply part of them.
 func Txn(ctx context.Context, dir string, ops [][]string, atomic bool) (DoorResponse, error) {
+	return TxnIntent(ctx, dir, ops, atomic, nil)
+}
+
+// TxnIntent is Txn with the door's holder check (DoorRequest.Intent). When cmdrd cannot be
+// reached the ops run directly, unjudged (the same fallback as every door write, logged).
+func TxnIntent(ctx context.Context, dir string, ops [][]string, atomic bool, intent *DoorIntent) (DoorResponse, error) {
 	if !OpsWritable(ops) {
 		return DoorResponse{}, errors.New("beads: Txn needs one or more write operations")
 	}
 	if dir != "" && !inDoorServer && DoorEnabled() {
-		resp, err := viaDoor(ctx, dir, DoorRequest{Ops: ops, Atomic: atomic, NoWait: true})
+		resp, err := viaDoor(ctx, dir, DoorRequest{Ops: ops, Atomic: atomic, NoWait: intent == nil, Intent: intent})
 		if !errors.Is(err, errDoorDown) {
 			return resp, err
 		}

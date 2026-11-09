@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -16,7 +15,7 @@ import (
 	"github.com/example-user/commander/internal/beads"
 	"github.com/example-user/commander/internal/decisions"
 	"github.com/example-user/commander/internal/gates"
-	"github.com/example-user/commander/internal/livedata"
+	"github.com/example-user/commander/internal/holding"
 	"github.com/example-user/commander/internal/store"
 	"github.com/example-user/commander/internal/wsmgr"
 )
@@ -319,6 +318,31 @@ func overruleProposal(ctx context.Context, bc beads.Client, project store.Projec
 	if err != nil {
 		return nil, err
 	}
+	// What the undo releases goes to the Manager (who is told why below) before it is undone,
+	// so overruling never leaves work with no holder.
+	undo := map[string]holding.Edit{}
+	switch p.Kind {
+	case beads.ProposedAsk:
+		undo[beadID] = func(h *holding.Bead) {
+			h.NeedsUser = false
+			if p.Prev != beads.StateInProgress {
+				h.Status = "open"
+			}
+		}
+	case beads.ProposedGate, beads.ProposedReview:
+		undo[beadID] = func(h *holding.Bead) { h.Status = holding.StatusClosed }
+	case beads.ProposedWait:
+		n := 0
+		for _, l := range b.Labels {
+			if w, ok := beads.ParseWaitLabel(l); ok && w.Kind == beads.WaitUntil {
+				n++
+			}
+		}
+		undo[beadID] = func(h *holding.Bead) { h.Waits -= n; h.Untyped = "" }
+	case beads.ProposedPark:
+		undo[beadID] = func(h *holding.Bead) { h.Status = "open" }
+	}
+	held := holdReleasedLive(ctx, bc, dir, beadID, undo, wsmgr.Role(wsmgr.Owner(ctx, bc, dir, beadID)), beads.ManagerDispatchWait, boardManagerTurns(boardSnapshot(), liveOwners(ctx)))
 	var undone string
 	switch p.Kind {
 	case beads.ProposedAsk:
@@ -363,12 +387,6 @@ func overruleProposal(ctx context.Context, bc beads.Client, project store.Projec
 	default:
 		return nil, fmt.Errorf("%s: unknown proposal kind %q", beadID, p.Kind)
 	}
-	// The undo can leave steps with no owner, wait or card (State missing):
-	// give their Manager custody in the same step, unless something else holds them.
-	held, err := overruleCustody(ctx, bc, dir, b, p.Kind)
-	if err != nil {
-		return nil, fmt.Errorf("%s: undone, but the Manager's hold was not written (run the overrule again): %w", beadID, err)
-	}
 	if err := bc.SetLabel(ctx, dir, beadID, p.Label, false); err != nil {
 		return nil, err
 	}
@@ -376,7 +394,7 @@ func overruleProposal(ctx context.Context, bc beads.Client, project store.Projec
 	manager := wsmgr.Role(wsmgr.Owner(ctx, bc, dir, beadID))
 	body := fmt.Sprintf("Commander overruled your proposed %s on %s %q: %s\n\nUndone: %s. Do not add it again; carry on with the approved workflow. If the user wants it, they will say so.", p.Kind, beadID, b.Title, reason, undone)
 	if len(held) > 0 {
-		body += fmt.Sprintf("\n\nYou now hold %s (a \"Manager to start\" receipt, due within %s): start each, give it an owner or a wait, or close it.", strings.Join(held, ", "), custodyWithin)
+		body += fmt.Sprintf("\n\nYou now hold %s (a \"%s\" wait): start each, give it an owner or a wait, or close it.", strings.Join(held, ", "), beads.ManagerDispatchWait)
 	}
 	st, client, key, cleanup, mailErr := mailDeps()
 	if mailErr == nil {
@@ -387,164 +405,6 @@ func overruleProposal(ctx context.Context, bc beads.Client, project store.Projec
 		fmt.Fprintf(stderr, "warning: overruled, but mailing %s failed: %v\n", manager, mailErr)
 	}
 	return map[string]any{"project": project.Name, "bead_id": beadID, "kind": p.Kind, "overruled": true, "undone": undone, "manager": manager, "held": held}, nil
-}
-
-// overruleCustody holds, for the Manager, every step the overrule of b leaves
-// unheld, and returns the steps that carry the Manager's "Manager to start"
-// receipt afterwards (written now, or by an earlier run of the same overrule).
-// An ask, wait or park overrule concerns b itself; a gate or review is retired,
-// which releases the stage it guarded, every bead waiting on it by a blocks
-// edge, and its parent when it was the last open child. Which of those are
-// unheld is the board's own rule (livedata.WithEdits over cmdrd's snapshot with
-// the fresh state of each), so a step with an open child, a live Manager's turn,
-// a running Operator, a wait or a card gets nothing; a step the board does not
-// show (or no board) is judged on a fresh read: no open child, then
-// holdForManager's own checks.
-func overruleCustody(ctx context.Context, bc beads.Client, dir string, b *beads.Bead, kind string) ([]string, error) {
-	candidates := []string{b.ID}
-	closing := ""
-	if kind == beads.ProposedGate || kind == beads.ProposedReview {
-		closing = b.ID
-		candidates = nil
-		if stage, _ := gateStageAndName(b.Labels); stage != "" {
-			candidates = append(candidates, stage)
-		}
-		deps, err := bc.Dependents(ctx, dir, b.ID)
-		if err != nil {
-			return nil, err
-		}
-		for _, d := range deps {
-			if d.Type == "blocks" && d.IssueID != "" {
-				candidates = append(candidates, d.IssueID)
-			}
-		}
-		if d, err := beads.FreshDetails(ctx, bc, dir, []string{b.ID}); err != nil {
-			return nil, err
-		} else if parent := d[b.ID].Parent; parent != "" {
-			candidates = append(candidates, parent)
-		}
-	}
-	if len(candidates) == 0 {
-		return []string{}, nil
-	}
-	fresh := map[string]*beads.Bead{}
-	var ids []string
-	parents, err := beads.FreshDetails(ctx, bc, dir, candidates)
-	if err != nil {
-		return nil, err
-	}
-	for _, id := range candidates {
-		if id == closing || fresh[id] != nil {
-			continue
-		}
-		if d, ok := parents[id]; ok && d.Parent == "" {
-			continue // a workstream bead: not a step, its Manager holds it
-		}
-		c, err := beads.FreshShow(ctx, bc, dir, id)
-		if errors.Is(err, beads.ErrNotFound) || (err == nil && c == nil) {
-			continue
-		}
-		if err != nil {
-			return nil, err
-		}
-		if c.Status == "closed" || c.Status == "tombstone" || c.Status == beads.StatusDeferred || beads.IsWorkstream(c.Labels) {
-			continue // done, parked, or a nested workstream bead (its own Manager holds it)
-		}
-		if gates.IsGate(*c) || slices.Contains(c.Labels, beads.GateLabel) {
-			continue // a gate is no board step: its approver holds it, never a custody receipt
-		}
-		fresh[id] = c
-		ids = append(ids, id)
-	}
-	held := []string{}
-	var check []string
-	for _, id := range ids {
-		if hasManagerStart(fresh[id].Labels) {
-			held = append(held, id) // an earlier run of this overrule held it
-		} else {
-			check = append(check, id)
-		}
-	}
-	unheld, onBoard := overruleUnheld(boardSnapshot(), fresh, closing)
-	var toHold []string
-	for _, id := range check {
-		if onBoard[id] {
-			if unheld[id] {
-				toHold = append(toHold, id)
-			}
-			continue
-		}
-		open, err := beads.OpenChildren(ctx, bc, dir, id)
-		if err != nil {
-			return nil, err
-		}
-		if len(open) == 0 {
-			toHold = append(toHold, id)
-		}
-	}
-	if len(toHold) == 0 {
-		return held, nil
-	}
-	wrote, err := holdForManager(ctx, bc, dir, toHold, closing, time.Now())
-	if err != nil {
-		return nil, err
-	}
-	return append(held, wrote...), nil
-}
-
-// overruleUnheld reads the board as it is once the overrule lands: each step in
-// fresh takes its fresh status, state, owner and waits, and closing (the retired
-// gate, "" for none) reads closed. unheld are the steps the board then marks
-// Broken; onBoard the steps it shows at all (nil board: none).
-func overruleUnheld(snap *livedata.Snapshot, fresh map[string]*beads.Bead, closing string) (unheld, onBoard map[string]bool) {
-	unheld, onBoard = map[string]bool{}, map[string]bool{}
-	if snap == nil {
-		return unheld, onBoard
-	}
-	edits := map[string]func(*livedata.SnapStep){}
-	for id, c := range fresh {
-		c := c
-		edits[id] = func(st *livedata.SnapStep) {
-			onBoard[st.BeadID] = true
-			state, owner := beads.StepState(c.Status, c.Labels)
-			if owner != st.Owner {
-				st.OwnerState = "" // the board's liveness was about another owner
-			}
-			st.Status, st.State, st.Owner = c.Status, state, owner
-			st.Waiting = ""
-			if len(beads.WaitsOf(c.Labels)) > 0 {
-				st.Waiting = "recorded wait"
-			}
-		}
-	}
-	s := *snap
-	if closing != "" {
-		edits[closing] = func(st *livedata.SnapStep) { st.Status, st.State = "closed", beads.StateDone }
-		s.Workstreams = slices.Clone(s.Workstreams)
-		for i, ws := range s.Workstreams {
-			nodes := slices.Clone(ws.GateNodes)
-			for j := range nodes {
-				if nodes[j].BeadID == closing {
-					nodes[j].Status = "passed"
-				}
-			}
-			s.Workstreams[i].GateNodes = nodes
-		}
-	}
-	for _, v := range livedata.WithEdits(s, edits).Broken {
-		unheld[v.BeadID] = true
-	}
-	return unheld, onBoard
-}
-
-// hasManagerStart: the labels carry the Manager's "Manager to start" receipt.
-func hasManagerStart(labels []string) bool {
-	for _, w := range beads.WaitsOf(labels) {
-		if w.Kind == beads.WaitUntil && w.Ref == beads.ManagerStartWait {
-			return true
-		}
-	}
-	return false
 }
 
 // gateStageAndName reads an internal-gate gate bead's stage and name ("" for a

@@ -9,6 +9,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/example-user/commander/internal/beads"
 	"github.com/example-user/commander/internal/store"
 )
 
@@ -1122,11 +1123,17 @@ func agentLine(a SnapAgent, ok bool) line {
 }
 
 // waitText is the line for a wait someone else must finish: "Waiting for review", "Waiting for reconcile · 09:45 PM".
-func (b board) waitText(beads []SnapStep, w string) string {
-	if w == "Manager to close" {
+func (b board) waitText(steps []SnapStep, w string) string {
+	if w == beads.ManagerCloseWait {
 		return resultReviewText
 	}
-	for _, s := range beads {
+	if w == beads.ManagerPlanWait {
+		return managerPlanningText
+	}
+	if w == beads.ManagerRecoverWait {
+		return "Manager recovering"
+	}
+	for _, s := range steps {
 		if u, ok := s.WaitUntils[w]; ok {
 			return "Waiting for " + w + " · " + clock(u, b.now, b.loc)
 		}
@@ -1331,6 +1338,11 @@ func parked(s SnapStep) bool { return s.Status == statusDeferred }
 // onUser is an open, unparked bead that waits on the user.
 func onUser(s SnapStep) bool {
 	return !parked(s) && !stepClosed(s) && (s.State == "needs-user" || s.Waiting == "you")
+}
+
+// onUserCard is onUser, or an open step holding a stored decision card the user answers.
+func onUserCard(s SnapStep) bool {
+	return onUser(s) || (s.Decision != nil && !parked(s) && !stepClosed(s))
 }
 
 func hasUser(approvers []string) bool { return slices.Contains(approvers, "user") }
@@ -1904,7 +1916,7 @@ func (b board) ownWaitLine(ws SnapWorkstream) (line, bool) {
 	for _, w := range strings.Split(ws.Waiting, " · ") {
 		// A time wait whose time has passed holds nothing: its owner was woken.
 		// operator waits are judged by liveness elsewhere (a dead Operator holds nothing).
-		if w != "" && w != "you" && !strings.HasPrefix(w, "operator") && !self.waitExpired(b.now, w) {
+		if w != "" && w != "you" && !strings.HasPrefix(w, "operator") && (w == beads.ManagerPlanWait || !self.waitExpired(b.now, w)) {
 			waits = append(waits, w)
 		}
 	}

@@ -41,6 +41,7 @@ import (
 	"github.com/example-user/commander/internal/config"
 	"github.com/example-user/commander/internal/docker"
 	"github.com/example-user/commander/internal/gates"
+	"github.com/example-user/commander/internal/holding"
 	"github.com/example-user/commander/internal/inbox"
 	"github.com/example-user/commander/internal/layout"
 	"github.com/example-user/commander/internal/linearsync"
@@ -875,7 +876,7 @@ func (d *Daemon) startAPI(ctx context.Context) {
 func (d *Daemon) apiOptions(token string) api.Options {
 	src := d.live
 	lin := linearsync.New(linearsync.Options{Home: d.home})
-	return api.Options{Token: token, Source: withBoards(d.home, src.Snapshot, &sprintFeed{lin: lin}), Linear: lin, Run: api.ExecRunner(cmdrPath()), AppDir: appDir(), AppDevURL: appDevURL(), Tabs: &api.Tabs{Store: d.store}, Pitches: d.store, LiveData: src.Last, Interval: time.Second, Chat: d.chat, ShotsDir: filepath.Join(d.home, "shots"), ConfigPath: filepath.Join(d.home, "config.toml"), MailToRole: mailUserToRole, WaitingMail: livedata.NewUnreadListFunc(d.store), UsageByAgent: d.store.UsageByAgent, Update: d.newUpdater()}
+	return api.Options{Token: token, Source: withBoards(d.home, src.Snapshot, &sprintFeed{lin: lin}), Linear: lin, Run: api.ExecRunner(cmdrPath()), AppDir: appDir(), AppDevURL: appDevURL(), Tabs: &api.Tabs{Store: d.store}, Pitches: d.store, LiveData: src.Last, Interval: time.Second, Chat: d.chat, ShotsDir: filepath.Join(d.home, "shots"), ConfigPath: filepath.Join(d.home, "config.toml"), MailToRole: mailUserToRole, WaitingMail: livedata.NewUnreadListFunc(d.store), UsageByAgent: d.store.UsageByAgent, Update: d.newUpdater(), LiveOwner: d.liveOwner}
 }
 
 // appDir is the built app renderer the API serves at /app/:
@@ -971,6 +972,8 @@ func (d *Daemon) reapHostRuns(ctx context.Context) {
 		retries.run(ctx)
 		battery.check(ctx)
 		d.settle.reported.beginSweep()
+		// Before the sweep, so a run past its final report is closed and settled this minute.
+		d.settle.endFinishedRuns(ctx, nil)
 		res, err := spawn.ReapHostRuns(ctx, d.store)
 		if len(res.ClosedRuns) > 0 || err != nil {
 			log.Printf("daemon: closed operator runs %v: %d exited, %d died (err=%v)", res.ClosedRuns, len(res.Exited), len(res.Died), err)
@@ -1041,4 +1044,26 @@ func (d *Daemon) ensureManagers(ctx context.Context) {
 		case <-t.C:
 		}
 	}
+}
+
+// liveOwner answers the write door's holder check (an intent): an Operator holds only while its
+// process is alive (the snapshot's own liveness look); a Manager's or Commander's name holds
+// nothing by itself. known is false when liveness could not be looked up.
+func (d *Daemon) liveOwner(owner string) (string, bool) {
+	if holding.IsManager(owner) {
+		return "idle", true
+	}
+	if d.liveOps == nil {
+		return "", false
+	}
+	names, _, ok := d.liveOps.get()
+	if !ok {
+		return "", false
+	}
+	for _, n := range names {
+		if spawn.CanonicalRole(n) == spawn.CanonicalRole(owner) {
+			return "working", true
+		}
+	}
+	return "", true
 }

@@ -14,6 +14,7 @@ import (
 
 	"github.com/example-user/commander/internal/beads"
 	"github.com/example-user/commander/internal/gates"
+	"github.com/example-user/commander/internal/holding"
 	"github.com/example-user/commander/internal/store"
 )
 
@@ -21,12 +22,12 @@ import (
 // Tests replace it.
 var gateRunFn gates.RunFn = gates.RunShell
 
-// runInternalGate is `cmdr internal-gate add|apply|check|pass|list|rm|link|unlink|publish|retire-legacy|migrate`:
+// runInternalGate is `cmdr internal-gate add|apply|check|pass|list|rm|link|unlink|convert|publish|retire-legacy|migrate`:
 // first-class gates on a stage bead, each stored as a kind:gate bead
 // (internal/gates). internal-close-objective refuses until every one passed.
 func runInternalGate(args []string, stdout, stderr *os.File) int {
 	if len(args) == 0 {
-		emitErr(stderr, "internal-gate: want add, apply, check, pass, list, rm, link, unlink, publish, retire-legacy or migrate")
+		emitErr(stderr, "internal-gate: want add, apply, check, pass, list, rm, link, unlink, convert, publish, retire-legacy or migrate")
 		return 1
 	}
 	verb, args := args[0], args[1:]
@@ -52,6 +53,8 @@ func runInternalGate(args []string, stdout, stderr *os.File) int {
 	repairWaiters := fs.String("repair-ancestor-waits", "", "publish: explicit comma-separated redundant strict ancestors; requires --reason, preserves guarded leaf wait")
 	replacement := fs.String("replacement", "", "retire-legacy: exact genuine open user gate")
 	dryRun := fs.Bool("dry-run", false, "publish/retire-legacy: validate fresh evidence without writing")
+	approver := fs.String("approver", "", "convert: who approves the gate, comma-separated (user, a GitHub login, a name)")
+	criteria := fs.String("criteria", "", "convert: what counts as passed, in one sentence")
 	waiter := fs.String("waiter", "", "unlink: comma-separated superseded steps whose wait on the gate --bead is removed (reopening an unlinked step does not restore its wait; link it again with cmdr internal-gate link)")
 	if err := fs.Parse(args); err != nil {
 		emitErr(stderr, fmt.Sprintf("parse flags: %v", err))
@@ -68,11 +71,11 @@ func runInternalGate(args []string, stdout, stderr *os.File) int {
 	if verb == "migrate" {
 		return runGateMigrate(stdout, stderr)
 	}
-	if *beadID == "" || (verb != "retire-legacy" && verb != "publish" && verb != "list" && verb != "check" && verb != "apply" && verb != "link" && verb != "unlink" && *name == "") {
+	if *beadID == "" || (verb != "retire-legacy" && verb != "publish" && verb != "list" && verb != "check" && verb != "apply" && verb != "link" && verb != "unlink" && verb != "convert" && *name == "") {
 		emitErr(stderr, "missing required flag(s): --bead, and --name (except for publish, retire-legacy, list, check, apply, link and unlink)")
 		return 1
 	}
-	if (verb == "retire-legacy" || verb == "publish" || verb == "add" || verb == "check" || verb == "apply" || verb == "link" || verb == "unlink") && *projectName == "" {
+	if (verb == "retire-legacy" || verb == "publish" || verb == "add" || verb == "check" || verb == "apply" || verb == "link" || verb == "unlink" || verb == "convert") && *projectName == "" {
 		emitErr(stderr, "missing required flag: --project")
 		return 1
 	}
@@ -118,6 +121,8 @@ func runInternalGate(args []string, stdout, stderr *os.File) int {
 		out, err = gateRemove(ctx, st, *projectName, *beadID, *name)
 	case "link":
 		out, err = gateLink(ctx, st, *projectName, *beadID, splitIDs(*after), splitIDs(*before))
+	case "convert":
+		out, err = gateConvert(ctx, st, *projectName, *beadID, *approver, *criteria)
 	case "unlink":
 		out, err = gateUnlink(ctx, st, *projectName, *beadID, splitIDs(*waiter), *reason)
 	case "list":
@@ -131,7 +136,7 @@ func runInternalGate(args []string, stdout, stderr *os.File) int {
 		}
 		out = map[string]any{"bead_id": *beadID, "gates": nonNilGates(gs)}
 	default:
-		err = fmt.Errorf("internal-gate: unknown verb %q (want add, apply, check, pass, list, rm, link, unlink, publish, retire-legacy or migrate)", verb)
+		err = fmt.Errorf("internal-gate: unknown verb %q (want add, apply, check, pass, list, rm, link, unlink, convert, publish, retire-legacy or migrate)", verb)
 	}
 	if err != nil {
 		emitErr(stderr, err.Error())
@@ -422,6 +427,9 @@ func gateCheck(ctx context.Context, st *store.Store, projectName, beadID, only s
 			if err := checkWorkflowClose(ctx, bc, project.Path, project.Name, n.ID); err != nil {
 				return nil, err
 			}
+			if err := requireGateClosesHeld(ctx, bc, project.Path, n.ID, "internal-gate check"); err != nil {
+				return nil, err
+			}
 		}
 		if err := gates.SetResult(ctx, bc, project.Path, n, status, evidence, "auto", now); err != nil {
 			return nil, err
@@ -484,6 +492,9 @@ func gatePass(ctx context.Context, st *store.Store, projectName, beadID, name, e
 		if g.Verifier == store.VerifierAuto {
 			return nil, fmt.Errorf("gate %q is auto: run `cmdr internal-gate check` instead of passing it by hand", name)
 		}
+		if err := requireGateClosesHeld(ctx, bc, p.Path, n.ID, "internal-gate pass "+name); err != nil {
+			return nil, err
+		}
 		if by == "" {
 			by = os.Getenv("USER")
 		}
@@ -512,6 +523,9 @@ func gateRemove(ctx context.Context, st *store.Store, projectName, beadID, name 
 	for _, n := range ns {
 		if n.Gate.Name == name {
 			if err := checkWorkflowClose(ctx, bc, p.Path, p.Name, n.ID); err != nil {
+				return nil, err
+			}
+			if err := requireGateClosesHeld(ctx, bc, p.Path, n.ID, "internal-gate rm "+name); err != nil {
 				return nil, err
 			}
 		}
@@ -576,4 +590,18 @@ func gatePublishRepair(ctx context.Context, dir, id, parent string, waiters []st
 		return fmt.Errorf("refused: Operators do not publish approval cards; ask the owning Manager")
 	}
 	return gates.RepairPublication(ctx, freshReader(newBeadsClientFn()), dir, id, parent, waiters, reason, role, dry)
+}
+
+// requireGateClosesHeld refuses an agent's ending of a gate (pass, retire, auto check) that would leave the work it
+// releases with no holder, judged on fresh reads of the gate's closure.
+// The user's (no role) is never refused: the released work gets the Manager's receipt before
+// the gate ends (custody, make before break).
+func requireGateClosesHeld(ctx context.Context, bc beads.Client, dir, gateID, verb string) error {
+	owed, err := requireHeldAfter(ctx, bc, dir, gateID, verb+" (it closes "+gateID+")", holdFlags+"; write it first with cmdr internal-set-objective on the released step",
+		map[string]holding.Edit{gateID: func(b *holding.Bead) { b.Status = holding.StatusClosed }})
+	if err != nil {
+		return err
+	}
+	_, err = owed.settle(ctx, gateID)
+	return err
 }

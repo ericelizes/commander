@@ -52,13 +52,42 @@ const ManagerCloseWithin = time.Hour
 // ManagerDispatchWait retains custody between an approval and real dispatch.
 const ManagerDispatchWait = "Manager dispatch"
 
+// ManagerPlanWait holds a freshly born workstream or track until its Manager
+// has planned the first step (atomic birth: the scope is never unheld).
+const ManagerPlanWait = "Manager to plan"
+
 // ManagerStartWait retains custody of ready work a close or create left with
 // nothing holding it, until the Manager starts it (spawn, wait, card).
 const ManagerStartWait = "Manager to start"
 
+// ManagerRecoverWait holds a step whose Operator ended for good (died again, was stopped, or could not
+// be restarted): the Manager decides what happens next, so the step is never "open, no owner".
+const ManagerRecoverWait = "Manager to recover"
+
+// HandoffWindow is how long a Manager handoff wait still holds its bead past its deadline: cmdrd
+// wakes the Manager at the deadline, and a wake left unanswered this long is the Manager's overdue
+// move, not a holder (invariant I1).
+const HandoffWindow = ManagerCloseWithin
+
+// WaitHolds reports whether a recorded wait still holds its bead at now: every wait does, except
+// a Manager handoff wait whose deadline passed more than HandoffWindow ago. Any other time wait
+// past its time still holds until cmdrd's wake clears it.
+func WaitHolds(w Wait, now time.Time) bool {
+	if !IsManagerHandoff(w) || w.Until.IsZero() {
+		return true
+	}
+	return !now.After(w.Until.Add(HandoffWindow))
+}
+
 // IsManagerHandoff identifies receipts that survive their reminder deadline.
 func IsManagerHandoff(w Wait) bool {
-	return w.Kind == WaitUntil && (w.Ref == ManagerCloseWait || w.Ref == ManagerDispatchWait || w.Ref == ManagerStartWait)
+	return w.Kind == WaitUntil && (w.Ref == ManagerCloseWait || w.Ref == ManagerDispatchWait || w.Ref == ManagerPlanWait || w.Ref == ManagerRecoverWait || w.Ref == ManagerStartWait)
+}
+
+// StartReceiptLabel is the "Manager to start" receipt written at now: the Manager's custody of work
+// a write left with no other holder, for ManagerCloseWithin.
+func StartReceiptLabel(now time.Time) string {
+	return Wait{Kind: WaitUntil, Since: now, Until: now.Add(ManagerCloseWithin), Ref: ManagerStartWait}.Label()
 }
 
 // IsManagerDispatch identifies the receipts a real successor (a spawn under

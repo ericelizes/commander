@@ -312,3 +312,15 @@ func TestUnreadableGateIsNotRechecked(t *testing.T) {
 		t.Fatalf("runs=%d", *r.runs)
 	}
 }
+
+// An open gate passing for the first time releases what waited on it: the Manager is told to dispatch it.
+func TestLiveGatePassHolds(t *testing.T) {
+	r := newGateRig(gateBead("p-g1", "auto", "open"))
+	r.poll(0)
+	if len(*r.sent) != 1 || (*r.sent)[0].to != "manager-p-ws" || !strings.Contains((*r.sent)[0].subject, "released") {
+		t.Fatalf("a gate passing for the first time mails its Manager: %+v", *r.sent)
+	}
+	if !strings.Contains(r.calls(), "Close:p-g1") {
+		t.Errorf("passed gate not closed: %s", r.calls())
+	}
+}

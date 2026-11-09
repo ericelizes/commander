@@ -128,7 +128,7 @@ func TestProposal_OverruleUndoesTheAskAndTellsTheManagerWhy(t *testing.T) {
 	if len(mailer.sent) != 1 || mailer.sent[0].to[0] != "GoldTiger" || !strings.HasPrefix(mailer.sent[0].subject, "[overruled] ask") {
 		t.Fatalf("the Manager is mailed: %+v", mailer.sent)
 	}
-	if ws := beads.WaitsOf(b.Labels); len(ws) != 1 || ws[0].Ref != beads.ManagerStartWait {
+	if ws := beads.WaitsOf(b.Labels); len(ws) != 1 || ws[0].Ref != beads.ManagerDispatchWait {
 		t.Fatalf("the overruled ask left the step with no holder: %v", b.Labels)
 	}
 	for _, want := range []string{"the user said pick them yourself", "Do not add it again", "You now hold ms-1.92"} {
@@ -154,8 +154,9 @@ func TestProposal_LongWaitAndParkAreProposedShortOnesAreNot(t *testing.T) {
 	t.Setenv("COMMANDER_ROLE", "commander")
 	runOK(t, runProposals, "overrule", "--project", "manifest", "--bead", "ms-1.92", "--reason", "come back later means today")
 	b, _ := m.Show(context.Background(), "", "ms-1.92")
-	if ws := beads.WaitsOf(b.Labels); len(ws) != 1 || ws[0].Ref != beads.ManagerStartWait {
-		t.Fatalf("the overruled wait stays, or the step has no holder: %v", b.Labels)
+	// The overruled wait goes; the step it alone held goes to its Manager (never left unheld).
+	if ws := beads.WaitsOf(b.Labels); len(ws) != 1 || ws[0].Ref != beads.ManagerDispatchWait {
+		t.Fatalf("want only the Manager dispatch wait left: %v", b.Labels)
 	}
 	if body := mailer.sent[len(mailer.sent)-1].body; !strings.Contains(body, "You now hold ms-1.92") {
 		t.Fatalf("the mail does not say the Manager holds the step:\n%s", body)
@@ -190,7 +191,7 @@ func TestProposal_OverruleLeavesNoStepWithoutAHolder(t *testing.T) {
 	runOK(t, runProposals, "overrule", "--project", "manifest", "--bead", "ms-1.92", "--reason", "no ask")
 	b, _ := m.Show(context.Background(), "", "ms-1.92")
 	for _, w := range beads.WaitsOf(b.Labels) {
-		if w.Ref == beads.ManagerStartWait {
+		if w.Ref == beads.ManagerDispatchWait {
 			t.Fatalf("a step another holder keeps got a receipt: %v", b.Labels)
 		}
 	}
@@ -205,7 +206,7 @@ func hasStartReceipt(t *testing.T, m *beads.MemClient, id string) bool {
 	if err != nil || b == nil {
 		t.Fatalf("show %s: %v", id, err)
 	}
-	return hasManagerStart(b.Labels)
+	return handoffWaits(b.Labels, beads.ManagerDispatchWait) > 0
 }
 
 // overruleOut runs the overrule as Commander and returns its result JSON.
@@ -369,7 +370,7 @@ func TestProposal_GateAfterTheApprovedWorkflowIsProposed(t *testing.T) {
 	if strings.Contains(out, "proposed") {
 		t.Fatalf("a new track's own workflow gate is part of its workflow: %s", out)
 	}
-	out = runOK(t, runInternalCreateObjective, "--project", "manifest", "--parent", "ms-1", "--title", "Re-review the fix")
+	out = runOK(t, runInternalCreateObjective, "--project", "manifest", "--parent", "ms-1", "--title", "Re-review the fix", "--waiting", "review:rev")
 	if !strings.Contains(out, `"proposed":"review"`) {
 		t.Fatalf("a re-review step past the approved workflow is proposed: %s", out)
 	}

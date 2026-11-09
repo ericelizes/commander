@@ -356,3 +356,33 @@ func (l LiveRuns) ListRunningRuns(ctx context.Context) ([]store.AgentRun, error)
 func NewLiveRuns(st *store.Store) LiveRuns {
 	return LiveRuns{Reaper: NewReaper(st, docker.New()).WithHost(tmuxctl.New(), st)}
 }
+
+// EndFinishedSession ends a host Operator's session whose work is over (its final report written)
+// so the reaper reads it as exited, not as killed: killing the pane HUPs the launcher before it can
+// write its own exit marker, so the marker is written here first, the way the launcher would. A
+// kill that fails takes back a marker this call created (the session still runs; a later kill
+// writes it again). kill nil = the pane on the ops socket (tmuxctl.ExactPane).
+func EndFinishedSession(ctx context.Context, session string, kill func(ctx context.Context, session string) error) error {
+	if kill == nil {
+		tx := tmuxctl.New()
+		kill = func(ctx context.Context, session string) error { return tx.KillPane(ctx, tmuxctl.ExactPane(session)) }
+	}
+	marker := ExitMarker(session)
+	_, statErr := os.Stat(marker)
+	created := os.IsNotExist(statErr)
+	if err := os.MkdirAll(ExitMarkerDir(), 0o755); err != nil {
+		return fmt.Errorf("exit marker dir: %w", err)
+	}
+	// Written fresh (mtime now) either way: a marker left from an earlier run would predate this
+	// run's spawn time and read as no finish.
+	if err := os.WriteFile(marker, []byte("ended after its final report\n"), 0o644); err != nil {
+		return fmt.Errorf("exit marker: %w", err)
+	}
+	if err := kill(ctx, session); err != nil {
+		if created {
+			_ = os.Remove(marker)
+		}
+		return err
+	}
+	return nil
+}

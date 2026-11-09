@@ -7,11 +7,13 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/example-user/commander/internal/beads"
 	"github.com/example-user/commander/internal/gates"
+	"github.com/example-user/commander/internal/holding"
 	"github.com/example-user/commander/internal/ownercompat"
 	"github.com/example-user/commander/internal/workflowtemplate"
 )
@@ -167,6 +169,19 @@ func runInternalDep(args []string, stdout, stderr *os.File) int {
 		}
 		if plugged {
 			emitErr(stderr, fmt.Sprintf("refused: %s is the review block plugged in front of %s, and removing the edge would let %s close unreviewed. Finish the block; if it is wrong, tell your Manager or Commander (cmdr internal-mail --to <role> --subject ... --body ...)", rest[2], rest[1], rest[1]))
+			return 1
+		}
+		waiter := rest[1]
+		owed, err := requireHeldAfter(ctx, bc, project.Path, waiter, "internal-dep rm "+waiter+" "+rest[2], depRmFix,
+			map[string]holding.Edit{waiter: func(b *holding.Bead) {
+				b.BlockedBy = slices.DeleteFunc(slices.Clone(b.BlockedBy), func(x string) bool { return x == rest[2] })
+			}})
+		if err != nil {
+			emitErr(stderr, err.Error())
+			return 1
+		}
+		if _, err := owed.settle(ctx, rest[2]); err != nil {
+			emitErr(stderr, err.Error()+"; nothing was removed")
 			return 1
 		}
 		if err := newBeadsClientFn().RemoveDep(ctx, project.Path, rest[1], rest[2]); err != nil {

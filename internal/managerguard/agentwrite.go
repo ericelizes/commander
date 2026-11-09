@@ -192,7 +192,29 @@ func onlyHelp(rest []string) bool {
 	return help
 }
 
-// writeVerbOf is the write verb of a bd/br argument list (after the program), or "".
+// bdReadSubs are the bd/br verbs an agent may run directly: they read. Anything else is refused,
+// including verbs that did not exist when this list was written (bd batch, sql, comment, note,
+// tag, priority, link, gate, supersede, duplicate ...): an allow-list cannot miss a new write verb
+// the way the old deny-list did.
+var bdReadSubs = map[string]bool{
+	"show": true, "list": true, "ready": true, "blocked": true, "children": true, "search": true, "query": true,
+	"count": true, "status": true, "statuses": true, "types": true, "stale": true, "history": true, "lint": true,
+	"graph": true, "export": true, "state": true, "info": true, "where": true, "context": true, "version": true,
+	"help": true, "prime": true, "quickstart": true, "onboard": true, "memories": true, "recall": true,
+	"find-duplicates": true, "stats": true, "diff": true,
+}
+
+// bdReadSecond are the sub-verbs of a verb that has both reads and writes.
+var bdReadSecond = map[string]map[string]bool{
+	"dep":    {"list": true, "tree": true, "cycles": true},
+	"label":  {"list": true, "list-all": true},
+	"config": {"get": true, "list": true},
+	// bd human respond|dismiss close beads (m4); only its listing reads.
+	"human": {"list": true, "show": true},
+}
+
+// writeVerbOf is the first non-read verb of a bd/br argument list (after the program), or "":
+// the verb that is not on the read allow-list. A bare `bd` or one with only flags is no verb.
 func writeVerbOf(args []string) string {
 	for i := 0; i < len(args); i++ {
 		a := args[i]
@@ -202,8 +224,8 @@ func writeVerbOf(args []string) string {
 				return ""
 			}
 			switch {
-			case bdWriteSubs[sub]:
-				return sub
+			case bdReadSubs[sub]:
+				return ""
 			case sub == "sync":
 				for _, r := range rest {
 					if r == "--flush-only" {
@@ -212,29 +234,27 @@ func writeVerbOf(args []string) string {
 				}
 				return sub
 			case sub == "comments":
+				// `comments <id>` and `comments list <id>` read; add/delete/remove/edit/update write.
 				for _, r := range rest {
 					switch r {
 					case "add", "delete", "remove", "edit", "update":
 						return sub
 					}
 				}
-			case sub == "dep" || sub == "label":
-				if len(rest) > 0 {
-					switch rest[0] {
-					case "add", "rm", "remove", "delete":
-						return sub
-					}
+				return ""
+			case bdReadSecond[sub] != nil:
+				if len(rest) > 0 && bdReadSecond[sub][rest[0]] {
+					return ""
 				}
-			case sub == "config":
-				if len(rest) > 0 && (rest[0] == "set" || rest[0] == "unset") {
-					return sub
-				}
+				return sub
 			}
-			return ""
+			return sub
 		}
 		if bdValueFlags[a] {
 			i++
 		}
+		// A help or version flag before the verb is only that when no verb follows (`bd --version`):
+		// `bd -v close X` (-v is --verbose) and `bd --help close X` still name a verb, judged below (M6).
 	}
 	return ""
 }

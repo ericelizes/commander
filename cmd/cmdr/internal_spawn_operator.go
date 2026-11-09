@@ -23,6 +23,7 @@ import (
 	"github.com/example-user/commander/internal/config"
 	"github.com/example-user/commander/internal/docker"
 	"github.com/example-user/commander/internal/gates"
+	"github.com/example-user/commander/internal/holding"
 	"github.com/example-user/commander/internal/livedata"
 	"github.com/example-user/commander/internal/opencode"
 	"github.com/example-user/commander/internal/ownercompat"
@@ -188,11 +189,15 @@ func spawnOperatorAttempt(args []string, stdout, stderr *os.File, retried bool) 
 		if keep == "" {
 			dctx, dcancel := context.WithTimeout(context.Background(), spawnStepTimeout)
 			defer dcancel()
+			// What the task held (its step, when nothing else does) goes to the Manager first.
+			holdReleased(dctx, bc, projectDir, id, map[string]holding.Edit{id: func(h *holding.Bead) { h.Status = holding.StatusClosed }}, manager(), beads.ManagerDispatchWait)
 			err := bc.Delete(dctx, projectDir, id, reason)
 			if err == nil {
 				return
 			}
 			keep = fmt.Sprintf("could not be removed (%v)", err)
+			// It stays, open with nobody on it: its Manager holds it.
+			_ = holdWithManager(dctx, bc, projectDir, id, manager(), beads.ManagerRecoverWait)
 		}
 		repeatable = false
 		left = fmt.Sprintf("; task %s %s and stays: look at it before spawning again", id, keep)

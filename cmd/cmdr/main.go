@@ -134,6 +134,7 @@ func main() {
 }
 
 func run(args []string, stdout, stderr *os.File) int {
+	args, leaveUnheldReason = stripLeaveUnheld(args)
 	if len(args) == 0 {
 		return openPublicTarget(publicTarget{kind: targetCommander}, stderr)
 	}

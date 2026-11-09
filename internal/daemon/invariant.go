@@ -100,7 +100,7 @@ func invariantMail(vs []livedata.Violation) (subject, body string) {
 		}
 	}
 	subject = fmt.Sprintf("[invariant] %d open bead(s) need a wait or an owner", len(vs))
-	body = fmt.Sprintf(`Every open bead needs an agent on it, a recorded wait, or the user. These have none, which is broken data, not a status (the app shows "Needs a wait or an owner"):
+	body = fmt.Sprintf(`Every open bead needs an agent on it, a recorded wait, or the user. These have none, which is broken data, not a status (the board reads "State missing"):
 
 %s
 Fix each one:

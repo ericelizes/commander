@@ -520,8 +520,19 @@ func TestSetObjective_ReviewNoneRefusesARemainingReviewWait(t *testing.T) {
 		_, errOut := read()
 		t.Fatalf("exit=%d: %s", code, errOut)
 	}
+	// The user's write dropped the step's only holder: it owes the Manager's "Manager to start"
+	// receipt (custody), and nothing else is left.
 	b, _ = mem.Show(context.Background(), "/d", "ms-1.8")
-	if !slices.Equal(b.Labels, []string{"kind:objective"}) {
+	var rest []string
+	receipt := false
+	for _, l := range b.Labels {
+		if ws := beads.WaitsOf([]string{l}); len(ws) == 1 && beads.IsManagerHandoff(ws[0]) {
+			receipt = true
+			continue
+		}
+		rest = append(rest, l)
+	}
+	if !receipt || !slices.Equal(rest, []string{"kind:objective"}) {
 		t.Fatalf("labels: %v", b.Labels)
 	}
 }

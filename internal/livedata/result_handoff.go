@@ -7,6 +7,8 @@ import (
 	"github.com/example-user/commander/internal/beads"
 )
 
+const managerPlanningText = "Manager planning"
+
 const resultReviewText = "Result ready for Manager review"
 const approvalDispatchText = "Approved; Manager dispatch pending"
 const approvalDispatchOverdueText = "Approved work not started; Manager recovery needed"

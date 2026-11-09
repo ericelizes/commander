@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/example-user/commander/internal/boardturn"
 	"github.com/example-user/commander/internal/store"
@@ -276,6 +277,15 @@ func percentOf(p Progress) int {
 		return 100
 	}
 	return (200*p.Done + p.Total) / (2 * p.Total) // rounded half up, as the app's Math.round
+}
+
+// markOverlaid derives Broken again over the overlaid agent states (store vs overlay: one state).
+func markOverlaid(s *Snapshot, rows []ObjectiveRow, at time.Time) {
+	s.Broken = OpenBeadInvariantAt(rows, func(owner string) string { return s.Agents[owner].State }, at)
+	for i := range s.Workstreams {
+		clearBroken(s.Workstreams[i].Steps)
+	}
+	markBroken(s.Workstreams, s.Broken)
 }
 
 // nestedScope finds the nested workstream whose own Manager is role.
