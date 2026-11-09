@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/example-user/commander/internal/spawn"
 	"github.com/example-user/commander/internal/store"
 )
 
@@ -35,282 +36,174 @@ func pinOperatorCommits(t *testing.T, wrote map[string]string, hiddenAtBind bool
 	t.Cleanup(func() { workflowOperatorCommits = old })
 }
 
-// A real repo: the user's commits, an Operator branched off main, a fix
-// Operator branched off the user's commits, a commit made on a detached
-// worktree, an archived branch, and a commit under an Operator-only identity.
-func TestOperatorAuthorshipReadsTheRepo(t *testing.T) {
-	ctx := context.Background()
-	dir := t.TempDir()
-	repo := filepath.Join(dir, "repo")
-	git := func(wd string, env []string, args ...string) string {
-		t.Helper()
-		cmd := exec.Command("git", append([]string{"-C", wd}, args...)...)
-		cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1")
-		cmd.Env = append(cmd.Env, env...)
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("git %v: %v\n%s", args, err, out)
-		}
-		return strings.TrimSpace(string(out))
-	}
-	commit := func(wd, msg string, env ...string) string {
-		git(wd, env, "commit", "--allow-empty", "-q", "-m", msg)
-		return git(wd, nil, "rev-parse", "HEAD")
-	}
-	if err := os.MkdirAll(repo, 0o755); err != nil {
+// opRepo is a real repo with the user's commits on user-work and git as an
+// Operator runs it: the launcher's committer identity in the environment.
+type opRepo struct {
+	t    *testing.T
+	repo string
+	wts  string
+}
+
+func newOpRepo(t *testing.T) (*opRepo, string, string) {
+	r := &opRepo{t: t, repo: filepath.Join(t.TempDir(), "repo")}
+	r.wts = filepath.Join(r.repo, ".worktrees")
+	if err := os.MkdirAll(r.repo, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	git(repo, nil, "init", "-q", "-b", "main")
-	git(repo, nil, "config", "user.email", "user@example.com")
-	git(repo, nil, "config", "user.name", "User")
-	commit(repo, "base")
-	git(repo, nil, "checkout", "-q", "-b", "user-work")
-	u1 := commit(repo, "user 1")
-	u2 := commit(repo, "user 2")
-	git(repo, nil, "checkout", "-q", "main")
+	r.git(r.repo, "", "init", "-q", "-b", "main")
+	r.git(r.repo, "", "config", "user.email", "user@example.com")
+	r.git(r.repo, "", "config", "user.name", "User")
+	r.commit(r.repo, "", "base")
+	r.git(r.repo, "", "checkout", "-q", "-b", "user-work")
+	u1 := r.commit(r.repo, "", "user 1")
+	u2 := r.commit(r.repo, "", "fast-forward") // a user subject that once fooled the reflog reader
+	r.git(r.repo, "", "checkout", "-q", "main")
+	return r, u1, u2
+}
 
-	wts := filepath.Join(repo, ".worktrees")
-	git(repo, nil, "worktree", "add", "-q", "-b", "op/a-t1", filepath.Join(wts, "op-a-t1"), "main")
-	a1 := commit(filepath.Join(wts, "op-a-t1"), "operator a")
-	git(repo, nil, "worktree", "remove", filepath.Join(wts, "op-a-t1")) // only its branch is left
-	git(repo, nil, "worktree", "add", "-q", "-b", "op/fix-t2", filepath.Join(wts, "op-fix-t2"), u2)
-	f1 := commit(filepath.Join(wts, "op-fix-t2"), "fix")
-	det := filepath.Join(wts, "op-det-t3")
-	git(repo, nil, "worktree", "add", "-q", "--detach", det, "main")
-	bot := []string{"GIT_COMMITTER_EMAIL=bot@example.com", "GIT_AUTHOR_EMAIL=bot@example.com"}
-	d1 := commit(det, "detached", bot...)
-	git(det, nil, "checkout", "-q", "--detach", "main") // d1 is now on no branch
-	git(repo, nil, "branch", "-q", "old-tip", "main")
-	o1 := git(repo, nil, "commit-tree", "-p", "main", "-m", "archived", "main^{tree}")
-	git(repo, nil, "update-ref", "refs/archive/op/old-t4-"+o1[:7], o1)
-	// Made outside every worktree, authored as the Operator-only identity.
-	i1 := git(repo, []string{"GIT_AUTHOR_EMAIL=bot@example.com"}, "commit-tree", "-p", "main", "-m", "identity", "main^{tree}")
-	git(repo, nil, "update-ref", "refs/heads/side", i1)
+// gitEnvWithoutIdentity drops an identity the test itself inherits (an
+// Operator running this suite has its own committer set).
+func gitEnvWithoutIdentity() []string {
+	var env []string
+	for _, kv := range os.Environ() {
+		if !strings.HasPrefix(kv, "GIT_COMMITTER_") && !strings.HasPrefix(kv, "GIT_AUTHOR_") {
+			env = append(env, kv)
+		}
+	}
+	return env
+}
+
+// git runs as agent ("" = the user) in wd.
+func (r *opRepo) git(wd, agent string, args ...string) string {
+	r.t.Helper()
+	cmd := exec.Command("git", append([]string{"-C", wd}, args...)...)
+	cmd.Env = append(gitEnvWithoutIdentity(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1")
+	if agent != "" {
+		cmd.Env = append(cmd.Env, spawn.OperatorGitEnv(agent)...)
+	}
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		r.t.Fatalf("git %v: %v\n%s", args, err, out)
+	}
+	return strings.TrimSpace(string(out))
+}
+
+func (r *opRepo) commit(wd, agent, msg string, extra ...string) string {
+	r.git(wd, agent, append([]string{"commit", "--allow-empty", "--allow-empty-message", "-q", "-m", msg}, extra...)...)
+	return r.git(wd, agent, "rev-parse", "HEAD")
+}
+
+// worktree adds the run's worktree as spawn does (-B from main).
+func (r *opRepo) worktree(name string) (string, store.AgentRun) {
+	wt := filepath.Join(r.wts, name)
+	r.git(r.repo, "", "worktree", "add", "-q", "-B", "op/"+strings.TrimPrefix(name, "op-"), wt, "main")
+	return wt, store.AgentRun{AgentName: "operator-" + name, TaskBeadID: name[len(name)-2:],
+		WorktreePath: sql.NullString{String: wt, Valid: true}}
+}
+
+// Every way an Operator makes a commit object is attributed, whatever its
+// message; every way it only moves a ref onto the user's commits is not.
+func TestOperatorAuthorshipReadsCommitIdentities(t *testing.T) {
+	ctx := context.Background()
+	r, u1, u2 := newOpRepo(t)
+
+	rev, revRun := r.worktree("op-rev-t1") // the review protocol: reset to the PR head, write nothing
+	r.git(rev, revRun.AgentName, "reset", "-q", "--hard", u2)
+	r.git(rev, revRun.AgentName, "merge", "-q", "--ff-only", "user-work")
+
+	w, run := r.worktree("op-w-t2")
+	a := run.AgentName
+	empty := r.commit(w, a, "\nbody after an empty first line") // reflog "commit:" with no subject
+	blank := r.commit(w, a, "")
+	ff := r.commit(w, a, "fast-forward")
+	r.commit(w, a, "to amend")
+	amended := r.commit(w, a, "amended", "--amend")
+	r.git(w, a, "cherry-pick", "--allow-empty", "--keep-redundant-commits", u2) // a commit titled "fast-forward"
+	picked := r.git(w, a, "rev-parse", "HEAD")
+	if err := os.WriteFile(filepath.Join(w, "f"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r.git(w, a, "add", "f")
+	file := r.commit(w, a, "file")
+	r.git(w, a, "revert", "--no-edit", "HEAD")
+	reverted := r.git(w, a, "rev-parse", "HEAD")
+	r.git(w, a, "merge", "-q", "--no-ff", "--no-edit", "user-work")
+	merged := r.git(w, a, "rev-parse", "HEAD")
+
+	rb, rbRun := r.worktree("op-rb-t3")
+	r.commit(rb, rbRun.AgentName, "own")
+	r.git(rb, rbRun.AgentName, "rebase", "-q", "user-work")
+	rebased := r.git(rb, rbRun.AgentName, "rev-parse", "HEAD")
+	r.git(r.repo, "", "worktree", "remove", "--force", rb) // no worktree or branch needed
+	r.git(r.repo, "", "branch", "-q", "-D", "op/rb-t3")
+
+	// An Operator of a run this project never had (another project's).
+	r.git(r.repo, "", "checkout", "-q", "main")
+	stranger := r.commit(r.repo, "operator-op-elsewhere-t9", "stranger")
 	missing := strings.Repeat("e", 40)
 
-	run := func(name, task string, wt bool) store.AgentRun {
-		r := store.AgentRun{AgentName: name, TaskBeadID: task}
-		if wt {
-			r.WorktreePath = sql.NullString{String: filepath.Join(wts, strings.TrimPrefix(name, "operator-")), Valid: true}
-		}
-		return r
+	runs := []store.AgentRun{revRun, run, rbRun}
+	written := map[string]string{empty: a, blank: a, ff: a, amended: a, picked: a, file: a, reverted: a, merged: a, rebased: rbRun.AgentName}
+	all := []string{u1, u2, stranger, missing}
+	for sha := range written {
+		all = append(all, sha)
 	}
-	runs := []store.AgentRun{
-		run("operator-op-a-t1", "t1", true),
-		run("operator-op-fix-t2", "t2", true),
-		run("operator-op-det-t3", "t3", true),
-		run("operator-op-old-t4", "t4", false),
-	}
-	all := []string{u1, u2, a1, f1, d1, o1, i1, missing}
-	got, err := operatorAuthorship(ctx, repo, repo, runs, all)
+	got, err := operatorAuthorship(ctx, r.repo, runs, true, all)
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := map[string]string{a1: "on branch op/a-t1 of Operator run operator-op-a-t1", f1: "operator-op-fix-t2 (task t2)", d1: "worktree of Operator run operator-op-det-t3", o1: "op/old-t4 (archived)", i1: "bot@example.com"}
-	for sha, why := range want {
-		if !strings.Contains(got[sha], why) {
-			t.Errorf("%s: got %q want %q", sha, got[sha], why)
+	for sha, who := range written {
+		if !strings.Contains(got[sha], who) {
+			t.Errorf("%s: got %q, want written by %s", sha, got[sha], who)
 		}
+	}
+	if !strings.Contains(got[stranger], "an Operator identity") {
+		t.Errorf("another project's Operator commit: got %q", got[stranger])
 	}
 	for _, sha := range []string{u1, u2, missing} {
 		if why, ok := got[sha]; ok {
 			t.Errorf("user commit %s attributed: %s", sha, why)
 		}
 	}
-	// Reviewer side: only that task's runs count.
-	if got, err := operatorAuthorship(ctx, repo, repo, runs[1:2], all); err != nil || len(got) != 1 || got[f1] == "" {
-		t.Fatal(got, err)
+	// Reviewer side: only that task's runs count. The reviewer that reset and
+	// fast-forwarded onto the user's commits wrote none of them.
+	if got, err := operatorAuthorship(ctx, r.repo, runs[:1], false, all); err != nil || len(got) != 0 {
+		t.Fatalf("reviewer that reset to the PR head counted as a writer: %v %v", got, err)
 	}
-	if got, err := operatorAuthorship(ctx, repo, repo, nil, all); err != nil || len(got) != 0 {
+	if got, err := operatorAuthorship(ctx, r.repo, runs[2:], false, all); err != nil || len(got) != 1 || got[rebased] == "" {
+		t.Fatalf("rebasing task: %v %v", got, err)
+	}
+	if got, err := operatorAuthorship(ctx, r.repo, nil, false, all); err != nil || len(got) != 0 {
 		t.Fatal(got, err)
 	}
 	// No repo to read = error, never a pass.
-	if _, err := operatorAuthorship(ctx, filepath.Join(dir, "nowhere"), repo, runs, all); err == nil {
+	if _, err := operatorAuthorship(ctx, filepath.Join(r.repo, "nowhere"), runs, true, all); err == nil {
 		t.Fatal("unreadable repo passed")
 	}
-}
-
-// Branches made as spawn makes them (-B from main) and then moved onto the
-// user's commits: a reviewer resetting to the PR head, a fast-forward merge, a
-// rebase, a non-fast-forward merge. Only the commits the Operator made count.
-func TestOperatorAuthorshipIgnoresMovesOntoTheUsersCommits(t *testing.T) {
-	ctx := context.Background()
-	dir := t.TempDir()
-	repo := filepath.Join(dir, "repo")
-	git := func(wd string, args ...string) string {
-		t.Helper()
-		cmd := exec.Command("git", append([]string{"-C", wd}, args...)...)
-		cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1")
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("git %v: %v\n%s", args, err, out)
-		}
-		return strings.TrimSpace(string(out))
-	}
-	commit := func(wd, msg string) string {
-		git(wd, "commit", "--allow-empty", "-q", "-m", msg)
-		return git(wd, "rev-parse", "HEAD")
-	}
-	if err := os.MkdirAll(repo, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	git(repo, "init", "-q", "-b", "main")
-	git(repo, "config", "user.email", "user@example.com")
-	git(repo, "config", "user.name", "User")
-	commit(repo, "base")
-	git(repo, "checkout", "-q", "-b", "user-work")
-	u1 := commit(repo, "user 1")
-	u2 := commit(repo, "user 2")
-	git(repo, "checkout", "-q", "main")
-	wts := filepath.Join(repo, ".worktrees")
-	add := func(name string) string {
-		wt := filepath.Join(wts, name)
-		git(repo, "worktree", "add", "-q", "-B", "op/"+strings.TrimPrefix(name, "op-"), wt, "main")
-		return wt
-	}
-	// The review protocol: reset to the reviewed head, write nothing.
-	rev := add("op-rev-t1")
-	git(rev, "reset", "-q", "--hard", u2)
-	// Fast-forward onto the user's branch, then a fix.
-	ff := add("op-ff-t2")
-	git(ff, "merge", "-q", "--ff-only", "user-work")
-	f1 := commit(ff, "fix after ff")
-	// A commit of its own, rebased onto the user's branch.
-	rb := add("op-rb-t3")
-	commit(rb, "own")
-	git(rb, "rebase", "-q", "user-work")
-	r1 := git(rb, "rev-parse", "HEAD")
-	// A non-fast-forward merge of the user's branch: only the merge commit.
-	mg := add("op-mg-t4")
-	commit(mg, "own before merge")
-	git(mg, "merge", "-q", "--no-ff", "--no-edit", "user-work")
-	m1 := git(mg, "rev-parse", "HEAD")
-
-	var runs []store.AgentRun
-	for _, n := range []string{"op-rev-t1", "op-ff-t2", "op-rb-t3", "op-mg-t4"} {
-		runs = append(runs, store.AgentRun{AgentName: "operator-" + n, TaskBeadID: n[len(n)-2:],
-			WorktreePath: sql.NullString{String: filepath.Join(wts, n), Valid: true}})
-	}
-	all := []string{u1, u2, f1, r1, m1}
-	got, err := operatorAuthorship(ctx, repo, repo, runs, all)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, sha := range []string{u1, u2} {
-		if why, ok := got[sha]; ok {
-			t.Errorf("user commit %s attributed: %s", sha, why)
-		}
-	}
-	for sha, who := range map[string]string{f1: "op-ff-t2", r1: "op-rb-t3", m1: "op-mg-t4"} {
-		if !strings.Contains(got[sha], who) {
-			t.Errorf("%s: got %q, want written by %s", sha, got[sha], who)
-		}
-	}
-	// The reviewer alone wrote nothing, so it is independent of the user's commits.
-	if got, err := operatorAuthorship(ctx, repo, repo, runs[:1], all); err != nil || len(got) != 0 {
-		t.Fatalf("reviewer that reset to the PR head counted as a writer: %v %v", got, err)
-	}
-	// Removing the worktree leaves only the branch reflog: same answer.
-	git(repo, "worktree", "remove", "--force", rb)
-	if got, err := operatorAuthorship(ctx, repo, repo, runs[2:3], all); err != nil || len(got) != 1 || got[r1] == "" {
-		t.Fatalf("rebased commit after worktree removal: %v %v", got, err)
+	if _, err := operatorAuthorship(ctx, r.repo, runs, true, []string{"abc"}); err == nil {
+		t.Fatal("short sha passed")
 	}
 }
 
-func TestReflogWrote(t *testing.T) {
-	sha := strings.Repeat("a", 40)
-	for msg, want := range map[string]int{
-		"commit: fix":                  wroteNew,
-		"commit (amend): fix":          wroteNew,
-		"commit (merge): Merge branch": wroteNew,
-		"merge user-work: Merge made by the 'ort' strategy.":  wroteNew,
-		"merge user-work: Fast-forward":                       wroteNothing,
-		"pull: Fast-forward":                                  wroteNothing,
-		"pull: Merge made by the 'ort' strategy.":             wroteNew,
-		"cherry-pick: fast-forward":                           wroteNothing,
-		"cherry-pick: fix":                                    wroteNew,
-		"revert: Revert \"x\"":                                wroteNew,
-		"am: fix":                                             wroteNew,
-		"reset: moving to " + sha:                             wroteNothing,
-		"branch: Created from main":                           wroteNothing,
-		"branch: Reset to main":                               wroteNothing,
-		"checkout: moving from a to b":                        wroteNothing,
-		"rebase (start): checkout user-work":                  wroteNothing,
-		"rebase (pick): own":                                  wroteNew,
-		"commit: fast-forward":                                wroteNew,
-		"commit (amend): Fast-forward the reset: moving to x": wroteNew,
-		"commit: merge Fast-forward":                          wroteNew,
-		"revert: Revert \"fast-forward\"":                     wroteNew,
-		"rebase (pick): fast-forward":                         wroteNew,
-		"rebase -i (pick): fast-forward":                      wroteNew,
-		"rebase (continue): fix":                              wroteNew,
-		"cherry-pick: Fast-forward reset: moving to":          wroteNew,
-		"merge x: Merge made by the 'ort' strategy.":          wroteNew,
-		"filter-branch: rewrite":                              wroteNothing,
-		"commitx: y":                                          wroteNothing,
-		"pull --rebase (pick): own":                           wroteNew,
-		"rebase (finish): returning to refs/heads/x":          wroteNothing,
-		"rebase (finish): refs/heads/x onto " + sha:           wroteRange,
-		"pull --rebase (finish): refs/heads/x onto " + sha:    wroteRange,
-	} {
-		if got, _ := reflogWrote(msg); got != want {
-			t.Errorf("%q: got %d want %d", msg, got, want)
-		}
+// The user cherry-picking or rebasing an Operator's commit makes a new commit
+// as the user, but the author header still names the Operator only when the
+// Operator authored it; the committer identity is what the launcher sets, so
+// the user's own rewrite of it is the user's.
+func TestOperatorAuthorshipReadsTheAuthorToo(t *testing.T) {
+	r, _, _ := newOpRepo(t)
+	agent := "operator-op-x-t1"
+	env := append(spawn.OperatorGitEnv(agent), "GIT_AUTHOR_EMAIL="+spawn.OperatorGitEmail(agent))
+	cmd := exec.Command("git", "-C", r.repo, "commit", "--allow-empty", "-q", "-m", "authored")
+	cmd.Env = append(gitEnvWithoutIdentity(), append([]string{"GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1"}, env...)...)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatal(err, string(out))
 	}
-}
-
-// Operator commits whose subjects imitate other reflog actions are still
-// attributed: only the action prefix of a reflog entry counts.
-func TestOperatorAuthorshipIgnoresSubjectsThatImitateReflogActions(t *testing.T) {
-	ctx := context.Background()
-	dir := t.TempDir()
-	repo := filepath.Join(dir, "repo")
-	git := func(wd string, args ...string) string {
-		t.Helper()
-		cmd := exec.Command("git", append([]string{"-C", wd}, args...)...)
-		cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1")
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("git %v: %v\n%s", args, err, out)
-		}
-		return strings.TrimSpace(string(out))
-	}
-	commit := func(wd, msg string) string {
-		git(wd, "commit", "--allow-empty", "-q", "-m", msg)
-		return git(wd, "rev-parse", "HEAD")
-	}
-	if err := os.MkdirAll(repo, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	git(repo, "init", "-q", "-b", "main")
-	git(repo, "config", "user.email", "user@example.com")
-	git(repo, "config", "user.name", "User")
-	commit(repo, "base")
-	wts := filepath.Join(repo, ".worktrees")
-	wt := filepath.Join(wts, "op-s-t1")
-	git(repo, "worktree", "add", "-q", "-B", "op/s-t1", wt, "main")
-	var shas []string
-	for _, subj := range []string{"fast-forward", "Fast-forward", "reset: moving to main", "merge main", "checkout: moving from a to b"} {
-		shas = append(shas, commit(wt, subj))
-	}
-	git(wt, "commit", "--allow-empty", "-q", "--amend", "-m", "amend fast-forward")
-	shas = append(shas, git(wt, "rev-parse", "HEAD"))
-	user := commit(repo, "user fast-forward")
-	runs := []store.AgentRun{{AgentName: "operator-op-s-t1", TaskBeadID: "t1",
-		WorktreePath: sql.NullString{String: wt, Valid: true}}}
-	got, err := operatorAuthorship(ctx, repo, repo, runs, append(shas, user))
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, sha := range shas[:len(shas)-2] {
-		if got[sha] == "" {
-			t.Errorf("operator commit %s not attributed", sha)
-		}
-	}
-	if got[shas[len(shas)-1]] == "" {
-		t.Error("amended operator commit not attributed")
-	}
-	if why, ok := got[user]; ok {
-		t.Errorf("user commit attributed: %s", why)
+	op := r.git(r.repo, "", "rev-parse", "HEAD")
+	r.git(r.repo, "", "checkout", "-q", "user-work")
+	r.git(r.repo, "", "cherry-pick", "--allow-empty", op)
+	userCopy := r.git(r.repo, "", "rev-parse", "HEAD")
+	got, err := operatorAuthorship(context.Background(), r.repo, []store.AgentRun{{AgentName: agent, TaskBeadID: "t1"}}, false, []string{userCopy})
+	if err != nil || !strings.Contains(got[userCopy], agent) {
+		t.Fatalf("author identity not read: %v %v", got, err)
 	}
 }

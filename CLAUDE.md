@@ -1460,17 +1460,19 @@ Commits from the user's own sessions (no task) bind as an external writer:
 `--external-writer user --commits <base-sha>..<last-sha>` (or a comma list of full SHAs), `--writers` optional for fix
 tasks. The range resolves through GitHub's compare API (ahead, full count, fail closed) and every commit must be on the
 PR; the record gains `external:{author:"user",commits:[sorted full SHAs]}`. A commit an Operator run of the project
-wrote is refused (`workflowOperatorCommits`, `cmd/cmdr/workflow_operator_commits.go`, local repo, read only): made by
-an entry of its `op/`/worktree branch reflog or its worktree's HEAD reflog that wrote commits (`reflogWrote`: commit,
-non-fast-forward merge/pull, cherry-pick, revert, am, rebase picks, a finished rebase's own range), never by one that only
-moved the branch (created from, reset, checkout, any fast-forward), so a reviewer that reset onto the PR head is no writer;
-a run branch with no reflog or a `refs/archive/op/` tip counts its whole history (fails closed); or under an identity only
-Operator reflogs show; a git error refuses, a commit not in the local repo passes. Reviewer independence is judged against
+wrote is refused (`workflowOperatorCommits`, `cmd/cmdr/workflow_operator_commits.go`, local repo, read only): by the
+identity in the commit object, never a reflog or message. The host launcher sets each Operator's committer
+(`spawn.OperatorGitEnv`: `GIT_COMMITTER_NAME=<agent>`, `GIT_COMMITTER_EMAIL=<agent>@operator.commander.invalid`; the
+author stays the user's), git writes it on every object a process makes (commit, amend, cherry-pick, revert, am, merge,
+rebase) and on none for a ref move (reset, fast-forward, checkout), so a reviewer that reset onto the PR head is no writer.
+An author or committer under that domain is an Operator's (the bind counts any; reviewer independence only the review
+task's runs' identities); a git error refuses, a commit not in the local repo passes. Limit: an Operator started before the
+install, or one that unsets the variables, commits as the user and is not attributed. Reviewer independence is judged against
 the bound tasks AND the bound commits (a review task whose runs wrote one is refused). The user's CLI, Commander (external
 commits only; the Manager's stored task writers for the PR are kept) or the owning Manager may bind one;
 Operators never. Rebind hints keep the stored writer kinds (`workflowtemplate.RebindCommand`). Tests
 `TestWorkflowBindExternalUserWriter`, `TestWorkflowExternalWriterReviewIndependence`, `TestExternalWriterBindingParse`,
-`TestOperatorAuthorshipReadsTheRepo`, `TestOperatorAuthorshipIgnoresMovesOntoTheUsersCommits` (real git), `TestReflogWrote`, `TestRebindCommandKeepsTheWriterKinds`, `TestRangeCommitsFailsClosed`, eval `TestExternalWriterBindingScenario` (`scenarios/external-writer-binding.json`, runs
+`TestOperatorAuthorshipReadsCommitIdentities`, `TestOperatorAuthorshipReadsTheAuthorToo` (real git), `TestHostOperatorCommandSetsTheRunsGitCommitter`, `TestRebindCommandKeepsTheWriterKinds`, `TestRangeCommitsFailsClosed`, eval `TestExternalWriterBindingScenario` (`scenarios/external-writer-binding.json`, runs
 in cmd/cmdr). No descendants or reviewers are inferred as writers. Tasks must have fresh ancestry
 in the block's workstream and task-bound runs in the same project. The current PR
 head is required. Selection is persisted as `workflow-writers@v1` on the block;

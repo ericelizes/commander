@@ -43,6 +43,35 @@ func TestHostOperatorCommandStripsTmuxEnvironment(t *testing.T) {
 	}
 }
 
+// Every Operator commits under its own committer identity, on both runtimes,
+// overriding one it inherited: that header is how its commits are attributed.
+func TestHostOperatorCommandSetsTheRunsGitCommitter(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("COMMANDER_HOME", dir)
+	t.Setenv("GIT_COMMITTER_EMAIL", "user@example.com")
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	for _, bin := range []string{"claude", "cmdr"} {
+		if err := os.WriteFile(filepath.Join(dir, bin), []byte("#!/bin/sh\nexec env\n"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, rt := range []string{"", "codex"} {
+		out, err := exec.Command("sh", "-c", hostOperatorCommand(SpawnRequest{Runtime: rt}, "operator-op-X-t1.2", hostSessionID, false)).Output()
+		if err != nil {
+			t.Fatal(rt, err)
+		}
+		env := "\n" + string(out)
+		for _, want := range []string{"\nGIT_COMMITTER_EMAIL=operator-op-x-t1.2@operator.commander.invalid\n", "\nGIT_COMMITTER_NAME=operator-op-X-t1.2\n"} {
+			if !strings.Contains(env, want) {
+				t.Errorf("runtime %q: env lacks %q", rt, strings.TrimSpace(want))
+			}
+		}
+		if strings.Contains(env, "\nGIT_AUTHOR_") {
+			t.Errorf("runtime %q: the author is the user's, not set", rt)
+		}
+	}
+}
+
 // newHostSpawner is a Spawner for the host runtime: a mock tmux, a stubbed
 // fifo capture, and a COMMANDER_HOME so role prompts land in a temp dir.
 func newHostSpawner(t *testing.T, dir string) (*Spawner, *fakeStore, *beads.MockClient, *agentmail.MockClient, *docker.MockClient, *tmuxctl.MockClient) {

@@ -418,6 +418,9 @@ func hostOperatorCommand(req SpawnRequest, agentName, sessionID string, resuming
 	// without it every new worktree recompiled and re-ran everything (measured:
 	// 0 of 34 packages cached in a second fresh worktree, 31 of 34 with it).
 	parts := []string{"env", "-u", "TMUX", "-u", "TMUX_PANE", "-u", "ANTHROPIC_API_KEY", "-u", "CLAUDE_CONFIG_DIR", "GOFLAGS='-trimpath -p=2'", "COMMANDER_ROLE=" + shellQuote(agentName)}
+	for _, kv := range OperatorGitEnv(agentName) {
+		parts = append(parts, shellQuote(kv))
+	}
 	if role := req.managerRole; role != "" {
 		parts = append(parts, "COMMANDER_MANAGER_ROLE="+shellQuote(role))
 	}
