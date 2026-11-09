@@ -3,6 +3,7 @@ package chat
 import (
 	"os"
 	"testing"
+	"time"
 
 	"github.com/example-user/commander/internal/agentrt"
 )
@@ -59,4 +60,21 @@ func TestDropDrawnCodexAtShareZero(t *testing.T) {
 	if dropDrawnCodex(home, "manager-kept") || WithRuntime(Spec{Role: "manager-kept"}, home).Runtime != RuntimeCodex {
 		t.Error("a draw under a configured share was dropped")
 	}
+}
+
+// Codex out of usage: the draw lands on Claude even at share 1 with hooks on.
+func TestAssignNewManagerRuntimeSkipsOutCodex(t *testing.T) {
+	home := t.TempDir()
+	OpenUsage(home).MarkOut(RuntimeCodex, "", "operator-x", time.Now().Add(time.Hour).Unix(), time.Now())
+	if err := AssignNewManagerRuntime(home, "manager-a", "ws-1", 1, func() bool { return true }); err != nil {
+		t.Fatal(err)
+	}
+	if ReadRuntime(home, "manager-a") != RuntimeClaude || RuntimePinned(home, "manager-a") {
+		t.Fatal("not unpinned Claude")
+	}
+	// Codex with usage left is still drawn.
+	if err := AssignNewManagerRuntime(home, "manager-b", "ws-1", 1, func() bool { return true }); err != nil {
+		t.Fatal(err)
+	}
+	OpenUsage(home) // reload only
 }

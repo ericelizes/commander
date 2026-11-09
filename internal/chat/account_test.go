@@ -157,17 +157,17 @@ func TestSetAccountFromCodexRunsClaudeOnThatAccount(t *testing.T) {
 
 func TestUsageLimitShowsANoticeAndContinueSwitchesAccount(t *testing.T) {
 	h := accountHarness(t, "work")
-	h.role("manager-d")
-	h.start("manager-d")
-	sub := h.subscribe("manager-d")
-	if err := h.e.Send(context.Background(), "manager-d", "usagelimit"); err != nil {
+	h.role("operator-d")
+	h.start("operator-d")
+	sub := h.subscribe("operator-d")
+	if err := h.e.Send(context.Background(), "operator-d", "usagelimit"); err != nil {
 		t.Fatal(err)
 	}
 	seen := waitFor(t, sub, func(e Event) bool { return e.Kind == KindNotice && e.Subtype == "usage_limit" })
 	if n := seen[len(seen)-1]; !strings.Contains(n.Text, "default") || !strings.Contains(n.Text, "You've hit your limit") {
 		t.Errorf("notice = %q", n.Text)
 	}
-	st, _ := h.e.Status("manager-d")
+	st, _ := h.e.Status("operator-d")
 	if st.UsageLimit == nil || st.UsageLimit.Account != "default" || st.UsageLimit.ResetsAt != 4102444800 {
 		t.Fatalf("status usage limit = %+v", st.UsageLimit)
 	}
@@ -179,8 +179,8 @@ func TestUsageLimitShowsANoticeAndContinueSwitchesAccount(t *testing.T) {
 	}
 
 	// The notice's one click: switch and continue.
-	sub = h.subscribe("manager-d")
-	st, err := h.e.SetAccount(context.Background(), "manager-d", "work", SwitchOptions{Continue: true})
+	sub = h.subscribe("operator-d")
+	st, err := h.e.SetAccount(context.Background(), "operator-d", "work", SwitchOptions{Continue: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -282,5 +282,56 @@ func TestUsageLimitOfReadsBothSignals(t *testing.T) {
 		if got := usageLimitOf(tc.ev) != nil; got != tc.want {
 			t.Errorf("%+v: %v", tc.ev, got)
 		}
+	}
+}
+
+// A new Manager whose default account is out starts on the next account with
+// usage (intent kept); a person's account choice is left alone.
+func TestAssignNewManagerRuntimeMovesOffAnOutAccount(t *testing.T) {
+	h := accountHarness(t, "work")
+	h.e.Usage().MarkOut(RuntimeClaude, claudeacct.Default, "manager-x", time.Now().Add(time.Hour).Unix(), time.Now())
+	if err := AssignNewManagerRuntime(h.home, "manager-n", "ws-n", 0, func() bool { return true }); err != nil {
+		t.Fatal(err)
+	}
+	if got := ReadAccount(h.home, "manager-n"); got != "work" {
+		t.Fatalf("account %q", got)
+	}
+	if ReadAccountIntent(h.home, "manager-n") != claudeacct.Default {
+		t.Error("intent not kept")
+	}
+	if err := WriteAccount(h.home, "manager-p", claudeacct.Default); err != nil {
+		t.Fatal(err)
+	}
+	if err := AssignNewManagerRuntime(h.home, "manager-p", "ws-p", 0, func() bool { return true }); err != nil {
+		t.Fatal(err)
+	}
+	if ReadAccount(h.home, "manager-p") != claudeacct.Default {
+		t.Error("a person's account was moved")
+	}
+}
+
+// A Manager (no auto-switch file) that hits a usage limit moves to the next
+// account with usage, is told to re-read its handover, and the move is reported.
+func TestManagerMovesAtUsageLimitAndReportsIt(t *testing.T) {
+	h := accountHarness(t, "work")
+	moved := make(chan string, 1)
+	h.e.SetUsageMoveHook(func(role, text string) { moved <- role + ": " + text })
+	h.role("manager-m")
+	h.start("manager-m")
+	sub := h.subscribe("manager-m")
+	if err := h.e.Send(context.Background(), "manager-m", "usagelimit"); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, sub, func(e Event) bool { return e.Kind == KindNotice && e.Subtype == "usage_limit_switch" })
+	if got := ReadAccount(h.home, "manager-m"); got != "work" {
+		t.Fatalf("account %q", got)
+	}
+	select {
+	case m := <-moved:
+		if !strings.Contains(m, "manager-m") || !strings.Contains(m, "to work") {
+			t.Fatalf("note %q", m)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("no move note")
 	}
 }

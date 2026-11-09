@@ -3,11 +3,14 @@ package wsmgr
 import (
 	"context"
 	"errors"
+	"os"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/example-user/commander/internal/beads"
+	"github.com/example-user/commander/internal/chat"
 	"github.com/example-user/commander/internal/mailstate"
 	"github.com/example-user/commander/internal/tui"
 )
@@ -392,5 +395,26 @@ func TestNestedUnderAClosedStep_IsOutOfPlay(t *testing.T) {
 	nested, err := NestedOwners(ctx, bc, f.proj)
 	if err != nil || slices.ContainsFunc(nested, func(tg Target) bool { return tg.BeadID == "demo-x" }) {
 		t.Fatalf("listed under a closed step: %v %v", nested, err)
+	}
+}
+
+// The nested cutover with Codex at its limit: every new nested Manager starts
+// on Claude even at share 1, none pinned.
+func TestEnsureNative_NestedCutoverNeverDrawsOutCodex(t *testing.T) {
+	f, _ := nestedFixture(t, true)
+	home := os.Getenv("COMMANDER_HOME")
+	old := codexHooksReady
+	codexHooksReady = func() bool { return true }
+	t.Cleanup(func() { codexHooksReady = old })
+	t.Setenv("COMMANDER_CODEX_MANAGER_SHARE", "1")
+	chat.OpenUsage(home).MarkOut(chat.RuntimeCodex, "", "operator-x", time.Now().Add(48*time.Hour).Unix(), time.Now())
+	f.m.Native = &fakeNative{}
+	if err := f.m.EnsureNative(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{beads.NestedRoot, beads.NestedB, beads.NestedA1} {
+		if rt := chat.ReadRuntime(home, Role(id)); rt != chat.RuntimeClaude || chat.RuntimePinned(home, Role(id)) {
+			t.Errorf("%s: runtime %s", id, rt)
+		}
 	}
 }

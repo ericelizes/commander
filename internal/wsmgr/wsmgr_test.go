@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/example-user/commander/internal/agentmail"
 	"github.com/example-user/commander/internal/agentrt"
@@ -496,5 +497,34 @@ func TestOpen_NativeFailureIsNotHiddenByMissingTmux(t *testing.T) {
 	_, err := f.m.Open(context.Background(), "example-app", "example-app-t11", OpenOptions{})
 	if err == nil || !strings.Contains(err.Error(), "native start of") || !strings.Contains(err.Error(), "file does not exist") {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+// Codex at its limit (cmdr account list says out): a new Manager the share
+// would draw onto Codex starts on Claude instead, unpinned.
+func TestEnsureNative_NewManagerNeverStartsOnOutCodex(t *testing.T) {
+	f := newFixture(t)
+	home := os.Getenv("COMMANDER_HOME")
+	old := codexHooksReady
+	codexHooksReady = func() bool { return true }
+	t.Cleanup(func() { codexHooksReady = old })
+	t.Setenv("COMMANDER_CODEX_MANAGER_SHARE", "1")
+	chat.OpenUsage(home).MarkOut(chat.RuntimeCodex, "", "operator-x", time.Now().Add(48*time.Hour).Unix(), time.Now())
+	f.m.Native = &fakeNative{fresh: map[string]bool{"manager-example-app-t11": true}}
+	if err := f.m.EnsureNative(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if rt := chat.ReadRuntime(home, "manager-example-app-t11"); rt != chat.RuntimeClaude || chat.RuntimePinned(home, "manager-example-app-t11") {
+		t.Errorf("runtime %s, pinned %v", rt, chat.RuntimePinned(home, "manager-example-app-t11"))
+	}
+}
+
+func TestNoteOnWorkstreamCommentsTheBead(t *testing.T) {
+	f := newFixture(t)
+	if err := f.m.NoteOnWorkstream(context.Background(), "manager-example-app-t11", "moved to Claude"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.m.NoteOnWorkstream(context.Background(), "commander", "x"); err != nil {
+		t.Fatal(err)
 	}
 }

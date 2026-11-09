@@ -44,6 +44,8 @@ type Options struct {
 	Resolver Resolver // role -> Spec
 	States   StateSink
 	Costs    CostSink // optional: per-turn cost of each role
+	// OnUsageMove, when set, is told of every move a usage limit made (role, text).
+	OnUsageMove func(role, text string)
 	// Usage keeps the latest plan usage per account; default OpenUsage(Home).
 	Usage *UsageStore
 	// Procs finds processes that reference a session id; default PSScanner.

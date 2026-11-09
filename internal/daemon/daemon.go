@@ -362,6 +362,13 @@ func New() (*Daemon, error) {
 	} else {
 		dir := layout.NewDirector()
 		managers := &wsmgr.Manager{Store: st, Beads: cached, Reg: amServer, AmKey: commanderRepo, Dir: dir, Numbered: liveWorkstreams(live)}
+		chatEngine.SetUsageMoveHook(func(role, text string) {
+			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+			defer cancel()
+			if err := managers.NoteOnWorkstream(ctx, role, text); err != nil {
+				log.Printf("usage move note for %s: %v", role, err)
+			}
+		})
 		deliverer := chatDeliverer{chat: chatEngine, tmux: &wake.TmuxDeliverer{Projects: st, Director: dir, Managers: managers}}
 		if chatEngine != nil {
 			managers.Native = nativeChats{e: chatEngine}

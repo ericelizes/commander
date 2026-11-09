@@ -105,6 +105,8 @@ type SwitchOptions struct {
 	// Continue sends ContinueMessage after the restart, so the agent picks up
 	// the turn a usage limit stopped.
 	Continue bool
+	// Message replaces ContinueMessage when Continue is set.
+	Message string
 }
 
 // ContinueMessage is the first message after a switch made to get past a usage limit.
@@ -173,7 +175,11 @@ func (e *Engine) restart(ctx context.Context, role string, o SwitchOptions) (Sta
 	if err != nil || !o.Continue {
 		return st, err
 	}
-	if err := e.send(role, ContinueMessage, "mail"); err != nil {
+	msg := o.Message
+	if msg == "" {
+		msg = ContinueMessage
+	}
+	if err := e.send(role, msg, "mail"); err != nil {
 		return st, err
 	}
 	return e.Status(role)
