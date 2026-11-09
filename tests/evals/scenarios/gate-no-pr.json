@@ -1,0 +1,15 @@
+{
+  "Comment": "A stage that ships with no PR (a deploy on a VM) and its merged gate, run through the real cmdr against a real bd. Each case gets its own stage and gate. Role 'owner' is the workstream's own Manager.",
+  "Cases": [
+    {"Name": "a plain pass still refuses a merge with no PR", "Verb": "pass", "Role": "", "Evidence": "answer TEAM-12-a1", "Exit": 1, "Stderr": "has no PR yet", "After": "open"},
+    {"Name": "the user passes it with the approval on the record", "Verb": "pass", "Role": "", "NoPR": "deploy on a VM, nothing to merge", "Evidence": "answer TEAM-12-a1: the user approved the deploy", "Exit": 0, "After": "closed", "Notes": 1},
+    {"Name": "the owning Manager passes it", "Verb": "pass", "Role": "owner", "NoPR": "deploy on a VM, nothing to merge", "Evidence": "answer TEAM-12-a2", "Exit": 0, "After": "closed", "Notes": 1},
+    {"Name": "the owning Manager removes it", "Verb": "rm", "Role": "owner", "NoPR": "deploy on a VM, nothing to merge", "Evidence": "answer TEAM-12-a3", "Exit": 0, "After": "gone", "Notes": 1},
+    {"Name": "Commander replaces it with another gate", "Verb": "apply", "Role": "commander", "NoPR": "deploy on a VM, nothing to merge", "Evidence": "answer TEAM-12-a4", "Exit": 0, "After": "gone", "Notes": 1},
+    {"Name": "a pr: label on the stage is a PR to review", "Verb": "pass", "Role": "owner", "StageLabel": "pr:7", "NoPR": "deploy on a VM, nothing to merge", "Evidence": "answer TEAM-12-a5", "Exit": 1, "Stderr": "has a PR to review", "After": "open"},
+    {"Name": "a pr: label on the gate is a PR to review", "Verb": "rm", "Role": "owner", "GateLabel": "pr:8", "NoPR": "deploy on a VM, nothing to merge", "Evidence": "answer TEAM-12-a6", "Exit": 1, "Stderr": "has a PR to review", "After": "open"},
+    {"Name": "an Operator is refused", "Verb": "pass", "Role": "operator-op-sample-1", "NoPR": "deploy on a VM, nothing to merge", "Evidence": "answer TEAM-12-a7", "Exit": 1, "Stderr": "Operators cannot waive", "After": "open"},
+    {"Name": "another Manager is refused", "Verb": "pass", "Role": "manager-other-1", "NoPR": "deploy on a VM, nothing to merge", "Evidence": "answer TEAM-12-a8", "Exit": 1, "Stderr": "may waive the merge rule", "After": "open"},
+    {"Name": "no approval named is refused", "Verb": "rm", "Role": "owner", "NoPR": "deploy on a VM, nothing to merge", "Exit": 1, "Stderr": "--evidence", "After": "open"}
+  ]
+}
