@@ -299,29 +299,45 @@ const (
 
 // reflogWrote reads a reflog message: did that update make commits? Moves that
 // only point the ref somewhere (created from, reset, checkout, any
-// fast-forward, a rebase's start) wrote nothing.
+// fast-forward, a rebase's start) wrote nothing. Only the action (the text
+// before the first ": ") and git's own fixed messages decide; a commit subject,
+// which follows the action, is never searched.
 func reflogWrote(msg string) (kind int, onto string) {
-	lower := strings.ToLower(msg)
-	if strings.Contains(lower, "fast-forward") {
+	action, rest, ok := strings.Cut(msg, ": ")
+	if !ok {
 		return wroteNothing, ""
 	}
-	if strings.HasPrefix(msg, "rebase") || strings.HasPrefix(msg, "pull --rebase") {
-		for _, a := range []string{"(pick)", "(reword)", "(squash)", "(fixup)", "(edit)"} {
-			if strings.Contains(msg, a) {
+	// A rebase step names its kind in parentheses: "rebase (pick)",
+	// "rebase -i (finish)", "pull --rebase (pick)".
+	if i := strings.Index(action, " ("); i >= 0 && strings.HasSuffix(action, ")") {
+		base, step := action[:i], action[i+2:len(action)-1]
+		if base == "rebase" || strings.HasPrefix(base, "rebase ") || strings.HasPrefix(base, "pull --rebase") {
+			switch step {
+			case "pick", "reword", "squash", "fixup", "edit", "continue":
 				return wroteNew, ""
+			case "finish":
+				if _, o, ok := strings.Cut(rest, " onto "); ok && isHex(strings.TrimSpace(o)) {
+					return wroteRange, strings.TrimSpace(o)
+				}
 			}
+			return wroteNothing, ""
 		}
-		if strings.Contains(msg, "(finish)") {
-			if _, o, ok := strings.Cut(msg, " onto "); ok && isHex(strings.TrimSpace(o)) {
-				return wroteRange, strings.TrimSpace(o)
-			}
-		}
-		return wroteNothing, ""
 	}
-	for _, p := range []string{"commit", "cherry-pick", "revert", "am:", "merge ", "pull:", "pull "} {
-		if strings.HasPrefix(msg, p) {
-			return wroteNew, ""
+	switch {
+	case action == "commit" || strings.HasPrefix(action, "commit ("):
+		return wroteNew, ""
+	case action == "cherry-pick":
+		if rest == "fast-forward" {
+			return wroteNothing, ""
 		}
+		return wroteNew, ""
+	case action == "revert", action == "am":
+		return wroteNew, ""
+	case strings.HasPrefix(action, "merge "), action == "pull", strings.HasPrefix(action, "pull "):
+		if rest == "Fast-forward" {
+			return wroteNothing, ""
+		}
+		return wroteNew, ""
 	}
 	return wroteNothing, ""
 }

@@ -223,27 +223,94 @@ func TestReflogWrote(t *testing.T) {
 		"commit: fix":                  wroteNew,
 		"commit (amend): fix":          wroteNew,
 		"commit (merge): Merge branch": wroteNew,
-		"merge user-work: Merge made by the 'ort' strategy.": wroteNew,
-		"merge user-work: Fast-forward":                      wroteNothing,
-		"pull: Fast-forward":                                 wroteNothing,
-		"pull: Merge made by the 'ort' strategy.":            wroteNew,
-		"cherry-pick: fast-forward":                          wroteNothing,
-		"cherry-pick: fix":                                   wroteNew,
-		"revert: Revert \"x\"":                               wroteNew,
-		"am: fix":                                            wroteNew,
-		"reset: moving to " + sha:                            wroteNothing,
-		"branch: Created from main":                          wroteNothing,
-		"branch: Reset to main":                              wroteNothing,
-		"checkout: moving from a to b":                       wroteNothing,
-		"rebase (start): checkout user-work":                 wroteNothing,
-		"rebase (pick): own":                                 wroteNew,
-		"pull --rebase (pick): own":                          wroteNew,
-		"rebase (finish): returning to refs/heads/x":         wroteNothing,
-		"rebase (finish): refs/heads/x onto " + sha:          wroteRange,
-		"pull --rebase (finish): refs/heads/x onto " + sha:   wroteRange,
+		"merge user-work: Merge made by the 'ort' strategy.":  wroteNew,
+		"merge user-work: Fast-forward":                       wroteNothing,
+		"pull: Fast-forward":                                  wroteNothing,
+		"pull: Merge made by the 'ort' strategy.":             wroteNew,
+		"cherry-pick: fast-forward":                           wroteNothing,
+		"cherry-pick: fix":                                    wroteNew,
+		"revert: Revert \"x\"":                                wroteNew,
+		"am: fix":                                             wroteNew,
+		"reset: moving to " + sha:                             wroteNothing,
+		"branch: Created from main":                           wroteNothing,
+		"branch: Reset to main":                               wroteNothing,
+		"checkout: moving from a to b":                        wroteNothing,
+		"rebase (start): checkout user-work":                  wroteNothing,
+		"rebase (pick): own":                                  wroteNew,
+		"commit: fast-forward":                                wroteNew,
+		"commit (amend): Fast-forward the reset: moving to x": wroteNew,
+		"commit: merge Fast-forward":                          wroteNew,
+		"revert: Revert \"fast-forward\"":                     wroteNew,
+		"rebase (pick): fast-forward":                         wroteNew,
+		"rebase -i (pick): fast-forward":                      wroteNew,
+		"rebase (continue): fix":                              wroteNew,
+		"cherry-pick: Fast-forward reset: moving to":          wroteNew,
+		"merge x: Merge made by the 'ort' strategy.":          wroteNew,
+		"filter-branch: rewrite":                              wroteNothing,
+		"commitx: y":                                          wroteNothing,
+		"pull --rebase (pick): own":                           wroteNew,
+		"rebase (finish): returning to refs/heads/x":          wroteNothing,
+		"rebase (finish): refs/heads/x onto " + sha:           wroteRange,
+		"pull --rebase (finish): refs/heads/x onto " + sha:    wroteRange,
 	} {
 		if got, _ := reflogWrote(msg); got != want {
 			t.Errorf("%q: got %d want %d", msg, got, want)
 		}
+	}
+}
+
+// Operator commits whose subjects imitate other reflog actions are still
+// attributed: only the action prefix of a reflog entry counts.
+func TestOperatorAuthorshipIgnoresSubjectsThatImitateReflogActions(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	repo := filepath.Join(dir, "repo")
+	git := func(wd string, args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-C", wd}, args...)...)
+		cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	commit := func(wd, msg string) string {
+		git(wd, "commit", "--allow-empty", "-q", "-m", msg)
+		return git(wd, "rev-parse", "HEAD")
+	}
+	if err := os.MkdirAll(repo, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	git(repo, "init", "-q", "-b", "main")
+	git(repo, "config", "user.email", "user@example.com")
+	git(repo, "config", "user.name", "User")
+	commit(repo, "base")
+	wts := filepath.Join(repo, ".worktrees")
+	wt := filepath.Join(wts, "op-s-t1")
+	git(repo, "worktree", "add", "-q", "-B", "op/s-t1", wt, "main")
+	var shas []string
+	for _, subj := range []string{"fast-forward", "Fast-forward", "reset: moving to main", "merge main", "checkout: moving from a to b"} {
+		shas = append(shas, commit(wt, subj))
+	}
+	git(wt, "commit", "--allow-empty", "-q", "--amend", "-m", "amend fast-forward")
+	shas = append(shas, git(wt, "rev-parse", "HEAD"))
+	user := commit(repo, "user fast-forward")
+	runs := []store.AgentRun{{AgentName: "operator-op-s-t1", TaskBeadID: "t1",
+		WorktreePath: sql.NullString{String: wt, Valid: true}}}
+	got, err := operatorAuthorship(ctx, repo, repo, runs, append(shas, user))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, sha := range shas[:len(shas)-2] {
+		if got[sha] == "" {
+			t.Errorf("operator commit %s not attributed", sha)
+		}
+	}
+	if got[shas[len(shas)-1]] == "" {
+		t.Error("amended operator commit not attributed")
+	}
+	if why, ok := got[user]; ok {
+		t.Errorf("user commit attributed: %s", why)
 	}
 }
