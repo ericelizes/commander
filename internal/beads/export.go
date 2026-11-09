@@ -121,12 +121,18 @@ func (c *exportClient) load(ctx context.Context, dir string) (*exportFile, error
 		return nil, errNoExport
 	}
 	if c.exportBehind(dir, fi) {
-		if len(doltJournals(dir)) > 0 {
+		c.mu.Lock()
+		_, warm := c.seen[dir]
+		c.mu.Unlock()
+		if len(doltJournals(dir)) > 0 && warm {
 			// bd export of a big Dolt project takes seconds (5s for 5,600 beads),
 			// and on a busy one a write lands meanwhile, so the export it makes is
 			// behind again. Waiting for it made every load pay the export and
 			// then read bd anyway. Refresh it in the background for later loads
-			// and answer this one from bd now.
+			// and answer this one from bd now. Not on the first load (a cmdrd
+			// start): the detail cache is cold too, and with no fresh export it
+			// reads every bead through bd show (6 min for 5,600 beads,
+			// il9.202.29), so that one waits for the export below.
 			c.flushInBackground(dir)
 			return nil, errNoExport
 		}

@@ -46,6 +46,16 @@ func setExportTime(t *testing.T, dir string, at time.Time) {
 	}
 }
 
+// warmExport makes c a client that has flushed dir before (a running cmdrd,
+// not its first load), so a behind Dolt export is refreshed in the background;
+// the empty stamp set leaves exportBehind to the journal-vs-export mtime rule.
+func warmExport(c Client, dir string) {
+	e := c.(*exportClient)
+	e.mu.Lock()
+	e.seen[dir] = map[string]fileStamp{}
+	e.mu.Unlock()
+}
+
 // waitFlushes waits for the background flushes to reach n.
 func waitFlushes(t *testing.T, c *flushingClient, n int64) {
 	t.Helper()
@@ -76,6 +86,7 @@ func TestExportJournalWriteJustAfterTheExportIsNotServedStale(t *testing.T) {
 	doltJournal(t, dir, e.Add(time.Second)) // the close, 1s after the hold's export
 	inner := &flushingClient{countingClient: &countingClient{MemClient: &MemClient{}}}
 	c := ExportReads(inner)
+	warmExport(c, dir)
 
 	if _, err := c.List(ctx, dir, ListOptions{Status: "all"}); err != nil {
 		t.Fatal(err)
@@ -105,6 +116,7 @@ func TestExportJournalChangedSinceOurFlushIsBehind(t *testing.T) {
 	j := doltJournal(t, dir, e.Add(5*time.Second)) // far ahead: flushed under the old rule too
 	inner := &flushingClient{countingClient: &countingClient{MemClient: &MemClient{}}}
 	c := ExportReads(inner)
+	warmExport(c, dir)
 
 	if _, err := c.List(ctx, dir, ListOptions{Status: "all"}); err != nil {
 		t.Fatal(err)
