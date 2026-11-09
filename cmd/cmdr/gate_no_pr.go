@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 
 	"github.com/example-user/commander/internal/beads"
+	"github.com/example-user/commander/internal/gates"
 	"github.com/example-user/commander/internal/workflowtemplate"
 )
 
@@ -34,6 +36,23 @@ func onlyNoPR(findings []workflowtemplate.Finding, id string) bool {
 		}
 	}
 	return len(findings) > 0
+}
+
+// checkPRRE: words in a gate's check that name a PR: `gh pr <verb> N` (the
+// standard merged check, gates.MergedCheck), a /pull/N URL, "PR #N", "PR N",
+// "pull request #N". A bare "#N" is not one.
+var checkPRRE = regexp.MustCompile(`(?i)\bgh\s+pr\s+[a-z-]+\s+(?:\S*/pull/)?#?\d+\b|/pull/\d+\b|\b(?:PR|pull request)\s*#?\d+\b`)
+
+// namesPR: the gate's own check names a PR. MergeRule reads only pr: labels and
+// review blocks, so a gate made by `apply --template merged --pr N` reads as
+// having no PR; the waiver must not take that gate for a ship with none.
+func namesPR(b beads.Bead) bool {
+	for _, text := range []string{b.Description, b.AcceptanceCriteria} {
+		if gates.IsMergedCheck(strings.TrimSpace(text)) || checkPRRE.MatchString(text) {
+			return true
+		}
+	}
+	return false
 }
 
 // newNoPRWaiver judges the caller before anything is read or written: Operators

@@ -498,6 +498,9 @@ func checkWorkflowCloseOnce(ctx context.Context, bc beads.Client, dir, project, 
 	findings := workflowtemplate.MergeRule(project, repo, nodes, scope)
 	if len(findings) > 0 {
 		if w != nil && !managed && onlyNoPR(findings, id) {
+			if namesPR(n.Bead) {
+				return fmt.Errorf("%s (--no-pr refused: the gate's own check names a PR; label it pr:<n> and plug its review, or redefine the check)", findings[0].Text)
+			}
 			return bc.AddComment(ctx, dir, id, w.comment())
 		}
 		if w != nil {

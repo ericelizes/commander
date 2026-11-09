@@ -152,3 +152,60 @@ func TestGateApplyNoPR_ReplacesTheMergedGate(t *testing.T) {
 		t.Fatalf("gates: %+v", gs)
 	}
 }
+
+// The standard merged gate names its PR only in its check (no pr: label): the
+// rule reads it as having no PR, but the waiver must not take it for one.
+func TestGateNoPR_RefusesAGateWhoseCheckNamesAPR(t *testing.T) {
+	for _, verb := range []string{"pass", "rm", "apply"} {
+		t.Run(verb, func(t *testing.T) {
+			mem := setupGateProject(t)
+			mem.Seed(beads.Bead{ID: "ms-1", Title: "Ship", Labels: []string{"kind:objective"}})
+			_ = mem.SetParent(context.Background(), "/d", "ms-1.2", "ms-1")
+			pinWorkflowRepo(t, "acme/widgets")
+			pinWorkflowGH(t, workflowFakeGH)
+			if code, _, errOut := gateCmd(t, "apply", "--project", "manifest", "--bead", "ms-1.2", "--template", "merged", "--pr", "7", "--repo", "acme/widgets"); code != 0 {
+				t.Fatal(errOut)
+			}
+			g := mergedGate(t, mem)
+			// merged is an auto gate: pass refuses it by verifier; make it a person's
+			// check naming the PR so pass reaches the waiver.
+			if verb == "pass" {
+				if code, _, errOut := gateCmd(t, "add", "--project", "manifest", "--bead", "ms-1.2", "--name", "merged", "--check", "PR #7 merged on GitHub", "--verifier", "user"); code != 0 {
+					t.Fatal(errOut)
+				}
+				g = mergedGate(t, mem)
+			}
+			args := map[string][]string{
+				"pass":  {"pass", "--name", "merged"},
+				"rm":    {"rm", "--name", "merged"},
+				"apply": {"apply", "--template", "spec"},
+			}[verb]
+			args = append(args, "--project", "manifest", "--bead", "ms-1.2", "--evidence", "answer a1", "--no-pr", noPRWhy)
+			code, _, errOut := gateCmd(t, args...)
+			if code == 0 || !strings.Contains(errOut, "check names a PR") {
+				t.Fatalf("exit=%d: %s", code, errOut)
+			}
+			g = mergedGate(t, mem)
+			if g.Status == "closed" || hasLabel(g.Labels, "retired") || len(waiverNotes(t, mem, g.ID)) != 0 {
+				t.Fatalf("a gate naming PR 7 was waived: %+v", g)
+			}
+		})
+	}
+}
+
+func TestNamesPR(t *testing.T) {
+	for text, want := range map[string]bool{
+		`[ "$(gh pr view 7 --repo acme/widgets --json state --jq .state)" = MERGED ]`: true,
+		"gh pr checks 12 green":                     true,
+		"https://github.com/acme/widgets/pull/31":   true,
+		"PR #4 merged":                              true,
+		"pull request 9 is in":                      true,
+		"the ship is live":                          false,
+		"deployed to the VM, smoke #2 passed":       false,
+		"no PR: deploy on a VM, health check green": false,
+	} {
+		if got := namesPR(beads.Bead{Description: text}); got != want {
+			t.Errorf("%q: got %v", text, got)
+		}
+	}
+}
