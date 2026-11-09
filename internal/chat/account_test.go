@@ -467,9 +467,22 @@ func TestManagerLeavesAnOutCodex(t *testing.T) {
 func TestManagerAccountChoiceStillFallsBackToCodex(t *testing.T) {
 	h := accountHarness(t, "work")
 	h.e.opts.CodexHooksReady = func() bool { return true }
+	ctx := context.Background()
+
+	// A Manager drawn onto Codex runs once, then the share drops to 0.
+	t.Setenv(agentrt.CodexManagerShareEnvVar, "1")
+	h.role("manager-d")
+	if err := WriteAutoRuntime(h.home, "manager-d", RuntimeCodex); err != nil {
+		t.Fatal(err)
+	}
+	h.start("manager-d")
+	if err := h.e.Stop(ctx, "manager-d"); err != nil {
+		t.Fatal(err)
+	}
 	t.Setenv(agentrt.CodexManagerShareEnvVar, "0")
+
 	h.role("manager-f")
-	if _, err := h.e.SetAccount(context.Background(), "manager-f", "work", SwitchOptions{}); err != nil {
+	if _, err := h.e.SetAccount(ctx, "manager-f", "work", SwitchOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	until := time.Now().Add(time.Hour).Unix()
@@ -479,17 +492,13 @@ func TestManagerAccountChoiceStillFallsBackToCodex(t *testing.T) {
 		t.Fatalf("account choice blocked the Codex fallback: %+v", st)
 	}
 
-	h.role("manager-d")
-	if err := WriteAutoRuntime(h.home, "manager-d", RuntimeCodex); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(CodexThreadFile(h.home, "manager-d"), []byte("thread-1\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	// Every Claude account out: it stays on Codex. The bug flipped it to Claude
+	// and back at the start (thread file deleted) and posted a false
+	// "moved from Claude account ... to Codex" notice.
 	if st := h.start("manager-d"); st.Runtime != RuntimeCodex {
 		t.Fatalf("drawn Codex at share 0 with Claude out: %+v", st)
 	}
-	if b, err := os.ReadFile(CodexThreadFile(h.home, "manager-d")); err != nil || strings.TrimSpace(string(b)) != "thread-1" {
-		t.Fatalf("the Codex thread was lost: %q %v", b, err)
+	if b, _ := os.ReadFile(filepath.Join(h.e.logDir(), "manager-d.jsonl")); strings.Contains(string(b), "usage_limit_switch") {
+		t.Fatalf("a drawn Codex Manager that never left Codex was reported moved: %s", b)
 	}
 }
