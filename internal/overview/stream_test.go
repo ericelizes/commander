@@ -173,3 +173,27 @@ func TestPartialRecapStreamsCharacterByCharacter(t *testing.T) {
 		t.Fatalf("%+v", r.Changes)
 	}
 }
+
+// An escaped emoji arrives as two \u escapes; until the low half lands the
+// draft holds the high half back instead of showing U+FFFD. Raw UTF-8 cut
+// mid-character is held back the same way.
+func TestPartialRecapHoldsAHighSurrogateBack(t *testing.T) {
+	bs := `\`
+	emoji := bs + "u" + "d83d" + bs + "u" + "de00"
+	for _, text := range []string{"Hi " + emoji + " there", "Hi " + string(rune(0x1F600)) + " there"} {
+		full := `{"summary":{"sentences":[{"text":"` + text + `","sources":[]}]}}`
+		for i := 1; i <= len(full); i++ {
+			r := PartialRecap(full[:i])
+			if n := len(r.Summary.Sentences); n > 0 && strings.ContainsRune(r.Summary.Sentences[0].Text, 0xFFFD) {
+				t.Fatalf("at %d: %q", i, r.Summary.Sentences[0].Text)
+			}
+		}
+		if got := PartialRecap(full).Summary.Sentences[0].Text; got != "Hi "+string(rune(0x1F600))+" there" {
+			t.Fatalf("%q", got)
+		}
+	}
+	// An escaped backslash before u is no escape: the text stays as written.
+	if got := openText(`{"text":"a` + bs + bs + "u" + "d83d"); got != "a"+bs+"u"+"d83d" {
+		t.Fatalf("%q", got)
+	}
+}

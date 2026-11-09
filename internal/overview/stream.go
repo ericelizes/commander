@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"regexp"
+	"unicode/utf8"
 )
 
 type progressKey struct{}
@@ -27,8 +28,8 @@ func progressFrom(ctx context.Context) func(Recap) {
 }
 
 // PartialRecap reads the sentences a half-written reader answer already holds.
-// Only sentences that are complete objects count; a sentence still being
-// written is left out until its closing brace arrives.
+// A sentence still being written counts too: its text so far, marked Partial,
+// with no sources until its closing brace arrives.
 func PartialRecap(buf string) Recap {
 	type frame struct {
 		open  byte
@@ -131,6 +132,8 @@ func PartialRecap(buf string) Recap {
 	return r
 }
 
+var highSurrogate = regexp.MustCompile(`^[dD][89abAB][0-9a-fA-F]{2}$`)
+
 var textKey = regexp.MustCompile(`"text"\s*:\s*"((?:[^"\\]|\\.)*)`)
 
 // openText is the text value of a sentence object that may not be finished:
@@ -156,6 +159,27 @@ func openText(obj string) string {
 			raw = raw[:i]
 		}
 		break
+	}
+	// Hold back a high surrogate whose low half has not arrived, or it reads as U+FFFD.
+	if n := len(raw); n >= 6 && raw[n-6] == '\\' && raw[n-5] == 'u' && highSurrogate.MatchString(raw[n-4:]) {
+		run := 0
+		for j := n - 6; j >= 0 && raw[j] == '\\'; j-- {
+			run++
+		}
+		if run%2 == 1 {
+			raw = raw[:n-6]
+		}
+	}
+	// Raw UTF-8 cut mid-character waits for the rest of it too.
+	for cut := 1; cut <= 3 && cut <= len(raw); cut++ {
+		if b := raw[len(raw)-cut]; b < 0x80 {
+			break
+		} else if b >= 0xC0 {
+			if !utf8.FullRuneInString(raw[len(raw)-cut:]) {
+				raw = raw[:len(raw)-cut]
+			}
+			break
+		}
 	}
 	var out string
 	if json.Unmarshal([]byte(`"`+raw+`"`), &out) != nil {

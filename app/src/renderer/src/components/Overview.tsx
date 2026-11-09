@@ -75,9 +75,20 @@ function Words({ text, settled }: { text: string; settled: number }) {
 }
 
 // StreamSentence paces a sentence's text the way the chat paces a reply. The
-// sources attach once the sentence is complete and fully shown.
-export function StreamSentence({ s, done }: { s: Sentence; done: (s: Sentence) => React.ReactNode }) {
-  const { shown, settled, animating } = useSmoothText(s.text, !!s.partial)
+// sources attach once the sentence is complete and fully shown. A text that no
+// longer extends the one shown here (a refresh's draft taking an earlier
+// recap's place) starts over: while the draft is live it is paced and faded
+// from its first character, never shown whole up to the old length.
+export function StreamSentence({ s, done, live = false }: { s: Sentence; done: (s: Sentence) => React.ReactNode; live?: boolean }) {
+  const prev = useRef(s.text)
+  const restarts = useRef(0)
+  if (!s.text.startsWith(prev.current)) restarts.current++
+  prev.current = s.text
+  return <PacedSentence key={restarts.current} s={s} done={done} start={restarts.current > 0 && live ? 0 : undefined} />
+}
+
+function PacedSentence({ s, done, start }: { s: Sentence; done: (s: Sentence) => React.ReactNode; start?: number }) {
+  const { shown, settled, animating } = useSmoothText(s.text, !!s.partial, start)
   if (s.partial || animating) return <span className="ov-streaming"><Words text={shown} settled={settled} /></span>
   return <>{done(s)}</>
 }
@@ -233,7 +244,7 @@ export function Overview({ ws, row, track, onWorkflow, onTrack }: {
   const cite = (claim: Claim) => sentencesOf(claim).map((s, n) => (
     <Fragment key={n}>
       {n > 0 && ' '}
-      <StreamSentence s={s} done={cited} />
+      <StreamSentence s={s} done={cited} live={draftOn} />
     </Fragment>
   ))
   const stalled = target.kind === 'stalled' || target.kind === 'stuck'
