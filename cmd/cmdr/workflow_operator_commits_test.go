@@ -129,3 +129,121 @@ func TestOperatorAuthorshipReadsTheRepo(t *testing.T) {
 		t.Fatal("unreadable repo passed")
 	}
 }
+
+// Branches made as spawn makes them (-B from main) and then moved onto the
+// user's commits: a reviewer resetting to the PR head, a fast-forward merge, a
+// rebase, a non-fast-forward merge. Only the commits the Operator made count.
+func TestOperatorAuthorshipIgnoresMovesOntoTheUsersCommits(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	repo := filepath.Join(dir, "repo")
+	git := func(wd string, args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-C", wd}, args...)...)
+		cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	commit := func(wd, msg string) string {
+		git(wd, "commit", "--allow-empty", "-q", "-m", msg)
+		return git(wd, "rev-parse", "HEAD")
+	}
+	if err := os.MkdirAll(repo, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	git(repo, "init", "-q", "-b", "main")
+	git(repo, "config", "user.email", "user@example.com")
+	git(repo, "config", "user.name", "User")
+	commit(repo, "base")
+	git(repo, "checkout", "-q", "-b", "user-work")
+	u1 := commit(repo, "user 1")
+	u2 := commit(repo, "user 2")
+	git(repo, "checkout", "-q", "main")
+	wts := filepath.Join(repo, ".worktrees")
+	add := func(name string) string {
+		wt := filepath.Join(wts, name)
+		git(repo, "worktree", "add", "-q", "-B", "op/"+strings.TrimPrefix(name, "op-"), wt, "main")
+		return wt
+	}
+	// The review protocol: reset to the reviewed head, write nothing.
+	rev := add("op-rev-t1")
+	git(rev, "reset", "-q", "--hard", u2)
+	// Fast-forward onto the user's branch, then a fix.
+	ff := add("op-ff-t2")
+	git(ff, "merge", "-q", "--ff-only", "user-work")
+	f1 := commit(ff, "fix after ff")
+	// A commit of its own, rebased onto the user's branch.
+	rb := add("op-rb-t3")
+	commit(rb, "own")
+	git(rb, "rebase", "-q", "user-work")
+	r1 := git(rb, "rev-parse", "HEAD")
+	// A non-fast-forward merge of the user's branch: only the merge commit.
+	mg := add("op-mg-t4")
+	commit(mg, "own before merge")
+	git(mg, "merge", "-q", "--no-ff", "--no-edit", "user-work")
+	m1 := git(mg, "rev-parse", "HEAD")
+
+	var runs []store.AgentRun
+	for _, n := range []string{"op-rev-t1", "op-ff-t2", "op-rb-t3", "op-mg-t4"} {
+		runs = append(runs, store.AgentRun{AgentName: "operator-" + n, TaskBeadID: n[len(n)-2:],
+			WorktreePath: sql.NullString{String: filepath.Join(wts, n), Valid: true}})
+	}
+	all := []string{u1, u2, f1, r1, m1}
+	got, err := operatorAuthorship(ctx, repo, repo, runs, all)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, sha := range []string{u1, u2} {
+		if why, ok := got[sha]; ok {
+			t.Errorf("user commit %s attributed: %s", sha, why)
+		}
+	}
+	for sha, who := range map[string]string{f1: "op-ff-t2", r1: "op-rb-t3", m1: "op-mg-t4"} {
+		if !strings.Contains(got[sha], who) {
+			t.Errorf("%s: got %q, want written by %s", sha, got[sha], who)
+		}
+	}
+	// The reviewer alone wrote nothing, so it is independent of the user's commits.
+	if got, err := operatorAuthorship(ctx, repo, repo, runs[:1], all); err != nil || len(got) != 0 {
+		t.Fatalf("reviewer that reset to the PR head counted as a writer: %v %v", got, err)
+	}
+	// Removing the worktree leaves only the branch reflog: same answer.
+	git(repo, "worktree", "remove", "--force", rb)
+	if got, err := operatorAuthorship(ctx, repo, repo, runs[2:3], all); err != nil || len(got) != 1 || got[r1] == "" {
+		t.Fatalf("rebased commit after worktree removal: %v %v", got, err)
+	}
+}
+
+func TestReflogWrote(t *testing.T) {
+	sha := strings.Repeat("a", 40)
+	for msg, want := range map[string]int{
+		"commit: fix":                  wroteNew,
+		"commit (amend): fix":          wroteNew,
+		"commit (merge): Merge branch": wroteNew,
+		"merge user-work: Merge made by the 'ort' strategy.": wroteNew,
+		"merge user-work: Fast-forward":                      wroteNothing,
+		"pull: Fast-forward":                                 wroteNothing,
+		"pull: Merge made by the 'ort' strategy.":            wroteNew,
+		"cherry-pick: fast-forward":                          wroteNothing,
+		"cherry-pick: fix":                                   wroteNew,
+		"revert: Revert \"x\"":                               wroteNew,
+		"am: fix":                                            wroteNew,
+		"reset: moving to " + sha:                            wroteNothing,
+		"branch: Created from main":                          wroteNothing,
+		"branch: Reset to main":                              wroteNothing,
+		"checkout: moving from a to b":                       wroteNothing,
+		"rebase (start): checkout user-work":                 wroteNothing,
+		"rebase (pick): own":                                 wroteNew,
+		"pull --rebase (pick): own":                          wroteNew,
+		"rebase (finish): returning to refs/heads/x":         wroteNothing,
+		"rebase (finish): refs/heads/x onto " + sha:          wroteRange,
+		"pull --rebase (finish): refs/heads/x onto " + sha:   wroteRange,
+	} {
+		if got, _ := reflogWrote(msg); got != want {
+			t.Errorf("%q: got %d want %d", msg, got, want)
+		}
+	}
+}

@@ -463,8 +463,8 @@ func TestWorkflowBindExternalUserWriter(t *testing.T) {
 	}
 	// Commander may bind the user's commits, never a task-only selection.
 	t.Setenv("COMMANDER_ROLE", "commander")
-	if _, err := bind(nil, u1+","+u2); err != nil {
-		t.Fatal(err)
+	if kept, err := bind(nil, u1); err != nil || !slices.Equal(kept.Tasks, []string{"fix-task"}) || kept.Revision == again.Revision {
+		t.Fatal("Commander's bind must keep the Manager's task writers:", kept, err)
 	}
 	if _, err := bindWorkflowWriters(ctx, mem, "/d", "p", res.Container, head, []string{"fix-task"}, nil); err == nil || !strings.Contains(err.Error(), "writer selection belongs") {
 		t.Fatal(err)

@@ -215,6 +215,11 @@ func bindWorkflowWriters(ctx context.Context, bc beads.Client, dir, project, blo
 		return nil, err
 	}
 	old, err := workflowtemplate.Binding(cs)
+	// Commander records only the user's commits: the task writers the owning
+	// Manager chose for this PR stay bound.
+	if err == nil && old.PR == pr && os.Getenv("COMMANDER_ROLE") == "commander" && len(tasks) == 0 {
+		tasks = slices.Clone(old.Tasks)
+	}
 	if err == nil && old.PR == pr && old.Head == head && slices.Equal(old.Tasks, tasks) && sameExternal(old.External, ext) {
 		return &old, nil
 	}

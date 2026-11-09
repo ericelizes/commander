@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -51,12 +50,14 @@ var workflowOperatorCommits = func(ctx context.Context, project, task string, sh
 }
 
 // operatorAuthorship attributes shas to runs from the local repo, read only:
-//   - reachable from a run's branch (its op/ name, its worktree's branch, or an
-//     archived tip of it) and not from the commit the branch was created at
-//     (the first entry of the branch's reflog; no reflog = all of it counts), so
-//     a fix Operator branched off the user's commits does not claim them;
-//   - made in a run's worktree (a commit, merge, cherry-pick, revert or rebase
-//     step in its HEAD reflog);
+//   - written on a run's branch (its op/ name or its worktree's branch): an
+//     entry of the branch's reflog that made a commit (commit, non-fast-forward
+//     merge, cherry-pick, revert, am, a rebase's new commits), never one that
+//     only moved the branch (created from, reset, checkout, fast-forward), so a
+//     reviewer that reset onto the PR head or a fix Operator branched off the
+//     user's commits does not claim them; a branch with no reflog counts all of
+//     it, as does an archived tip of one (refs/archive/op/; nothing tells there);
+//   - made in a run's worktree (the same entries in its HEAD reflog);
 //   - authored or committed under an identity only Operator runs used (seen in
 //     their reflogs, never in the main checkout's reflog or its user.email).
 //
@@ -131,17 +132,26 @@ func operatorAuthorship(ctx context.Context, repo, projectPath string, runs []st
 				}
 			}
 		}
-		for _, e := range readReflog(filepath.Join(gitdir, "logs", "HEAD")) {
+		es := readReflog(filepath.Join(gitdir, "logs", "HEAD"))
+		if err := claimWritten(ctx, repo, es, present, "made in the worktree of "+who, mark); err != nil {
+			return nil, err
+		}
+		for _, e := range es {
 			if _, ok := opIDs[e.email]; !ok {
 				opIDs[e.email] = who
 			}
-			if authoredAction(e.msg) && slices.Contains(present, e.sha) {
-				mark(e.sha, "made in the worktree of "+who)
-			}
 		}
 	}
+	noReflog := map[string]bool{}
 	for b, who := range branches {
-		for _, e := range readReflog(filepath.Join(common, "logs", "refs", "heads", filepath.FromSlash(b))) {
+		es := readReflog(filepath.Join(common, "logs", "refs", "heads", filepath.FromSlash(b)))
+		if len(es) == 0 {
+			noReflog[b] = true
+		}
+		if err := claimWritten(ctx, repo, es, present, "on branch "+b+" of "+who, mark); err != nil {
+			return nil, err
+		}
+		for _, e := range es {
 			if _, ok := opIDs[e.email]; !ok {
 				opIDs[e.email] = who
 			}
@@ -153,20 +163,9 @@ func operatorAuthorship(ctx context.Context, repo, projectPath string, runs []st
 			return nil, fmt.Errorf("cannot list branches containing %s: %w", sha, err)
 		}
 		for _, ref := range strings.Fields(out) {
-			b, who, base := refRun(ref, branches, common)
-			if who == "" {
-				continue
+			if b, who := refRun(ref, branches, noReflog); who != "" {
+				mark(sha, "on branch "+b+" of "+who)
 			}
-			if base != "" {
-				in, err := isAncestor(ctx, repo, sha, base)
-				if err != nil {
-					return nil, err
-				}
-				if in {
-					continue // there before the Operator's branch was
-				}
-			}
-			mark(sha, "on branch "+b+" of "+who)
 		}
 		ids, err := gitOut(ctx, repo, "show", "-s", "--format=%ae%n%ce", sha)
 		if err != nil {
@@ -181,29 +180,25 @@ func operatorAuthorship(ctx context.Context, repo, projectPath string, runs []st
 	return found, nil
 }
 
-// refRun maps a ref containing a commit to the run branch it belongs to, with
-// the commit that branch was created at ("" = unknown: count all of it).
-func refRun(ref string, branches map[string]string, common string) (branch, who, base string) {
+// refRun maps a ref containing a commit to the run whose whole history it
+// counts as written: an archived tip, or a run branch with no reflog.
+func refRun(ref string, branches map[string]string, noReflog map[string]bool) (branch, who string) {
 	if b, ok := strings.CutPrefix(ref, "refs/heads/"); ok {
-		who = branches[b]
-		if who == "" {
-			return "", "", ""
+		if !noReflog[b] {
+			return "", ""
 		}
-		if es := readReflog(filepath.Join(common, "logs", "refs", "heads", filepath.FromSlash(b))); len(es) > 0 {
-			base = es[0].sha
-		}
-		return b, who, base
+		return b, branches[b]
 	}
 	rest, ok := strings.CutPrefix(ref, "refs/archive/op/")
 	if !ok {
-		return "", "", ""
+		return "", ""
 	}
 	i := strings.LastIndex(rest, "-")
 	if i <= 0 || !isHex(rest[i+1:]) {
-		return "", "", ""
+		return "", ""
 	}
 	b := "op/" + rest[:i]
-	return b + " (archived)", branches[b], ""
+	return b + " (archived)", branches[b]
 }
 
 func isHex(s string) bool {
@@ -216,18 +211,6 @@ func isHex(s string) bool {
 		}
 	}
 	return true
-}
-
-func isAncestor(ctx context.Context, repo, a, b string) (bool, error) {
-	err := exec.CommandContext(ctx, "git", "-C", repo, "merge-base", "--is-ancestor", a, b).Run()
-	var exit *exec.ExitError
-	switch {
-	case err == nil:
-		return true, nil
-	case errors.As(err, &exit) && exit.ExitCode() == 1:
-		return false, nil
-	}
-	return false, fmt.Errorf("cannot compare %s with %s: %w", a, b, err)
 }
 
 func gitOut(ctx context.Context, dir string, args ...string) (string, error) {
@@ -251,7 +234,7 @@ func worktreeGitDir(wt string) string {
 	return dir
 }
 
-type reflogEntry struct{ sha, email, msg string }
+type reflogEntry struct{ old, sha, email, msg string }
 
 // readReflog parses a reflog file oldest first ("old new Name <email> ts tz\tmsg").
 func readReflog(path string) []reflogEntry {
@@ -274,24 +257,71 @@ func readReflog(path string) []reflogEntry {
 		if i, j := strings.Index(head, "<"), strings.LastIndex(head, ">"); i >= 0 && j > i {
 			email = strings.ToLower(head[i+1 : j])
 		}
-		es = append(es, reflogEntry{sha: fields[1], email: email, msg: msg})
+		es = append(es, reflogEntry{old: fields[0], sha: fields[1], email: email, msg: msg})
 	}
 	return es
 }
 
-// authoredAction reads a reflog message as one that wrote a new commit.
-func authoredAction(msg string) bool {
-	switch {
-	case strings.HasPrefix(msg, "commit"), strings.HasPrefix(msg, "cherry-pick"), strings.HasPrefix(msg, "revert"):
-		return true
-	case strings.HasPrefix(msg, "merge "):
-		return !strings.Contains(msg, "Fast-forward")
-	case strings.HasPrefix(msg, "rebase"):
-		for _, a := range []string{"(pick)", "(reword)", "(squash)", "(fixup)", "(edit)"} {
-			if strings.Contains(msg, a) {
-				return true
+// claimWritten marks each of present that an entry of es wrote (why).
+func claimWritten(ctx context.Context, repo string, es []reflogEntry, present []string, why string, mark func(sha, why string)) error {
+	for _, e := range es {
+		switch c, onto := reflogWrote(e.msg); c {
+		case wroteNew:
+			if slices.Contains(present, e.sha) {
+				mark(e.sha, why)
+			}
+		case wroteRange:
+			// A finished rebase: the commits it made are on its new tip and on
+			// neither its old tip nor what it was rebased onto.
+			args := []string{"rev-list", e.sha, "^" + onto}
+			if strings.Trim(e.old, "0") != "" {
+				args = append(args, "^"+e.old)
+			}
+			out, err := gitOut(ctx, repo, args...)
+			if err != nil {
+				return fmt.Errorf("cannot read the commits of %q: %w", e.msg, err)
+			}
+			for _, sha := range strings.Fields(out) {
+				if slices.Contains(present, sha) {
+					mark(sha, why)
+				}
 			}
 		}
 	}
-	return false
+	return nil
+}
+
+const (
+	wroteNothing = iota
+	wroteNew     // the entry's new value is a commit it made
+	wroteRange   // a finished rebase onto a commit
+)
+
+// reflogWrote reads a reflog message: did that update make commits? Moves that
+// only point the ref somewhere (created from, reset, checkout, any
+// fast-forward, a rebase's start) wrote nothing.
+func reflogWrote(msg string) (kind int, onto string) {
+	lower := strings.ToLower(msg)
+	if strings.Contains(lower, "fast-forward") {
+		return wroteNothing, ""
+	}
+	if strings.HasPrefix(msg, "rebase") || strings.HasPrefix(msg, "pull --rebase") {
+		for _, a := range []string{"(pick)", "(reword)", "(squash)", "(fixup)", "(edit)"} {
+			if strings.Contains(msg, a) {
+				return wroteNew, ""
+			}
+		}
+		if strings.Contains(msg, "(finish)") {
+			if _, o, ok := strings.Cut(msg, " onto "); ok && isHex(strings.TrimSpace(o)) {
+				return wroteRange, strings.TrimSpace(o)
+			}
+		}
+		return wroteNothing, ""
+	}
+	for _, p := range []string{"commit", "cherry-pick", "revert", "am:", "merge ", "pull:", "pull "} {
+		if strings.HasPrefix(msg, p) {
+			return wroteNew, ""
+		}
+	}
+	return wroteNothing, ""
 }
