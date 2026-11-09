@@ -12,6 +12,7 @@ import (
 
 	"github.com/example-user/commander/internal/beads"
 	"github.com/example-user/commander/internal/decisions"
+	"github.com/example-user/commander/internal/livedata"
 )
 
 // proposalFixture is workstream ms-1 with an in-progress step ms-1.92 and its
@@ -193,8 +194,151 @@ func TestProposal_OverruleLeavesNoStepWithoutAHolder(t *testing.T) {
 			t.Fatalf("a step another holder keeps got a receipt: %v", b.Labels)
 		}
 	}
-	if len(mailer.sent) == 1 && strings.Contains(mailer.sent[0].body, "You now hold") {
-		t.Fatal("mail claims a hold that was not written")
+	if len(mailer.sent) != 1 || strings.Contains(mailer.sent[0].body, "You now hold") {
+		t.Fatalf("want one overrule mail claiming no hold: %+v", mailer.sent)
+	}
+}
+
+func hasStartReceipt(t *testing.T, m *beads.MemClient, id string) bool {
+	t.Helper()
+	b, err := m.Show(context.Background(), "", id)
+	if err != nil || b == nil {
+		t.Fatalf("show %s: %v", id, err)
+	}
+	return hasManagerStart(b.Labels)
+}
+
+// overruleOut runs the overrule as Commander and returns its result JSON.
+func overruleOut(t *testing.T, id string) map[string]any {
+	t.Helper()
+	t.Setenv("COMMANDER_ROLE", "commander")
+	out := runOK(t, runProposals, "overrule", "--project", "manifest", "--bead", id, "--reason", "only an approval was needed")
+	var r map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &r); err != nil {
+		t.Fatalf("%v: %s", err, out)
+	}
+	return r
+}
+
+// A gate or review step proposed through internal-create-objective has no
+// gate-of label: retiring it releases the steps that waited on it by blocks
+// edges, and each is held for the Manager and named in the mail.
+func TestProposal_OverruledCreatedGateHoldsTheStepsThatWaitedOnIt(t *testing.T) {
+	for _, tc := range []struct {
+		name, title string
+		gate        bool
+	}{
+		{"gate", "Greenlight: pick the VMs", true},
+		{"review", "Re-review the fix", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m, mailer := proposalFixture(t, true)
+			m.Seed(beads.Bead{ID: "ms-1.95", Title: "Ship the panel", Labels: []string{"kind:objective"}})
+			t.Setenv("COMMANDER_ROLE", "manager-ms-1")
+			args := []string{"--project", "manifest", "--parent", "ms-1", "--title", tc.title}
+			if tc.gate {
+				args = append(args, "--before", "ms-1.95", "--gate", "--approver", "user", "--criteria", "The user says go")
+			}
+			var r internalCreateObjectiveResult
+			if err := json.Unmarshal([]byte(strings.TrimSpace(runOK(t, runInternalCreateObjective, args...))), &r); err != nil {
+				t.Fatal(err)
+			}
+			if r.Proposed == "" {
+				t.Fatalf("not proposed: %+v", r)
+			}
+			if !tc.gate { // a review step: the later step waits on it
+				if err := m.DependOn(context.Background(), "", "ms-1.95", r.BeadID); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if hasStartReceipt(t, m, "ms-1.95") {
+				t.Fatal("the waiter is held before the overrule")
+			}
+			mailer.sent = nil
+			out := overruleOut(t, r.BeadID)
+			if !hasStartReceipt(t, m, "ms-1.95") {
+				b, _ := m.Show(context.Background(), "", "ms-1.95")
+				t.Fatalf("the step that waited on the retired %s has no holder: %v", tc.name, b.Labels)
+			}
+			if held, _ := out["held"].([]any); len(held) != 1 || held[0] != "ms-1.95" {
+				t.Fatalf("held: %v", out["held"])
+			}
+			if hasStartReceipt(t, m, "ms-1") {
+				t.Fatal("the workstream bead got a step's receipt")
+			}
+			if len(mailer.sent) != 1 || !strings.Contains(mailer.sent[0].body, "You now hold ms-1.95") {
+				t.Fatalf("the mail names no holder: %+v", mailer.sent)
+			}
+		})
+	}
+}
+
+// The board's held rule decides: a step a live Manager's turn holds, or one
+// with an open child, gets no receipt.
+func TestProposal_OverruleWritesNoHoldOnAStepAlreadyHeld(t *testing.T) {
+	t.Run("live Manager turn on the board", func(t *testing.T) {
+		m, mailer := proposalFixture(t, true)
+		if err := m.SetLabel(context.Background(), "", "ms-1.92", "owner:manager-ms-1", true); err != nil {
+			t.Fatal(err)
+		}
+		t.Setenv("COMMANDER_ROLE", "manager-ms-1")
+		runOK(t, runInternalSetObjective, askArgs("ms-1.92")...)
+		snap := &livedata.Snapshot{
+			Agents: map[string]livedata.SnapAgent{"manager-ms-1": {State: "working"}},
+			Workstreams: []livedata.SnapWorkstream{{BeadID: "ms-1", Project: "manifest", Status: "open", ManagerRole: "manager-ms-1",
+				Steps: []livedata.SnapStep{{BeadID: "ms-1.92", Status: "in_progress", State: beads.StateNeedsUser, Owner: "manager-ms-1"}}}},
+		}
+		withCloseSnapshot(t, snap, "commander")
+		mailer.sent = nil
+		out := overruleOut(t, "ms-1.92")
+		if hasStartReceipt(t, m, "ms-1.92") {
+			t.Fatal("a step the live Manager holds got a receipt")
+		}
+		if held, _ := out["held"].([]any); held == nil || len(held) != 0 {
+			t.Fatalf("held should be an empty list: %v", out["held"])
+		}
+		// the same step with the Manager idle is unheld: the receipt goes on
+		snap.Agents["manager-ms-1"] = livedata.SnapAgent{State: "idle"}
+		t.Setenv("COMMANDER_ROLE", "manager-ms-1")
+		runOK(t, runInternalSetObjective, askArgs("ms-1.92")...)
+		overruleOut(t, "ms-1.92")
+		if !hasStartReceipt(t, m, "ms-1.92") {
+			t.Fatal("an idle Manager's step got no receipt")
+		}
+	})
+	t.Run("open child, no board", func(t *testing.T) {
+		m, _ := proposalFixture(t, true)
+		m.Seed(beads.Bead{ID: "ms-1.92.1", Title: "Child", Labels: []string{"kind:objective"}})
+		if err := m.SetParent(context.Background(), "", "ms-1.92.1", "ms-1.92"); err != nil {
+			t.Fatal(err)
+		}
+		t.Setenv("COMMANDER_ROLE", "manager-ms-1")
+		runOK(t, runInternalSetObjective, askArgs("ms-1.92")...)
+		overruleOut(t, "ms-1.92")
+		if hasStartReceipt(t, m, "ms-1.92") {
+			t.Fatal("a step with an open child got a receipt")
+		}
+	})
+}
+
+// A retry of an overrule whose label removal did not happen (a failed hold)
+// finds the gate already retired and the receipt already written, and still
+// tells the Manager it holds the step.
+func TestProposal_OverruleRetryAfterTheUndo(t *testing.T) {
+	m, mailer := proposalFixture(t, true)
+	m.Seed(beads.Bead{ID: "ms-1.95", Title: "Ship the panel", Labels: []string{"kind:objective"}})
+	t.Setenv("COMMANDER_ROLE", "manager-ms-1")
+	var r internalCreateObjectiveResult
+	_ = json.Unmarshal([]byte(strings.TrimSpace(runOK(t, runInternalCreateObjective, "--project", "manifest", "--parent", "ms-1", "--title", "Greenlight: pick the VMs", "--before", "ms-1.95", "--gate", "--approver", "user", "--criteria", "The user says go"))), &r)
+	overruleOut(t, r.BeadID)
+	p := beads.ProposedLabel(beads.ProposedGate, time.Now().Unix(), "")
+	if err := m.SetLabel(context.Background(), "", r.BeadID, p, true); err != nil {
+		t.Fatal(err)
+	}
+	mailer.sent = nil
+	overruleOut(t, r.BeadID)
+	if len(mailer.sent) != 1 || !strings.Contains(mailer.sent[0].body, "You now hold ms-1.95") {
+		t.Fatalf("the retry's mail: %+v", mailer.sent)
 	}
 }
 
