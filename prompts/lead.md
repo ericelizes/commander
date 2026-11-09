@@ -288,17 +288,21 @@ edge already gone counts as done, so after a failure run the same command again.
    recheck reviewer with the prior review bead and the head it reviewed, have it run
    policy with `--base <prior head>`, and prove it with
    `"prior_review":"<prior-review-task>","prior_head":"<prior-full-sha>","fix_commits":["<full-fix-sha>"]`
-   added to the proof (the verifier checks the receipt's base is the prior head and
-   that the prior review completed a typed review of it). Any minor left on the
+   added to the proof (the verifier checks the receipt's base is the prior head,
+   that the prior review completed a FULL typed review of it (never another
+   recheck: a second recheck names the full review and covers every fix since), and
+   that the recheck's receipt lists every prior blocker/major in `resolved`). A
+   review that read only a delta never stands as a plain proof. Any minor left on the
    passing head is filed by the close door as a follow-up bead under your
    workstream (label `workflow-followup-of:<block>`, a Manager-to-start receipt,
    yours to schedule or close) and the step passes; `no_findings` can never hide
    typed minors. **Tiny documentation fixes need no new review:** after a review
    of head H, a fix delta the verifier itself measures on GitHub as documentation
-   only (at most 3 prose files, 20 lines, no agent-instruction file such as a
-   prompts/ file or CLAUDE.md, nothing reviewpolicy reads as sensitive) renews
-   that review with
-   `{"review_bead":"<the review of H>","head":"<current-full-sha>","prior_head":"<H>","fix_commits":["<full-fix-sha>"],"delta_renewal":true}`;
+   only (at most 3 files on the prose allow-list: docs/** or a .md/.rst/.adoc outside
+   dot, prompts/agents/skills directories and never CLAUDE.md/AGENTS.md/SKILL.md;
+   20 lines, nothing reviewpolicy reads as sensitive) renews that typed review with
+   `{"review_bead":"<the review of H>","head":"<current-full-sha>","prior_head":"<H>","fix_commits":["<full-fix-sha>"],"delta_renewal":true}`
+   (renewing a delta recheck: add `"prior_review":"<the full review it retained>"`);
    anything bigger is refused with the reason and needs a delta recheck. Brief
    every reviewer to run `cmdr workflow review-report-check` before it exits.
 

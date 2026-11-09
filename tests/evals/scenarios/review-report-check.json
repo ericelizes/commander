@@ -13,6 +13,8 @@
     {"name": "minors reported NOT CLEAN", "findings": "minor", "verdict": "NOT CLEAN", "want": 1, "says": "minors never make NOT CLEAN"},
     {"name": "invented manifest", "manifest": "0", "want": 1, "says": "no sealed launch record"},
     {"name": "receipt for another head", "receipt_head": "f", "want": 1, "says": "not the reviewed head"},
-    {"name": "blocked review claims CLEAN", "blocked": true, "want": 1, "says": "claims no verdict"}
+    {"name": "blocked review claims CLEAN", "blocked": true, "want": 1, "says": "claims no verdict"},
+    {"name": "embedded receipt in the report", "embedded": true, "want": 0, "says": "\"verdict\":\"CLEAN\""},
+    {"name": "embedded receipt with findings null (the close door refuses it)", "embedded": true, "null_findings": true, "want": 1, "says": "own comment"}
   ]
 }

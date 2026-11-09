@@ -14,7 +14,7 @@ import (
 // A delta renewal carries a review of PriorHead to the current head without a
 // new review, only when the verifier itself measures the fix delta on GitHub
 // as tiny documentation: at most RenewalMaxFiles files and RenewalMaxLines
-// changed lines, every file prose by extension and outside agent instructions,
+// changed lines, every file on the prose allow-list (proseFile),
 // and reviewpolicy.Select reads it as focused (no sensitive path or wording).
 // Anything else, or any read that fails, needs a new review of the delta.
 const (
@@ -22,17 +22,38 @@ const (
 	RenewalMaxLines = 20
 )
 
-var proseExt = map[string]bool{".md": true, ".markdown": true, ".rst": true, ".txt": true, ".adoc": true}
+// markupExt is prose anywhere outside agent configuration; .txt counts only
+// under docs/ (requirements.txt, CMakeLists.txt are build input, not prose).
+var markupExt = map[string]bool{".md": true, ".markdown": true, ".rst": true, ".adoc": true}
 
-// proseFile is documentation by extension. Agent instruction files (a prompts
-// directory, CLAUDE.md, AGENTS.md) are behaviour, never prose.
+// agentDirs are path segments that hold agent instructions or tooling config.
+var agentDirs = map[string]bool{"prompts": true, "agents": true, "skills": true, "commands": true, "hooks": true, "rules": true}
+
+// agentFiles are instruction files read by agents wherever they sit.
+var agentFiles = map[string]bool{"claude.md": true, "agents.md": true, "gemini.md": true, "skill.md": true, "copilot-instructions.md": true, "conventions.md": true}
+
+// proseFile is an explicit allow-list: docs/** prose (markup or .txt) and
+// markup files elsewhere, never inside a dot directory (.claude, .github,
+// .cursor ...), an agent directory (prompts/, agents/, skills/ ...) or an agent
+// instruction file (CLAUDE.md, AGENTS.md, GEMINI.md, SKILL.md ...). Build,
+// config and agent files are behaviour, never prose.
 func proseFile(p string) bool {
-	low := strings.ToLower(p)
-	base := path.Base(low)
-	if base == "claude.md" || base == "agents.md" || strings.HasPrefix(low, "prompts/") || strings.Contains(low, "/prompts/") {
+	low := strings.ToLower(strings.TrimPrefix(p, "./"))
+	parts := strings.Split(low, "/")
+	base := parts[len(parts)-1]
+	if base == "" || agentFiles[base] || strings.HasPrefix(base, ".") {
 		return false
 	}
-	return proseExt[path.Ext(low)]
+	for _, dir := range parts[:len(parts)-1] {
+		if dir == "" || dir == ".." || strings.HasPrefix(dir, ".") || agentDirs[dir] {
+			return false
+		}
+	}
+	ext := path.Ext(base)
+	if markupExt[ext] {
+		return true
+	}
+	return ext == ".txt" && len(parts) > 1 && parts[0] == "docs"
 }
 
 type compareFile struct {
@@ -75,7 +96,8 @@ func renewDelta(ctx context.Context, run GHRunner, pr, prior, head string) (stri
 				return "", fmt.Errorf("the fix delta changes %s, which is not documentation: review the delta", p)
 			}
 		}
-		if (f.Patch == "" && f.Additions+f.Deletions > 0) || f.Status == "removed" {
+		// No patch is a binary or unreadable change, except a pure rename.
+		if (f.Patch == "" && !(f.Status == "renamed" && f.Additions+f.Deletions == 0)) || f.Status == "removed" {
 			return "", fmt.Errorf("the fix delta's change to %s cannot be read or removes it: review the delta", f.Name)
 		}
 		files = append(files, reviewpolicy.File{Path: f.Name, Added: f.Additions, Deleted: f.Deletions})

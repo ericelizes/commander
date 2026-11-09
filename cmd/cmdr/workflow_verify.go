@@ -350,13 +350,24 @@ func checkWorkflowCloseOnce(ctx context.Context, bc beads.Client, dir, project, 
 						if !ok || e.Binding != binding.Revision || e.Head != binding.Head || e.PR != binding.PR || e.Proof == nil {
 							continue
 						}
-						first, err := workflowRolesInScope(ctx, bc, dir, project, root, e.Proof.ReviewBead)
-						if err != nil {
-							return workflowtemplate.Review{}, err
-						}
+						// Every review the primary evidence stands on (its retained
+						// prior review too); this reader also judges the adversarial
+						// proof's own prior_review, so neither can borrow the primary's.
 						found = true
-						if roleOverlap(roles, first) {
-							return workflowtemplate.Review{}, fmt.Errorf("adversarial reviewer must differ from first reviewer")
+						for _, primary := range []string{e.Proof.ReviewBead, e.Proof.PriorReview} {
+							if primary == "" {
+								continue
+							}
+							if primary == reviewID {
+								return workflowtemplate.Review{}, fmt.Errorf("adversarial review must not name the primary step's review %s", primary)
+							}
+							first, err := workflowRolesInScope(ctx, bc, dir, project, root, primary)
+							if err != nil {
+								return workflowtemplate.Review{}, err
+							}
+							if roleOverlap(roles, first) {
+								return workflowtemplate.Review{}, fmt.Errorf("adversarial reviewer must differ from first reviewer (review %s)", primary)
+							}
 						}
 					}
 				}

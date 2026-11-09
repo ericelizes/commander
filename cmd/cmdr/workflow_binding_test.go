@@ -351,3 +351,51 @@ func TestWorkflowBindWritersDispatchRefusesBeforeIO(t *testing.T) {
 		})
 	}
 }
+
+// The adversarial step can borrow no review the primary evidence stands on: its
+// retained prior review counts as the primary's too (M4 of the bounded loop's review).
+func TestWorkflowAdversarialCannotBorrowThePrimarysPriorReview(t *testing.T) {
+	ctx := context.Background()
+	mem := &beads.MemClient{}
+	res := seedReviewWorkflow(t, mem)
+	pinWorkflowGH(t, workflowFakeGH)
+	for _, task := range []string{"primary", "earlier", "peer"} {
+		mem.Seed(beads.Bead{ID: task, Status: "closed", Labels: []string{"owner:manager-B"}})
+		mem.SetParent(ctx, "/d", task, "B")
+		mem.AddComment(ctx, "/d", task, "Head: head1\nCLEAN")
+	}
+	for _, s := range res.Remaining[:3] {
+		if s.Step != "devin-comments" {
+			raw, _ := json.Marshal(workflowtemplate.Proof{ReviewBead: "primary", Head: "head1", NoFindings: true})
+			mem.AddComment(ctx, "/d", s.BeadID, workflowtemplate.ProofPrefix+string(raw))
+		}
+		if err := checkWorkflowClose(ctx, mem, "/d", "p", s.BeadID); err != nil {
+			t.Fatal(err)
+		}
+		mem.Close(ctx, "/d", s.BeadID)
+		if s.Step != "review" {
+			continue
+		}
+		// The primary's evidence as a delta recheck would record it: it retains "earlier".
+		comments, _ := mem.Comments(ctx, "/d", s.BeadID)
+		for _, c := range comments {
+			if e, ok := workflowtemplate.ParseEvidence(c.Text); ok && e.Proof != nil {
+				e.Proof.PriorReview, e.Proof.PriorHead = "earlier", strings.Repeat("1", 40)
+				mem.AddComment(ctx, "/d", s.BeadID, e.Comment())
+			}
+		}
+	}
+	raw, _ := json.Marshal(workflowtemplate.Proof{ReviewBead: "peer", Head: "head1", NoFindings: true})
+	mem.AddComment(ctx, "/d", res.Remaining[3].BeadID, workflowtemplate.ProofPrefix+string(raw))
+	old := workflowTaskRoles
+	workflowTaskRoles = func(_ context.Context, _, task string) ([]string, error) {
+		if task == "peer" || task == "earlier" {
+			return []string{"operator-common"}, nil
+		}
+		return []string{"operator-" + task}, nil
+	}
+	t.Cleanup(func() { workflowTaskRoles = old })
+	if err := checkWorkflowClose(ctx, mem, "/d", "p", res.Remaining[3].BeadID); err == nil || !strings.Contains(err.Error(), "review earlier") {
+		t.Fatal(err)
+	}
+}

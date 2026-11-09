@@ -369,8 +369,8 @@ func reviewProof(ctx context.Context, run GHRunner, read ReviewReader, pr string
 	// A renewal judges the review on the head it read; everything else on the current head.
 	reviewed, note := h.SHA, ""
 	if p.DeltaRenewal {
-		if p.Addendum != nil || p.PriorReview != "" || !hexLength(p.PriorHead, 40) || p.PriorHead == h.SHA || len(p.FixCommits) == 0 {
-			return nil, fmt.Errorf("a delta renewal names the renewed review as review_bead, its full prior_head and the fix_commits since, with no prior_review or addendum")
+		if p.Addendum != nil || !hexLength(p.PriorHead, 40) || p.PriorHead == h.SHA || len(p.FixCommits) == 0 {
+			return nil, fmt.Errorf("a delta renewal names the renewed review as review_bead, its full prior_head and the fix_commits since, with no addendum")
 		}
 		reviewed = p.PriorHead
 	}
@@ -381,6 +381,22 @@ func reviewProof(ctx context.Context, run GHRunner, read ReviewReader, pr string
 	}
 	current := currentResult(r, reviewed)
 	if p.DeltaRenewal {
+		if current == nil {
+			return nil, fmt.Errorf("a delta renewal carries only a complete typed review: review %s has none on head %s", r.ID, p.PriorHead)
+		}
+		// The renewed review must stand on full coverage: a full review, or a
+		// delta recheck whose proof names the full review it retained
+		// (prior_review), judged exactly as that recheck was.
+		full := fullCoverage(ctx, run, pr, h, r.ID, current)
+		if p.PriorReview == "" {
+			if full != nil {
+				return nil, full
+			}
+		} else if full == nil {
+			return nil, fmt.Errorf("review %s is a full review: a renewal names prior_review only to renew a delta recheck", r.ID)
+		} else if err := deltaRecheck(ctx, run, read, pr, h, &Proof{ReviewBead: r.ID, PriorReview: p.PriorReview, PriorHead: current.Base, FixCommits: p.FixCommits}, current); err != nil {
+			return nil, fmt.Errorf("renewing delta recheck %s: %w", r.ID, err)
+		}
 		on, err := onPR(ctx, run, pr, h, p.PriorHead)
 		if err != nil {
 			return nil, fmt.Errorf("prior head %s: %w", p.PriorHead, err)
@@ -405,6 +421,12 @@ func reviewProof(ctx context.Context, run GHRunner, read ReviewReader, pr string
 		if err := deltaRecheck(ctx, run, read, pr, h, p, current); err != nil {
 			return nil, err
 		}
+	} else if !p.DeltaRenewal && p.Addendum == nil && current != nil {
+		// A plain proof stands on its own review: one that reviewed only a delta
+		// (its base a PR commit) covers nothing before it.
+		if err := fullCoverage(ctx, run, pr, h, r.ID, current); err != nil {
+			return nil, err
+		}
 	}
 	for _, sha := range p.FixCommits {
 		on, err := onPR(ctx, run, pr, h, sha)
@@ -424,6 +446,20 @@ func reviewProof(ctx context.Context, run GHRunner, read ReviewReader, pr string
 	return out, nil
 }
 
+// fullCoverage refuses a typed review that reviewed only a delta: its base is
+// one of the PR's commits, so it saw nothing between the PR base and that
+// commit. A full review's base is the PR base (or a merge-base), never on the PR.
+func fullCoverage(ctx context.Context, run GHRunner, pr string, h Head, review string, res *ReviewResult) error {
+	on, err := onPR(ctx, run, pr, h, res.Base)
+	if err != nil {
+		return fmt.Errorf("review %s base %s: %w", review, res.Base, err)
+	}
+	if on {
+		return fmt.Errorf("review %s reviewed only the delta %s..%s (its base is a PR commit): prove it as a delta recheck with prior_review and prior_head naming the full review it builds on", review, res.Base, res.Head)
+	}
+	return nil
+}
+
 // currentResult is the latest valid typed result of r on head, nil when none
 // (a legacy CLEAN report carries no findings to file).
 func currentResult(r Review, head string) *ReviewResult {
@@ -440,8 +476,10 @@ func currentResult(r Review, head string) *ReviewResult {
 
 // deltaRecheck holds a recheck that reviewed only the fix delta to honest
 // retained coverage: the recheck's typed receipt has base = the prior head, the
-// prior review completed a typed review of that head, the prior head is on the
-// PR and the fix pass between them is named.
+// prior review is a complete full typed review of that head (never itself a
+// delta, so coverage never chains), every blocker/major it found is named in the
+// recheck's resolved list, the prior head is on the PR and the fix pass between
+// them is named.
 func deltaRecheck(ctx context.Context, run GHRunner, read ReviewReader, pr string, h Head, p *Proof, current *ReviewResult) error {
 	if p.PriorReview == "" || !hexLength(p.PriorHead, 40) || p.PriorHead == h.SHA {
 		return fmt.Errorf("a delta recheck proof needs prior_review and the full prior_head it was reviewed at (not the current head)")
@@ -468,6 +506,31 @@ func deltaRecheck(ctx context.Context, run GHRunner, read ReviewReader, pr strin
 	retained := currentResult(prior, p.PriorHead)
 	if retained == nil || retained.Execution != "complete" || retained.Coverage != "complete" || retained.Source == "not-assessed" {
 		return fmt.Errorf("prior review %s has no complete typed review of head %s to retain", p.PriorReview, p.PriorHead)
+	}
+	if err := fullCoverage(ctx, run, pr, h, p.PriorReview, retained); err != nil {
+		return fmt.Errorf("a delta recheck retains one full review, never another delta (a later recheck names the full review as prior_review and its head as prior_head): %w", err)
+	}
+	resolved := map[string]bool{}
+	for _, id := range current.Resolved {
+		resolved[id] = true
+	}
+	known := map[string]bool{}
+	var unverified []string
+	for _, f := range retained.Findings {
+		known[f.ID] = true
+		switch {
+		case resolved[f.ID]:
+		case f.Severity == "blocker" || f.Severity == "major":
+			unverified = append(unverified, f.ID)
+		}
+	}
+	for _, id := range current.Resolved {
+		if !known[id] {
+			return fmt.Errorf("delta recheck %s resolves %s, which is no finding of prior review %s", p.ReviewBead, id, p.PriorReview)
+		}
+	}
+	if len(unverified) > 0 {
+		return fmt.Errorf("delta recheck %s does not verify the prior review's blocker/major finding(s) %s fixed: its receipt must list each one in resolved", p.ReviewBead, strings.Join(unverified, ", "))
 	}
 	on, err := onPR(ctx, run, pr, h, p.PriorHead)
 	if err != nil {

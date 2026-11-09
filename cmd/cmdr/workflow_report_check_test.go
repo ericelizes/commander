@@ -24,6 +24,8 @@ func TestReviewReportCheckScenario(t *testing.T) {
 			Manifest    string `json:"manifest"`
 			ReceiptHead string `json:"receipt_head"`
 			Blocked     bool   `json:"blocked"`
+			Embedded    bool   `json:"embedded"`
+			NullFinds   bool   `json:"null_findings"`
 			Want        int    `json:"want"`
 			Says        string `json:"says"`
 		} `json:"cases"`
@@ -64,6 +66,13 @@ func TestReviewReportCheckScenario(t *testing.T) {
 			}
 			if c.DropHead {
 				headLine = "Reviewed the branch tip."
+			}
+			if c.NullFinds {
+				receipt = strings.Replace(receipt, `"findings":[]`, `"findings":null`, 1)
+			}
+			if c.Embedded {
+				headLine += "\n" + receipt
+				c.NoReceipt = true
 			}
 			dir := t.TempDir()
 			reportFile := filepath.Join(dir, "report.md")

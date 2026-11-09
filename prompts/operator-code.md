@@ -124,7 +124,12 @@ Record the verifier receipt as `workflow-review-result@v1` followed by JSON:
 A **recheck** (your brief names the prior review and the head it reviewed)
 reviews only the fix delta: run `review-policy` and `review-exec` with
 `--base <prior reviewed head>`, so the receipt's `base` is that head; the prior
-review's coverage of the rest is retained, so do not re-review unchanged code.
+review's coverage of the rest is retained, so do not re-review unchanged code,
+but verify each blocker/major of the prior review is fixed in the delta and list
+those ids in the receipt as `"resolved":["<prior finding id>"]` (the close door
+refuses a recheck that leaves any prior blocker/major unlisted). The prior must
+be a full review: a later recheck names the full review and reviews everything
+since its head, never another recheck's delta.
 Grade every finding honestly. Minors never make the report NOT CLEAN: the review
 loop gives minors at most one fix pass, and the close door files any minor left
 on the passing head as a follow-up bead for the Manager (decision d78), so a

@@ -60,7 +60,7 @@ func CheckReport(report, receipt, head string, read RecordReader) (string, error
 		return "", fmt.Errorf("the receipt would be refused: %w", err)
 	}
 	complete := result.Execution == "complete" && result.Coverage == "complete" && result.Source != "not-assessed"
-	if embedded && (!complete || result.Source != "clear" || !hexLength(rec.Manifest.PromptHash, 64)) {
+	if embedded && (!complete || result.Source != "clear" || result.Findings == nil || !hexLength(rec.Manifest.PromptHash, 64)) {
 		return "", fmt.Errorf("a receipt inside the report is accepted only for a clear complete review with no findings: post it as its own comment")
 	}
 	clean, notClean := verdictLines(report)
