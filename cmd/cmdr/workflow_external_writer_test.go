@@ -26,13 +26,24 @@ func TestExternalWriterBindingScenario(t *testing.T) {
 				From, To string
 				Commits  []string
 			} `json:"range"`
+			OpRange struct {
+				From, To string
+				Commits  []string
+			} `json:"op_range"`
+			OffRange struct {
+				From, To string
+				Commits  []string
+			} `json:"off_range"`
 		} `json:"pr"`
-		Cases []struct {
+		OperatorCommits map[string]string `json:"operator_commits"`
+		Cases           []struct {
 			Name, Role, Manager, Stderr string
 			Args                        []string
 			Exit                        int
 			Commits, Tasks              []string
-			ReviewCloses                bool `json:"review_closes"`
+			ReviewCloses                bool   `json:"review_closes"`
+			ReviewRefused               string `json:"review_refused"`
+			HiddenAtBind                bool   `json:"hidden_at_bind"`
 		} `json:"cases"`
 	}
 	data, err := os.ReadFile("../../tests/evals/scenarios/external-writer-binding.json")
@@ -61,14 +72,20 @@ func TestExternalWriterBindingScenario(t *testing.T) {
 				if args[0] == "pr" {
 					return []byte(`{"headRefOid":"` + sc.PR.Head + `","state":"OPEN","commits":[` + strings.Join(oids, ",") + `],"statusCheckRollup":[{"status":"COMPLETED","conclusion":"SUCCESS"}]}`), nil
 				}
-				if args[0] == "api" && strings.Contains(args[1], "/compare/"+sc.PR.Range.From+"..."+sc.PR.Range.To) {
-					if slices.Contains(args, "--paginate") {
-						return []byte(strings.Join(sc.PR.Range.Commits, "\n")), nil
+				for _, r := range []struct {
+					From, To string
+					Commits  []string
+				}{sc.PR.Range, sc.PR.OpRange, sc.PR.OffRange} {
+					if args[0] == "api" && strings.Contains(args[1], "/compare/"+r.From+"..."+r.To) {
+						if slices.Contains(args, "--paginate") {
+							return []byte(strings.Join(r.Commits, "\n")), nil
+						}
+						return []byte("ahead " + strconv.Itoa(len(r.Commits))), nil
 					}
-					return []byte("ahead " + strconv.Itoa(len(sc.PR.Range.Commits))), nil
 				}
 				return workflowFakeGH(ctx, args...)
 			})
+			pinOperatorCommits(t, sc.OperatorCommits, tc.HiddenAtBind)
 			oldProject, oldClient := resolveProjectRecFn, newBeadsClientFn
 			resolveProjectRecFn = func(string) (*store.Project, error) { return &store.Project{Name: "p", Path: "/d"}, nil }
 			newBeadsClientFn = func() beads.Client { return mem }
@@ -104,15 +121,13 @@ func TestExternalWriterBindingScenario(t *testing.T) {
 				!slices.Equal(stored.External.Commits, tc.Commits) || !slices.Equal(stored.Tasks, tc.Tasks) {
 				t.Fatalf("stored %+v printed %+v err %v", stored, printed, err)
 			}
-			if !tc.ReviewCloses {
+			if !tc.ReviewCloses && tc.ReviewRefused == "" {
 				return
 			}
-			// The reviewer once ran as the earlier-bound writer-task: no longer a writer.
+			// review-task ran as its own Operator; whether it wrote a bound
+			// commit is the scenario's operator_commits.
 			oldRoles := workflowTaskRoles
 			workflowTaskRoles = func(_ context.Context, _, task string) ([]string, error) {
-				if task == "review-task" {
-					return []string{"operator-writer-task", "operator-review"}, nil
-				}
 				return []string{"operator-" + task}, nil
 			}
 			t.Cleanup(func() { workflowTaskRoles = oldRoles })
@@ -127,7 +142,14 @@ func TestExternalWriterBindingScenario(t *testing.T) {
 			mem.AddComment(ctx, "/d", "review-task", "Head: "+sc.PR.Head+"\nCLEAN")
 			raw, _ := json.Marshal(workflowtemplate.Proof{ReviewBead: "review-task", Head: sc.PR.Head, NoFindings: true})
 			mem.AddComment(ctx, "/d", res.Remaining[1].BeadID, workflowtemplate.ProofPrefix+string(raw))
-			if err := checkWorkflowClose(ctx, mem, "/d", "p", res.Remaining[1].BeadID); err != nil {
+			err = checkWorkflowClose(ctx, mem, "/d", "p", res.Remaining[1].BeadID)
+			if tc.ReviewRefused != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.ReviewRefused) {
+					t.Fatalf("review close: %v want %q", err, tc.ReviewRefused)
+				}
+				return
+			}
+			if err != nil {
 				t.Fatal(err)
 			}
 			cs, _ := mem.Comments(ctx, "/d", res.Remaining[1].BeadID)

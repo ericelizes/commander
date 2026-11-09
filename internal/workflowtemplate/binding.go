@@ -14,8 +14,9 @@ import (
 const BindingPrefix = "workflow-writers@v1 "
 
 // ExternalAuthorUser is the only external writer: the user's own sessions,
-// which have no task or Operator run. The user is never an Operator, so
-// reviewer independence is judged against the bound tasks alone.
+// which have no task or Operator run. The bind refuses a commit an Operator
+// run wrote, and a reviewer task whose runs wrote a bound commit is refused
+// (cmd/cmdr workflowOperatorCommits).
 const ExternalAuthorUser = "user"
 
 // ExternalWriter records commits written outside any task, by their exact
@@ -141,4 +142,22 @@ func RangeCommits(ctx context.Context, run GHRunner, pr, from, to string) ([]str
 // validRef allows a SHA, or a branch/tag name with no range syntax.
 func validRef(s string) bool {
 	return s != "" && !strings.Contains(s, "..") && !strings.ContainsAny(s, " ~^:?*[\\") && !strings.HasPrefix(s, "-")
+}
+
+// RebindCommand is the bind-writers line that renews a block's binding: the
+// writer kinds of the stored binding kept (task writers and/or the user's own
+// commits), each as a placeholder to select again; head "" = a placeholder.
+// With no readable binding it asks for task writers, as before.
+func RebindCommand(project, block string, old *WriterBinding, head string) string {
+	if head == "" {
+		head = "<current-full-sha>"
+	}
+	cmd := fmt.Sprintf("cmdr workflow bind-writers --project %s --block %s", project, block)
+	if old == nil || len(old.Tasks) > 0 || old.External == nil {
+		cmd += " --writers <original-task,actual-fix-task>"
+	}
+	if old != nil && old.External != nil {
+		cmd += " --external-writer user --commits <user-base-sha>..<user-last-sha>"
+	}
+	return cmd + " --head " + head
 }

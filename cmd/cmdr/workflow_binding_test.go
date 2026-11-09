@@ -410,7 +410,7 @@ func TestWorkflowBindExternalUserWriter(t *testing.T) {
 	var compares int
 	pinWorkflowGH(t, func(ctx context.Context, args ...string) ([]byte, error) {
 		if args[0] == "pr" {
-			return []byte(`{"headRefOid":"` + head + `","state":"OPEN","commits":[{"oid":"` + u1 + `"},{"oid":"` + u2 + `"},{"oid":"` + head + `"}]}`), nil
+			return []byte(`{"headRefOid":"` + head + `","state":"OPEN","commits":[{"oid":"` + u1 + `"},{"oid":"` + u2 + `"},{"oid":"` + strings.Repeat("3", 40) + `"},{"oid":"` + head + `"}]}`), nil
 		}
 		if args[0] == "api" && strings.Contains(args[1], "/compare/base...") {
 			compares++
@@ -421,6 +421,8 @@ func TestWorkflowBindExternalUserWriter(t *testing.T) {
 		}
 		return workflowFakeGH(ctx, args...)
 	})
+	opSHA := strings.Repeat("3", 40)
+	pinOperatorCommits(t, map[string]string{opSHA: "writer-task"}, false)
 	bind := func(tasks []string, commits string) (*workflowtemplate.WriterBinding, error) {
 		return bindWorkflowWriters(ctx, mem, "/d", "p", res.Container, head, tasks, &externalWriterSpec{Author: "user", Commits: commits})
 	}
@@ -450,12 +452,25 @@ func TestWorkflowBindExternalUserWriter(t *testing.T) {
 	if err != nil || withFix.Revision == b.Revision || !slices.Equal(withFix.Tasks, []string{"fix-task"}) {
 		t.Fatal(withFix, err)
 	}
+	// Adding or removing the external writer alone, same PR, head and tasks, bumps the revision.
+	tasksOnly, err := bindWorkflowWriters(ctx, mem, "/d", "p", res.Container, head, []string{"fix-task"}, nil)
+	if err != nil || tasksOnly.Revision == withFix.Revision || tasksOnly.External != nil {
+		t.Fatal(tasksOnly, err)
+	}
+	again, err := bind([]string{"fix-task"}, u1+","+u2)
+	if err != nil || again.Revision == tasksOnly.Revision || again.Revision == withFix.Revision {
+		t.Fatal(again, err)
+	}
 	// Commander may bind the user's commits, never a task-only selection.
 	t.Setenv("COMMANDER_ROLE", "commander")
 	if _, err := bind(nil, u1+","+u2); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := bindWorkflowWriters(ctx, mem, "/d", "p", res.Container, head, []string{"fix-task"}, nil); err == nil || !strings.Contains(err.Error(), "writer selection belongs") {
+		t.Fatal(err)
+	}
+	// Nor task writers riding along with the user's commits.
+	if _, err := bind([]string{"fix-task"}, u1); err == nil || !strings.Contains(err.Error(), "writer selection belongs") {
 		t.Fatal(err)
 	}
 	// The user's own CLI has no role.
@@ -490,6 +505,7 @@ func TestWorkflowBindExternalUserWriter(t *testing.T) {
 		{"three dots", &externalWriterSpec{Author: "user", Commits: "base...tip"}, "two dots"},
 		{"no commits", &externalWriterSpec{Author: "user"}, "--commits"},
 		{"another author", &externalWriterSpec{Author: "someone", Commits: u1}, "--external-writer must be"},
+		{"an Operator's commit", &externalWriterSpec{Author: "user", Commits: u1 + "," + opSHA}, "is not the user's own"},
 	} {
 		before, _ := mem.Comments(ctx, "/d", res.Container)
 		if _, err := bindWorkflowWriters(ctx, mem, "/d", "p", res.Container, head, nil, tc.spec); err == nil || !strings.Contains(err.Error(), tc.want) {
@@ -505,16 +521,19 @@ func TestWorkflowBindExternalUserWriter(t *testing.T) {
 }
 
 // With the user's commits bound, reviewer independence is judged against the
-// bound Operator tasks only: a task no longer bound is no writer.
+// bound Operator tasks and against the bound commits: a reviewer task whose
+// runs wrote one of them is their writer.
 func TestWorkflowExternalWriterReviewIndependence(t *testing.T) {
 	user := strings.Repeat("1", 40)
 	for _, tc := range []struct {
 		name  string
 		tasks []string
+		wrote bool
 		want  string
 	}{
 		{name: "user commits only", tasks: nil},
 		{name: "reviewer shares the bound fix task", tasks: []string{"fix-task"}, want: "differ from writer"},
+		{name: "reviewer wrote a bound external commit", wrote: true, want: "differ from the writer of bound external commit"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.Background()
@@ -534,11 +553,17 @@ func TestWorkflowExternalWriterReviewIndependence(t *testing.T) {
 			mem.AddComment(ctx, "/d", "review-task", "Head: head1\nCLEAN")
 			raw, _ := json.Marshal(workflowtemplate.Proof{ReviewBead: "review-task", Head: "head1", NoFindings: true})
 			mem.AddComment(ctx, "/d", res.Remaining[1].BeadID, workflowtemplate.ProofPrefix+string(raw))
+			// The binding was recorded before the reviewer's branch showed the commit.
+			wrote := map[string]string{}
+			if tc.wrote {
+				wrote[user] = "review-task"
+			}
+			pinOperatorCommits(t, wrote, true)
 			old := workflowTaskRoles
-			// The reviewer once ran as the earlier-bound writer-task and as fix-task.
+			// The reviewer ran as fix-task: a writer only while fix-task is bound.
 			workflowTaskRoles = func(_ context.Context, _, task string) ([]string, error) {
 				if task == "review-task" {
-					return []string{"operator-writer-task", "operator-fix-task"}, nil
+					return []string{"operator-review", "operator-fix-task"}, nil
 				}
 				return []string{"operator-" + task}, nil
 			}

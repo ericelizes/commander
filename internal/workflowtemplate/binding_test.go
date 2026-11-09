@@ -120,3 +120,23 @@ func TestRangeCommitsFailsClosed(t *testing.T) {
 		}
 	}
 }
+
+// A renewal keeps the writer kinds of the stored binding, never only --writers.
+func TestRebindCommandKeepsTheWriterKinds(t *testing.T) {
+	ext := &ExternalWriter{Author: "user", Commits: []string{strings.Repeat("1", 40)}}
+	for _, tc := range []struct {
+		name string
+		old  *WriterBinding
+		head string
+		want string
+	}{
+		{"no binding", nil, "", "--block R --writers <original-task,actual-fix-task> --head <current-full-sha>"},
+		{"tasks", &WriterBinding{Tasks: []string{"t"}}, "h", "--block R --writers <original-task,actual-fix-task> --head h"},
+		{"external only", &WriterBinding{External: ext}, "", "--block R --external-writer user --commits <user-base-sha>..<user-last-sha> --head <current-full-sha>"},
+		{"mixed", &WriterBinding{Tasks: []string{"t"}, External: ext}, "h", "--block R --writers <original-task,actual-fix-task> --external-writer user --commits <user-base-sha>..<user-last-sha> --head h"},
+	} {
+		if got := RebindCommand("p", "R", tc.old, tc.head); got != "cmdr workflow bind-writers --project p "+tc.want {
+			t.Errorf("%s: %s", tc.name, got)
+		}
+	}
+}

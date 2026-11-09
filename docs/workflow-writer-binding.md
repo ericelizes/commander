@@ -32,10 +32,30 @@ commands; an Operator must hand the recipe back to that Manager.
    be ahead of its base and GitHub's list must hold its full count. Every commit
    must belong to the PR at the current head. The binding records
    `"external":{"author":"user","commits":[...]}` (sorted full SHAs) beside
-   `tasks`. The user is never an Operator, so reviewer independence is judged
-   against the bound tasks only. The user's own CLI, Commander or the owning
-   Manager may bind an external writer; Operators and other Managers never.
-   Changing the commits, the tasks or the head gives a new revision, as above.
+   `tasks`. The user's own CLI, Commander (external commits only, never task
+   writers) or the owning Manager may bind an external writer; Operators and
+   other Managers never. Changing the commits, the tasks or the head gives a new
+   revision, as above.
+
+   **An Operator's commit is never the user's.** Before it records anything,
+   the bind reads the project's local repo (`repo_path`, else the project dir)
+   against every Operator run of the project in `agent_runs` and refuses a
+   commit that run wrote: reachable from its branch (`op/<name>`, its
+   worktree's branch, or an archived `refs/archive/op/<name>-<sha>` tip) but
+   not from the commit that branch was created at (the first entry of its
+   reflog; no reflog = all of it), made in its worktree (a commit, merge,
+   cherry-pick, revert or rebase step in the worktree's HEAD reflog), or
+   carrying an author/committer identity only Operator runs used (seen in their
+   reflogs, never in the main checkout's reflog or its `user.email`; Operators
+   normally commit as the user, so this only bites when their identity
+   differs). The refusal names the run and says to bind its task with
+   `--writers`. A fix Operator branched off the user's commits does not claim
+   them. A git error refuses. Reviewer independence applies the same reading to
+   the review task's own runs: a reviewer that wrote a bound external commit is
+   refused. Limits: a commit missing from the local repo (made on another
+   machine) is on no local branch and passes, and so does an Operator commit
+   whose branch, worktree and reflogs were all deleted; this is a speed bump
+   against a mistaken or careless bind, not a proof of authorship.
 
 4. Renew each step in template order. Existing closed steps use the same close
    command and stay closed. For every review/fix step, reference a closed separate

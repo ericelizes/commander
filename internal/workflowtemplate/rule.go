@@ -443,7 +443,11 @@ func MergeRule(project, repo string, nodes []Node, scope map[string]bool) []Find
 			renew := renewCommands(project, t, ids, stale, block.Bead)
 			binding, bindingErr := Binding(block.Comments)
 			if bindingErr != nil || binding.PR != pr || binding.Head != head {
-				renew = append([]string{fmt.Sprintf("cmdr workflow bind-writers --project %s --block %s --writers <original-task,actual-fix-task> --head <current-full-sha>", project, block.Bead.ID)}, renew...)
+				var old *WriterBinding
+				if bindingErr == nil {
+					old = &binding
+				}
+				renew = append([]string{RebindCommand(project, block.Bead.ID, old, "")}, renew...)
 			}
 			if plugNeeded {
 				renew = append([]string{fix}, renew...)

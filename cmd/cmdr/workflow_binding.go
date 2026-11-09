@@ -147,8 +147,9 @@ func bindWorkflowWriters(ctx context.Context, bc beads.Client, dir, project, blo
 	}
 	// Agents may bind only as an owning Manager (the block's nearest owner or one
 	// above it; the root's alone while nested Managers are off). A human CLI has no role.
-	// Commander may also bind the user's own commits as an external writer.
-	if role := os.Getenv("COMMANDER_ROLE"); role != "" && !(external != nil && role == "commander") {
+	// Commander may also bind the user's own commits as an external writer, never
+	// task writers (those stay the owning Manager's choice).
+	if role := os.Getenv("COMMANDER_ROLE"); role != "" && !(external != nil && len(tasks) == 0 && role == "commander") {
 		owners, err := workflowOwnerRoles(ctx, bc, dir, blockID, root)
 		if err != nil {
 			return nil, err
@@ -196,6 +197,16 @@ func bindWorkflowWriters(ctx context.Context, bc beads.Client, dir, project, blo
 		commits, err := externalCommits(ctx, pr, h, external.Commits)
 		if err != nil {
 			return nil, err
+		}
+		// The user's own sessions only: a commit an Operator run wrote is that run's task's work.
+		wrote, err := workflowOperatorCommits(ctx, project, "", commits)
+		if err != nil {
+			return nil, fmt.Errorf("cannot check the external commits against Operator runs: %w", err)
+		}
+		for _, sha := range commits {
+			if why, ok := wrote[sha]; ok {
+				return nil, fmt.Errorf("commit %s is not the user's own: %s; bind that task with --writers instead", sha, why)
+			}
 		}
 		ext = &workflowtemplate.ExternalWriter{Author: external.Author, Commits: commits}
 	}

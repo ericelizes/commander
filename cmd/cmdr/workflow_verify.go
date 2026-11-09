@@ -264,7 +264,7 @@ func checkWorkflowCloseOnce(ctx context.Context, bc beads.Client, dir, project, 
 			return err
 		}
 		if binding.PR != workflowtemplate.BlockPR(block.Bead) {
-			return fmt.Errorf("writer binding PR differs from block; ask the owning Manager to run cmdr workflow bind-writers --project %s --block %s --writers <original-task,actual-fix-task> --head <current-full-sha>", project, block.Bead.ID)
+			return fmt.Errorf("writer binding PR differs from block; ask the owning Manager to run %s", workflowtemplate.RebindCommand(project, block.Bead.ID, &binding, ""))
 		}
 		instance := workflowtemplate.Label(block.Bead, workflowtemplate.LabelInstance)
 		if instance == "" || workflowtemplate.Label(*b, workflowtemplate.LabelInstance) != instance || workflowtemplate.Label(*b, workflowtemplate.LabelHash) != tpl.Hash() {
@@ -339,6 +339,17 @@ func checkWorkflowCloseOnce(ctx context.Context, bc beads.Client, dir, project, 
 					return workflowtemplate.Review{}, fmt.Errorf("reviewer must differ from writer task %s", task)
 				}
 			}
+			if binding.External != nil {
+				wrote, err := workflowOperatorCommits(ctx, project, reviewID, binding.External.Commits)
+				if err != nil {
+					return workflowtemplate.Review{}, fmt.Errorf("cannot check reviewer %s against the external commits: %w", reviewID, err)
+				}
+				for _, sha := range binding.External.Commits {
+					if why, ok := wrote[sha]; ok {
+						return workflowtemplate.Review{}, fmt.Errorf("reviewer must differ from the writer of bound external commit %s: %s", sha, why)
+					}
+				}
+			}
 			if strings.Contains(step, "adversarial") {
 				found := false
 				for _, s := range nodes {
@@ -402,7 +413,7 @@ func checkWorkflowCloseOnce(ctx context.Context, bc beads.Client, dir, project, 
 			return err
 		}
 		if e.Head != binding.Head {
-			return fmt.Errorf("stale writer binding: ask the owning Manager to run cmdr workflow bind-writers --project %s --block %s --writers <original-task,actual-fix-task> --head %s", project, block.Bead.ID, e.Head)
+			return fmt.Errorf("stale writer binding: ask the owning Manager to run %s", workflowtemplate.RebindCommand(project, block.Bead.ID, &binding, e.Head))
 		}
 		e.Binding = binding.Revision
 		if verifier == "head-current" {
