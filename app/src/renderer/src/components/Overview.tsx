@@ -12,11 +12,26 @@ type Sentence = { text: string; sources: string[] }
 type Claim = { sentences: Sentence[] } | Sentence
 const sentencesOf = (claim: Claim): Sentence[] => ('sentences' in claim ? claim.sentences : [claim])
 export type RecapResult = {
-  state: 'waiting' | 'updating' | 'ready' | 'unavailable'
+  // waiting/retrying are transient: the daemon says what it waits for and the tab asks again.
+  state: 'waiting' | 'updating' | 'retrying' | 'ready' | 'unavailable'
   stale: boolean
   error?: string
+  waiting_for?: string
   evidence: Evidence[]
   recap?: { summary: Claim; changes: Claim[]; next: Claim[]; generated_at: string }
+  // What the reader has written so far while state is updating.
+  draft?: { summary: Claim; changes?: Claim[] | null; next?: Claim[] | null }
+}
+
+// The recap's own wording of a wait, so a transient wait never reads as a failure.
+export function waitText(r: RecapResult | null, degraded: boolean, reconnecting: boolean): string {
+  if (degraded) return 'Recap updates will resume when live state is available.'
+  if (reconnecting) return 'Waiting for Commander to answer. Trying again shortly…'
+  if (!r) return 'Reading the latest evidence for a recap…'
+  if (r.waiting_for) return `Waiting for ${r.waiting_for}. This tab retries by itself.`
+  if (r.state === 'retrying') return 'The last try at writing the recap did not finish. Trying again shortly…'
+  if (r.state === 'updating') return 'Writing the recap…'
+  return 'Reading the latest evidence for a recap…'
 }
 
 export function scopedSteps(ws: SnapWorkstream, track?: string): SnapStep[] {
@@ -111,37 +126,68 @@ export function Overview({ ws, row, track, onWorkflow, onTrack }: {
     if (!cfg || degraded) return
     let cancelled = false
     let controller: AbortController | null = null
-    let running = false
-    const load = async () => {
-      if (running) return
-      running = true; controller = new AbortController()
-      const timer = setTimeout(() => controller?.abort(), 12_000)
+    let timer: ReturnType<typeof setTimeout> | undefined
+    // Each pass opens the recap stream: a result per change while it is being
+    // written, then the stream ends. A wait or a failure is asked again soon.
+    const pass = async (): Promise<number> => {
+      controller = new AbortController()
+      const abort = setTimeout(() => controller?.abort(), 150_000)
+      let last: RecapResult | null = null
       try {
         const r = await fetch(`${cfg.apiUrl}/api/overview`, {
           method: 'POST', headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ project: ws.project, bead_id: ws.bead_id, track_id: track ?? '' }), signal: controller.signal,
+          body: JSON.stringify({ project: ws.project, bead_id: ws.bead_id, track_id: track ?? '', stream: true }), signal: controller.signal,
         })
-        if (!r.ok) throw new Error('Recap unavailable')
-        const body = await r.json() as RecapResult
-        if (!['waiting', 'updating', 'ready', 'unavailable'].includes(body.state) || !Array.isArray(body.evidence)) throw new Error('Invalid recap')
-        if (!cancelled) { setResult(body); setError('') }
+        if (!r.ok) throw new Error('not ready')
+        const take = (line: string) => {
+          if (!line.trim()) return
+          const body = JSON.parse(line) as RecapResult
+          if (!['waiting', 'updating', 'retrying', 'ready', 'unavailable'].includes(body.state) || !Array.isArray(body.evidence)) throw new Error('Invalid recap')
+          last = body
+          if (!cancelled) { setResult(body); setError('') }
+        }
+        const reader = r.body?.getReader()
+        if (!reader) take(await r.text())
+        else {
+          const dec = new TextDecoder()
+          let buf = ''
+          for (;;) {
+            const { done, value } = await reader.read()
+            buf += dec.decode(value, { stream: !done })
+            const lines = buf.split('\n')
+            buf = lines.pop() ?? ''
+            lines.forEach(take)
+            if (done) break
+          }
+          take(buf)
+        }
       } catch {
-        if (!cancelled) setError('The recap is unavailable. Live status and decisions are shown below.')
-      } finally { clearTimeout(timer); running = false }
+        if (!cancelled) setError('reconnecting')
+        return 3_000
+      } finally { clearTimeout(abort) }
+      const state = (last as RecapResult | null)?.state
+      return state === 'waiting' || state === 'retrying' || state === 'updating' ? 3_000 : 15_000
     }
-    void load()
-    const timer = setInterval(() => void load(), 15_000)
-    return () => { cancelled = true; clearInterval(timer); controller?.abort() }
+    const loop = async () => {
+      const wait = await pass()
+      if (!cancelled) timer = setTimeout(() => void loop(), wait)
+    }
+    void loop()
+    return () => { cancelled = true; clearTimeout(timer); controller?.abort() }
   }, [cfg, ws.project, ws.bead_id, track, degraded])
+
+  // While the reader is writing, its draft stands in for the earlier recap.
+  const draftOn = result?.state === 'updating' && !!result.draft?.summary && sentencesOf(result.draft.summary).length > 0
+  const shown = draftOn ? { summary: result!.draft!.summary, changes: result!.draft!.changes ?? [], next: result!.draft!.next ?? [], generated_at: result?.recap?.generated_at ?? '' } : result?.recap
 
   // One number per source across the whole recap, so a source cited twice reads
   // as the same footnote.
   const sourceNumbers = useMemo(() => {
     const numbers = new Map<string, number>()
-    const recap = result?.recap
+    const recap = shown
     if (recap) for (const c of [recap.summary, ...recap.changes, ...recap.next]) for (const s of sentencesOf(c)) for (const id of s.sources) if (!numbers.has(id)) numbers.set(id, numbers.size + 1)
     return numbers
-  }, [result])
+  }, [result, shown])
   // The marks close their own sentence, held to its last word so they never sit alone on a line.
   const cite = (claim: Claim) => sentencesOf(claim).map((s, n) => {
     const lastWord = s.text.lastIndexOf(' ') + 1
@@ -186,20 +232,20 @@ export function Overview({ ws, row, track, onWorkflow, onTrack }: {
           )) : <p>{noAsk}</p>}
         </section>}
         <section aria-label="Recap">
-          {result?.recap ? <div>
-            {(result.stale || degraded) && <p className="ov-warning">Earlier recap. Current status and decisions above take precedence.</p>}
-            <p className="ov-summary">{cite(result.recap.summary)}</p>
-            {result.recap.changes.length > 0 && <><h2>What changed</h2><ul>{result.recap.changes.map((c, i) => <li key={i}>{cite(c)}</li>)}</ul></>}
-            {result.recap.next.length > 0 && <><h2>What happens next</h2><ul>{result.recap.next.map((c, i) => <li key={i}>{cite(c)}</li>)}</ul></>}
-          </div> : <p className="ov-muted" role="status">{error || result?.error || (degraded ? 'Recap updates will resume when live state is available.' : 'Reading the latest evidence for a recap…')}</p>}
-          {result?.recap && (error || result.error) && <p className="ov-warning">{error || result.error}</p>}
-          {result?.state === 'updating' && result.recap && <p className="ov-muted" role="status">Updating the recap from newer evidence…</p>}
+          {shown ? <div>
+            {(result?.stale || degraded) && !draftOn && <p className="ov-warning">Earlier recap. Current status and decisions above take precedence.</p>}
+            <p className="ov-summary">{cite(shown.summary)}</p>
+            {shown.changes.length > 0 && <><h2>What changed</h2><ul>{shown.changes.map((c, i) => <li key={i}>{cite(c)}</li>)}</ul></>}
+            {shown.next.length > 0 && <><h2>What happens next</h2><ul>{shown.next.map((c, i) => <li key={i}>{cite(c)}</li>)}</ul></>}
+          </div> : <p className="ov-muted" role="status">{waitText(result, degraded, !!error)}</p>}
+          {shown && result?.state === 'retrying' && <p className="ov-warning">{waitText(result, false, false)}</p>}
+          {result?.state === 'updating' && shown && <p className="ov-muted ov-writing" role="status">{draftOn ? 'Writing the recap…' : 'Updating the recap from newer evidence…'}</p>}
         </section>
         {below.length > 0 && <section aria-label="Workstreams under this one"><h2>Across this workstream</h2><div className="ov-tracks">{below.map((t) => <button type="button" key={t.bead_id} onClick={() => onTrack(t.bead_id)}><strong>{plainTitle(t.title)}</strong><span data-tone={toneOf(t.kind)}>{t.text}</span></button>)}</div></section>}
         <footer className="ov-footer">
           {ws.repo && /^[\w.-]+\/[\w.-]+$/.test(ws.repo) && artifacts.map((p) => <a key={p} href={`https://github.com/${ws.repo}/pull/${p}`} target="_blank" rel="noreferrer">PR #{p} ↗</a>)}
           <button type="button" onClick={onWorkflow}>View workflow</button>
-          <span>{result?.recap && `Recap written ${new Date(result.recap.generated_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}. `}State recorded {new Date(snapshot.generated_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}.</span>
+          <span>{result?.recap?.generated_at && !draftOn && `Recap written ${new Date(result.recap.generated_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}. `}State recorded {new Date(snapshot.generated_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}.</span>
         </footer>
       </article>
     </div>

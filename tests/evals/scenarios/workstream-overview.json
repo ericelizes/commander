@@ -4,6 +4,6 @@
   "evidence": [{"id": "infra", "label": "Infrastructure result", "text": "Button PR published; Terraform apply remains manual."}],
   "cases": [
     {"name": "verified recap", "source": "infra", "want": "ready"},
-    {"name": "invented evidence cannot become a recap", "source": "not-a-real-source", "want": "unavailable"}
+    {"name": "invented evidence cannot become a recap", "source": "not-a-real-source", "want": "retrying"}
   ]
 }

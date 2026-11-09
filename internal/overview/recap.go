@@ -50,6 +50,11 @@ type Result struct {
 	Evidence []Evidence `json:"evidence"`
 	Stale    bool       `json:"stale"`
 	Error    string     `json:"error,omitempty"`
+	// Draft is what the reader has written so far while State is "updating";
+	// its sentences are not yet checked against the evidence.
+	Draft *Recap `json:"draft,omitempty"`
+	// WaitingFor says plainly what a "waiting" or "retrying" recap is waiting on.
+	WaitingFor string `json:"waiting_for,omitempty"`
 }
 type Generate func(context.Context, Input) (Recap, error)
 type entry struct {
@@ -58,15 +63,35 @@ type entry struct {
 	pending  bool
 	attempt  time.Time
 	err      string
+	draft    *Recap
 }
+
+// retryAfter is how long a failed reader run waits before the next try.
+const retryAfter = 30 * time.Second
+
 type Cache struct {
 	mu       sync.Mutex
+	changed  chan struct{}
 	entries  map[string]*entry
 	generate Generate
 	busy     bool
 }
 
-func New(generate Generate) *Cache { return &Cache{entries: map[string]*entry{}, generate: generate} }
+func New(generate Generate) *Cache {
+	return &Cache{entries: map[string]*entry{}, generate: generate, changed: make(chan struct{})}
+}
+
+// Changed returns a channel closed at the next change to any recap or draft.
+func (c *Cache) Changed() <-chan struct{} {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.changed
+}
+
+func (c *Cache) notifyLocked() {
+	close(c.changed)
+	c.changed = make(chan struct{})
+}
 func Hash(in Input) string {
 	b, _ := json.Marshal(in)
 	h := sha256.Sum256(b)
@@ -100,24 +125,34 @@ func (c *Cache) Get(in Input) Result {
 		c.entries[key] = e
 	}
 	same := e.recap != nil && e.recap.Hash == h
-	if !same && !e.pending && !c.busy && (e.attempt.IsZero() || now.Sub(e.attempt) >= 2*time.Minute) {
+	if !same && !e.pending && !c.busy && (e.attempt.IsZero() || e.err == "" || now.Sub(e.attempt) >= retryAfter) {
 		e.pending = true
 		e.attempt = now
 		e.err = ""
+		e.draft = nil
 		c.busy = true
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 			defer cancel()
+			ctx = WithProgress(ctx, func(d Recap) {
+				d = onlyKnown(d, in)
+				c.mu.Lock()
+				defer c.mu.Unlock()
+				e.draft = &d
+				c.notifyLocked()
+			})
 			r, err := c.generate(ctx, in)
 			if err == nil {
 				err = Validate(r, in)
 			}
 			c.mu.Lock()
 			defer c.mu.Unlock()
+			defer c.notifyLocked()
 			e.pending = false
 			c.busy = false
+			e.draft = nil
 			if err != nil {
-				e.err = "The recap could not be updated. Live status and decisions are still shown below."
+				e.err = "The last attempt to write the recap did not finish. Trying again shortly; live status and decisions are shown below."
 				return
 			}
 			r.Hash = h
@@ -126,16 +161,24 @@ func (c *Cache) Get(in Input) Result {
 			e.evidence = in.Evidence
 		}()
 	}
-	r := Result{State: "waiting", Recap: e.recap, Evidence: in.Evidence, Stale: !same, Error: e.err}
+	r := Result{State: "waiting", Recap: e.recap, Evidence: in.Evidence, Stale: !same, WaitingFor: "the reader to start on this recap"}
+	if c.busy && !e.pending {
+		r.WaitingFor = "another recap to finish being written"
+	}
 	if e.recap != nil {
 		r.State = "ready"
 		r.Evidence = e.evidence
+		r.WaitingFor = ""
 	}
 	if e.pending {
 		r.State = "updating"
+		r.Draft = e.draft
+		r.WaitingFor = ""
 	}
-	if e.err != "" {
-		r.State = "unavailable"
+	if e.err != "" && !e.pending {
+		r.State = "retrying"
+		r.Error = e.err
+		r.WaitingFor = "the next try at writing the recap"
 	}
 	return r
 }
@@ -185,7 +228,7 @@ func ClaudeWith(prompt string, accountEnv []string) Generate {
 	return func(ctx context.Context, in Input) (Recap, error) {
 		payload, _ := json.Marshal(in)
 		schema, _ := json.Marshal(readerSchema(in))
-		cmd := exec.CommandContext(ctx, "claude", "-p", "--safe-mode", "--tools", "", "--strict-mcp-config", "--mcp-config", `{"mcpServers":{}}`, "--setting-sources", "", "--no-session-persistence", "--output-format", "json", "--json-schema", string(schema), "--system-prompt", prompt)
+		cmd := exec.CommandContext(ctx, "claude", "-p", "--safe-mode", "--tools", "", "--strict-mcp-config", "--mcp-config", `{"mcpServers":{}}`, "--setting-sources", "", "--no-session-persistence", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--json-schema", string(schema), "--system-prompt", prompt)
 		dir, err := os.MkdirTemp("", "commander-recap-")
 		if err != nil {
 			return Recap{}, err
@@ -195,19 +238,18 @@ func ClaudeWith(prompt string, accountEnv []string) Generate {
 		cmd.Dir = dir
 		cmd.Stdin = bytes.NewReader(payload)
 		cmd.Env = cleanEnv(os.Environ(), accountEnv)
-		var out limitedBuffer
-		cmd.Stdout = &out
+		sw := &streamReader{progress: progressFrom(ctx)}
+		cmd.Stdout = sw
 		cmd.Stderr = &limitedBuffer{}
 		if err := cmd.Run(); err != nil {
 			return Recap{}, err
 		}
-		var envelope struct {
-			Result           string          `json:"result"`
-			StructuredOutput json.RawMessage `json:"structured_output"`
-			IsError          bool            `json:"is_error"`
+		if len(sw.line) > 0 && !sw.bad {
+			sw.handle(sw.line) // a last line with no newline
 		}
-		if err := json.Unmarshal(out.Bytes(), &envelope); err != nil {
-			return Recap{}, err
+		envelope := sw.final
+		if !sw.done {
+			return Recap{}, errors.New("reader gave no result")
 		}
 		if envelope.IsError {
 			return Recap{}, errors.New("reader failed")
@@ -235,6 +277,83 @@ func cleanEnv(env, account []string) []string {
 		out = append(out, e)
 	}
 	return append(out, account...)
+}
+
+type resultLine struct {
+	Result           string          `json:"result"`
+	StructuredOutput json.RawMessage `json:"structured_output"`
+	IsError          bool            `json:"is_error"`
+}
+
+// streamReader reads claude's stream-json lines: text and tool-input deltas feed
+// the progress callback, the "result" line is the answer.
+type streamReader struct {
+	progress func(Recap)
+	line     []byte
+	total    int
+	text     strings.Builder
+	final    resultLine
+	done     bool
+	bad      bool
+}
+
+func (w *streamReader) Write(p []byte) (int, error) {
+	w.total += len(p)
+	if w.total > 16<<20 {
+		return 0, errors.New("recap output limit")
+	}
+	for _, b := range p {
+		if b != '\n' {
+			if len(w.line) < 1<<20 {
+				w.line = append(w.line, b)
+			} else {
+				w.bad = true
+			}
+			continue
+		}
+		if !w.bad {
+			w.handle(w.line)
+		}
+		w.line, w.bad = w.line[:0], false
+	}
+	return len(p), nil
+}
+
+func (w *streamReader) handle(line []byte) {
+	var ev struct {
+		Type  string `json:"type"`
+		Event struct {
+			Type         string                `json:"type"`
+			ContentBlock struct{ Type string } `json:"content_block"`
+			Delta        struct {
+				Text        string `json:"text"`
+				PartialJSON string `json:"partial_json"`
+			} `json:"delta"`
+		} `json:"event"`
+		resultLine
+	}
+	if json.Unmarshal(line, &ev) != nil {
+		return
+	}
+	if ev.Type == "" && (ev.Result != "" || len(ev.StructuredOutput) > 0) {
+		ev.Type = "result" // the older single-envelope form
+	}
+	switch ev.Type {
+	case "result":
+		w.final, w.done = ev.resultLine, true
+	case "stream_event":
+		switch ev.Event.Type {
+		case "content_block_start":
+			w.text.Reset()
+		case "content_block_delta":
+			d := ev.Event.Delta.Text + ev.Event.Delta.PartialJSON
+			if d == "" || w.progress == nil {
+				return
+			}
+			w.text.WriteString(d)
+			w.progress(PartialRecap(w.text.String()))
+		}
+	}
 }
 
 type limitedBuffer struct{ bytes.Buffer }

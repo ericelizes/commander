@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/example-user/commander/internal/livedata"
 	"github.com/example-user/commander/internal/overview"
@@ -37,6 +39,7 @@ func TestOverviewEndpointRequiresAuthAndKnownScope(t *testing.T) {
 	s := New(Options{Token: "token", Source: func(context.Context) livedata.Snapshot {
 		return livedata.Snapshot{Workstreams: []livedata.SnapWorkstream{overviewFixture()}}
 	}, OverviewGenerate: func(context.Context, overview.Input) (overview.Recap, error) { return overview.Recap{}, nil }})
+	s.Refresh(context.Background())
 	for _, tc := range []struct {
 		token, body string
 		want        int
@@ -176,5 +179,74 @@ func TestOverviewReaderSeesOutcomesFoldedUnderAClosedStep(t *testing.T) {
 	}
 	if ship["also_waits_on_beads_outside_this_workstream"] != float64(1) || ship["waits_for"] != nil {
 		t.Fatalf("a folded finished blocker reads as a wait: %v", ship)
+	}
+}
+
+func TestOverviewWaitsPlainlyWhileTheFirstSnapshotLoads(t *testing.T) {
+	release := make(chan struct{})
+	defer close(release)
+	s := New(Options{Token: "token", Source: func(context.Context) livedata.Snapshot {
+		<-release
+		return livedata.Snapshot{Workstreams: []livedata.SnapWorkstream{overviewFixture()}}
+	}, OverviewGenerate: func(context.Context, overview.Input) (overview.Recap, error) { return overview.Recap{}, nil }})
+	done := make(chan *httptest.ResponseRecorder, 1)
+	go func() {
+		r := httptest.NewRequest("POST", "/api/overview", strings.NewReader(`{"project":"p","bead_id":"w"}`))
+		r.Header.Set("Authorization", "Bearer token")
+		w := httptest.NewRecorder()
+		s.Handler().ServeHTTP(w, r)
+		done <- w
+	}()
+	select {
+	case w := <-done:
+		var res overview.Result
+		if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil || w.Code != 200 || res.State != "waiting" || !strings.Contains(res.WaitingFor, "board to finish loading") {
+			t.Fatalf("%d %s", w.Code, w.Body.String())
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("the request hung on the first snapshot load")
+	}
+}
+
+func TestOverviewStreamsDraftThenRecap(t *testing.T) {
+	step, release := make(chan struct{}), make(chan struct{})
+	s := New(Options{Token: "token", Source: func(context.Context) livedata.Snapshot {
+		return livedata.Snapshot{Workstreams: []livedata.SnapWorkstream{overviewFixture()}}
+	}, OverviewGenerate: func(ctx context.Context, in overview.Input) (overview.Recap, error) {
+		overview.ProgressOf(ctx)(overview.Recap{Summary: overview.Claim{Sentences: []overview.Sentence{{Text: "Started."}}}})
+		close(step)
+		<-release
+		id := in.Evidence[0].ID
+		return overview.Recap{Summary: overview.Claim{Sentences: []overview.Sentence{{Text: "Done.", Sources: []string{id}}}}}, nil
+	}})
+	s.Refresh(context.Background())
+	srv := httptest.NewServer(s.Handler())
+	defer srv.Close()
+	req, _ := http.NewRequest("POST", srv.URL+"/api/overview", strings.NewReader(`{"project":"p","bead_id":"w","stream":true}`))
+	req.Header.Set("Authorization", "Bearer token")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	dec := json.NewDecoder(resp.Body)
+	var states []string
+	sawDraft := false
+	for {
+		var res overview.Result
+		if dec.Decode(&res) != nil {
+			break
+		}
+		states = append(states, res.State)
+		if res.Draft != nil && len(res.Draft.Summary.Sentences) == 1 {
+			if !sawDraft {
+				<-step
+				close(release)
+			}
+			sawDraft = true
+		}
+	}
+	if !sawDraft || states[len(states)-1] != "ready" {
+		t.Fatalf("draft=%v states=%v", sawDraft, states)
 	}
 }

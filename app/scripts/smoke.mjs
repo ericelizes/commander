@@ -119,6 +119,14 @@ const server = createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify(snapshot.linear ?? { state: 'no_key', key: 'not set', issues: [] }))
     return
   }
+  if (fake && path === '/api/overview') {
+    // The fixture's `overview` is one stream line: a recap still being written.
+    const snapshot = JSON.parse(readFileSync(fixture, 'utf8'))
+    if (snapshot.overview) {
+      res.writeHead(200, { 'Content-Type': 'application/x-ndjson' }).end(JSON.stringify(snapshot.overview) + '\n')
+      return
+    }
+  }
   const file = join(dist, path === '/' ? 'index.html' : path)
   if (!file.startsWith(dist) || !existsSync(file)) {
     res.writeHead(404).end()

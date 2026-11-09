@@ -1,0 +1,614 @@
+{
+ "version": 1,
+ "generated_at": "2026-10-26T12:00:00Z",
+ "projects": [
+  {
+   "id": 1,
+   "name": "lab",
+   "type": "repo",
+   "path": "/tmp/lab",
+   "status": "active"
+  }
+ ],
+ "fleet": {
+  "cost_usd_24h": 0,
+  "cost_usd_7d": 0,
+  "cost_series_24h": [],
+  "agents": 0,
+  "active": 0,
+  "blocked": 0,
+  "idle_ratio": 0,
+  "projects": 1,
+  "chat_cost_usd_24h": 0,
+  "roles_cost": []
+ },
+ "agents": {
+  "manager-lab-t06": {
+   "state": "idle",
+   "since": 1792990000
+  },
+  "manager-lab-ops": {
+   "state": "idle",
+   "since": 1792990000
+  }
+ },
+ "unread": {},
+ "needs_you": [
+  {
+   "project": "lab",
+   "bead_id": "lab-t06.6",
+   "title": "Workflow approved: compare sample text variants",
+   "workstream": "Sample text trials",
+   "rank": 1,
+   "decision": {
+    "question": "Approve comparing sample text variants?",
+    "context": "### High level\n\nTwo invented text variants are ready. This approval starts a comparison on sample records and a results review.\n\n### The plan\n\n1. Verify the sample text variants.\n2. Compare the variants on invented sample records.\n3. Bring the results back for review.",
+    "options": [
+     {
+      "label": "Approve",
+      "recommended": true,
+      "approves": true,
+      "implications": "Operators start the three measurement steps."
+     },
+     {
+      "label": "Not yet"
+     }
+    ]
+   }
+  }
+ ],
+ "workstreams": [
+  {
+   "n": 1,
+   "project": "lab",
+   "project_id": 1,
+   "bead_id": "lab-t06",
+   "title": "Sample text trials",
+   "state": "in-progress",
+   "status": "open",
+   "manager_role": "manager-lab-t06",
+   "done": 0,
+   "total": 0,
+   "steps": [
+    {
+     "bead_id": "lab-t06.1",
+     "title": "Experiment 3: off-modal completed",
+     "state": "done",
+     "status": "closed",
+     "track": true,
+     "viz": 2
+    },
+    {
+     "bead_id": "lab-t06.2",
+     "title": "Experiment 2: slow pages",
+     "state": "blocked",
+     "status": "in_progress",
+     "track": true,
+     "blocked_by": [
+      "lab-t06.4"
+     ],
+     "owner": "manager-lab-t06",
+     "viz": 2,
+     "children": [
+      {
+       "bead_id": "lab-t06.2.1",
+       "title": "Slow pages: design approved",
+       "state": "done",
+       "status": "closed",
+       "gate": true,
+       "approvers": [
+        "user"
+       ],
+       "viz": 1
+      },
+      {
+       "bead_id": "lab-t06.2.2",
+       "title": "Slow pages: run the baseline",
+       "state": "done",
+       "status": "closed",
+       "blocked_by": [
+        "lab-t06.2.1"
+       ],
+       "viz": 3
+      },
+      {
+       "bead_id": "lab-t06.2.3",
+       "title": "Verify the sample list guide",
+       "state": "not-started",
+       "status": "open",
+       "blocked_by": [
+        "lab-t06.6"
+       ],
+       "viz": 3
+      },
+      {
+       "bead_id": "lab-t06.2.4",
+       "title": "Measure real-app slow-page impact (TEAM-11)",
+       "state": "not-started",
+       "status": "open",
+       "blocked_by": [
+        "lab-t06.2.3",
+        "lab-t06.6"
+       ],
+       "viz": 3
+      }
+     ]
+    },
+    {
+     "bead_id": "lab-t06.3",
+     "title": "Experiment 7: slow restarts",
+     "state": "in-progress",
+     "status": "in_progress",
+     "track": true,
+     "viz": 2,
+     "children": [
+      {
+       "bead_id": "lab-t06.3.1",
+       "title": "Slow restarts: baseline",
+       "state": "done",
+       "status": "closed",
+       "viz": 3
+      },
+      {
+       "bead_id": "lab-t06.3.2",
+       "title": "Restore the test VM",
+       "state": "in-progress",
+       "status": "in_progress",
+       "owner": "operator-op-restore-lab-t06-3-2",
+       "owner_state": "working",
+       "viz": 3
+      },
+      {
+       "bead_id": "lab-t06.3.3",
+       "title": "Measure real-app startup impact",
+       "state": "not-started",
+       "status": "open",
+       "blocked_by": [
+        "lab-t06.6"
+       ],
+       "viz": 3
+      },
+      {
+       "bead_id": "lab-t06.3.4",
+       "title": "Wait for CI on the fixture fix",
+       "state": "blocked",
+       "status": "in_progress",
+       "waiting": "CI #12",
+       "waiting_since": 1792999000,
+       "viz": 3
+      }
+     ]
+    },
+    {
+     "bead_id": "lab-t06.4",
+     "title": "Design work approved",
+     "state": "done",
+     "status": "closed",
+     "viz": 2
+    },
+    {
+     "bead_id": "lab-t06.5",
+     "title": "Align both designs to one gate per tier",
+     "state": "done",
+     "status": "closed",
+     "viz": 2
+    },
+    {
+     "bead_id": "lab-t06.9",
+     "title": "Former stage 9",
+     "state": "done",
+     "status": "closed",
+     "superseded": true,
+     "viz": 2
+    },
+    {
+     "bead_id": "lab-t06.6",
+     "title": "Workflow approved: compare sample text variants",
+     "state": "needs-user",
+     "status": "open",
+     "gate": true,
+     "approvers": [
+      "user"
+     ],
+     "waiting": "you",
+     "waiting_since": 1792996400,
+     "viz": 1
+    },
+    {
+     "bead_id": "lab-t06.7",
+     "title": "Results reviewed and reports posted",
+     "state": "not-started",
+     "status": "open",
+     "gate": true,
+     "approvers": [
+      "user"
+     ],
+     "blocked_by": [
+      "lab-t06.2.4",
+      "lab-t06.3.3"
+     ],
+     "viz": 1
+    },
+    {
+     "bead_id": "lab-t06.8",
+     "title": "Write the summary post",
+     "state": "not-started",
+     "status": "open",
+     "blocked_by": [
+      "lab-t06.7"
+     ],
+     "viz": 2
+    },
+    {
+     "bead_id": "lab-t06.10",
+     "title": "Revisit the old fixtures",
+     "state": "not-started",
+     "status": "deferred",
+     "viz": 2
+    }
+   ]
+  },
+  {
+   "n": 2,
+   "project": "lab",
+   "project_id": 1,
+   "bead_id": "lab-ops",
+   "title": "Lab ops",
+   "state": "in-progress",
+   "status": "open",
+   "manager_role": "manager-lab-ops",
+   "done": 0,
+   "total": 0,
+   "steps": [
+    {
+     "bead_id": "lab-ops.1",
+     "title": "Rotate the lab keys",
+     "state": "in-progress",
+     "status": "in_progress",
+     "owner": "operator-op-rotate-lab-ops-1",
+     "owner_state": "working",
+     "viz": 2
+    },
+    {
+     "bead_id": "lab-ops.2",
+     "title": "Land the cleanup PR",
+     "state": "blocked",
+     "status": "in_progress",
+     "review": "41",
+     "waiting": "review (a reviewer)",
+     "waiting_since": 1792998000,
+     "viz": 2
+    },
+    {
+     "bead_id": "lab-ops.3",
+     "title": "Announce the new keys",
+     "state": "not-started",
+     "status": "open",
+     "blocked_by": [
+      "lab-ops.1"
+     ],
+     "viz": 2
+    },
+    {
+     "bead_id": "lab-ops.4",
+     "title": "Old runner cleanup",
+     "state": "in-progress",
+     "status": "in_progress",
+     "owner": "operator-op-old-lab-ops-4",
+     "owner_state": "died",
+     "viz": 2
+    }
+   ]
+  }
+ ],
+ "display": {
+  "commander": {
+   "kind": "none",
+   "text": "no agent yet",
+   "since": 0,
+   "unread": 0
+  },
+  "asks": [
+   {
+    "key": "ask:lab:lab-t06.6",
+    "text": "Approve comparing sample text variants?",
+    "rank": 1,
+    "workstream": "Sample text trials",
+    "track": "",
+    "track_letter": "",
+    "ws_key": "lab:lab-t06"
+   }
+  ],
+  "workstreams": [
+   {
+    "key": "lab:lab-t06",
+    "n": 1,
+    "title": "Sample text trials",
+    "project": "lab",
+    "bead_id": "lab-t06",
+    "manager_role": "manager-lab-t06",
+    "starred": false,
+    "kind": "needs",
+    "text": "Needs you: Approve comparing sample text variants?",
+    "since": 1792996400,
+    "progress": {
+     "done": 6,
+     "total": 12
+    },
+    "working": 2,
+    "flag": 1,
+    "unread": 0,
+    "gate": {
+     "bead_id": "lab-t06.6",
+     "title": "Workflow approved: compare sample text variants",
+     "who": "you",
+     "at": false,
+     "for_you": true
+    },
+    "tracks": [
+     {
+      "key": "lab:lab-t06.2",
+      "bead_id": "lab-t06.2",
+      "letter": "A",
+      "title": "Experiment 2: slow pages",
+      "kind": "needs",
+      "text": "Needs you: Approve comparing sample text variants?",
+      "since": 1792996400,
+      "progress": {
+       "done": 1,
+       "total": 3
+      },
+      "working": 0
+     },
+     {
+      "key": "lab:lab-t06.3",
+      "bead_id": "lab-t06.3",
+      "letter": "B",
+      "title": "Experiment 7: slow restarts",
+      "kind": "working",
+      "text": "Working on restore the test VM",
+      "since": 0,
+      "progress": {
+       "done": 1,
+       "total": 4
+      },
+      "working": 1
+     }
+    ],
+    "workflow": {
+     "current": "lab-t06.6",
+     "unlocks": [
+      "lab-t06.2.3",
+      "lab-t06.3.3",
+      "lab-t06.2.4",
+      "lab-t06.7"
+     ],
+     "steps": [
+      {
+       "id": "lab-t06.1",
+       "title": "Experiment 3: off-modal completed",
+       "kind": "done",
+       "text": "Done",
+       "track": true
+      },
+      {
+       "id": "lab-t06.2",
+       "title": "Experiment 2: slow pages",
+       "kind": "needs",
+       "text": "Needs you: Approve comparing sample text variants?",
+       "since": 1792996400,
+       "track": true,
+       "children": [
+        {
+         "id": "lab-t06.2.1",
+         "title": "Slow pages: design approved",
+         "kind": "done",
+         "text": "Done",
+         "gate": true,
+         "who": "you"
+        },
+        {
+         "id": "lab-t06.2.2",
+         "title": "Slow pages: run the baseline",
+         "kind": "done",
+         "text": "Done"
+        },
+        {
+         "id": "lab-t06.2.3",
+         "title": "Verify the sample list guide",
+         "kind": "idle",
+         "text": "Not started"
+        },
+        {
+         "id": "lab-t06.2.4",
+         "title": "Measure real-app slow-page impact",
+         "kind": "idle",
+         "text": "Not started"
+        }
+       ]
+      },
+      {
+       "id": "lab-t06.3",
+       "title": "Experiment 7: slow restarts",
+       "kind": "working",
+       "text": "Working on restore the test VM",
+       "track": true,
+       "current": "lab-t06.3.2",
+       "children": [
+        {
+         "id": "lab-t06.3.1",
+         "title": "Slow restarts: baseline",
+         "kind": "done",
+         "text": "Done"
+        },
+        {
+         "id": "lab-t06.3.2",
+         "title": "Restore the test VM",
+         "kind": "working",
+         "text": "Operator working"
+        },
+        {
+         "id": "lab-t06.3.3",
+         "title": "Measure real-app startup impact",
+         "kind": "idle",
+         "text": "Not started"
+        },
+        {
+         "id": "lab-t06.3.4",
+         "title": "Wait for CI on the fixture fix",
+         "kind": "waiting",
+         "text": "Waiting for CI",
+         "since": 1792999000
+        }
+       ]
+      },
+      {
+       "id": "lab-t06.4",
+       "title": "Design work approved",
+       "kind": "done",
+       "text": "Done"
+      },
+      {
+       "id": "lab-t06.5",
+       "title": "Align both designs to one gate per tier",
+       "kind": "done",
+       "text": "Done"
+      },
+      {
+       "id": "lab-t06.6",
+       "title": "Workflow approved: compare sample text variants",
+       "kind": "needs",
+       "text": "Needs you",
+       "since": 1792996400,
+       "gate": true,
+       "who": "you",
+       "unlocks": [
+        "lab-t06.2.3",
+        "lab-t06.3.3",
+        "lab-t06.2.4",
+        "lab-t06.7"
+       ]
+      },
+      {
+       "id": "lab-t06.7",
+       "title": "Results reviewed and reports posted",
+       "kind": "idle",
+       "text": "Not reached",
+       "gate": true,
+       "who": "you"
+      },
+      {
+       "id": "lab-t06.8",
+       "title": "Write the summary post",
+       "kind": "idle",
+       "text": "Not started"
+      },
+      {
+       "id": "lab-t06.10",
+       "title": "Revisit the old fixtures",
+       "kind": "idle",
+       "text": "Parked"
+      }
+     ]
+    }
+   },
+   {
+    "key": "lab:lab-ops",
+    "n": 2,
+    "title": "Lab ops",
+    "project": "lab",
+    "bead_id": "lab-ops",
+    "manager_role": "manager-lab-ops",
+    "starred": false,
+    "kind": "working",
+    "text": "Working on rotate the lab keys",
+    "since": 0,
+    "progress": {
+     "done": 0,
+     "total": 4
+    },
+    "working": 2,
+    "flag": 0,
+    "unread": 0,
+    "gate": null,
+    "tracks": [],
+    "workflow": {
+     "current": "lab-ops.1",
+     "steps": [
+      {
+       "id": "lab-ops.1",
+       "title": "Rotate the lab keys",
+       "kind": "working",
+       "text": "Operator working"
+      },
+      {
+       "id": "lab-ops.2",
+       "title": "Land the cleanup PR",
+       "kind": "waiting",
+       "text": "Waiting for review",
+       "since": 1792998000
+      },
+      {
+       "id": "lab-ops.3",
+       "title": "Announce the new keys",
+       "kind": "idle",
+       "text": "Not started"
+      },
+      {
+       "id": "lab-ops.4",
+       "title": "Old runner cleanup",
+       "kind": "stalled",
+       "text": "Agent stopped: the Manager's move"
+      }
+     ]
+    }
+   }
+  ]
+ },
+ "overview": {
+  "state": "updating",
+  "stale": false,
+  "evidence": [
+   {
+    "id": "lab-t06.1",
+    "label": "Experiment 3: off-modal completed",
+    "text": "Closed: the off-modal trial finished."
+   },
+   {
+    "id": "lab-t06.4",
+    "label": "Design work approved",
+    "text": "Approved."
+   }
+  ],
+  "draft": {
+   "summary": {
+    "sentences": [
+     {
+      "text": "The off-modal trial finished, so the trial plan now rests on its result.",
+      "sources": [
+       "lab-t06.1"
+      ]
+     },
+     {
+      "text": "The design work was approved, which lets the remaining trials start.",
+      "sources": [
+       "lab-t06.4"
+      ]
+     }
+    ]
+   },
+   "changes": [
+    {
+     "sentences": [
+      {
+       "text": "Experiment 3 completed without changing the plan.",
+       "sources": [
+        "lab-t06.1"
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ }
+}

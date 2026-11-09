@@ -24,7 +24,7 @@ func waitReady(t *testing.T, c *Cache, in Input) Result {
 	until := time.Now().Add(time.Second)
 	for time.Now().Before(until) {
 		r := c.Get(in)
-		if r.State == "ready" || r.State == "unavailable" {
+		if r.State == "ready" || r.State == "retrying" {
 			return r
 		}
 		time.Sleep(time.Millisecond)
@@ -70,7 +70,7 @@ func TestReaderFailureIsBoundedAndDoesNotInventRecap(t *testing.T) {
 	var calls atomic.Int32
 	c := New(func(context.Context, Input) (Recap, error) { calls.Add(1); return Recap{}, errors.New("provider down") })
 	r := waitReady(t, c, fixture())
-	if r.State != "unavailable" || r.Recap != nil || r.Error == "" {
+	if r.State != "retrying" || r.Recap != nil || r.Error == "" {
 		t.Fatal(r)
 	}
 	c.Get(fixture())

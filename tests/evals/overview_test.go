@@ -60,7 +60,7 @@ func TestWorkstreamOverviewScenario(t *testing.T) {
 			if writes.Load() != 0 {
 				t.Fatal("overview invoked a mutation")
 			}
-			if tc.Want == "unavailable" && result.Recap != nil {
+			if tc.Want == "retrying" && result.Recap != nil {
 				t.Fatal("invented evidence reached the user")
 			}
 		})

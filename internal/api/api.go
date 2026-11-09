@@ -80,9 +80,10 @@ type Options struct {
 
 // Server holds the latest snapshot and fans changes out to WebSocket clients.
 type Server struct {
-	overviews *overview.Cache
-	signins   signins
-	opts      Options
+	overviews    *overview.Cache
+	overviewKick atomic.Bool // a background first load for Overview is under way
+	signins      signins
+	opts         Options
 
 	refreshMu   sync.Mutex  // one Source call at a time
 	loadKept    atomic.Bool // the latest load was degraded, served last-good rows or was dropped

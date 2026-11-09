@@ -1554,6 +1554,7 @@ The default workstream/track view is Overview, with Workflow as a second tab.
 scopes evidence and never changes workflow state. Decisions and live activity
 remain snapshot-derived. See `docs/features/workstream-overview.md` for the
 reader's boundaries, stale-state behavior and Manager-result handoff semantics.
+**Streaming and waits:** `POST /api/overview` never blocks on cmdrd's first snapshot (`overviewSnapshot` starts the load in the background): while the board loads or is degraded it answers 200 `state:waiting` with `waiting_for`; a failed reader run is `state:retrying` (30s retry), never `unavailable` (the app still accepts it from an old cmdrd). With `"stream":true` it writes NDJSON `Result`s, one per change while `updating`, each with `draft` (sentences finished so far, `overview.PartialRecap`, cited ids filtered to known evidence); `claude` runs with `--output-format stream-json --include-partial-messages` and reports through `overview.WithProgress`. The tab reads the stream and polls every 3s while waiting. Tests: `TestPartialRecap*`, `TestCacheShowsDraft*`, `TestClaudeStreamsDraftThenResult`, `TestOverviewWaitsPlainly*`, `TestOverviewStreamsDraft*`, `app/test/overview.test.tsx`; shot: `smoke.mjs --fake --fixture test/fixtures/snapshot-overview-streaming.json --query 'ws=1&flow=1'`.
 
 Approval dispatch custody: `internal-resolve-needs` writes Manager ownership and
 a `Manager dispatch` receipt on otherwise unheld released steps before closing

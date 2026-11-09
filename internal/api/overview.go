@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/example-user/commander/internal/beads"
 	"github.com/example-user/commander/internal/chat"
@@ -22,6 +23,32 @@ type overviewRequest struct {
 	Project string `json:"project"`
 	BeadID  string `json:"bead_id"`
 	TrackID string `json:"track_id"`
+	// Stream asks for newline-delimited results: one per change while the recap is
+	// being written, ending when it is ready (or is waiting on something).
+	Stream bool `json:"stream"`
+}
+
+// overviewWaiting is the answer while something the recap needs is still on its way.
+// It is a plain wait the client retries, never a failure.
+func overviewWaiting(for_ string) overview.Result {
+	return overview.Result{State: "waiting", Evidence: []overview.Evidence{}, WaitingFor: for_}
+}
+
+// overviewSnapshot is the latest snapshot without waiting for a first one: cmdrd's
+// first load after a restart can take minutes, longer than any reader of this
+// route should hang. The load starts in the background, once.
+func (s *Server) overviewSnapshot() (livedata.Snapshot, bool) {
+	s.mu.Lock()
+	have := s.version > 0
+	cur := s.cur
+	s.mu.Unlock()
+	if !have && s.overviewKick.CompareAndSwap(false, true) {
+		go func() {
+			defer s.overviewKick.Store(false)
+			s.Refresh(context.Background())
+		}()
+	}
+	return cur, have
 }
 
 func (s *Server) serveOverview(w http.ResponseWriter, r *http.Request) {
@@ -30,9 +57,13 @@ func (s *Server) serveOverview(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 400, map[string]string{"error": "invalid overview target"})
 		return
 	}
-	snap := s.current(r.Context())
+	snap, have := s.overviewSnapshot()
+	if !have {
+		s.writeOverview(w, q, overviewWaiting("the board to finish loading (cmdrd is still reading its first snapshot)"))
+		return
+	}
 	if snap.Degraded != nil {
-		writeJSON(w, 503, map[string]string{"error": "Live state is unavailable; recap updates are paused."})
+		s.writeOverview(w, q, overviewWaiting("live state to recover (the board could not be read just now)"))
 		return
 	}
 	var ws *livedata.SnapWorkstream
@@ -56,7 +87,50 @@ func (s *Server) serveOverview(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 404, map[string]string{"error": "nested workstream not found in this workstream"})
 		return
 	}
-	writeJSON(w, http.StatusOK, s.overviews.Get(in))
+	if !q.Stream {
+		writeJSON(w, http.StatusOK, s.overviews.Get(in))
+		return
+	}
+	s.streamOverview(w, r, in)
+}
+
+func (s *Server) writeOverview(w http.ResponseWriter, q overviewRequest, res overview.Result) {
+	if q.Stream {
+		w.Header().Set("Content-Type", "application/x-ndjson")
+	}
+	writeJSON(w, http.StatusOK, res)
+}
+
+// streamOverview writes the recap as it is written: a line per change, closed
+// once nothing is being written. The client reopens it to keep the recap fresh.
+func (s *Server) streamOverview(w http.ResponseWriter, r *http.Request, in overview.Input) {
+	w.Header().Set("Content-Type", "application/x-ndjson")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("X-Accel-Buffering", "no")
+	fl, _ := w.(http.Flusher)
+	enc := json.NewEncoder(w)
+	deadline := time.NewTimer(2 * time.Minute)
+	defer deadline.Stop()
+	for {
+		changed := s.overviews.Changed() // taken first: a change between Get and the wait is not lost
+		res := s.overviews.Get(in)
+		if enc.Encode(res) != nil {
+			return
+		}
+		if fl != nil {
+			fl.Flush()
+		}
+		if res.State != "updating" {
+			return
+		}
+		select {
+		case <-changed:
+		case <-r.Context().Done():
+			return
+		case <-deadline.C:
+			return
+		}
+	}
 }
 
 func buildOverviewInput(snap livedata.Snapshot, ws *livedata.SnapWorkstream, q overviewRequest, home string) (overview.Input, bool) {
