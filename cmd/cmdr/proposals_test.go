@@ -127,7 +127,10 @@ func TestProposal_OverruleUndoesTheAskAndTellsTheManagerWhy(t *testing.T) {
 	if len(mailer.sent) != 1 || mailer.sent[0].to[0] != "GoldTiger" || !strings.HasPrefix(mailer.sent[0].subject, "[overruled] ask") {
 		t.Fatalf("the Manager is mailed: %+v", mailer.sent)
 	}
-	for _, want := range []string{"the user said pick them yourself", "Do not add it again", "needs a holder now"} {
+	if ws := beads.WaitsOf(b.Labels); len(ws) != 1 || ws[0].Ref != beads.ManagerStartWait {
+		t.Fatalf("the overruled ask left the step with no holder: %v", b.Labels)
+	}
+	for _, want := range []string{"the user said pick them yourself", "Do not add it again", "You now hold ms-1.92"} {
 		if !strings.Contains(mailer.sent[0].body, want) {
 			t.Fatalf("overrule mail missing %q:\n%s", want, mailer.sent[0].body)
 		}
@@ -150,8 +153,11 @@ func TestProposal_LongWaitAndParkAreProposedShortOnesAreNot(t *testing.T) {
 	t.Setenv("COMMANDER_ROLE", "commander")
 	runOK(t, runProposals, "overrule", "--project", "manifest", "--bead", "ms-1.92", "--reason", "come back later means today")
 	b, _ := m.Show(context.Background(), "", "ms-1.92")
-	if len(beads.WaitsOf(b.Labels)) != 0 {
-		t.Fatalf("the overruled wait stays: %v", b.Labels)
+	if ws := beads.WaitsOf(b.Labels); len(ws) != 1 || ws[0].Ref != beads.ManagerStartWait {
+		t.Fatalf("the overruled wait stays, or the step has no holder: %v", b.Labels)
+	}
+	if body := mailer.sent[len(mailer.sent)-1].body; !strings.Contains(body, "You now hold ms-1.92") {
+		t.Fatalf("the mail does not say the Manager holds the step:\n%s", body)
 	}
 
 	t.Setenv("COMMANDER_ROLE", "manager-ms-1")
@@ -163,6 +169,32 @@ func TestProposal_LongWaitAndParkAreProposedShortOnesAreNot(t *testing.T) {
 	runOK(t, runProposals, "overrule", "--project", "manifest", "--bead", "ms-1.92", "--reason", "no park")
 	if b, _ := m.Show(context.Background(), "", "ms-1.92"); b.Status == beads.StatusDeferred {
 		t.Fatal("the overruled park is still parked")
+	}
+	if b, _ := m.Show(context.Background(), "", "ms-1.92"); len(beads.WaitsOf(b.Labels)) != 1 {
+		t.Fatalf("the unparked step has no holder: %v", b.Labels)
+	}
+}
+
+// An overrule leaves the step held by its Manager unless something else holds it.
+func TestProposal_OverruleLeavesNoStepWithoutAHolder(t *testing.T) {
+	m, mailer := proposalFixture(t, true)
+	t.Setenv("COMMANDER_ROLE", "manager-ms-1")
+	// a step an Operator owns keeps its owner, no receipt
+	if err := m.SetLabel(context.Background(), "", "ms-1.92", "owner:operator-x", true); err != nil {
+		t.Fatal(err)
+	}
+	runOK(t, runInternalSetObjective, askArgs("ms-1.92")...)
+	t.Setenv("COMMANDER_ROLE", "commander")
+	mailer.sent = nil
+	runOK(t, runProposals, "overrule", "--project", "manifest", "--bead", "ms-1.92", "--reason", "no ask")
+	b, _ := m.Show(context.Background(), "", "ms-1.92")
+	for _, w := range beads.WaitsOf(b.Labels) {
+		if w.Ref == beads.ManagerStartWait {
+			t.Fatalf("a step another holder keeps got a receipt: %v", b.Labels)
+		}
+	}
+	if len(mailer.sent) == 1 && strings.Contains(mailer.sent[0].body, "You now hold") {
+		t.Fatal("mail claims a hold that was not written")
 	}
 }
 

@@ -317,6 +317,7 @@ func overruleProposal(ctx context.Context, bc beads.Client, project store.Projec
 		return nil, err
 	}
 	var undone string
+	holder := beadID // the step the undone write leaves needing a holder
 	switch p.Kind {
 	case beads.ProposedAsk:
 		prev := p.Prev
@@ -332,6 +333,7 @@ func overruleProposal(ctx context.Context, bc beads.Client, project store.Projec
 		undone = "the ask and its card are gone; the step is " + prev + " again"
 	case beads.ProposedGate, beads.ProposedReview:
 		stage, name := gateStageAndName(b.Labels)
+		holder = stage // the gate is retired; the stage it guarded is what needs one
 		if stage != "" && name != "" {
 			err = gates.Remove(ctx, bc, dir, project.ID, stage, name)
 		} else if err = bc.SetLabel(ctx, dir, beadID, gates.RetiredLabel, true); err == nil {
@@ -358,13 +360,24 @@ func overruleProposal(ctx context.Context, bc beads.Client, project store.Projec
 	default:
 		return nil, fmt.Errorf("%s: unknown proposal kind %q", beadID, p.Kind)
 	}
+	// The undo can leave the step with no owner, wait or card (State missing):
+	// give its Manager custody in the same step, unless something else holds it.
+	var held []string
+	if holder != "" {
+		var err error
+		if held, err = holdForManager(ctx, bc, dir, []string{holder}, "", time.Now()); err != nil {
+			return nil, fmt.Errorf("%s: undone, but the Manager's hold on %s was not written: %w", beadID, holder, err)
+		}
+	}
 	if err := bc.SetLabel(ctx, dir, beadID, p.Label, false); err != nil {
 		return nil, err
 	}
 	_ = bc.AddComment(ctx, dir, beadID, fmt.Sprintf("proposed %s overruled by %s at %d: %s", p.Kind, who, time.Now().Unix(), reason))
 	manager := wsmgr.Role(wsmgr.Owner(ctx, bc, dir, beadID))
 	body := fmt.Sprintf("Commander overruled your proposed %s on %s %q: %s\n\nUndone: %s. Do not add it again; carry on with the approved workflow. If the user wants it, they will say so.", p.Kind, beadID, b.Title, reason, undone)
-	if p.Kind == beads.ProposedAsk || p.Kind == beads.ProposedWait {
+	if len(held) > 0 {
+		body += fmt.Sprintf("\n\nYou now hold %s (a \"Manager to start\" receipt, due within %s): start it, give it an owner or a wait, or close it.", held[0], custodyWithin)
+	} else if p.Kind == beads.ProposedAsk || p.Kind == beads.ProposedWait {
 		body += fmt.Sprintf("\n\n%s needs a holder now: an owner working it, a wait cmdrd can watch, or close it.", beadID)
 	}
 	st, client, key, cleanup, mailErr := mailDeps()
@@ -375,7 +388,7 @@ func overruleProposal(ctx context.Context, bc beads.Client, project store.Projec
 	if mailErr != nil {
 		fmt.Fprintf(stderr, "warning: overruled, but mailing %s failed: %v\n", manager, mailErr)
 	}
-	return map[string]any{"project": project.Name, "bead_id": beadID, "kind": p.Kind, "overruled": true, "undone": undone, "manager": manager}, nil
+	return map[string]any{"project": project.Name, "bead_id": beadID, "kind": p.Kind, "overruled": true, "undone": undone, "manager": manager, "held": held}, nil
 }
 
 // gateStageAndName reads an internal-gate gate bead's stage and name ("" for a
