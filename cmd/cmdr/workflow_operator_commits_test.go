@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -185,10 +186,8 @@ func TestOperatorAuthorshipReadsCommitIdentities(t *testing.T) {
 	}
 }
 
-// The user cherry-picking or rebasing an Operator's commit makes a new commit
-// as the user, but the author header still names the Operator only when the
-// Operator authored it; the committer identity is what the launcher sets, so
-// the user's own rewrite of it is the user's.
+// An author header under the Operator domain counts as well as the committer:
+// the user's copy of a commit an Operator authored names it by identity.
 func TestOperatorAuthorshipReadsTheAuthorToo(t *testing.T) {
 	r, _, _ := newOpRepo(t)
 	agent := "operator-op-x-t1"
@@ -205,5 +204,132 @@ func TestOperatorAuthorshipReadsTheAuthorToo(t *testing.T) {
 	got, err := operatorAuthorship(context.Background(), r.repo, []store.AgentRun{{AgentName: agent, TaskBeadID: "t1"}}, false, []string{userCopy})
 	if err != nil || !strings.Contains(got[userCopy], agent) {
 		t.Fatalf("author identity not read: %v %v", got, err)
+	}
+}
+
+// gitAt runs git as agent ("" = the user) with every commit it makes stamped
+// at unix time at.
+func (r *opRepo) gitAt(at int64, wd, agent string, args ...string) string {
+	r.t.Helper()
+	cmd := exec.Command("git", append([]string{"-C", wd}, args...)...)
+	stamp := fmt.Sprintf("@%d +0000", at)
+	cmd.Env = append(gitEnvWithoutIdentity(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1",
+		"GIT_COMMITTER_DATE="+stamp, "GIT_AUTHOR_DATE="+stamp)
+	if agent != "" {
+		cmd.Env = append(cmd.Env, spawn.OperatorGitEnv(agent)...)
+	}
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		r.t.Fatalf("git %v: %v\n%s", args, err, out)
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// change writes a file in wd and commits it at time at.
+func (r *opRepo) change(at int64, wd, agent, file, body string) string {
+	r.t.Helper()
+	if err := os.WriteFile(filepath.Join(wd, file), []byte(body), 0o644); err != nil {
+		r.t.Fatal(err)
+	}
+	r.gitAt(at, wd, agent, "add", file)
+	r.gitAt(at, wd, agent, "commit", "-q", "-m", "change "+file)
+	return r.gitAt(at, wd, agent, "rev-parse", "HEAD")
+}
+
+// A rewrite made outside an Operator (the user's rebase, amend or
+// cherry-pick, GitHub's update-branch fetched back) leaves the user's or
+// GitHub's identities on a copy of the Operator's change: the copy is still
+// the Operator's, matched by patch-id against the original in the local repo.
+// The user's own commit an Operator copied later stays the user's.
+func TestOperatorAuthorshipFollowsRewritesOutsideAnOperator(t *testing.T) {
+	ctx := context.Background()
+	r, _, _ := newOpRepo(t)
+	const t0 = int64(1_800_000_000)
+	w, run := r.worktree("op-w-t2")
+	a := run.AgentName
+	op1 := r.change(t0+10, w, a, "op1.txt", "operator one\n")
+	op2 := r.change(t0+20, w, a, "op2.txt", "operator two\n")
+
+	// main moves on, then the user rebases the Operator branch in place: both
+	// commits now read as the user's and the branch no longer holds the
+	// originals (only its reflog does).
+	r.gitAt(t0+30, r.repo, "", "checkout", "-q", "main")
+	r.change(t0+30, r.repo, "", "main.txt", "main moved\n")
+	r.gitAt(t0+40, w, "", "rebase", "-q", "main")
+	rebased2 := r.gitAt(t0+40, w, "", "rev-parse", "HEAD")
+	rebased1 := r.gitAt(t0+40, w, "", "rev-parse", "HEAD~1")
+	if who := r.git(w, "", "show", "-s", "--format=%ae %ce", rebased2); who != "user@example.com user@example.com" {
+		t.Fatalf("rebase outside an Operator kept an Operator identity: %s", who)
+	}
+
+	// The user amends a cherry-picked copy without changing it (message only).
+	r.gitAt(t0+50, r.repo, "", "checkout", "-q", "-b", "user-pick", "main")
+	r.gitAt(t0+50, r.repo, "", "cherry-pick", op1)
+	r.gitAt(t0+51, r.repo, "", "commit", "-q", "--amend", "-m", "reworded by the user")
+	amended := r.gitAt(t0+51, r.repo, "", "rev-parse", "HEAD")
+
+	// GitHub's update-branch: author kept, committer GitHub, fetched back.
+	r.gitAt(t0+60, r.repo, "", "checkout", "-q", "-b", "gh", "main")
+	cmd := exec.Command("git", "-C", r.repo, "cherry-pick", op2)
+	cmd.Env = append(gitEnvWithoutIdentity(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1",
+		"GIT_COMMITTER_NAME=GitHub", "GIT_COMMITTER_EMAIL=noreply@github.com", "GIT_COMMITTER_DATE=@1800000060 +0000")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatal(err, string(out))
+	}
+	github := r.git(r.repo, "", "rev-parse", "HEAD")
+
+	// The user's own change, which an Operator copies afterwards: still the
+	// user's (the Operator's copy is later).
+	r.gitAt(t0+70, r.repo, "", "checkout", "-q", "-b", "mine", "main")
+	mine := r.change(t0+70, r.repo, "", "mine.txt", "the user's own\n")
+	cp, cpRun := r.worktree("op-cp-t4")
+	r.gitAt(t0+80, cp, cpRun.AgentName, "cherry-pick", mine)
+	r.gitAt(t0+80, r.repo, "", "checkout", "-q", "main")
+
+	runs := []store.AgentRun{run, cpRun}
+	all := []string{rebased1, rebased2, amended, github, mine}
+	got, err := operatorAuthorship(ctx, r.repo, runs, true, all)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, sha := range []string{rebased1, rebased2, amended, github} {
+		if !strings.Contains(got[sha], "same change") || !strings.Contains(got[sha], a) {
+			t.Errorf("copy %s outside an Operator: got %q, want the change of %s", sha, got[sha], a)
+		}
+	}
+	if why, ok := got[mine]; ok {
+		t.Errorf("the user's own commit, copied later by an Operator, attributed: %s", why)
+	}
+	// Reviewer side: only the task's own runs' originals count.
+	if got, err := operatorAuthorship(ctx, r.repo, []store.AgentRun{cpRun}, false, all); err != nil || len(got) != 0 {
+		t.Fatalf("another task's copies attributed to the reviewer: %v %v", got, err)
+	}
+	if got, err := operatorAuthorship(ctx, r.repo, []store.AgentRun{run}, false, all); err != nil || len(got) != 4 {
+		t.Fatalf("writer task: %v %v", got, err)
+	}
+
+	// Limit: with the Operator's worktree and branch (and so their reflogs)
+	// gone, no original is left to match and the copies pass.
+	r.git(r.repo, "", "worktree", "remove", "--force", w)
+	r.git(r.repo, "", "branch", "-q", "-D", "op/w-t2")
+	if got, err := operatorAuthorship(ctx, r.repo, []store.AgentRun{run}, false, all); err != nil || len(got) != 0 {
+		t.Fatalf("originals gone, yet matched: %v %v", got, err)
+	}
+}
+
+// A replace ref cannot dress an Operator commit in the user's identity.
+func TestOperatorAuthorshipIgnoresReplaceRefs(t *testing.T) {
+	r, _, _ := newOpRepo(t)
+	agent := "operator-op-x-t1"
+	op := r.change(1_800_000_000, r.repo, agent, "x.txt", "x\n")
+	r.git(r.repo, "", "checkout", "-q", "-b", "disguise", "main~1")
+	disguise := r.change(1_800_000_001, r.repo, "", "y.txt", "y\n")
+	r.git(r.repo, "", "replace", op, disguise)
+	if who := r.git(r.repo, "", "show", "-s", "--format=%ce", op); who != "user@example.com" {
+		t.Fatalf("replace ref not in effect: %s", who)
+	}
+	got, err := operatorAuthorship(context.Background(), r.repo, []store.AgentRun{{AgentName: agent, TaskBeadID: "t1"}}, false, []string{op})
+	if err != nil || !strings.Contains(got[op], agent) {
+		t.Fatalf("replace ref hid the Operator: %v %v", got, err)
 	}
 }

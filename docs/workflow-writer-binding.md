@@ -48,12 +48,21 @@ commands; an Operator must hand the recipe back to that Manager.
    for a ref move (reset, fast-forward, checkout), so a reviewer that reset
    onto the PR head, or a fix Operator branched off the user's commits, claims
    none of them. A commit whose author or committer is under that domain is
-   an Operator's. The refusal names the run and says to bind its task with
+   an Operator's. A copy made outside an Operator (the user's rebase, amend or
+   cherry-pick, GitHub's update-branch fetched back) carries the user's or
+   GitHub's identities, so a commit is also an Operator's when its `git
+   patch-id --stable` equals that of an Operator commit in the local repo (any
+   ref or reflog, every worktree) committed no later than it; the user's own
+   commit an Operator copied afterwards stays the user's. Replace refs are
+   ignored. The refusal names the run and says to bind its task with
    `--writers`. A git error refuses. Reviewer independence applies the same
    reading to the review task's own runs: a reviewer that wrote a bound
    external commit is refused. Limits: a commit missing from the local repo
    passes; an Operator started before the install that added the identity, or
-   one that unsets `GIT_COMMITTER_*`, commits as the user and passes; this is
+   one that unsets `GIT_COMMITTER_*`, commits as the user and passes; a copy
+   whose change differs (a squash, a resolved conflict, moved context lines, an
+   edit while amending) or whose Operator original has left the local repo
+   (branch and worktree deleted, reflog expired) passes; this is
    a speed bump against a mistaken or careless bind, not a proof of authorship.
 
 4. Renew each step in template order. Existing closed steps use the same close
