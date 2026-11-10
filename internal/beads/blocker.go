@@ -19,6 +19,10 @@ func BehindOpenBlocker(ctx context.Context, c Client, dir, id, except string) (b
 			continue
 		}
 		blocker, err := FreshShow(ctx, c, dir, d.DependsOnID)
+		// Typed provenance failures must precede the legacy local absence exception.
+		if IsCrossProjectError(err) {
+			return false, err
+		}
 		if errors.Is(err, ErrNotFound) {
 			continue
 		}

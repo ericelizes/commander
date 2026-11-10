@@ -44,13 +44,21 @@ func (c *custodyReader) List(ctx context.Context, dir string, o beads.ListOption
 	if c.fail == "list" {
 		return nil, c.readErr
 	}
-	if c.fail == "show" {
-		return nil, nil
+	if c.fail == "show" || c.fail == "reached" {
+		bs, err := c.MemClient.List(ctx, dir, o)
+		var out []beads.Bead
+		for _, b := range bs {
+			if (c.fail == "show" && b.ID == "a") || (c.fail == "reached" && b.ID == "b") {
+				continue
+			}
+			out = append(out, b)
+		}
+		return out, err
 	}
 	return c.MemClient.List(ctx, dir, o)
 }
 func (c *custodyReader) Show(ctx context.Context, dir, id string) (*beads.Bead, error) {
-	if c.fail == "show" {
+	if (c.fail == "show" && id == "a") || (c.fail == "reached" && id == "b") {
 		return nil, c.readErr
 	}
 	return c.MemClient.Show(ctx, dir, id)
@@ -73,8 +81,8 @@ func (c *custodyReader) Dependents(ctx context.Context, dir, id string) ([]beads
 func TestCrossProjectCustodyScenario(t *testing.T) {
 	var sc struct {
 		Cases []struct {
-			Name, Fail                   string
-			Typed, Foreign, Leave, Allow bool
+			Name, Fail                             string
+			Typed, Foreign, Leave, Allow, NotFound bool
 		}
 	}
 	raw, err := os.ReadFile("../../tests/evals/scenarios/cross-project-custody-boundary.json")
@@ -91,8 +99,11 @@ func TestCrossProjectCustodyScenario(t *testing.T) {
 		t.Run(tc.Name, func(t *testing.T) {
 			t.Setenv("COMMANDER_HOME", t.TempDir())
 			c := &custodyReader{MemClient: &beads.MemClient{EdgeParentsOnly: true}, fail: tc.Fail, foreign: tc.Foreign, readErr: errors.New("read unavailable")}
+			if tc.NotFound {
+				c.readErr = beads.ErrNotFound
+			}
 			if tc.Typed {
-				c.readErr = fmt.Errorf("wrapped: %w", &beads.CrossProjectError{Operation: "identity/read", Bead: "a", Err: c.readErr})
+				c.readErr = fmt.Errorf("outer: %w", fmt.Errorf("inner: %w", &beads.CrossProjectError{Operation: "identity/read", Bead: "a", Err: c.readErr}))
 			}
 			c.Seed(beads.Bead{ID: "a", Status: "open"})
 			c.Seed(beads.Bead{ID: "b", Status: "open"})

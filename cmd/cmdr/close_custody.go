@@ -47,6 +47,10 @@ func holdForManagerInSnapshot(ctx context.Context, bc beads.Client, dir string, 
 	var held []string
 	for _, id := range ids {
 		b, err := beads.FreshShow(ctx, bc, dir, id)
+		// Typed provenance failures must precede the legacy local absence exception.
+		if beads.IsCrossProjectError(err) {
+			return nil, err
+		}
 		if errors.Is(err, beads.ErrNotFound) {
 			continue // the board lags a removal: nothing to hold
 		}

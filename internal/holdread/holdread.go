@@ -203,6 +203,10 @@ func (l *loader) list(ids []string) (map[string]beads.Bead, error) {
 			continue
 		}
 		b, err := beads.FreshShow(l.ctx, l.bc, l.dir, x)
+		// Typed provenance failures must precede the legacy local absence exception.
+		if beads.IsCrossProjectError(err) {
+			return nil, err
+		}
 		if errors.Is(err, beads.ErrNotFound) || (err == nil && b == nil) {
 			continue
 		}

@@ -16,6 +16,8 @@ type custodyTestKey struct{}
 type crossCustodyClient struct {
 	*beads.MemClient
 	readErr error
+	missing string
+	showErr error
 	foreign bool
 	writes  int
 	checks  int
@@ -35,6 +37,16 @@ func (c *crossCustodyClient) RequireLocalCustody(_ context.Context, _ string, id
 	return nil
 }
 func (c *crossCustodyClient) List(ctx context.Context, dir string, o beads.ListOptions) ([]beads.Bead, error) {
+	if c.missing != "" {
+		bs, err := c.MemClient.List(ctx, dir, o)
+		var out []beads.Bead
+		for _, b := range bs {
+			if b.ID != c.missing {
+				out = append(out, b)
+			}
+		}
+		return out, err
+	}
 	if c.readErr != nil {
 		return nil, c.readErr
 	}
@@ -95,6 +107,66 @@ func TestCrossProjectCustodyForeignReceipt(t *testing.T) {
 		}
 		if err == nil || c.writes != 0 || c.checks != 1 {
 			t.Fatalf("foreign set wrote: %v writes=%d checks=%d", err, c.writes, c.checks)
+		}
+	}
+}
+
+func (c *crossCustodyClient) Show(ctx context.Context, dir, id string) (*beads.Bead, error) {
+	if id == c.missing {
+		return nil, c.showErr
+	}
+	return c.MemClient.Show(ctx, dir, id)
+}
+func TestCrossProjectCustodyNotFoundCLI(t *testing.T) {
+	t.Setenv("COMMANDER_ROLE", "")
+	old, recorded := leaveUnheldReason, leaveUnheldRecorded
+	t.Cleanup(func() { leaveUnheldReason, leaveUnheldRecorded = old, recorded })
+	for _, id := range []string{"a", "b"} {
+		for _, typed := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/typed=%v", id, typed), func(t *testing.T) {
+				c := crossCustodyWorld()
+				c.missing = id
+				c.showErr = beads.ErrNotFound
+				if typed {
+					c.showErr = fmt.Errorf("outer: %w", fmt.Errorf("inner: %w", &beads.CrossProjectError{Operation: "read", Bead: id, Err: beads.ErrNotFound}))
+				}
+				leaveUnheldReason, leaveUnheldRecorded = "user takes custody", false
+				_, err := requireHeldAfter(context.Background(), c, "", "a", "close", "hold first", map[string]holding.Edit{"a": func(b *holding.Bead) { b.Status = "closed" }})
+				if typed {
+					if !beads.IsCrossProjectError(err) || !errors.Is(err, beads.ErrNotFound) || c.writes != 0 || leaveUnheldRecorded {
+						t.Fatalf("lost typed refusal or wrote: %v writes=%d", err, c.writes)
+					}
+				} else if err != nil {
+					t.Fatalf("local absence policy changed: %v", err)
+				}
+			})
+		}
+	}
+}
+func TestCrossProjectCustodyNotFoundSettlement(t *testing.T) {
+	for _, blocker := range []bool{false, true} {
+		for _, typed := range []bool{false, true} {
+			t.Run(fmt.Sprintf("blocker=%v/typed=%v", blocker, typed), func(t *testing.T) {
+				c := crossCustodyWorld()
+				c.missing = "b"
+				ids := []string{"a", "b"}
+				if blocker {
+					c.missing = "a"
+					ids = []string{"b"}
+				}
+				c.showErr = beads.ErrNotFound
+				if typed {
+					c.showErr = fmt.Errorf("outer: %w", fmt.Errorf("inner: %w", &beads.CrossProjectError{Operation: "read", Bead: c.missing, Err: beads.ErrNotFound}))
+				}
+				_, err := (custodyOwed{bc: c, ids: ids}).settle(context.Background(), "")
+				if typed {
+					if !beads.IsCrossProjectError(err) || !errors.Is(err, beads.ErrNotFound) || c.writes != 0 {
+						t.Fatalf("lost refusal or wrote: %v writes=%d", err, c.writes)
+					}
+				} else if err != nil || c.writes != 1 {
+					t.Fatalf("local absence changed: %v writes=%d", err, c.writes)
+				}
+			})
 		}
 	}
 }
