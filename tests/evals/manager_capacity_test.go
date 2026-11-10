@@ -29,8 +29,13 @@ func TestManagerCapacityScenario(t *testing.T) {
 	}
 	s.ManagerCapacity = nil
 	row = livedata.Board(s, s.GeneratedAt.Unix()).Workstreams[0]
-	if row.Text != "Manager picking it up" {
+	if row.Kind != "stalled" || row.Text != "Stalled" {
 		t.Fatalf("recovered row %+v", row)
+	}
+	for _, tr := range row.Tracks {
+		if tr.Kind != "stalled" || !strings.Contains(tr.Why, "Automation failure") {
+			t.Fatalf("unread mail recolored recovery: %+v", tr)
+		}
 	}
 }
 
