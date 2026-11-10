@@ -1415,10 +1415,13 @@ func (e *Engine) InterruptForMail(ctx context.Context, role, by string) error {
 		return nil
 	}
 	if err := e.send(role, note, "mail"); err != nil {
+		// A transport failure can race the live check after the interrupt ACK.
+		// Keep the explanation for the replacement process on every failure.
+		keepErr := e.keepInterruptNote(role, note)
 		if errors.Is(err, ErrNotRunning) {
-			return e.keepInterruptNote(role, note)
+			return keepErr
 		}
-		return err
+		return errors.Join(err, keepErr)
 	}
 	return nil
 }
