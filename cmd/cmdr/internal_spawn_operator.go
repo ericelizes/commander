@@ -286,6 +286,11 @@ func spawnOperatorAttempt(args []string, stdout, stderr *os.File, retried bool) 
 			return fail(err.Error())
 		}
 	}
+	// Before the task bead is made: no Operator starts on a nearly full disk.
+	if err := spawn.CheckDisk(spawn.SpawnRequest{ProjectPath: project.Path, RepoPath: project.RepoPath}); err != nil {
+		emitErr(stderr, fmt.Sprintf("spawn operator: %v; no task was created", err))
+		return 1
+	}
 	// Before the task bead is made: what the run would really start on (the
 	// Manager's account, a share draw either way) has usage left.
 	if err := spawn.CheckUsage(spawn.SpawnRequest{TaskText: *title + "\n" + *prompt, Runtime: *runtime, Account: *account},

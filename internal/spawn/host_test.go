@@ -13,9 +13,11 @@ import (
 	"time"
 
 	"github.com/example-user/commander/internal/agentmail"
+	"github.com/example-user/commander/internal/agentrt"
 	"github.com/example-user/commander/internal/beads"
 	"github.com/example-user/commander/internal/chat"
 	"github.com/example-user/commander/internal/claudeacct"
+	"github.com/example-user/commander/internal/diskguard"
 	"github.com/example-user/commander/internal/docker"
 	"github.com/example-user/commander/internal/mailstate"
 	"github.com/example-user/commander/internal/tmuxctl"
@@ -141,7 +143,8 @@ func TestSpawnCodeHost_HappyPath(t *testing.T) {
 		t.Fatalf("tmux calls: %v", tx.Calls)
 	}
 	cmd := launcherCmd(t, dir)
-	if !strings.HasPrefix(cmd, "#!/bin/sh\nunset TMUX TMUX_PANE\nenv -u TMUX -u TMUX_PANE -u ANTHROPIC_API_KEY -u CLAUDE_CONFIG_DIR GOFLAGS='-trimpath -p=2' COMMANDER_ROLE='operator-feat-auth' 'GIT_COMMITTER_NAME=operator-feat-auth' 'GIT_COMMITTER_EMAIL=operator-feat-auth@operator.commander.invalid' COMMANDER_MANAGER_ROLE='manager-bd-100' 'claude' '-p'") ||
+	runTmp := diskguard.RunTmpDir(agentrt.CommanderHome(), "cmdr-myproj-feat-auth")
+	if !strings.HasPrefix(cmd, "#!/bin/sh\nunset TMUX TMUX_PANE\nTMPDIR='"+runTmp+"'\nexport TMPDIR\nmkdir -p \"$TMPDIR\"\nenv -u TMUX -u TMUX_PANE -u ANTHROPIC_API_KEY -u CLAUDE_CONFIG_DIR GOFLAGS='-trimpath -p=2' COMMANDER_ROLE='operator-feat-auth' 'GIT_COMMITTER_NAME=operator-feat-auth' 'GIT_COMMITTER_EMAIL=operator-feat-auth@operator.commander.invalid' COMMANDER_MANAGER_ROLE='manager-bd-100' 'claude' '-p'") ||
 		!strings.Contains(cmd, "'--session-id' '"+res.SessionID+"'") { // minted up front, not captured
 		t.Fatalf("launcher: %s", cmd)
 	}
@@ -601,5 +604,38 @@ func TestSpawnCodeHost_MarksTheRunStartForItsMailHook(t *testing.T) {
 	old := agentmail.Mail{ID: "1", Subject: "earlier", SentAt: sp.now().Add(-time.Hour)}
 	if n := mailstate.HiddenByAge("operator-feat-auth", []agentmail.Mail{old}); n != 1 {
 		t.Fatalf("hidden = %d: the spawn left no run start", n)
+	}
+}
+
+// No spawn starts on a nearly full disk: refused before any worktree, session
+// or bead write, naming the disk.
+func TestSpawnRefusedOnAFullDisk(t *testing.T) {
+	dir := makeGitRepo(t)
+	sp, fs, _, _, _, tx := newHostSpawner(t, dir)
+	orig := diskguard.Stat
+	t.Cleanup(func() { diskguard.Stat = orig })
+	diskguard.Stat = func(p string) (diskguard.Usage, error) {
+		return diskguard.Usage{Path: p, Mount: "/data", Dev: 7, UsedPct: 96, Free: 2 << 30}, nil
+	}
+	req := goodRequest(t, dir)
+	_, err := sp.Spawn(context.Background(), req)
+	var refused *diskguard.RefuseError
+	if !errors.As(err, &refused) || !strings.Contains(err.Error(), "disk /data is 96% full") {
+		t.Fatalf("Spawn on a 96%% disk: %v, want a refusal naming the disk", err)
+	}
+	if len(tx.Calls) != 0 || len(fs.runs) != 0 {
+		t.Fatalf("a refused spawn touched tmux %v / runs %v", tx.Calls, fs.runs)
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".worktrees", req.slug())); !os.IsNotExist(err) {
+		t.Fatalf("a refused spawn made a worktree: %v", err)
+	}
+	if err := CheckDisk(req); err == nil {
+		t.Fatal("CheckDisk passed a 96% disk")
+	}
+	diskguard.Stat = func(p string) (diskguard.Usage, error) {
+		return diskguard.Usage{Path: p, Mount: "/data", Dev: 7, UsedPct: 94}, nil
+	}
+	if err := CheckDisk(req); err != nil {
+		t.Fatalf("CheckDisk refused a 94%% disk: %v", err)
 	}
 }

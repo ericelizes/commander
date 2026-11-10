@@ -512,6 +512,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 			sweepReads = d.beads
 		}
 		go worktreeSweeper{runs: d.store, projects: d.store, beads: sweepReads}.Run(ctx)
+		go (&diskWatcher{home: d.home, health: d.health, projects: d.store, runs: d.store}).Run(ctx)
 		go d.runTokenLedger(ctx)
 	}
 	if d.waker != nil {

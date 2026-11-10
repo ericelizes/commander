@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -69,4 +70,30 @@ func TestPruneKeepsWorkThatIsNotOnMain(t *testing.T) {
 			t.Fatalf("work lost: %v", err)
 		}
 	})
+}
+
+func TestPruneRemovesWorkKeptByAnArchiveRef(t *testing.T) {
+	project, wt := repo(t)
+	os.WriteFile(filepath.Join(wt, "b.txt"), []byte("b"), 0o644)
+	git(t, wt, "add", ".")
+	git(t, wt, "commit", "-qm", "b")
+	tip := strings.TrimSpace(git(t, wt, "rev-parse", "HEAD"))
+	// main was rebuilt: the branch's commit is not on it, only in the archive.
+	git(t, project, "update-ref", "refs/archive/op/x-"+tip[:12], tip)
+	if err := Lock(wt); err != nil {
+		t.Fatal(err)
+	}
+	ok, err := Prune(project, wt)
+	if err != nil || !ok {
+		t.Fatalf("Prune = %v, %v; want removed", ok, err)
+	}
+	if _, err := os.Stat(wt); !os.IsNotExist(err) {
+		t.Errorf("worktree still on disk: %v", err)
+	}
+	if exec.Command("git", "-C", project, "rev-parse", "--verify", "--quiet", "refs/heads/op/x").Run() == nil {
+		t.Error("branch op/x kept")
+	}
+	if exec.Command("git", "-C", project, "cat-file", "-e", tip).Run() != nil {
+		t.Error("archived commit lost")
+	}
 }

@@ -148,6 +148,11 @@ func runInternalOperatorProvider(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
+	if err := spawn.CheckDisk(spawn.SpawnRequest{ProjectPath: p.Path, RepoPath: p.RepoPath}); err != nil {
+		fmt.Fprintf(stderr, "internal-operator-provider: %s: %v; nothing was changed\n", role, err)
+		return 1
+	}
+
 	// Close the old run first, then end its session, then respawn under the same names.
 	if err := deps.Runs.MarkClosed(ctx, run.ID, switchedStatus); err != nil {
 		fmt.Fprintf(stderr, "internal-operator-provider: %v\n", err)

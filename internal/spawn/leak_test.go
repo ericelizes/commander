@@ -9,7 +9,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/example-user/commander/internal/agentrt"
 	"github.com/example-user/commander/internal/chat"
+	"github.com/example-user/commander/internal/diskguard"
 	"github.com/example-user/commander/internal/testguard"
 	"github.com/example-user/commander/internal/tmuxctl"
 )
@@ -278,4 +280,34 @@ func waitFor(t *testing.T, timeout time.Duration, cond func() bool) {
 		}
 	}
 	t.Fatal("condition not met")
+}
+
+// A code Operator's scratch goes to its own TMPDIR under the commander home,
+// and the real launcher removes it (read-only trees included) as the run ends.
+func TestSpawnHost_RunTmpDirIsRemovedWhenTheRunEnds(t *testing.T) {
+	if _, err := exec.LookPath("tmux"); err != nil {
+		t.Skip("tmux not installed")
+	}
+	dir := makeGitRepo(t)
+	testguard.NoLeakedProcesses(t, dir)
+	sp, _, _, _, _, _ := newHostSpawner(t, dir)
+	socket := privateOpsServer(t, "#!/bin/sh\necho \"tmp=$TMPDIR\"\nmkdir -p \"$TMPDIR/ro/deep\" && touch \"$TMPDIR/ro/deep/f\" && chmod -R a-w \"$TMPDIR/ro\"\nsleep 1\n")
+	sp.tmux = tmuxctl.New()
+	req := goodRequest(t, dir)
+	if _, err := sp.Spawn(context.Background(), req); err != nil {
+		t.Fatalf("Spawn: %v", err)
+	}
+	session := hostSessionName(req.ProjectName, req.slug())
+	runTmp := diskguard.RunTmpDir(agentrt.CommanderHome(), session)
+	waitFor(t, 10*time.Second, func() bool {
+		return exec.Command("tmux", "-L", socket, "has-session", "-t", "="+session).Run() != nil
+	})
+	out := filepath.Join(dir, ".commander", "operators", req.slug()+".fifo")
+	if body, _ := os.ReadFile(out); !strings.Contains(string(body), "tmp="+runTmp) {
+		t.Fatalf("agent TMPDIR: pane output %q, want tmp=%s", body, runTmp)
+	}
+	waitFor(t, 3*time.Second, func() bool {
+		_, err := os.Stat(runTmp)
+		return os.IsNotExist(err)
+	})
 }

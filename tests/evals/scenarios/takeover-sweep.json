@@ -1,0 +1,6 @@
+{
+  "cases": [
+    {"name": "sweep removes the checkout before takeover claims it; refuse without a pane or run", "order": "sweep-first"},
+    {"name": "takeover claims first; sweep skips and the run owns the surviving checkout", "order": "spawn-first"}
+  ]
+}

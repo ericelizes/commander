@@ -25,7 +25,9 @@ import (
 	"time"
 
 	"github.com/example-user/commander/internal/agentmail"
+	"github.com/example-user/commander/internal/agentrt"
 	"github.com/example-user/commander/internal/beads"
+	"github.com/example-user/commander/internal/diskguard"
 	"github.com/example-user/commander/internal/docker"
 	"github.com/example-user/commander/internal/opencode"
 	"github.com/example-user/commander/internal/store"
@@ -222,6 +224,11 @@ func (s *Spawner) Spawn(ctx context.Context, req SpawnRequest) (result *SpawnRes
 			}
 		}
 	}()
+	// Every spawn (CLI, crash restart, scheduler) writes a worktree, logs and
+	// scratch: none starts on a disk that is nearly full.
+	if err := CheckDisk(req); err != nil {
+		return nil, fmt.Errorf("spawn: %w", err)
+	}
 	switch req.ProjectType {
 	case "code":
 		if s.useHost != nil && s.useHost() {
@@ -236,6 +243,13 @@ func (s *Spawner) Spawn(ctx context.Context, req SpawnRequest) (result *SpawnRes
 	default:
 		return nil, fmt.Errorf("spawn: ProjectType %q: want \"code\" or \"knowledge\"", req.ProjectType)
 	}
+}
+
+// CheckDisk refuses a spawn (a *diskguard.RefuseError naming the disk) while
+// the project's, its repo's or the commander home's disk is at or above
+// diskguard.RefusePct. The spawn verbs call it before they write anything.
+func CheckDisk(req SpawnRequest) error {
+	return diskguard.CheckSpawn(req.ProjectPath, req.repoRoot(), agentrt.CommanderHome())
 }
 
 // repoRoot is the git repo code Operators branch from.

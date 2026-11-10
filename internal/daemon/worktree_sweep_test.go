@@ -3,6 +3,7 @@ package daemon
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"errors"
 	"log"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/example-user/commander/internal/beads"
+	"github.com/example-user/commander/internal/spawn"
 	"github.com/example-user/commander/internal/store"
 )
 
@@ -174,4 +176,175 @@ func TestSweepOnAFailedListPrunesNothingAndListsOnce(t *testing.T) {
 	if !strings.Contains(buf.String(), "database is locked") {
 		t.Fatalf("the failed read is not logged: %q", buf.String())
 	}
+}
+
+// A follow-up spawned with --branch works in a finished run's worktree under a
+// new name and task. The finished run's closed bead must not take that live
+// tree, whichever spelling of the path either row holds.
+func TestSweepNeverTakesAWorktreeARunningRunUses(t *testing.T) {
+	dir := t.TempDir()
+	noindex := filepath.Join(dir, ".worktrees.noindex")
+	for _, n := range []string{"op-a", "op-c", "op-custom"} {
+		os.MkdirAll(filepath.Join(noindex, n), 0o755)
+	}
+	os.Symlink(noindex, filepath.Join(dir, ".worktrees")) // .worktrees links to .worktrees.noindex
+	outside := filepath.Join(dir, "elsewhere", "op-out")
+	os.MkdirAll(outside, 0o755)
+	mem := &beads.MemClient{}
+	ctx := context.Background()
+	a, _ := mem.Create(ctx, dir, "a", beads.CreateOptions{})
+	b, _ := mem.Create(ctx, dir, "b", beads.CreateOptions{})
+	c, _ := mem.Create(ctx, dir, "c", beads.CreateOptions{})
+	cu, _ := mem.Create(ctx, dir, "custom", beads.CreateOptions{})
+	out, _ := mem.Create(ctx, dir, "out", beads.CreateOptions{})
+	for _, id := range []string{a, c, cu, out} {
+		mem.Close(ctx, dir, id)
+	}
+	path := func(p string) sql.NullString { return sql.NullString{String: p, Valid: true} }
+	var pruned []string
+	w := worktreeSweeper{
+		runs: fakeRuns{
+			finished: []store.AgentRun{
+				// NULL path = .worktrees/op-a, which the follow-up names by its real folder.
+				{ID: 1, ProjectID: 1, AgentName: "operator-op-a", TaskBeadID: a},
+				{ID: 2, ProjectID: 1, AgentName: "operator-op-c", TaskBeadID: c},
+				{ID: 3, ProjectID: 1, AgentName: "operator-op-x", TaskBeadID: cu, WorktreePath: path(filepath.Join(noindex, "op-custom"))},
+				{ID: 4, ProjectID: 1, AgentName: "operator-op-y", TaskBeadID: out, WorktreePath: path(outside)},
+			},
+			running: []store.AgentRun{{ID: 5, ProjectID: 1, AgentName: "operator-op-follow", TaskBeadID: b, Status: "running",
+				WorktreePath: path(filepath.Join(noindex, "op-a"))}},
+		},
+		projects: projectAt{dir},
+		beads:    mem,
+		prune: func(_, wt string) (bool, error) {
+			pruned = append(pruned, filepath.Base(wt))
+			return true, nil
+		},
+	}
+	w.sweep(ctx)
+	got := strings.Join(pruned, ",")
+	if got != "op-c,op-custom" {
+		t.Fatalf("pruned %q; want op-c,op-custom (op-a is the follow-up's, op-out is outside the worktree folders)", got)
+	}
+}
+
+type failingProjects struct{}
+
+func (failingProjects) GetProjectByID(context.Context, int64) (*store.Project, error) {
+	return nil, errors.New("db busy")
+}
+
+func TestSweepWithAnUnreadableRunningProjectPrunesNothing(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, ".worktrees", "op-done"), 0o755)
+	mem := &beads.MemClient{}
+	ctx := context.Background()
+	done, _ := mem.Create(ctx, dir, "done", beads.CreateOptions{})
+	mem.Close(ctx, dir, done)
+	w := worktreeSweeper{
+		runs: fakeRuns{
+			finished: []store.AgentRun{{ProjectID: 1, AgentName: "operator-op-done", TaskBeadID: done}},
+			running:  []store.AgentRun{{ProjectID: 2, AgentName: "operator-op-live", Status: "running"}},
+		},
+		projects: failingProjects{},
+		beads:    mem,
+		prune: func(string, string) (bool, error) {
+			t.Fatal("pruned with a running run's project unread")
+			return false, nil
+		},
+	}
+	if n := w.sweep(ctx); n != 0 {
+		t.Fatalf("pruned %d", n)
+	}
+}
+
+// takeoverRuns answers the pass's first ListRunningRuns with nothing and every
+// later read with the follow-up whose row landed meanwhile.
+type takeoverRuns struct {
+	finished []store.AgentRun
+	follow   store.AgentRun
+	reads    *int
+}
+
+func (f takeoverRuns) ListFinishedRuns(context.Context) ([]store.AgentRun, error) {
+	return f.finished, nil
+}
+func (f takeoverRuns) ListRunningRuns(context.Context) ([]store.AgentRun, error) {
+	*f.reads++
+	if *f.reads == 1 {
+		return nil, nil
+	}
+	return []store.AgentRun{f.follow}, nil
+}
+
+func sweepRaceFixture(t *testing.T) (dir, wt, done string, mem *beads.MemClient) {
+	t.Setenv("COMMANDER_HOME", t.TempDir())
+	dir = t.TempDir()
+	wt = filepath.Join(dir, ".worktrees", "op-done")
+	os.MkdirAll(wt, 0o755)
+	mem = &beads.MemClient{}
+	ctx := context.Background()
+	done, _ = mem.Create(ctx, dir, "done", beads.CreateOptions{})
+	mem.Close(ctx, dir, done)
+	return dir, wt, done, mem
+}
+
+func TestSweepSkipsAWorktreeASpawnHoldsTheClaimOf(t *testing.T) {
+	dir, wt, done, mem := sweepRaceFixture(t)
+	// A --branch takeover holds the claim from before it unlocks the worktree
+	// until its row is written: the pass's running runs do not show it yet.
+	release, held, err := spawn.TryClaimWorktree(wt)
+	if err != nil || !held {
+		t.Fatalf("claim: held=%v err=%v", held, err)
+	}
+	w := worktreeSweeper{
+		runs:     fakeRuns{finished: []store.AgentRun{{ID: 1, ProjectID: 1, AgentName: "operator-op-done", TaskBeadID: done}}},
+		projects: projectAt{dir},
+		beads:    mem,
+		prune: func(string, string) (bool, error) {
+			t.Fatal("pruned a worktree a spawn holds the claim of")
+			return false, nil
+		},
+	}
+	if n := w.sweep(context.Background()); n != 0 {
+		t.Fatalf("pruned %d", n)
+	}
+	release()
+	// Once the claim is free (and no run works there) the next pass prunes it.
+	var pruned int
+	w.prune = func(string, string) (bool, error) { pruned++; return true, nil }
+	if n := w.sweep(context.Background()); n != 1 || pruned != 1 {
+		t.Fatalf("after release: pruned %d (%d calls), want 1", n, pruned)
+	}
+}
+
+func TestSweepRereadsRunningRunsUnderTheClaim(t *testing.T) {
+	dir, wt, done, mem := sweepRaceFixture(t)
+	reads := 0
+	w := worktreeSweeper{
+		runs: takeoverRuns{
+			finished: []store.AgentRun{{ID: 1, ProjectID: 1, AgentName: "operator-op-done", TaskBeadID: done}},
+			follow: store.AgentRun{ID: 2, ProjectID: 1, AgentName: "operator-op-follow", Status: "running",
+				WorktreePath: sql.NullString{String: wt, Valid: true}},
+			reads: &reads,
+		},
+		projects: projectAt{dir},
+		beads:    mem,
+		prune: func(string, string) (bool, error) {
+			t.Fatal("pruned a worktree whose takeover's row landed during the pass")
+			return false, nil
+		},
+	}
+	if n := w.sweep(context.Background()); n != 0 {
+		t.Fatalf("pruned %d", n)
+	}
+	if reads < 2 {
+		t.Fatalf("running runs read %d times; want a re-read under the claim", reads)
+	}
+	// The claim is released after the pass: a spawn can take it.
+	release, held, err := spawn.TryClaimWorktree(wt)
+	if err != nil || !held {
+		t.Fatalf("claim left held after the sweep: held=%v err=%v", held, err)
+	}
+	release()
 }
