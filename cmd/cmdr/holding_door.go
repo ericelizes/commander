@@ -293,11 +293,13 @@ func overruleTakes(b holding.Bead) bool {
 	return !strings.HasPrefix(b.Owner, "operator-")
 }
 
-// handoffWaits counts the labels' until: waits whose label is kind (a Manager handoff receipt).
+// handoffWaits counts the labels' until: waits whose label is kind (a Manager handoff receipt)
+// and that still hold (beads.WaitHolds): an expired receipt holds nothing, as holdread reads it.
 func handoffWaits(labels []string, kind string) int {
 	n := 0
+	now := time.Now()
 	for _, w := range beads.WaitsOf(labels) {
-		if w.Kind == beads.WaitUntil && w.Ref == kind {
+		if w.Kind == beads.WaitUntil && w.Ref == kind && beads.WaitHolds(w, now) {
 			n++
 		}
 	}

@@ -332,12 +332,7 @@ func overruleProposal(ctx context.Context, bc beads.Client, project store.Projec
 	case beads.ProposedGate, beads.ProposedReview:
 		undo[beadID] = func(h *holding.Bead) { h.Status = holding.StatusClosed }
 	case beads.ProposedWait:
-		n := 0
-		for _, l := range b.Labels {
-			if w, ok := beads.ParseWaitLabel(l); ok && w.Kind == beads.WaitUntil {
-				n++
-			}
-		}
+		n := len(proposedWaitLabels(b.Labels))
 		undo[beadID] = func(h *holding.Bead) { h.Waits -= n; h.Untyped = "" }
 	case beads.ProposedPark:
 		undo[beadID] = func(h *holding.Bead) { h.Status = "open" }
@@ -371,11 +366,18 @@ func overruleProposal(ctx context.Context, bc beads.Client, project store.Projec
 		}
 		undone = "it is retired: nothing waits on it"
 	case beads.ProposedWait:
-		for _, l := range b.Labels {
-			if w, ok := beads.ParseWaitLabel(l); ok && w.Kind == beads.WaitUntil {
-				if err := bc.SetLabel(ctx, dir, beadID, l, false); err != nil {
-					return nil, err
-				}
+		// Read again after the hold, and remove only the proposed timed wait: never the Manager's
+		// handoff receipt the hold (or an earlier run of this overrule) just wrote.
+		now, err := bc.Show(ctx, dir, beadID)
+		if err != nil {
+			return nil, err
+		}
+		if now == nil {
+			return nil, fmt.Errorf("bead %s not found", beadID)
+		}
+		for _, l := range proposedWaitLabels(now.Labels) {
+			if err := bc.SetLabel(ctx, dir, beadID, l, false); err != nil {
+				return nil, err
 			}
 		}
 		undone = "the timed wait is gone"
@@ -405,6 +407,18 @@ func overruleProposal(ctx context.Context, bc beads.Client, project store.Projec
 		fmt.Fprintf(stderr, "warning: overruled, but mailing %s failed: %v\n", manager, mailErr)
 	}
 	return map[string]any{"project": project.Name, "bead_id": beadID, "kind": p.Kind, "overruled": true, "undone": undone, "manager": manager, "held": held}, nil
+}
+
+// proposedWaitLabels are the until: wait labels an overruled wait proposal undoes: every timed
+// wait except a Manager handoff receipt (beads.IsManagerHandoff), which is custody, not the proposal.
+func proposedWaitLabels(labels []string) []string {
+	var out []string
+	for _, l := range labels {
+		if w, ok := beads.ParseWaitLabel(l); ok && w.Kind == beads.WaitUntil && !beads.IsManagerHandoff(w) {
+			out = append(out, l)
+		}
+	}
+	return out
 }
 
 // gateStageAndName reads an internal-gate gate bead's stage and name ("" for a

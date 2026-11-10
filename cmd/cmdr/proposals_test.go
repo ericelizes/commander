@@ -343,6 +343,56 @@ func TestProposal_OverruleRetryAfterTheUndo(t *testing.T) {
 	}
 }
 
+// A retried wait overrule (the first run held the step, then its undo failed) removes only the
+// proposed timed wait and keeps the Manager dispatch receipt it reports holding.
+func TestProposal_OverruleWaitRetryKeepsTheReceipt(t *testing.T) {
+	m, mailer := proposalFixture(t, true)
+	t.Setenv("COMMANDER_ROLE", "manager-ms-1")
+	later := time.Now().Add(48 * time.Hour).UTC().Format(time.RFC3339)
+	runOK(t, runInternalSetObjective, "--project", "manifest", "--bead", "ms-1.92", "--waiting", "until:"+later+":come back to the dev box")
+	b, _ := m.Show(context.Background(), "", "ms-1.92")
+	wait := proposedWaitLabels(b.Labels)
+	p, ok := beads.ProposalOf(b.Labels)
+	if len(wait) != 1 || !ok {
+		t.Fatalf("no proposed wait: %v", b.Labels)
+	}
+	overruleOut(t, "ms-1.92")
+	if !hasDispatchReceipt(t, m, "ms-1.92") {
+		t.Fatal("the first overrule held nothing")
+	}
+	// Back to the state a failed undo leaves: receipt written, proposed wait and label still there.
+	for _, l := range []string{wait[0], p.Label} {
+		if err := m.SetLabel(context.Background(), "", "ms-1.92", l, true); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mailer.sent = nil
+	out := overruleOut(t, "ms-1.92")
+	b, _ = m.Show(context.Background(), "", "ms-1.92")
+	if ws := beads.WaitsOf(b.Labels); len(ws) != 1 || ws[0].Ref != beads.ManagerDispatchWait {
+		t.Fatalf("the retry must keep only the dispatch receipt: %v", b.Labels)
+	}
+	if held, _ := out["held"].([]any); len(held) != 1 || held[0] != "ms-1.92" {
+		t.Fatalf("held: %v", out["held"])
+	}
+	if len(mailer.sent) != 1 || !strings.Contains(mailer.sent[0].body, "You now hold ms-1.92") {
+		t.Fatalf("the retry's mail: %+v", mailer.sent)
+	}
+}
+
+// An expired receipt holds nothing: it is not counted as this write's earlier hold.
+func TestHandoffWaitsSkipsAnExpiredReceipt(t *testing.T) {
+	old := time.Now().Add(-3 * time.Hour)
+	expired := beads.Wait{Kind: beads.WaitUntil, Since: old, Until: old.Add(time.Minute), Ref: beads.ManagerDispatchWait}.Label()
+	if n := handoffWaits([]string{expired}, beads.ManagerDispatchWait); n != 0 {
+		t.Fatalf("an expired receipt counted: %d", n)
+	}
+	fresh := beads.Wait{Kind: beads.WaitUntil, Since: time.Now(), Until: time.Now().Add(time.Minute), Ref: beads.ManagerDispatchWait}.Label()
+	if n := handoffWaits([]string{fresh, expired}, beads.ManagerDispatchWait); n != 1 {
+		t.Fatalf("want the one live receipt: %d", n)
+	}
+}
+
 func TestProposal_GateAfterTheApprovedWorkflowIsProposed(t *testing.T) {
 	m, mailer := proposalFixture(t, false)
 	t.Setenv("COMMANDER_ROLE", "manager-ms-1")
