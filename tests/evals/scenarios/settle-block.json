@@ -1,0 +1,14 @@
+{
+  "schema": "settle-block@v1",
+  "runner": "cmd/cmdr:TestSettleBlockScenario",
+  "about": "A pr-review block whose PR merged outside the review: settle-block closes the open steps as settled (not reviewed), keeps earlier evidence, and refuses before any write unless GitHub reports the PR merged and the caller owns the block.",
+  "cases": [
+    {"name": "merged by the user", "role": "manager-B", "state": "MERGED", "exit": 0, "settled": 5, "kept": 1, "block_closed": true, "then_close_target": true},
+    {"name": "Commander settles", "role": "commander", "state": "MERGED", "exit": 0, "settled": 5, "kept": 1, "block_closed": true},
+    {"name": "PR still open", "role": "manager-B", "state": "OPEN", "exit": 1, "stderr": "not merged"},
+    {"name": "GitHub read fails", "role": "manager-B", "state": "MERGED", "gh_fails": true, "exit": 1, "stderr": "nothing settled"},
+    {"name": "Operator refused", "role": "operator-x", "state": "MERGED", "exit": 1, "stderr": "Operators cannot"},
+    {"name": "another Manager refused", "role": "manager-other", "state": "MERGED", "exit": 1, "stderr": "belongs to manager-B"},
+    {"name": "step close names the settle", "role": "manager-B", "state": "MERGED", "close_step": true, "exit": 1, "stderr": "cmdr workflow settle-block --project manifest --block"}
+  ]
+}

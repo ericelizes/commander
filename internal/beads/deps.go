@@ -126,6 +126,13 @@ type PartialDetailsError struct {
 }
 
 func (e *PartialDetailsError) Error() string {
+	if len(e.Missing) == 0 {
+		return e.Err.Error() // every bead read, from a source that says why it is partial
+	}
+	var stale *staleExportError
+	if errors.As(e.Err, &stale) {
+		return fmt.Sprintf("%d of the requested beads unread: %v", len(e.Missing), e.Err) // no bd show ran
+	}
 	return fmt.Sprintf("br show: %d of the requested beads unread: %v", len(e.Missing), e.Err)
 }
 func (e *PartialDetailsError) Unwrap() error { return e.Err }
@@ -239,6 +246,14 @@ func (c *cmdClient) details(ctx context.Context, projectDir string, ids []string
 		for inflight >= parallelism(projectDir, fresh) {
 			cond.Wait()
 		}
+		if ctx.Err() != nil {
+			failed = append(failed, missing[start:]...)
+			if firstEr == nil {
+				firstEr = ctx.Err()
+			}
+			mu.Unlock()
+			break
+		}
 		inflight++
 		mu.Unlock()
 		wg.Add(1)
@@ -289,6 +304,9 @@ func (c *cmdClient) showOnce(ctx context.Context, projectDir string, batch []str
 		if ctx.Err() != nil {
 			break
 		}
+		if trace, ok := ctx.Value(detailTraceKey{}).(*detailTrace); ok {
+			trace.batches.Add(1)
+		}
 		stdout, stderr, err := c.run(ctx, projectDir, beadsBinary(), args...)
 		if err != nil {
 			lastErr = fmt.Errorf("br show: %w: %s", err, strings.TrimSpace(string(stderr)))
@@ -327,7 +345,8 @@ func (c *cmdClient) showOnce(ctx context.Context, projectDir string, batch []str
 	return nil, lastErr
 }
 
-const maxExportAge = 30 * time.Second
+// maxExportAge is a var only so tests can age an export without waiting 30s.
+var maxExportAge = 30 * time.Second
 
 // exportDetails accepts bounded display lag; enforcement never calls it.
 func exportDetails(projectDir string, ids []string) map[string]Detail {

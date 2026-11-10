@@ -52,13 +52,42 @@ const ManagerCloseWithin = time.Hour
 // ManagerDispatchWait retains custody between an approval and real dispatch.
 const ManagerDispatchWait = "Manager dispatch"
 
+// ManagerPlanWait holds a freshly born workstream or track until its Manager
+// has planned the first step (atomic birth: the scope is never unheld).
+const ManagerPlanWait = "Manager to plan"
+
 // ManagerStartWait retains custody of ready work a close or create left with
 // nothing holding it, until the Manager starts it (spawn, wait, card).
 const ManagerStartWait = "Manager to start"
 
+// ManagerRecoverWait holds a step whose Operator ended for good (died again, was stopped, or could not
+// be restarted): the Manager decides what happens next, so the step is never "open, no owner".
+const ManagerRecoverWait = "Manager to recover"
+
+// HandoffWindow is how long a Manager handoff wait still holds its bead past its deadline: cmdrd
+// wakes the Manager at the deadline, and a wake left unanswered this long is the Manager's overdue
+// move, not a holder (invariant I1).
+const HandoffWindow = ManagerCloseWithin
+
+// WaitHolds reports whether a recorded wait still holds its bead at now: every wait does, except
+// a Manager handoff wait whose deadline passed more than HandoffWindow ago. Any other time wait
+// past its time still holds until cmdrd's wake clears it.
+func WaitHolds(w Wait, now time.Time) bool {
+	if !IsManagerHandoff(w) || w.Until.IsZero() {
+		return true
+	}
+	return !now.After(w.Until.Add(HandoffWindow))
+}
+
 // IsManagerHandoff identifies receipts that survive their reminder deadline.
 func IsManagerHandoff(w Wait) bool {
-	return w.Kind == WaitUntil && (w.Ref == ManagerCloseWait || w.Ref == ManagerDispatchWait || w.Ref == ManagerStartWait)
+	return w.Kind == WaitUntil && (w.Ref == ManagerCloseWait || w.Ref == ManagerDispatchWait || w.Ref == ManagerPlanWait || w.Ref == ManagerRecoverWait || w.Ref == ManagerStartWait)
+}
+
+// StartReceiptLabel is the "Manager to start" receipt written at now: the Manager's custody of work
+// a write left with no other holder, for ManagerCloseWithin.
+func StartReceiptLabel(now time.Time) string {
+	return Wait{Kind: WaitUntil, Since: now, Until: now.Add(ManagerCloseWithin), Ref: ManagerStartWait}.Label()
 }
 
 // IsManagerDispatch identifies the receipts a real successor (a spawn under
@@ -210,10 +239,28 @@ func ParseWait(arg string) (Wait, error) {
 			stamp, label = stamp[:i], ref[i+1:]
 		}
 		w.Until, w.Ref = t, strings.TrimSpace(label)
+		if err := w.checkLabelFits(arg); err != nil {
+			return w, err
+		}
 	default:
 		return w, fmt.Errorf("--waiting %q: kind must be ci, main-ci, prod-tag, review, user, operator or until", arg)
 	}
 	return w, nil
+}
+
+// checkLabelFits refuses a plain-words until label whose stored form would not
+// keep two whole words under MaxLabelLen: cut to one word it would read as an
+// untyped slug and hold nothing.
+func (w Wait) checkLabelFits(arg string) error {
+	if !strings.Contains(w.Ref, " ") {
+		return nil
+	}
+	w.Since = time.Now()
+	p, ok := ParseWaitLabel(w.Label())
+	if ok && strings.Contains(strings.TrimSpace(p.Ref), " ") {
+		return nil
+	}
+	return fmt.Errorf("--waiting %q: the label is too long to store (labels are limited to %d characters, apostrophes and punctuation count three); use a shorter label of at least two words", arg, MaxLabelLen)
 }
 
 // ReadableUntilLabel reports whether a time wait's label reads as plain words
@@ -285,22 +332,37 @@ func (w Wait) compactLabel() string {
 		return head + ":" + strings.TrimPrefix(w.Ref, "operator-")
 	case WaitUntil:
 		head += ":" + strconv.FormatInt(w.Until.Unix(), 36)
-		ref := []rune(w.Ref)
-		cut := false
-		for {
-			l := head
-			if len(ref) > 0 {
-				l += ":" + EscapeLabel(string(ref))
+		full := func(ref string) string {
+			if ref == "" {
+				return head
 			}
-			if len(l) <= MaxLabelLen || len(ref) == 0 {
-				if s := string(ref); cut && strings.Contains(strings.TrimRight(s, " "), " ") {
-					// Cut at a word boundary, keeping the space: a trailing space marks the cut.
-					return head + ":" + EscapeLabel(s[:strings.LastIndex(strings.TrimRight(s, " "), " ")+1])
+			return head + ":" + EscapeLabel(ref)
+		}
+		if l := full(w.Ref); len(l) <= MaxLabelLen {
+			return l
+		}
+		// Too long: keep whole words only, the trailing space marking the cut.
+		// Cutting mid-word would leave a slug that reads untyped and holds nothing.
+		ref := strings.TrimRight(w.Ref, " ")
+		for i := len(ref) - 1; i > 0; i-- {
+			if ref[i] == ' ' {
+				if l := full(ref[:i] + " "); len(l) <= MaxLabelLen && strings.Contains(strings.TrimRight(ref[:i], " "), " ") {
+					return l
 				}
+			}
+		}
+		// Fewer than two words fit (ParseWait refuses such a label): the first word.
+		if i := strings.Index(ref, " "); i > 0 {
+			if l := full(ref[:i] + " "); len(l) <= MaxLabelLen {
 				return l
 			}
-			ref, cut = ref[:len(ref)-1], true
 		}
+		// No word boundary fits: cut by characters (a single long slug).
+		r := []rune(ref)
+		for len(r) > 0 && len(full(string(r))) > MaxLabelLen {
+			r = r[:len(r)-1]
+		}
+		return full(string(r))
 	}
 	// Other kinds keep their long body behind the short head.
 	_, body, _ := strings.Cut(w.longBody(), ":")

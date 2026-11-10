@@ -36,7 +36,7 @@ func Accounts(home string, usage map[string]Usage, now time.Time) []AccountView 
 		}
 		out = append(out, v)
 	}
-	codex := AccountView{Name: RuntimeCodex, Runtime: RuntimeCodex, Dir: CodexHome(), LoggedIn: fileExists(filepath.Join(CodexHome(), "auth.json"))}
+	codex := AccountView{Name: RuntimeCodex, Runtime: RuntimeCodex, Dir: CodexHome(), LoggedIn: codexConnected()}
 	codex.Email, codex.AccountUUID = codexIdentity(filepath.Join(CodexHome(), "auth.json"))
 	if u, ok := usage[RuntimeCodex]; ok {
 		u = u.Current(now)

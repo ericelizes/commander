@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -47,11 +48,17 @@ func runWorkflow(args []string, stdout, stderr *os.File) int {
 	if len(args) > 0 && args[0] == "add-review-addendum" {
 		return runWorkflowAddendum(args[1:], stdout, stderr)
 	}
+	if len(args) > 0 && args[0] == "review-report-check" {
+		return runWorkflowReviewReportCheck(args[1:], stdout, stderr)
+	}
 	if len(args) > 0 && args[0] == "bind-writers" {
 		return runWorkflowBindWriters(args[1:], stdout, stderr)
 	}
+	if len(args) > 0 && args[0] == "settle-block" {
+		return runWorkflowSettleBlock(args[1:], stdout, stderr)
+	}
 	if len(args) == 0 || args[0] != "plug" {
-		emitErr(stderr, "usage: workflow plug <template> --project P --parent B --before M --pr URL | workflow bind-writers --project P --block B --writers original-task,fix-task --head full-sha")
+		emitErr(stderr, "usage: workflow plug <template> --project P --parent B --before M --pr URL | workflow bind-writers --project P --block B --writers original-task,fix-task [--external-writer user --commits base-sha..last-sha] --head full-sha | workflow settle-block --project P --block B --reason R")
 		return 1
 	}
 	return runWorkflowPlug(args[1:], stdout, stderr)
@@ -67,7 +74,7 @@ func canonicalPR(raw string) (string, error) {
 func runWorkflowPlug(args []string, stdout, stderr *os.File) int {
 	// The template name comes first, flags after.
 	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
-		emitErr(stderr, "usage: workflow plug <template> --project P --parent B --before M --pr URL | workflow bind-writers --project P --block B --writers original-task,fix-task --head full-sha")
+		emitErr(stderr, "usage: workflow plug <template> --project P --parent B --before M --pr URL | workflow bind-writers --project P --block B --writers original-task,fix-task [--external-writer user --commits base-sha..last-sha] --head full-sha | workflow settle-block --project P --block B --reason R")
 		return 1
 	}
 	name, args := args[0], args[1:]
@@ -248,7 +255,14 @@ func plugWorkflow(ctx context.Context, bc beads.Client, dir string, inst *workfl
 	for _, s := range inst.Steps {
 		b, ok := steps[s.ID]
 		if !ok {
-			id, err := bc.Create(ctx, dir, s.Title, beads.CreateOptions{Parent: container.ID, Labels: s.Labels, Silent: true})
+			labels := s.Labels
+			if len(s.After) == 0 {
+				// A step nothing precedes is born held: the Manager dispatches it (atomic birth).
+				now := time.Now()
+				w := beads.Wait{Kind: beads.WaitUntil, Since: now, Until: now.Add(2 * time.Minute), Ref: beads.ManagerDispatchWait}
+				labels = append(slices.Clone(labels), w.Label())
+			}
+			id, err := bc.Create(ctx, dir, s.Title, beads.CreateOptions{Parent: container.ID, Labels: labels, Silent: true})
 			if err != nil {
 				return res, fmt.Errorf("creating step %s failed (%v); %d created so far, rerun the same command to resume", s.ID, err, len(res.Created))
 			}

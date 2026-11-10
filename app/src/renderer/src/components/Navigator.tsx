@@ -51,6 +51,7 @@ const HOLD_MS = 60_000
 interface Lift { node: NavNode; x: number; y: number; drop: Drop | null; lineY: number }
 
 export function Navigator() {
+  const conn = useStore((s) => s.conn)
   const completed = useStore((s) => s.completed)
   const snapshot = useStore((s) => s.snapshot)
   const nowSec = useStore((s) => s.nowSec)
@@ -192,6 +193,8 @@ export function Navigator() {
   }, [cursor])
 
   const working = useAgentRows().filter((r) => r.state === 'working').length
+  if (snapshot?.storage === 'postgres' && conn !== 'live') return <nav className="nav" aria-label="Navigator"><p role="status">Live state unavailable. Reconnecting…</p></nav>
+  if (snapshot?.degraded) return <nav className="nav" aria-label="Navigator"><p role="status">Live state unavailable. {snapshot.degraded.reason}</p></nav>
   if (!vm || !snapshot) return <NavSkeleton />
   const selKey = selected.kind === 'commander' || selected.kind === 'progress' ? 'commander' : selected.key
   // The row that is open is the one lit: a nested row when it can be seen, else the top-level row it sits in.

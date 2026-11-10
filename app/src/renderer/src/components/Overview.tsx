@@ -1,13 +1,15 @@
-import { Component, Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Component, Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { BoardRow, BoardTrack, LineKind, SnapStep, SnapWorkstream, Snapshot } from '../../../shared/snapshot'
 import { splitTickets, TicketPills } from '../../../features/linear/Ticket'
+import { useSmoothText } from '../../../features/chat/thread/streaming'
 import { useStore } from '../store'
 import { askKey, findTrack, openNested, plainTitle } from '../viewmodel'
 import { diagramFor } from './DerivedDiagram'
 import { SourceReader, type Evidence, type Tone } from './OverviewSource'
 import './overview.css'
 
-type Sentence = { text: string; sources: string[] }
+// partial: a draft sentence still being written (no sources yet).
+type Sentence = { text: string; sources: string[]; partial?: boolean }
 // A daemon from before the per-sentence recap sends one block with its sources.
 type Claim = { sentences: Sentence[] } | Sentence
 const sentencesOf = (claim: Claim): Sentence[] => ('sentences' in claim ? claim.sentences ?? [] : [claim])
@@ -56,6 +58,39 @@ export function overviewAsks(snapshot: Snapshot, ws: SnapWorkstream, track?: str
 export function overviewTickets(ws: SnapWorkstream, track?: string): string[] {
   const scope: { title: string; tickets?: string[] }[] = track ? scopedSteps(ws, track) : [ws, ...openNested(ws)]
   return [...new Set(scope.flatMap((s) => [...splitTickets(s.title).tickets, ...(s.tickets ?? [])]))]
+}
+
+// A word that has been drawn is never drawn again: only new words mount, and
+// each fades in once (the chat's own fade).
+const Word = memo(function Word({ word, fade }: { word: string; fade: boolean }) {
+  return <span className={fade ? 'ct-fade-word' : undefined}>{word}</span>
+})
+
+function Words({ text, settled }: { text: string; settled: number }) {
+  let offset = 0
+  return <>{(text.match(/\S+\s*|\s+/g) ?? []).map((w, i) => {
+    offset += w.length
+    return <Word key={i} word={w} fade={offset > settled} />
+  })}</>
+}
+
+// StreamSentence paces a sentence's text the way the chat paces a reply. The
+// sources attach once the sentence is complete and fully shown. A text that no
+// longer extends the one shown here (a refresh's draft taking an earlier
+// recap's place) starts over: while the draft is live it is paced and faded
+// from its first character, never shown whole up to the old length.
+export function StreamSentence({ s, done, live = false }: { s: Sentence; done: (s: Sentence) => React.ReactNode; live?: boolean }) {
+  const prev = useRef(s.text)
+  const restarts = useRef(0)
+  if (!s.text.startsWith(prev.current)) restarts.current++
+  prev.current = s.text
+  return <PacedSentence key={restarts.current} s={s} done={done} start={restarts.current > 0 && live ? 0 : undefined} />
+}
+
+function PacedSentence({ s, done, start }: { s: Sentence; done: (s: Sentence) => React.ReactNode; start?: number }) {
+  const { shown, settled, animating } = useSmoothText(s.text, !!s.partial, start)
+  if (s.partial || animating) return <span className="ov-streaming"><Words text={shown} settled={settled} /></span>
+  return <>{done(s)}</>
 }
 
 function toneOf(kind?: LineKind): Tone {
@@ -189,11 +224,10 @@ export function Overview({ ws, row, track, onWorkflow, onTrack }: {
     return numbers
   }, [result, shown])
   // The marks close their own sentence, held to its last word so they never sit alone on a line.
-  const cite = (claim: Claim) => sentencesOf(claim).map((s, n) => {
+  const cited = (s: Sentence) => {
     const lastWord = s.text.lastIndexOf(' ') + 1
     return (
-      <Fragment key={n}>
-        {n > 0 && ' '}
+      <>
         {s.text.slice(0, lastWord)}
         <span className="ov-cited">
           {s.text.slice(lastWord)}
@@ -204,9 +238,15 @@ export function Overview({ ws, row, track, onWorkflow, onTrack }: {
               onClick={(ev) => { cancelHover(); const anchor = ev.currentTarget; setSource((s) => (s?.pinned && s.evidence.id === id ? null : { evidence: e, anchor, pinned: true })) }}>{sourceNumbers.get(id)}</button> : null
           })}</span>
         </span>
-      </Fragment>
+      </>
     )
-  })
+  }
+  const cite = (claim: Claim) => sentencesOf(claim).map((s, n) => (
+    <Fragment key={n}>
+      {n > 0 && ' '}
+      <StreamSentence s={s} done={cited} live={draftOn} />
+    </Fragment>
+  ))
   const stalled = target.kind === 'stalled' || target.kind === 'stuck'
   const pendingDecision = asks.length === 0 && (target.kind === 'needs' || (!track && row.flag > 0))
   const noAsk = pendingDecision ? 'A decision is recorded, but its details are not available yet.' : 'No decision is requested from you. Agent recovery is needed.'

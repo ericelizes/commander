@@ -819,3 +819,61 @@ func TestWorktreeGCDryRunWritesOnlyItsListedFiles(t *testing.T) {
 		t.Error("gc wrote a Spotlight marker")
 	}
 }
+
+// TestWorktreeGCGitCallsDoNotGrowPerWorktree pins the batched read: a dry run
+// over N worktrees runs one git status each and a constant number of other git
+// calls (no rev-parse, merge-base or for-each-ref per worktree). N is 50;
+// COMMANDER_GC_BENCH=1 runs 2,000 and logs the time.
+func TestWorktreeGCGitCallsDoNotGrowPerWorktree(t *testing.T) {
+	n := 50
+	if os.Getenv("COMMANDER_GC_BENCH") == "1" {
+		n = 2000
+	}
+	project := gcRepo(t)
+	for i := 0; i < n; i++ {
+		git(t, project, "worktree", "add", "-q", "-b", fmt.Sprintf("op/task-%d", i), filepath.Join(project, ".worktrees", fmt.Sprintf("task-%d", i)))
+	}
+	realGit, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	shim := t.TempDir()
+	calls := filepath.Join(shim, "calls")
+	script := "#!/bin/sh\necho \"$*\" >> " + calls + "\nexec " + realGit + " \"$@\"\n"
+	if err := os.WriteFile(filepath.Join(shim, "git"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", shim+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	start := time.Now()
+	rep := gcRun(t, project, false, matchedClosed)
+	took := time.Since(start)
+	removable := 0
+	for _, e := range rep.Entries {
+		if e.Remove || e.Reason == ReasonCapped {
+			removable++
+		}
+	}
+	if removable != n {
+		reasons := map[string]int{}
+		for _, e := range rep.Entries {
+			reasons[e.Reason]++
+		}
+		t.Fatalf("%d of %d merged, closed worktrees removable: %v", removable, n, reasons)
+	}
+	data, _ := os.ReadFile(calls)
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	status := 0
+	var others []string
+	for _, l := range lines {
+		if strings.Contains(l, " status --porcelain") && strings.Contains(l, "/.worktrees/") {
+			status++
+		} else {
+			others = append(others, l)
+		}
+	}
+	if status != n || len(others) > 15 {
+		t.Fatalf("%d worktrees: %d status calls (want %d), %d others (want at most 15):\n%s", n, status, n, len(others), strings.Join(others, "\n"))
+	}
+	t.Logf("%d worktrees: dry run %s, %d git calls", n, took.Round(time.Millisecond), len(lines))
+}

@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/example-user/commander/internal/agentrt"
 	"github.com/example-user/commander/internal/claudeacct"
 )
 
@@ -157,17 +158,17 @@ func TestSetAccountFromCodexRunsClaudeOnThatAccount(t *testing.T) {
 
 func TestUsageLimitShowsANoticeAndContinueSwitchesAccount(t *testing.T) {
 	h := accountHarness(t, "work")
-	h.role("manager-d")
-	h.start("manager-d")
-	sub := h.subscribe("manager-d")
-	if err := h.e.Send(context.Background(), "manager-d", "usagelimit"); err != nil {
+	h.role("operator-d")
+	h.start("operator-d")
+	sub := h.subscribe("operator-d")
+	if err := h.e.Send(context.Background(), "operator-d", "usagelimit"); err != nil {
 		t.Fatal(err)
 	}
 	seen := waitFor(t, sub, func(e Event) bool { return e.Kind == KindNotice && e.Subtype == "usage_limit" })
 	if n := seen[len(seen)-1]; !strings.Contains(n.Text, "default") || !strings.Contains(n.Text, "You've hit your limit") {
 		t.Errorf("notice = %q", n.Text)
 	}
-	st, _ := h.e.Status("manager-d")
+	st, _ := h.e.Status("operator-d")
 	if st.UsageLimit == nil || st.UsageLimit.Account != "default" || st.UsageLimit.ResetsAt != 4102444800 {
 		t.Fatalf("status usage limit = %+v", st.UsageLimit)
 	}
@@ -179,8 +180,8 @@ func TestUsageLimitShowsANoticeAndContinueSwitchesAccount(t *testing.T) {
 	}
 
 	// The notice's one click: switch and continue.
-	sub = h.subscribe("manager-d")
-	st, err := h.e.SetAccount(context.Background(), "manager-d", "work", SwitchOptions{Continue: true})
+	sub = h.subscribe("operator-d")
+	st, err := h.e.SetAccount(context.Background(), "operator-d", "work", SwitchOptions{Continue: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -214,7 +215,7 @@ func TestAutoSwitchMovesToTheNextAccountWithUsageLeft(t *testing.T) {
 		t.Fatal(err)
 	}
 	seen := waitFor(t, sub, func(e Event) bool { return e.Kind == KindNotice && e.Subtype == "usage_limit_switch" })
-	if n := seen[len(seen)-1]; !strings.Contains(n.Text, "from Claude account work to default") {
+	if n := seen[len(seen)-1]; !strings.Contains(n.Text, "from Claude account work (out of usage) to default") {
 		t.Fatalf("switch notice = %q", n.Text)
 	}
 	if ReadAccount(h.home, "manager-e") != claudeacct.Default {
@@ -282,5 +283,222 @@ func TestUsageLimitOfReadsBothSignals(t *testing.T) {
 		if got := usageLimitOf(tc.ev) != nil; got != tc.want {
 			t.Errorf("%+v: %v", tc.ev, got)
 		}
+	}
+}
+
+// Every Manager start goes through the steer: a fresh Manager whose default
+// account is out starts on the next account with usage, keeps default as its
+// intent, and the move is noticed and reported; once default has usage again
+// the next start goes back to it.
+func TestManagerStartMovesOffAnOutAccountAndBack(t *testing.T) {
+	h := accountHarness(t, "work")
+	moved := make(chan string, 4)
+	h.e.SetUsageMoveHook(func(role, text string) { moved <- role + ": " + text })
+	h.e.Usage().MarkOut(RuntimeClaude, claudeacct.Default, "manager-x", time.Now().Add(time.Hour).Unix(), time.Now())
+	h.role("manager-n")
+	st := h.start("manager-n")
+	if st.Account != "work" || ReadAccount(h.home, "manager-n") != "work" {
+		t.Fatalf("started on %q (file %q)", st.Account, ReadAccount(h.home, "manager-n"))
+	}
+	if ReadAccountIntent(h.home, "manager-n") != claudeacct.Default {
+		t.Error("intent not kept")
+	}
+	select {
+	case m := <-moved:
+		if !strings.Contains(m, "manager-n") || !strings.Contains(m, "default (out of usage) to work") {
+			t.Fatalf("note %q", m)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("no move note")
+	}
+	if err := h.e.Stop(context.Background(), "manager-n"); err != nil {
+		t.Fatal(err)
+	}
+	h.e.Usage().Record(RuntimeClaude, "", "manager-x", json.RawMessage(`{"status":"allowed"}`), time.Now())
+	if st := h.start("manager-n"); st.Account != claudeacct.Default {
+		t.Fatalf("not back on default: %q", st.Account)
+	}
+	if ReadAccountIntent(h.home, "manager-n") != "" {
+		t.Error("intent left after going back")
+	}
+}
+
+// A person's account choice is the intent: a start while it is out runs
+// elsewhere without forgetting it.
+func TestManagerStartKeepsAPersonsChoice(t *testing.T) {
+	h := accountHarness(t, "work")
+	if err := WriteAccount(h.home, "manager-p", "work"); err != nil {
+		t.Fatal(err)
+	}
+	h.e.Usage().MarkOut(RuntimeClaude, "work", "manager-x", time.Now().Add(time.Hour).Unix(), time.Now())
+	h.role("manager-p")
+	if st := h.start("manager-p"); st.Account != claudeacct.Default {
+		t.Fatalf("account %q", st.Account)
+	}
+	if ReadAccountIntent(h.home, "manager-p") != "work" {
+		t.Error("the person's choice was dropped")
+	}
+}
+
+// Nothing with usage left: the start is refused, visibly, and nothing moves.
+func TestManagerStartRefusedWhenEveryAccountIsOut(t *testing.T) {
+	h := accountHarness(t, "work")
+	h.opts.CodexHooksReady = func() bool { return false }
+	h.e = New(h.opts)
+	for _, a := range []string{claudeacct.Default, "work"} {
+		h.e.Usage().MarkOut(RuntimeClaude, a, "manager-x", time.Now().Add(time.Hour).Unix(), time.Now())
+	}
+	h.role("manager-z")
+	_, err := h.e.Start(context.Background(), "manager-z", StartOptions{})
+	if !errors.Is(err, ErrNoUsage) {
+		t.Fatalf("err = %v", err)
+	}
+	if _, err := os.Stat(AccountFile(h.home, "manager-z")); !os.IsNotExist(err) {
+		t.Error("account written")
+	}
+}
+
+// A Manager (no auto-switch file) that hits a usage limit moves to the next
+// account with usage, keeps its intent, is told to re-read its handover, and
+// the move is reported.
+func TestManagerMovesAtUsageLimitAndReportsIt(t *testing.T) {
+	h := accountHarness(t, "work")
+	moved := make(chan string, 1)
+	h.e.SetUsageMoveHook(func(role, text string) { moved <- role + ": " + text })
+	h.role("manager-m")
+	h.start("manager-m")
+	sub := h.subscribe("manager-m")
+	if err := h.e.Send(context.Background(), "manager-m", "usagelimit"); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, sub, func(e Event) bool { return e.Kind == KindNotice && e.Subtype == "usage_limit_switch" })
+	if got := ReadAccount(h.home, "manager-m"); got != "work" {
+		t.Fatalf("account %q", got)
+	}
+	if ReadAccountIntent(h.home, "manager-m") != claudeacct.Default {
+		t.Error("the auto-move overwrote the account choice")
+	}
+	waitFor(t, sub, func(e Event) bool {
+		return e.Kind == KindUser && strings.Contains(e.Text, "re-read your handover") && strings.Contains(e.Text, "--agent manager-m")
+	})
+	select {
+	case m := <-moved:
+		if !strings.Contains(m, "manager-m") || !strings.Contains(m, "to work") {
+			t.Fatalf("note %q", m)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("no move note")
+	}
+}
+
+// An unpinned Manager on Codex at Codex's limit moves to Claude, and onto a
+// Claude account with usage (never an out one); a pinned one moves too (d82)
+// with its Codex pin kept, and goes back to Codex once Codex has usage again.
+func TestManagerLeavesAnOutCodex(t *testing.T) {
+	h := accountHarness(t, "work")
+	h.e.opts.CodexHooksReady = func() bool { return true }
+	t.Setenv(agentrt.CodexManagerShareEnvVar, "1") // keep the drawn Codex run at its start
+	h.e.Usage().MarkOut(RuntimeClaude, claudeacct.Default, "manager-x", time.Now().Add(time.Hour).Unix(), time.Now())
+	for _, role := range []string{"manager-c", "manager-pc"} {
+		h.role(role)
+	}
+	if err := WriteAutoRuntime(h.home, "manager-c", RuntimeCodex); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteRuntime(h.home, "manager-pc", RuntimeCodex); err != nil {
+		t.Fatal(err)
+	}
+	// Each Codex start reads its rate limits (allowed); mark Codex out only after.
+	for _, role := range []string{"manager-pc", "manager-c"} {
+		h.start(role)
+		for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(20 * time.Millisecond) {
+			if u, ok := h.e.Usage().Get(UsageKey(RuntimeCodex, "")); ok && u.Role == role {
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("%s: no Codex usage read", role)
+			}
+		}
+	}
+	h.e.Usage().MarkOut(RuntimeCodex, "", "manager-c", time.Now().Add(time.Hour).Unix(), time.Now())
+
+	sub := h.subscribe("manager-c")
+	c, _ := h.e.chat("manager-c")
+	h.e.moveManager(c)
+	seen := waitFor(t, sub, func(e Event) bool { return e.Kind == KindNotice && e.Subtype == "usage_limit_switch" })
+	if n := seen[len(seen)-1]; !strings.Contains(n.Text, "from Codex (out of usage) to Claude account work") {
+		t.Fatalf("notice %q", n.Text)
+	}
+	st, _ := h.e.Status("manager-c")
+	if st.Runtime != RuntimeClaude || st.Account != "work" || RuntimePinned(h.home, "manager-c") {
+		t.Fatalf("after the move: %+v pinned=%v", st, RuntimePinned(h.home, "manager-c"))
+	}
+
+	sub = h.subscribe("manager-pc")
+	pc, _ := h.e.chat("manager-pc")
+	h.e.moveManager(pc)
+	seen = waitFor(t, sub, func(e Event) bool { return e.Kind == KindNotice && e.Subtype == "usage_limit_switch" })
+	if n := seen[len(seen)-1]; !strings.Contains(n.Text, "to Claude account work") || !strings.Contains(n.Text, "Codex pin stays") {
+		t.Fatalf("pinned notice %q", n.Text)
+	}
+	if st, _ := h.e.Status("manager-pc"); st.Runtime != RuntimeClaude || st.Account != "work" {
+		t.Fatalf("pinned Codex Manager left on an out Codex: %+v", st)
+	}
+	if !RuntimePinned(h.home, "manager-pc") || ManagerPin(h.home, "manager-pc") != RuntimeCodex {
+		t.Fatalf("the fallback dropped the pin: pinned=%v pin=%q", RuntimePinned(h.home, "manager-pc"), ManagerPin(h.home, "manager-pc"))
+	}
+
+	// Codex has usage again: the next start goes back to the pinned runtime.
+	h.e.Usage().MarkOut(RuntimeCodex, "", "manager-c", time.Now().Add(-time.Minute).Unix(), time.Now())
+	if _, err := h.e.restart(context.Background(), "manager-pc", SwitchOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if st, _ := h.e.Status("manager-pc"); st.Runtime != RuntimeCodex {
+		t.Fatalf("pinned Codex Manager not back on Codex: %+v", st)
+	}
+	if ManagerPin(h.home, "manager-pc") != RuntimeCodex || fileExists(RuntimeFallbackFile(h.home, "manager-pc")) {
+		t.Fatal("back on its pin, the fallback marker must go")
+	}
+}
+
+// d82 through the engine: a Manager whose account a person chose, with every
+// Claude account out, starts on Codex; a drawn Codex Manager at share 0 with
+// Claude out restarts on Codex with no move and its thread kept.
+func TestManagerAccountChoiceStillFallsBackToCodex(t *testing.T) {
+	h := accountHarness(t, "work")
+	h.e.opts.CodexHooksReady = func() bool { return true }
+	ctx := context.Background()
+
+	// A Manager drawn onto Codex runs once, then the share drops to 0.
+	t.Setenv(agentrt.CodexManagerShareEnvVar, "1")
+	h.role("manager-d")
+	if err := WriteAutoRuntime(h.home, "manager-d", RuntimeCodex); err != nil {
+		t.Fatal(err)
+	}
+	h.start("manager-d")
+	if err := h.e.Stop(ctx, "manager-d"); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(agentrt.CodexManagerShareEnvVar, "0")
+
+	h.role("manager-f")
+	if _, err := h.e.SetAccount(ctx, "manager-f", "work", SwitchOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	until := time.Now().Add(time.Hour).Unix()
+	h.e.Usage().MarkOut(RuntimeClaude, claudeacct.Default, "manager-x", until, time.Now())
+	h.e.Usage().MarkOut(RuntimeClaude, "work", "manager-x", until, time.Now())
+	if st := h.start("manager-f"); st.Runtime != RuntimeCodex {
+		t.Fatalf("account choice blocked the Codex fallback: %+v", st)
+	}
+
+	// Every Claude account out: it stays on Codex. The bug flipped it to Claude
+	// and back at the start (thread file deleted) and posted a false
+	// "moved from Claude account ... to Codex" notice.
+	if st := h.start("manager-d"); st.Runtime != RuntimeCodex {
+		t.Fatalf("drawn Codex at share 0 with Claude out: %+v", st)
+	}
+	if b, _ := os.ReadFile(filepath.Join(h.e.logDir(), "manager-d.jsonl")); strings.Contains(string(b), "usage_limit_switch") {
+		t.Fatalf("a drawn Codex Manager that never left Codex was reported moved: %s", b)
 	}
 }

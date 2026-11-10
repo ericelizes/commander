@@ -22,7 +22,7 @@
   overflow: hidden;
 }
 .ov-scroll { height: 100%; overflow: auto; }
-.ov { max-width: 720px; margin: 0 auto; padding: 48px 40px 64px; color: var(--ink); font: 400 16px/1.68 var(--serif); overflow-wrap: anywhere; }
+.ov { max-width: 1040px; margin: 0 auto; padding: 48px 40px 64px; color: var(--ink); font: 400 16px/1.68 var(--serif); overflow-wrap: anywhere; }
 .ov h1 { font: 700 33px/1.2 var(--serif); letter-spacing: -.016em; margin: 0 0 24px; text-wrap: balance; }
 .ov section { margin: 32px 0; }
 .ov h2 { font: 600 18px/1.35 var(--serif); letter-spacing: -.004em; margin: 32px 0 10px; }

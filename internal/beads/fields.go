@@ -14,11 +14,17 @@ type Fields struct {
 	Notes       *string
 	Acceptance  *string
 	Priority    *int
+	// Status, AddLabels and RemoveLabels ride in the same update, so a holder handed on
+	// (new owner and wait in, the old claim out) is one write: no read falls between them.
+	Status       *string
+	AddLabels    []string
+	RemoveLabels []string
 }
 
 // Empty reports whether f sets nothing.
 func (f Fields) Empty() bool {
-	return f.Title == nil && f.Description == nil && f.Notes == nil && f.Acceptance == nil && f.Priority == nil
+	return f.Title == nil && f.Description == nil && f.Notes == nil && f.Acceptance == nil && f.Priority == nil &&
+		f.Status == nil && len(f.AddLabels) == 0 && len(f.RemoveLabels) == 0
 }
 
 func (f Fields) args() ([]string, error) {
@@ -43,6 +49,15 @@ func (f Fields) args() ([]string, error) {
 			return nil, fmt.Errorf("beads: priority must be 0-4")
 		}
 		out = append(out, "--priority", strconv.Itoa(*f.Priority))
+	}
+	if f.Status != nil {
+		out = append(out, "--status", *f.Status)
+	}
+	for _, l := range f.AddLabels {
+		out = append(out, "--add-label", l)
+	}
+	for _, l := range f.RemoveLabels {
+		out = append(out, "--remove-label", l)
 	}
 	return out, nil
 }

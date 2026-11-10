@@ -1,0 +1,403 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Making incorrect board state impossible</title>
+<style>
+  :root { color-scheme: light dark; --fg: light-dark(#1d1d1f,#e6e6e6); --bg: light-dark(#fbfbfa,#17171a);
+          --muted: light-dark(#5f6368,#a0a0a8); --card: light-dark(#f1f0ec,#212126); --bad: light-dark(#b3261e,#ff8a80);
+          --warn: light-dark(#8a5a00,#ffcc66); --ok: light-dark(#1e6b35,#8fd19e); }
+  body { font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: var(--fg); background: var(--bg);
+         max-width: 1080px; margin: 2rem auto; padding: 0 1.5rem; }
+  h1 { font-size: 1.7rem; margin-bottom: .2rem; } h2 { margin-top: 2.4rem; font-size: 1.3rem; } h3 { font-size: 1.05rem; margin-top: 1.6rem; }
+  .sub { color: var(--muted); margin-top: 0; }
+  code { font: 13px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--card); padding: 0 .25em; border-radius: 3px; }
+  pre { background: var(--card); padding: .8rem 1rem; border-radius: 6px; overflow-x: auto; font-size: 13px; line-height: 1.45; }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; margin: .6rem 0 1rem; }
+  th, td { text-align: left; vertical-align: top; padding: .35rem .5rem; }
+  th { color: var(--muted); font-weight: 600; } tr:nth-child(even) td { background: var(--card); }
+  .bad { color: var(--bad); font-weight: 600; } .warn { color: var(--warn); font-weight: 600; } .ok { color: var(--ok); font-weight: 600; }
+  .box { background: var(--card); border-radius: 8px; padding: .9rem 1.1rem; margin: 1rem 0; }
+  ol li, ul li { margin: .25rem 0; }
+  nav ol { columns: 2; }
+</style>
+</head>
+<body>
+
+<h1>Making incorrect board state impossible</h1>
+<p class="sub">Investigation for commander-il9.204.1.1 (workstream commander-il9.204) · 2026-11-09 · read-only, based on
+HEAD <code>7aafb1cc</code>. Standing decisions: d69 (live work never reads Agent stopped / State missing / Nothing to do)
+and d72 (State missing must not be possible; one enforced canonical pattern in the cmdr CLI, and agents know how to use it).
+All references are <code>path:line</code> in this repo at that head.</p>
+
+<nav><ol>
+  <li><a href="#summary">Summary and top findings</a></li>
+  <li><a href="#writes">1. Every path that writes beads</a></li>
+  <li><a href="#states">2. Every board state and its predicate</a></li>
+  <li><a href="#evidence">3. Today's evidence, traced</a></li>
+  <li><a href="#invariants">4. The invariants, stated once</a></li>
+  <li><a href="#design">5. Proposed guarded domain layer</a></li>
+  <li><a href="#migration">6. Migration plan</a></li>
+  <li><a href="#teach">7. How agents learn it</a></li>
+  <li><a href="#fit">How commander-il9.202.24 fits</a></li>
+</ol></nav>
+
+<h2 id="summary">Summary and top findings</h2>
+
+<p>"State missing" is not one bug. Two structural facts produce it:</p>
+<ul>
+  <li><b>No write path promises a holder.</b> About thirty paths write beads. Exactly one, the close door in
+  <code>internal-close-objective</code> (<code>cmd/cmdr/door_checks.go:358-411</code>), checks that the work it
+  releases is still held. It runs on the client, against a snapshot that can lag, and it exempts the user, the owning
+  Manager and an Operator closing its own work. cmdrd's own writes (settle, waits, live gates, unpark) skip the write
+  door entirely (<code>beads.SetDoorServer(true)</code>, <code>internal/daemon/daemon.go:476</code>).</li>
+  <li><b>"Held" has six definitions.</b> The invariant (<code>livedata.OpenBeadInvariant</code>), the board's own line
+  ordering, the diagram's <code>unheld</code> finding, <code>StalledWork</code>, the close door's
+  <code>UnheldAfter</code> and the audit's <code>open-bead-no-owner</code> each decide it a little differently. Some
+  writes pass one predicate and fail another, so a write the door accepts can still read wrong on the board.</li>
+</ul>
+
+<div class="box">
+<b>Top findings</b> (the first five are the ones asked for; the sixth came from the Manager's mail)
+<ol>
+  <li><span class="bad">A Manager's name is accepted as an owner, but it is not a durable holder.</span>
+  <code>internal-set-objective --state in-progress --owner manager-x</code> passes <code>requireOwner</code> and
+  <code>checkOwnerLive</code> (<code>door_checks.go:216-224</code> checks only <code>operator-*</code> and
+  <code>user</code>). The invariant counts it only while that Manager is mid-turn
+  (<code>internal/livedata/invariant.go:133-137</code>), so the step reads State missing between turns. The audit says
+  the opposite and treats any named owner as held (<code>internal/livedata/audit.go:258</code>).
+  <code>internal-resolve-needs</code> decide, <code>internal-move-card</code> and cmdrd's settle all write this same
+  pattern.</li>
+  <li><span class="bad">The died and stopped settle paths leave work holderless on purpose.</span>
+  <code>runSettler.diedWith</code> moves the bead to <code>open</code> with no owner
+  (<code>internal/daemon/settle.go:266-279</code>), then adds <code>operator-died</code>. The invariant does not count
+  that label as a holder (<code>invariant.go:122</code>). Its only "holder" is a mail to the Manager. Every settle is
+  also several separate br calls with unheld windows between them (<code>settle.go:566-639</code>).</li>
+  <li><span class="bad">Births are unheld.</span> <code>internal-create-objective</code> has no owner, wait or plan flag
+  and no holder check (<code>cmd/cmdr/internal_create_objective.go:74-315</code>). <code>workflow plug</code> makes a
+  first step with no owner and no blocker. An empty workstream or track reads "Nothing to do"
+  (<code>internal/livedata/board.go:1042-1049</code>), while the invariant flags it. This is the "#1.4 read Nothing to
+  do 100%" incident.</li>
+  <li><span class="bad">Gate closes other than approve do not hold what they release.</span>
+  <code>internal-gate pass</code>, <code>rm</code>, <code>apply</code>, an auto gate passing through <code>check</code>,
+  the live gate watcher's <code>gates.SetResult</code> and <code>proposals overrule</code> all close gates without the
+  close door. Only <code>internal-resolve-needs</code> approve runs <code>holdApprovedWork</code>
+  (<code>cmd/cmdr/approval_handoff.go:16-99</code>).</li>
+  <li><span class="bad">Writes can be lost, not just unchecked.</span> The wait watcher reads the set of running Operators once per poll (<code>internal/daemon/waits.go:286-291</code>). It can then clear an <code>operator:</code> wait that was written mid-poll for a newly spawned Operator, which fits the 15:55 report of a wait that said success and then vanished (§1d).</li>
+  <li><span class="bad">Spawn has no usage preflight, and its failure paths leave orphans.</span> No spawn or respawn
+  code checks whether the chosen runtime or account has usage left. Usage tracking (<code>NextAccount</code>,
+  <code>MarkOut</code>) lives only in the chat engine (<code>internal/chat/usagelimit.go:81-175</code>). A Codex
+  Operator at 100% exits silently, gets settled as died, and is crash-restarted onto the same pin.
+  <code>internal-operator-provider</code>'s failure path sets the task to <code>open</code> and keeps a dead owner
+  (<code>cmd/cmdr/internal_operator_provider.go:150</code>).</li>
+</ol>
+</div>
+
+<p><b>Recommendation:</b> add one domain package, <code>internal/holding</code>, made of two parts. The first is a pure
+<code>Held(row, world)</code> predicate that every reader uses: board, invariant, diagram, stalled list, audit and
+door. The second is a <code>Transition</code> API that every writer uses: CLI verbs, the app, and cmdrd's own
+watchers. It runs <em>server-side in the write door</em>, against <em>fresh</em> reads of the affected beads. Every
+transition names the holder of each bead it touches, or it is refused with the exact command that fixes it. It writes
+make-before-break: the new holder lands before the old one is removed, as one <code>bd batch</code> where possible. A
+Manager's name stops counting as a holder. Its durable form is a typed handoff wait such as <code>Manager to plan</code>,
+<code>Manager dispatch</code> or <code>Manager to recover</code>, which cmdrd already knows how to wake. Section 6
+splits this into eight steps that can each ship on their own.</p>
+
+<h2 id="writes">1. Every path that writes beads, and what it checks today</h2>
+
+<p>"Holder check" means the path verifies that every open bead it affects (the bead itself, its parent, its siblings and
+its dependants) still has a holder afterwards. The ✗ rows are the ways a bead can end up reading State missing.</p>
+
+<h3>1a. cmdr verbs</h3>
+<table>
+<tr><th>Verb / mode</th><th>Writes</th><th>Checks before writing</th><th>Holder check</th></tr>
+<tr><td><code>internal-create-objective</code> (plain step, workstream, track)</td><td>create, parent, labels, optional deps; a new top-level workstream starts its Manager (<code>:286-295</code>)</td><td>approval title must be a gate (<code>:101</code>), <code>CheckPlacement</code> (<code>:170</code>), gate dedupe, gate-edge, acyclic, standing decisions (gates and review steps only)</td><td class="bad">✗ no owner/wait/plan flags at all</td></tr>
+<tr><td><code>internal-create-objective --gate</code></td><td>gate bead + labels + edges</td><td>approver, criteria, Greenlight rule, door checks</td><td class="ok">gate is held by definition</td></tr>
+<tr><td><code>internal-set-objective --state in-progress</code></td><td>status, owner, clears blocked/needs-user</td><td><code>requireWorkflowGate</code> (<code>internal_objective_edit.go:166</code>), <code>checkReached</code> (<code>:244</code>), <code>requireOwner</code> (<code>:249</code>), <code>checkOwnerLive</code> (<code>:252</code>, Operators only)</td><td class="bad">✗ <code>manager-*</code> owner accepted</td></tr>
+<tr><td><code>--status in_progress</code> (no <code>--state</code>)</td><td>status</td><td>workflow gate, reopen placement</td><td class="bad">✗ no owner required</td></tr>
+<tr><td><code>--state not-started</code>, <code>--owner none</code>, <code>--waiting none</code></td><td>drop state, owner or waits</td><td>none relevant</td><td class="bad">✗ can drop the only holder</td></tr>
+<tr><td><code>--state blocked</code></td><td>blocked label</td><td><code>checkBlockedNamesWait</code> (<code>:259</code>)</td><td class="ok">✓ (local)</td></tr>
+<tr><td><code>--state needs-user</code></td><td>needs-user + card</td><td>requires <code>--decision</code>; <code>checkAskReady</code>, <code>checkAskNotSettled</code>, <code>checkReached</code></td><td class="ok">card is a holder</td></tr>
+<tr><td><code>--waiting</code></td><td><code>waiting:</code>/<code>until:</code> labels (replaces earlier waits)</td><td>typed waits, review needs PR, <code>checkWaitsAreReal</code> (<code>:355</code>), push counter</td><td class="ok">✓ adds a holder</td></tr>
+<tr><td><code>--park</code> / <code>--unpark</code></td><td>status deferred + parked labels / restore</td><td>role, standing decisions; unpark: placement only (<code>:1307</code>)</td><td class="bad">✗ unpark may restore an unheld bead</td></tr>
+<tr><td><code>--hold</code>, <code>--lane</code>, <code>--viz</code>, <code>--track</code>, <code>--review</code>, <code>--max-operators</code></td><td>labels, parent</td><td>role, label rules, review-reason rule</td><td>no holder effect (track move: ✗ unchecked)</td></tr>
+<tr><td><code>internal-close-objective</code></td><td>close (+ optional <code>--then-*</code> hold first)</td><td><code>checkWorkflowClose</code>, <code>requireGatesPassed</code>, close door <code>UnheldAfter</code> on the snapshot (<code>door_checks.go:358-411</code>)</td><td class="warn">✓ the only one; exempts user, owning Manager, Operator own task; passes on degraded/unreadable snapshot</td></tr>
+<tr><td><code>internal-gate pass</code> / <code>rm</code> / <code>apply</code> / <code>check</code> (auto pass)</td><td>gate close via <code>gates.SetResult</code>/<code>Remove</code></td><td>evidence, <code>checkWorkflowClose</code></td><td class="bad">✗ releases dependants unheld</td></tr>
+<tr><td><code>internal-gate add</code> / <code>link</code> / <code>unlink</code> / <code>publish</code> / <code>retire-legacy</code></td><td>gate beads, edges, labels</td><td>extensive (acyclic, ownership, superseded waiters, retained blocker)</td><td class="ok">safe (only adds holders, or the waiter is superseded)</td></tr>
+<tr><td><code>internal-dep add|rm</code></td><td>edges</td><td>gate/track edge rule, cycle on add, plugged-block on rm</td><td class="bad">✗ rm may remove the only blocker</td></tr>
+<tr><td><code>internal-label add|rm</code></td><td>plain labels</td><td>reserved prefixes (<code>internal_bead_write.go:231-271</code>)</td><td class="bad">✗ <code>blocked</code> is not reserved: skips <code>checkBlockedNamesWait</code></td></tr>
+<tr><td><code>internal-update</code>, <code>internal-comment</code>, <code>internal-phase</code>, <code>internal-rename-objective</code></td><td>text, comments, phase</td><td>closed bead, gate text, approval title, reserved prefixes</td><td>no holder effect</td></tr>
+<tr><td><code>internal-spawn-operator</code></td><td>task create (<code>spawn-attempt:</code>), then <code>in_progress</code> + <code>owner:operator-*</code> (<code>internal_spawn_operator.go:321-331</code>)</td><td>cap, open gate above, workflow gate, prod gate, <code>checkReached</code></td><td class="bad">✗ no usage preflight; a failed owner write leaves the task open, unowned</td></tr>
+<tr><td><code>internal-operator-provider</code></td><td>respawn; status/owner</td><td>role, running, detached HEAD, stop pending</td><td class="bad">✗ failure sets <code>open</code> with a dead owner (<code>:150</code>); success writes ignore errors</td></tr>
+<tr><td><code>internal-resolve-needs</code> approve</td><td>clears card, <code>holdApprovedWork</code> (Manager owner + 2-min <code>Manager dispatch</code> wait), close</td><td>gates passed, workflow close</td><td class="ok">✓ the model to copy</td></tr>
+<tr><td><code>internal-resolve-needs</code> decide / defer</td><td>in-progress + Manager owner / not-started, drop user wait</td><td>journal receipts</td><td class="bad">✗ Manager owner; defer drops the holder</td></tr>
+<tr><td><code>internal-place</code>, <code>internal-track convert</code></td><td>parent edges, wrapper workstream, <code>unwrapSteps</code> close without the door (<code>internal_place.go:125</code>)</td><td>role, placement, descendant</td><td class="bad">✗ old parent may lose its last child</td></tr>
+<tr><td><code>internal-move-card</code></td><td>ancestor in-progress + Manager owner, then gate needs-user</td><td>open gate under ancestor, card on board</td><td class="warn">held by the gate child; Manager-owner pattern</td></tr>
+<tr><td><code>workflow plug</code></td><td>container + steps (template labels only)</td><td>PR not merged, target open, no duplicate, no cycle</td><td class="bad">✗ first step starts unheld</td></tr>
+<tr><td><code>proposals overrule</code></td><td>previous state back / waits cleared / gate removed</td><td>Commander or user</td><td class="bad">✗ knowingly unheld; mails the Manager (<code>proposals.go:366-368</code>)</td></tr>
+<tr><td><code>workflow bind-writers</code>, <code>add-review-addendum</code>, <code>proposals accept</code>, <code>restore-approved-context</code>, <code>--card-check</code>, <code>migrate-workstreams</code></td><td>comments, labels, description</td><td>role and provenance checks</td><td>no holder effect</td></tr>
+</table>
+
+<h3>1b. cmdrd's own writes (no door, no role, no checks)</h3>
+<table>
+<tr><th>Path</th><th>Writes</th><th>Unheld windows / end states</th></tr>
+<tr><td>settle <code>exited</code> (<code>settle.go:101-121</code>)</td><td><code>move</code>: remove other owners and markers, add Manager owner, review label, status (separate calls, <code>:566-639</code>), then <code>awaitManager</code> adds the 1h <code>Manager to close</code> wait (<code>:546</code>)</td><td>in_progress with no owner between steps; Manager-only holder until the wait lands; ends held</td></tr>
+<tr><td>settle <code>diedWith</code> / <code>stoppedOnRequest</code> (<code>:238-279</code>)</td><td><code>move(open, no owner)</code>, then respawn or <code>stopped</code> (adds <code>operator-died</code>)</td><td class="bad">ends holderless by design; between move and label, no marker at all</td></tr>
+<tr><td>settle <code>respawn</code> / <code>afterRespawn</code> (<code>:349-447</code>)</td><td>caps, <code>Spawn(Resume)</code>, then 3 writes: respawn label, status, owner</td><td>open, unowned for seconds up to ~30s; on spawn failure until the next sweep; retries dropped after 10 tries / 30 min (<code>wake.go:174-177</code>)</td></tr>
+<tr><td><code>settleOrphan</code> at start (<code>:704-728</code>)</td><td>same as above, never respawns</td><td>same</td></tr>
+<tr><td>waits <code>wake</code> (<code>waits.go:229-263</code>)</td><td>mail, then remove the wait label (handoff waits get a receipt and stay)</td><td class="bad">if the wait was the only holder, unheld until the Manager acts</td></tr>
+<tr><td>waits <code>unparkDue</code> (<code>:151-212</code>)</td><td>mail, <code>parked-notified</code>, <code>beads.Unpark</code> (sequential through the export client)</td><td>restored bead may have a long-dead owner or nothing</td></tr>
+<tr><td>live gates <code>gates.SetResult</code> (<code>livegates.go:281-313</code>, <code>gates.go:208-237</code>)</td><td>comment, close on pass; reopen + <code>gate-failed</code> on fail</td><td class="bad">open→passed closes silently (mail only on passed↔failed): dependants unheld, nobody told</td></tr>
+<tr><td>spawn (<code>internal/spawn</code>)</td><td><code>cmdr=brainstorming</code> state, move-off-Codex comment, dispatch-receipt cleanup (<code>approval_handoff.go:13-61</code>)</td><td>owner and status come from the caller; scheduler auto-spawn (<code>scheduler.go:220-262</code>) writes neither</td></tr>
+<tr><td>invariant watcher, pitch, watch, sweep, health, hooks</td><td>no bead writes (mail, sqlite <code>agent_states</code> only)</td><td>—</td></tr>
+</table>
+
+<h3>1c. The write door and direct writes</h3>
+<ul>
+  <li><b>Door</b> (<code>internal/beads/door.go:238-251</code>, <code>internal/api/write.go:44-97</code>,
+  <code>internal/api/doorchecks.go</code>): it checks argv-level rules only. These are typed waits, a gate needs an
+  approver and acceptance, Greenlight is approved by the user, a review wait needs <code>pr:</code>,
+  <code>in_progress</code> cannot have owner user, and <code>blocked</code> needs a wait or blocker. It does this only
+  when the request carries <code>COMMANDER_ROLE</code>. Several rules fail open on read errors. It has no holder rule
+  and does not inspect <code>close</code>, <code>reopen</code>, <code>dep</code>, <code>label remove</code> or
+  <code>defer</code>. The client falls back to a direct write when the door is unreachable, and
+  <code>COMMANDER_WRITE_DOOR=off</code> skips it.</li>
+  <li><b>Direct bd/br</b>: <code>managerguard.BeadsWriteVerb</code> is a deny-list (<code>agentwrite.go:164-226</code>).
+  It misses <code>bd batch</code>, <code>sql</code>, <code>comment</code>, <code>note</code>, <code>tag</code>,
+  <code>priority</code>, <code>link</code>, <code>gate</code>, <code>supersede</code>, <code>duplicate</code>,
+  <code>label propagate</code>, <code>dep relate</code>, the <code>dep A --blocks B</code> shorthand, the maintenance
+  verbs and <code>serve</code>. <code>scripts/br-bd</code> wraps only <code>br</code>; <code>bd</code> is unwrapped.
+  Scripts and non-Bash tools pass both guards.</li>
+</ul>
+
+<h3>1d. Lost writes (a write that reports success and then disappears)</h3>
+<p>The Manager reported this at about 15:55 UTC. Right after <code>internal-spawn-operator</code>, it ran
+<code>internal-set-objective --waiting operator:&lt;new Operator&gt;</code>. The command printed success, but a minute
+later the bead had no wait label; running it again landed it. No path rewrites a bead's whole label set: no
+<code>--set-labels</code> exists outside the door's argument checks, and the spawn path's dispatch cleanup
+(<code>internal/spawn/approval_handoff.go</code>) removes only named <code>Manager dispatch</code> and
+<code>handoff-notified:</code> labels. The likely cause is a check-then-act race in cmdrd's wait watcher:</p>
+<ul>
+  <li><code>waitWatcher</code> captures the set of running Operators <b>once, at the start of a poll</b>
+  (<code>internal/daemon/waits.go:286-291</code>, <code>runningNow</code>). It then lists every project and works
+  through every wait, including GitHub calls, so a poll can take tens of seconds.</li>
+  <li>Take an <code>operator:</code> wait written during that poll, on an Operator spawned after the capture. The
+  watcher judges it against the stale set (<code>waits.go:423-429</code>), decides the Operator "is no longer
+  running", mails <code>[operator] … is no longer running</code> and <b>removes the wait label</b>
+  (<code>wake</code>, <code>waits.go:229-263</code>).</li>
+  <li>The re-read before mailing (<code>FreshShow</code>) confirms only that the <em>label</em> still exists. It does
+  not re-check the <em>fact</em>.</li>
+  <li>To confirm: the Manager's inbox should hold an <code>[operator] operator-op-accept-ty-… is no longer
+  running</code> mail from shortly after 15:55.</li>
+</ul>
+<p>The general class is a watcher acting on a fact it read before the write it then undoes. The same shape exists
+wherever cmdrd clears or moves a holder from a view older than the bead: wait clears in <code>wake</code>, and settle
+<code>move</code> calls after a slow spawn. The fix is <b>compare-and-clear</b>: a watcher may remove a holder only
+if the fact it acted on was read <em>after</em> the holder's own <code>since</code> stamp. Otherwise it re-reads the
+fact and judges again. This is invariant I9 below, and step 6 of the migration.</p>
+
+<h2 id="states">2. Every board state and the predicate that produces it</h2>
+
+<table>
+<tr><th>Text</th><th>Where</th><th>Condition</th></tr>
+<tr><td>State missing</td><td>row: <code>board.go:460-461</code> (gates), <code>:1059-1061</code> (no gates), <code>:479-501</code> <code>brokenBeside</code>; step: <code>workflow.go:245-246</code></td><td>the line would read Stalled and some open step has <code>Broken</code> (= <code>OpenBeadInvariant</code> at snapshot build, <code>snapshot.go:342</code>); or a Broken step beside live Operators</td></tr>
+<tr><td>Nothing to do</td><td><code>board.go:1042-1049</code></td><td>no open unparked leaves, no own wait, no parked return. Also wins through <code>rollUp</code> (<code>:357-372</code>) when a parent's only child is an empty track</td></tr>
+<tr><td>Agent stopped on X / Agent finished X, step not closed</td><td>row <code>board.go:919</code>, <code>:924</code>; step <code>workflow.go:204-206</code>; why text <code>liveness.go:206-216</code></td><td><code>OwnerState</code> died / finished from <code>MarkOperatorOwners</code> (<code>livedata.go:376-384</code>), <code>liveClaim</code> (<code>liveness.go:139-153</code>), or every <code>operator:</code> wait dropped</td></tr>
+<tr><td>Stalled / Stuck</td><td>row <code>board.go:797</code>, <code>:1002</code>; step <code>workflow.go:248</code></td><td>nothing else matched and not Broken (an expired time wait lands here)</td></tr>
+<tr><td>Manager picking it up</td><td><code>board.go:278-281</code> <code>pickingUp</code></td><td>any stalled-kind line while <code>managerReacting</code> (unread mail, or busy)</td></tr>
+<tr><td>Needs you (and stale)</td><td><code>board.go:447, 515, 541, 758, 994</code>; stale <code>card_dependencies.go:139</code> <code>CardStaleIn</code></td><td>open card / user gate / user wait; stale = push count, spec hash, age, dependency change</td></tr>
+<tr><td>Not started / Not reached</td><td><code>workflow.go:236-240</code>, <code>:251</code></td><td>unfinished blocker or blocked parent (checked <em>before</em> Broken)</td></tr>
+<tr><td>Working on X</td><td><code>board.go:638-648</code> from <code>liveSteps</code> (<code>:552</code>)</td><td>live Operator on a non-Broken, non-waiting step</td></tr>
+<tr><td>Waiting for …</td><td><code>board.go:718-726</code>, <code>waitText</code> <code>:1092-1104</code></td><td>wait not expired (<code>waitExpired</code>, <code>:1896</code>); <code>Manager to close</code> reads "Result ready for Manager review"</td></tr>
+<tr><td>Parked / Commander reviewing the proposed …</td><td><code>workflow.go:172-182</code>, <code>board.go:901</code></td><td>deferred; <code>proposed:</code> label under 30 min</td></tr>
+<tr><td>Needs a wait or an owner</td><td>nowhere</td><td class="warn">no code produces it. Only <code>snapshot.go:249</code>'s comment and the daemon's mail (<code>internal/daemon/invariant.go:103</code>) use it, and the mail says "the app shows" it. The board shows State missing; the app's flow view says "Nobody on it" (<code>app/src/renderer/src/flow.ts:93</code>).</td></tr>
+</table>
+
+<h3>The six holder predicates and where they disagree</h3>
+<table>
+<tr><th>Case</th><th>(a) Invariant / Broken</th><th>(b) Board line</th><th>(c) Diagram unheld</th><th>(d) StalledWork</th><th>(e) UnheldAfter (door)</th><th>(f) Audit</th></tr>
+<tr><td><code>in_progress</code>, owner <code>manager-x</code>, idle Manager</td><td>unheld</td><td>State missing, or Manager picking it up</td><td>unheld</td><td>listed</td><td>unheld (but exempt for that Manager)</td><td class="bad">held</td></tr>
+<tr><td>Same, chat overlay says working, store says idle</td><td>unheld (store state)</td><td>reads "State missing" while the Manager is visibly in a turn</td><td>unheld</td><td>quiet</td><td>held (overlay state)</td><td>held</td></tr>
+<tr><td>Dead Operator + recorded wait</td><td>unheld</td><td>Agent stopped (wins first)</td><td>unheld</td><td>stopped</td><td>unheld</td><td class="bad">held</td></tr>
+<tr><td>Expired time wait</td><td>held</td><td class="bad">Stalled</td><td>held</td><td>stalled</td><td>held</td><td>held</td></tr>
+<tr><td><code>in_progress</code> step behind an open blocker</td><td>unheld</td><td class="bad">step "Not started", row "State missing"</td><td>unheld</td><td>held if blocker outside</td><td>unheld</td><td>unheld</td></tr>
+<tr><td>Blocked only through its parent</td><td>unheld (looks at own deps only)</td><td>Not started</td><td>unheld</td><td>held</td><td>unheld</td><td>unheld</td></tr>
+<tr><td>Superseded blocker</td><td>blocks nothing</td><td class="bad">blocks ("Not started")</td><td>—</td><td>—</td><td>blocks nothing</td><td>blocks nothing</td></tr>
+<tr><td>Only a parked child</td><td>no open child</td><td>—</td><td>—</td><td>—</td><td>no open child</td><td class="bad">open child = held</td></tr>
+<tr><td>Untyped <code>until:</code> slug wait</td><td>unheld</td><td>State missing</td><td>unheld</td><td>—</td><td class="bad">held (placeholder wait)</td><td>held</td></tr>
+<tr><td>Empty track / nested workstream</td><td>unheld</td><td class="bad">Nothing to do</td><td>unheld</td><td>quiet, not listed</td><td>root filtered</td><td>steps only</td></tr>
+</table>
+
+<h2 id="evidence">3. Today's evidence, traced to the source</h2>
+<table>
+<tr><th>Observation</th><th>Cause in code</th></tr>
+<tr><td>create/set accepted unheld steps</td><td><code>internal-create-objective</code> has no holder input; <code>--state not-started</code>, <code>--owner none</code>, <code>--waiting none</code>, <code>--status in_progress</code> and <code>--unpark</code> run no holder check (§1a).</td></tr>
+<tr><td><code>set --state in-progress --owner manager-x</code> accepted, but the board does not count it</td><td><code>checkOwnerLive</code> returns nil for any non-Operator owner (<code>door_checks.go:216-224</code>); the invariant counts a Manager only mid-turn (<code>invariant.go:133-137</code>). The write door and the reader disagree by design.</td></tr>
+<tr><td>Operator spawned on exhausted Codex ended silently</td><td>No usage check on spawn/respawn (<code>internal/spawn/codex.go:54-152</code> checks the runtime's hooks and that the account is logged in, never usage). The run exits with no report, is settled as died, and the crash restart resumes onto the same pin.</td></tr>
+<tr><td>Empty nested workstream reads Nothing to do (#1.4, ~30s after creation)</td><td>Creation makes no plan step or wait; <code>managerState</code> with zero leaves returns "Nothing to do" (<code>board.go:1049</code>); <code>rollUp</code> lets the empty child's line win on the parent.</td></tr>
+<tr><td>Snapshot lag showed a just-closed bead open + unheld</td><td>The board and <code>graph check</code> read only cmdrd's snapshot. A load that overlaps writes keeps last-good rows without a degraded flag (<code>KeptLastGood</code>, <code>livedata.go:592-611</code>). The close door also accepts that snapshot, so it can judge a sibling as held by a blocker that br has already closed.</td></tr>
+</table>
+
+<h2 id="invariants">4. The invariants, stated once</h2>
+<div class="box">
+<p><b>I1 – Every open bead has exactly one current holder, chosen from this closed set:</b></p>
+<ol>
+  <li><b>Operator</b>: a running <code>agent_runs</code> row on the bead (the owner label alone is not enough).</li>
+  <li><b>Typed wait</b>: a parseable <code>waiting:</code> label whose waker exists (ci, main-ci, prod-tag, review,
+  operator with a live Operator, an <code>until:</code> time, or a handoff wait addressed to a Manager). An expired time
+  wait stops holding once its wake is delivered and unanswered past the handoff window.</li>
+  <li><b>User</b>: an open user gate, or a needs-user card with a stored decision.</li>
+  <li><b>Blocker</b>: an open, unparked, non-superseded bead it (or an ancestor) waits on. This holds for any status;
+  "in progress and blocked" is a contradiction the write layer refuses, not a reason to read State missing.</li>
+  <li><b>Children</b>: at least one open (non-deferred) child.</li>
+  <li><b>Parked</b>: status deferred (with or without a return time).</li>
+  <li><b>Gate</b>: a gate bead is held by its stage and approvers.</li>
+</ol>
+<p>A Manager's or Commander's name is <em>not</em> a holder. It names who is accountable, not who is moving. A
+Manager's turn in progress is a display fact ("Manager working"), never what keeps a bead legal.</p>
+<p><b>I2 – Atomic birth.</b> A step, track or workstream is created together with its holder in the same command. A new
+workstream is born with a <code>Manager to plan</code> handoff wait (reads "Manager planning"), or with its first plan
+step and that step's holder.</p>
+<p><b>I3 – Make before break.</b> No write removes a holder before the replacement is written. If both cannot go in one
+transaction, the new holder is written first.</p>
+<p><b>I4 – Closure check.</b> A write is judged on its closure: the bead, its parent chain, its siblings, and every bead
+that waits on it. Each must satisfy I1 afterwards.</p>
+<p><b>I5 – One reader.</b> Every surface derives "held" and "who holds it" from the same function, on the same inputs.
+These surfaces are the board line, the diagram lane, the invariant mail, the stalled list, the audit, the door and
+<code>graph check</code>.</p>
+<p><b>I6 – No silent ending.</b> When a run ends, its bead moves to a named next holder in the same settle: a respawned
+Operator, <code>Manager to close</code>, or <code>Manager to recover</code> with the reason. It never moves to "open,
+no owner".</p>
+<p><b>I7 – No unusable start.</b> A spawn or respawn goes only to a runtime/account with usage left; otherwise it is
+refused with the reason, and the bead stays with its current holder.</p>
+<p><b>I8 – Board never older than a write it answered.</b> After the door answers a write, the snapshot it serves
+reflects that write. It may be optimistic, but it is never stale.</p>
+<p><b>I9 – No lost writes.</b> An accepted write stays until a later write <em>that knew about it</em> changes it. A
+watcher that removes a holder must have read the fact it acts on after the holder's <code>since</code> stamp
+(compare-and-clear).</p>
+</div>
+
+<h2 id="design">5. Proposed single guarded domain layer</h2>
+
+<h3>5a. Shape</h3>
+<pre><code>internal/holding/            // pure, no I/O
+  type Holder struct { Kind Kind; Ref string; Since, Until int64 }   // Operator|Wait|User|Blocker|Children|Parked|Gate
+  func Held(b Bead, w World) (Holder, bool, Why)   // the ONE predicate (I1, I5)
+  type World interface { RunLive(id) bool; Bead(id) (Bead, bool); Children(id) []string; Blockers(id) []string; Now() int64 }
+
+internal/holding/transition.go
+  type Intent interface{ intent() }          // Create, SetState, SetOwner, SetWaits, Close, Park, Unpark, AddDep, RemoveDep,
+                                             // GatePass, GateRemove, Place, SettleRun, Respawn, ClearWait, Unwrap ...
+  type Plan struct { Ops [][]string; Affected []string; After map[string]Holder }
+  func Plan(ctx, w World, in Intent) (Plan, error)   // simulate, run Held on the closure (I4), order writes holder-first (I3)
+  type Refusal struct { Bead, Title string; Why Why; Fix []string }   // exact cmdr commands that would make it legal
+</code></pre>
+
+<ul>
+  <li><b>Reads.</b> <code>Held</code> takes a <code>World</code>. The board builds it from the snapshot. The door builds
+  it from <code>FreshDetails</code> of the closure plus <code>spawn.LiveRuns</code>. So the reader and the writer run
+  the same code, and only the source of truth differs: fresh for writes, snapshot for display.</li>
+  <li><b>Board.</b> <code>leafLine</code>, <code>managerState</code>, <code>idleLine</code> and <code>trackLine</code>
+  call <code>Held</code> first and render by <code>Holder.Kind</code>. "State missing" becomes the rendering of
+  <code>ok == false</code>. Once the writer enforces I1 it is unreachable, and kept only as an alarm. "Nothing to do"
+  is reserved for a <em>closed</em> scope. An open scope with no open children is either held (reads "Manager planning"
+  from its wait) or a violation.</li>
+  <li><b>Writes.</b> Every verb builds an <code>Intent</code> rather than argv and sends it to cmdrd's door. The door is
+  extended to accept <code>{intent}</code> next to <code>{ops}</code>. The door runs <code>Plan</code> with fresh
+  reads, refuses with <code>Refusal.Fix</code> or applies <code>Plan.Ops</code> (one <code>bd batch</code> when it
+  fits, holder-first otherwise), then patches its snapshot (I8). This happens <em>for every caller</em>: agents, the
+  user, the app's <code>/api/cmd</code> and cmdrd's own watchers. cmdrd calls <code>Plan</code> in-process; it no
+  longer bypasses it.</li>
+  <li><b>The Manager holder becomes a wait.</b> <code>--owner manager-x</code> on a step that has no other holder is
+  rewritten by <code>Plan</code> into owner plus a typed handoff wait (<code>Manager dispatch</code>, 2 min), or it is
+  refused with that fix. <code>holdApprovedWork</code> already does exactly this, and cmdrd already wakes, receipts and
+  escalates these waits (<code>waits.go:254-258</code>). Three kinds cover every case:
+  <code>Manager to plan</code> (birth), <code>Manager dispatch</code> (released or decided work) and <code>Manager to
+  close</code> / <code>Manager to recover</code> (a run ended).</li>
+  <li><b>Settle.</b> <code>SettleRun{run, outcome}</code> plans one batch:
+    <ul>
+      <li>exited with a report: Manager owner + <code>Manager to close</code>, then remove the Operator owner;</li>
+      <li>died with restart allowed: keep the old owner and add <code>Manager to recover</code>, then the respawn
+      replaces both with the new run (a failed spawn leaves the recover wait);</li>
+      <li>stopped or died for good: <code>Manager to recover: &lt;reason&gt;</code> + <code>operator-died</code>.</li>
+    </ul>
+  The row then reads "Agent stopped: Manager recovering · 3 min", which is honest and held, rather than State missing.
+  </li>
+  <li><b>Usage (I7).</b> <code>Plan(Spawn)</code> consults a shared <code>usage.Available(runtime, account)</code>.
+  This lifts <code>NextAccount</code>/<code>MarkOut</code> out of <code>internal/chat</code>, and adds Codex's
+  <code>account/rateLimits/updated</code> already captured in <code>chat/usage.json</code>. The result is a refusal or
+  a move to an account with usage left.</li>
+</ul>
+
+<h3>5b. What it makes unrepresentable</h3>
+<ul>
+  <li>An open bead with no holder after any accepted write, by any caller (I1, I4).</li>
+  <li>A birth without a holder (I2); an empty workstream reading "Nothing to do".</li>
+  <li>A Manager name standing in as a holder (I1).</li>
+  <li>An unheld window inside a single write (I3). Windows <em>between</em> writes vanish too, because each write is
+  checked against its closure.</li>
+  <li>The board disagreeing with the door, the audit or <code>graph check</code> (I5).</li>
+  <li>A board older than an answered write (I8).</li>
+</ul>
+
+<h3>5c. What it cannot make impossible (honest limits)</h3>
+<ul>
+  <li>A same-UID process that writes Dolt directly (<code>bd sql</code>, <code>bd serve</code>, a script, a raw
+  <code>/api/write</code> with <code>ops</code>). Guards stay speed bumps until the Dolt server has per-role grants.
+  The layer should therefore <em>also</em> keep the invariant watcher as an alarm, now on the shared predicate.</li>
+  <li>Time: a typed wait can be legal when written and expire later. The handoff escalation (receipt, then health issue)
+  covers this; it is a true "Manager's move", not missing state.</li>
+  <li>Process death between batch writes in the non-batchable path (labels, comments). Holder-first ordering bounds the
+  damage to "two holders briefly", which is never illegal.</li>
+</ul>
+
+<h2 id="migration">6. Migration plan: ordered, independently shippable</h2>
+<table>
+<tr><th>#</th><th>Step</th><th>Unit tests</th><th>Eval / golden</th></tr>
+<tr><td>1</td><td><b>One predicate.</b> Extract <code>holding.Held</code>, and route <code>OpenBeadInvariant</code>, <code>UnheldAfter</code>, audit <code>openWithoutOwner</code>, diagram <code>unheld</code> and <code>StalledWork</code>'s quiet test through it. Fix the disagreements in §2: Manager owner not held, expired waits, blocked-through-parent, superseded blocker, parked child, untyped wait in <code>UnheldAfter</code>, store vs overlay agent state. Board text unchanged except where it was wrong. Fix the "Needs a wait or an owner" wording in the daemon mail.</td><td><code>TestHeldMatrix</code>: a table of every case in §2 against every consumer; a parity test that fails when any consumer stops calling <code>Held</code> (parse-based, like <code>TestEveryClaudeLauncherIsAccounted</code>)</td><td>board goldens re-run; new golden <code>holder-parity.json</code>; <code>graph check --audit</code> on it</td></tr>
+<tr><td>2</td><td><b>Board renders by holder.</b> <code>leafLine</code> checks <code>Held</code> before Not started; an empty open scope reads "Manager planning" when held by the <code>Manager to plan</code> wait, else State missing (never Nothing to do); <code>rollUp</code> stops letting an empty child hide the parent.</td><td><code>TestEmptyScopeNeverReadsNothingToDo</code></td><td>goldens <code>empty-nested-workstream</code>, <code>in-progress-blocked</code></td></tr>
+<tr><td>3</td><td><b>Atomic birth.</b> <code>internal-create-objective</code> takes <code>--owner &lt;running Operator&gt;</code> | <code>--waiting</code> | <code>--decision</code> | <code>--deps blocked-by:</code>, and a workstream/track gets <code>Manager to plan</code> automatically. A plain step with none is refused, naming those flags. <code>workflow plug</code> gives its first step <code>Manager dispatch</code>.</td><td><code>TestCreateRefusesUnheldStep</code>, <code>TestWorkstreamBornPlanning</code>, <code>TestPlugFirstStepHeld</code></td><td>eval <code>atomic-birth.json</code> (create → board reads Manager planning)</td></tr>
+<tr><td>4</td><td><b>Manager owner becomes a handoff wait.</b> <code>--owner manager-x</code> / <code>--state in-progress</code> with a Manager owner writes the <code>Manager dispatch</code> wait in the same update (shared with <code>holdApprovedWork</code>). This covers resolve-needs decide/defer and move-card too.</td><td><code>TestManagerOwnerWritesDispatch</code>, resolve-needs cases</td><td>eval <code>manager-owner-held.json</code></td></tr>
+<tr><td>5</td><td><b>Closure check on every CLI verb.</b> Generalise the close door into <code>holding.Plan</code> with fresh reads of the closure (not the snapshot). Apply it to set-objective (not-started, owner none, waiting none, status, unpark), gate pass/rm/apply/check, dep rm, place/unwrap, track convert, proposals overrule, and the spawn/provider failure paths. Drop the owning-Manager exemption. Refusals list <code>Refusal.Fix</code>.</td><td><code>TestEveryWriteVerbRunsPlan</code> (parse-based registry), per-verb refusal tests, <code>TestRefusalNamesExistingVerb</code></td><td>evals <code>gate-pass-holds.json</code>, <code>dep-rm-holds.json</code>, <code>stale-snapshot-close.json</code> (closed-in-br blocker)</td></tr>
+<tr><td>6</td><td><b>Server-side and cmdrd.</b> The door accepts <code>{intent}</code>; <code>Plan</code> runs for role-less callers too (the user gets an explicit <code>--leave-unheld &lt;reason&gt;</code> escape, logged). cmdrd's settle, waits <code>wake</code>, unpark and live gates use <code>SettleRun</code>/<code>ClearWait</code>/<code>Unpark</code>/<code>GatePass</code> intents: one batch, make-before-break, <code>Manager to recover</code> for died and stopped runs. The open→passed live gate mails and holds the released work. The wait watcher becomes compare-and-clear (I9): it re-reads the running set when a wait is younger than the poll's capture. That part is small enough to ship first, on its own.</td><td><code>TestSettleNeverUnheld</code> (every outcome × every failure point), <code>TestWakeClearKeepsAHolder</code>, <code>TestLiveGatePassHolds</code>, <code>TestOperatorWaitWrittenMidPollIsNotCleared</code></td><td>eval <code>settle-died-held.json</code>; daemon <code>TestReportedThroughDaemonWiring</code> extended</td></tr>
+<tr><td>7</td><td><b>Write-through snapshot (I8).</b> After applying a plan, the door patches its in-memory snapshot with <code>Plan.After</code> (marked <code>pending</code> until a load confirms it). <code>KeptLastGood</code> keeps the patched rows, not the pre-write rows.</td><td><code>TestBoardReflectsAnsweredWrite</code>, <code>TestKeptLastGoodKeepsPendingPatch</code></td><td>eval <code>close-then-board.json</code> (no open+unheld frame)</td></tr>
+<tr><td>8</td><td><b>Close the raw-write gaps.</b> The guards switch from a deny-list to an allow-list of bd/br read verbs. Wrap <code>bd</code> like <code>br</code>. Later, add Dolt grants: a read-only user for agents, and writes only through cmdrd.</td><td><code>TestGuardAllowsOnlyReads</code> over the <code>bd --help</code> verb list</td><td><code>scripts/br-bd_test.sh</code> for bd</td></tr>
+</table>
+<p>Steps 1–2 change only readers, so they are safe to ship first. Steps 3–5 can ship in any order after 1. Step 6
+depends on 5. Steps 7 and 8 are independent. Each step leaves the system strictly more correct, with no flag day.</p>
+
+<h2 id="teach">7. How agents learn it</h2>
+<ul>
+  <li><b>One sentence in every role prompt</b> (<code>prompts/lead.md</code>, <code>commander.md</code>,
+  <code>operator-code.md</code>, <code>ownership.md</code>): "Every write names who holds the work next: a running
+  Operator, a typed wait, a user card, an open blocker or child, or a park. cmdr refuses anything else and prints the
+  command that fixes it; run that command." This replaces the scattered close-door paragraph
+  (<code>lead.md:57</code>) and the "State is always true" exhortation (<code>ownership.md:93</code>) with a rule cmdr
+  enforces.</li>
+  <li><b>Refusal text as the teacher.</b> Every refusal uses one template: <code>refused: &lt;verb&gt; would leave
+  &lt;bead&gt; "&lt;title&gt;" with no holder (&lt;why&gt;). Hold it in the same command: &lt;exact flags&gt;</code>.
+  It always lists runnable commands. Extend <code>TestEveryRefusedVerbNamesAnExistingCmdrVerb</code> so it covers
+  every holder refusal.</li>
+  <li><b>Prompt tests.</b> Add a <code>TestHolderRuleInPrompts</code> next to <code>TestPushAndInstallPolicyInPrompts</code>.
+  Also add a test that no prompt teaches <code>--owner manager-*</code> as a way to hold work.</li>
+  <li><b>Board feedback.</b> After any write, the verb already prints the row as it now reads. It should also print the
+  <code>Holder</code> for each affected bead, so an agent sees "held by: Manager dispatch (2 min)" rather than
+  inferring it.</li>
+  <li><b>No skill needed.</b> The CLI is the canonical pattern, as d72 asks. A skill would be a second source of truth.
+  <code>cmdr graph check</code> stays the self-check, and after step 1 it reports exactly what the board would
+  show.</li>
+</ul>
+
+<h2 id="fit">How commander-il9.202.24 (in flight) fits</h2>
+<table>
+<tr><th>il9.202.24 part</th><th>Relation to this design</th></tr>
+<tr><td>.1 Spawn refuses or moves off an out-of-usage runtime/account</td><td>This is I7, and it is needed as is. Build the usage check as a shared package (not inside <code>internal-spawn-operator</code>) so step 6's <code>Plan(Spawn)</code>, <code>internal-operator-provider</code> and the settle respawn all call it.</td></tr>
+<tr><td>.2 Board never reads Nothing to do / State missing on live work</td><td>This is a tactical version of steps 1–2. Keep its goldens: they become the acceptance tests for <code>holding.Held</code>. If it adds new special cases in <code>board.go</code>, step 1 should fold them into <code>Held</code>, not stack another predicate.</td></tr>
+<tr><td>(3) Closing or creating a step leaves a sibling State missing; snapshot lag</td><td>A point fix belongs in steps 3, 5 and 7. A tactical fix in the close door is fine, but it should use fresh reads of the closure rather than the snapshot, which is the core of step 5.</td></tr>
+</table>
+<p>Nothing in il9.202.24 conflicts with this plan. It removes today's visible symptoms, and this plan removes the class
+of bug behind them.</p>
+
+</body>
+</html>

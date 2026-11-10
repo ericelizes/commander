@@ -27,18 +27,20 @@ import (
 // Partial loads are tolerated: any per-source error is captured in LoadErr
 // and whatever populated successfully is still returned.
 type Data struct {
-	Projects   []store.Project
-	Objectives []ObjectiveRow
-	Operators  []OperatorRow
-	Ranks      map[store.WorkstreamKey]int // the user's priority order; see workstream_ranks
-	BeadRanks  map[store.WorkstreamKey]int `json:"-"` // each bead's priority among its siblings; see bead_ranks
-	Agents     map[string]store.AgentState // live state per agent mail role (hooks + scrape)
-	Checkins   map[string]store.Checkin    // each Manager's next check-in on its running Operators (and Commander's)
-	Finished   []store.CostEvent           // Operators whose process ended in the last FinishedFor
-	Issues     []store.WatchIssue          // what the minute watch finds wrong across workstreams
-	Metrics    FleetMetrics
-	LoadedAt   time.Time
-	LoadErr    error
+	workstreams []Workstream
+	Postgres    bool `json:"postgres,omitempty"`
+	Projects    []store.Project
+	Objectives  []ObjectiveRow
+	Operators   []OperatorRow
+	Ranks       map[store.WorkstreamKey]int // the user's priority order; see workstream_ranks
+	BeadRanks   map[store.WorkstreamKey]int `json:"-"` // each bead's priority among its siblings; see bead_ranks
+	Agents      map[string]store.AgentState // live state per agent mail role (hooks + scrape)
+	Checkins    map[string]store.Checkin    // each Manager's next check-in on its running Operators (and Commander's)
+	Finished    []store.CostEvent           // Operators whose process ended in the last FinishedFor
+	Issues      []store.WatchIssue          // what the minute watch finds wrong across workstreams
+	Metrics     FleetMetrics
+	LoadedAt    time.Time
+	LoadErr     error
 	// ProjectTimes is how long each project's beads read took in this load.
 	ProjectTimes map[string]time.Duration `json:"-"`
 	// Phases is where this load's time went.
@@ -104,6 +106,7 @@ type ObjectiveRow struct {
 	GateViz       []int        // each gate bead's own viz:<n> label (0 = none), parallel to Gates
 	Viz           int          // the bead's own viz:<n> label (0 = none); see EffectiveViz
 	Task          bool         // an Operator task bead (kind:task, not an objective, gate or track): agent-internal, not a step the user plans
+	KindTask      bool         // labelled kind:task at all (also with kind:objective, e.g. converted then --no-workstream): never a workstream row, as wsmgr refuses to register one
 	// Owns: a nested workstream with a Manager of its own (an open kind:workstream
 	// bead under another, in a project whose nested Managers are on); see beads.Owner.
 	Owns        bool
@@ -218,6 +221,7 @@ func Load(ctx context.Context, deps Deps) Data {
 		return out
 	}
 
+	out.Postgres = deps.Store.IsPostgres()
 	mark := out.LoadedAt
 	lap := func(phase *time.Duration) {
 		now := time.Now()
@@ -252,7 +256,11 @@ func Load(ctx context.Context, deps Deps) Data {
 	if deps.Scrape != nil {
 		scraped = deps.Scrape(out.LoadedAt)
 	}
-	out.Agents = MergeAgentStates(hooks, scraped, out.LoadedAt)
+	if out.Postgres {
+		out.Agents = hooks
+	} else {
+		out.Agents = MergeAgentStates(hooks, scraped, out.LoadedAt)
+	}
 
 	projectNameByID := make(map[int64]string, len(projects))
 	for _, p := range projects {
@@ -511,9 +519,15 @@ type projectRowsKey struct {
 
 func rowsKey(p store.Project) projectRowsKey { return projectRowsKey{p.ID, p.Path, p.Name} }
 
+type nativeProjectRows struct {
+	revision int64
+	rows     []ObjectiveRow
+}
+
 type projectRowsCache struct {
-	mu   sync.Mutex
-	rows map[projectRowsKey][]ObjectiveRow
+	mu     sync.Mutex
+	native map[projectRowsKey]nativeProjectRows
+	rows   map[projectRowsKey][]ObjectiveRow
 	// misses counts consecutive ticks a project's read overlapped writes.
 	misses map[projectRowsKey]int
 }
@@ -554,6 +568,10 @@ func objectiveRowsFromBeadsCached(ctx context.Context, bc beads.Client, projects
 // objectiveRowsTimed also says how long each project's read took, and whether a
 // read that overlapped writes quietly kept a project's last-good rows.
 func objectiveRowsTimed(ctx context.Context, bc beads.Client, projects []store.Project, cache *projectRowsCache) ([]ObjectiveRow, map[string]time.Duration, bool, error) {
+	nativeCache := cache
+	if beads.PostgresConfigured() {
+		cache = nil
+	}
 	if cache != nil {
 		cache.mu.Lock()
 		live := make(map[projectRowsKey]bool, len(projects))
@@ -578,11 +596,40 @@ func objectiveRowsTimed(ctx context.Context, bc beads.Client, projects []store.P
 			defer wg.Done()
 			start := time.Now()
 			defer func() { took[i] = time.Since(start) }()
-			errs[i] = beads.ReadConsistent(ctx, project.Path, func() error {
-				var err error
-				rows[i], err = projectObjectiveRows(ctx, bc, project)
-				return err
-			})
+			if beads.PostgresConfigured() {
+				errs[i] = beads.ReadPostgresSnapshot(ctx, func(readCtx context.Context) error {
+					revision, err := beads.PostgresProjectRevision(readCtx, project.Path)
+					if err != nil {
+						return err
+					}
+					key := rowsKey(project)
+					if nativeCache != nil {
+						nativeCache.mu.Lock()
+						cached, ok := nativeCache.native[key]
+						nativeCache.mu.Unlock()
+						if ok && cached.revision == revision {
+							rows[i] = cloneObjectiveRows(cached.rows)
+							return nil
+						}
+					}
+					rows[i], err = projectObjectiveRows(readCtx, bc, project)
+					if err == nil && nativeCache != nil {
+						nativeCache.mu.Lock()
+						if nativeCache.native == nil {
+							nativeCache.native = map[projectRowsKey]nativeProjectRows{}
+						}
+						nativeCache.native[key] = nativeProjectRows{revision, cloneObjectiveRows(rows[i])}
+						nativeCache.mu.Unlock()
+					}
+					return err
+				})
+			} else {
+				errs[i] = beads.ReadConsistent(ctx, project.Path, func() error {
+					var err error
+					rows[i], err = projectObjectiveRows(ctx, bc, project)
+					return err
+				})
+			}
 			readErr := errs[i]
 			if cache != nil {
 				cache.mu.Lock()
@@ -790,6 +837,7 @@ func projectObjectiveRows(ctx context.Context, bc beads.Client, project store.Pr
 			ParkedUntil:   beads.ParkedUntil(objective.Labels),
 			Viz:           beads.VizOf(objective.Labels),
 			Task:          slices.Contains(objective.Labels, "kind:task") && !slices.Contains(objective.Labels, "kind:objective") && !slices.Contains(objective.Labels, beads.GateLabel) && !beads.IsWorkstream(objective.Labels),
+			KindTask:      slices.Contains(objective.Labels, "kind:task"),
 			Track:         beads.IsNested(objective.Labels, parent),
 			Owns:          parent != "" && beads.OwnsWork(objective),
 			Superseded:    supersededBead(objective),

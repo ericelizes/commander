@@ -91,6 +91,9 @@ func runInternalCreateObjective(args []string, stdout, stderr *os.File) int {
 	criteria := fs.String("criteria", "", "with --gate (required): what counts as passed, in one sentence; stored as the bead's acceptance criteria and shown on the gate in the diagram")
 	operational := fs.Bool("operational", false, "create an operational bead (kind:operational, not an objective) under --parent: an Operator's own sub-task")
 	deps := fs.String("deps", "", "dependencies of the new bead, comma-separated: `blocked-by:ID` (or a bare ID) makes the new bead wait for ID, `blocks:ID` makes ID wait for the new bead")
+	var waitings stringList
+	fs.Var(&waitings, "waiting", "a plain step's holder: what it waits on (ci:#N, review:<who>, until:<time>[:label], operator:<running role>, ...); repeatable")
+	owner := fs.String("owner", "", "a plain step's holder: the running Operator (operator-...) that has it")
 	notAGate := fs.Bool("not-a-gate", false, "the title only looks like an approval (Greenlight, Approve...) but is ordinary work")
 
 	if err := fs.Parse(args); err != nil {
@@ -158,6 +161,12 @@ func runInternalCreateObjective(args []string, stdout, stderr *os.File) int {
 		emitErr(stderr, err.Error())
 		return 1
 	}
+	birthLabels, err := birthHolder(birthKind(*gate, *operational, *track || *parent == ""), *title, waitings, *owner, waitsOn, time.Now())
+	if err != nil {
+		emitErr(stderr, err.Error())
+		return 1
+	}
+	labels = append(labels, birthLabels...)
 	project, err := resolveProject(*projectName)
 	if err != nil {
 		emitErr(stderr, err.Error())
@@ -208,6 +217,12 @@ func runInternalCreateObjective(args []string, stdout, stderr *os.File) int {
 			labels = append(labels, proposed.label(time.Now()))
 		}
 	}
+	if strings.HasPrefix(*owner, "operator-") {
+		if err := checkOwnerLive(ctx, *owner); err != nil {
+			emitErr(stderr, err.Error())
+			return 1
+		}
+	}
 	beadID, err := bc.Create(ctx, project.Path, *title, beads.CreateOptions{
 		Parent:             *parent,
 		Labels:             labels,
@@ -237,6 +252,13 @@ func runInternalCreateObjective(args []string, stdout, stderr *os.File) int {
 	// its own, or every step below would fail at once.
 	ctx, cancelRest := context.WithTimeout(context.Background(), beadWriteTimeout)
 	defer cancelRest()
+
+	// The first step is the plan the new scope was waiting for: its own holder is now on the board.
+	if *parent != "" && beadID != "" && !*operational {
+		if err := clearPlanWait(ctx, bc, project.Path, *parent); err != nil {
+			warn(fmt.Sprintf("clearing the Manager to plan wait on %s failed: %v", *parent, err))
+		}
+	}
 
 	if *takeSteps {
 		steps, err := beads.OpenChildren(ctx, bc, project.Path, *parent)
@@ -283,7 +305,11 @@ func runInternalCreateObjective(args []string, stdout, stderr *os.File) int {
 	// Manager's to start: it carries that receipt from the start, so the board
 	// never reads it State missing once the creating turn ends.
 	var custody []string
-	if *parent != "" && !*gate && !*operational && !*track {
+	if bornWithReceipt(birthLabels) {
+		custody = []string{beadID}
+	} else if *parent != "" && !*gate && !*operational && !*track {
+		// A named holder that did not hold (a closed or parked blocker, an edge that failed to
+		// land): the step gets the receipt now.
 		held, err := holdForManager(ctx, bc, project.Path, []string{beadID}, "", time.Now())
 		if err != nil {
 			warn(fmt.Sprintf("its Manager's hold was not written: %v; give it a holder (spawn, --waiting or a card)", err))
@@ -436,4 +462,93 @@ func lookForCreate(bc beads.Client, dir, title, parent, label string, started ti
 		found = b.ID
 	}
 	return found
+}
+
+// bornWithReceipt: the create's own labels carry the "Manager to start" receipt.
+func bornWithReceipt(labels []string) bool {
+	for _, w := range beads.WaitsOf(labels) {
+		if w.Ref == beads.ManagerStartWait {
+			return true
+		}
+	}
+	return false
+}
+
+// Kinds of bead a create can make, for the holder it must be born with.
+const (
+	birthStep = iota
+	birthScope
+	birthGate
+	birthOperational
+)
+
+func birthKind(gate, operational, scope bool) int {
+	switch {
+	case gate:
+		return birthGate
+	case operational:
+		return birthOperational
+	case scope:
+		return birthScope
+	}
+	return birthStep
+}
+
+// birthHolder is the labels that make a new bead held in the same create (atomic birth):
+// a workstream or track is born waiting on its Manager to plan, a plain step carries the holder it
+// names (a wait, an open blocker or a running Operator) or else its Manager's "Manager to start"
+// receipt, a gate is held by definition. A named blocker that turns out closed or parked, or whose
+// edge fails to land, is caught after the links by holdForManager.
+func birthHolder(kind int, title string, waitings stringList, owner string, blockedBy []string, now time.Time) ([]string, error) {
+	switch kind {
+	case birthScope:
+		w := beads.Wait{Kind: beads.WaitUntil, Since: now, Until: now.Add(2 * time.Minute), Ref: beads.ManagerPlanWait}
+		return []string{w.Label()}, nil
+	case birthGate, birthOperational:
+		if len(waitings) > 0 || owner != "" {
+			return nil, fmt.Errorf("--waiting and --owner give a plain step its holder; a gate or an operational bead needs neither")
+		}
+		return nil, nil
+	}
+	waits, err := parseWaitingFlags(waitings)
+	if err != nil {
+		return nil, err
+	}
+	if owner != "" && !strings.HasPrefix(owner, "operator-") {
+		return nil, fmt.Errorf("--owner %s: a step is born held by a running Operator (operator-...), not by a Manager or the user; use --waiting <kind> for a wait, or --waiting operator:<running role>", owner)
+	}
+	if len(waits) == 0 && len(blockedBy) == 0 && owner == "" {
+		// Nothing named: the step is its Manager's to start, and it is born carrying that
+		// receipt (the same "Manager to start" a close writes), so it never reads State missing.
+		return []string{custodyLabel(now)}, nil
+	}
+	var labels []string
+	for _, w := range waits {
+		w.Since = now
+		if l := w.Label(); len(l) > beads.MaxLabelLen {
+			return nil, fmt.Errorf("--waiting %s: too long to record (%d > %d characters)", w.Kind, len(l), beads.MaxLabelLen)
+		} else {
+			labels = append(labels, l)
+		}
+	}
+	if owner != "" {
+		labels = append(labels, beads.OwnerLabelPrefix+beads.OwnerLabelName(owner))
+	}
+	return labels, nil
+}
+
+// clearPlanWait removes the Manager to plan wait from a scope that now has its first step.
+func clearPlanWait(ctx context.Context, bc beads.Client, dir, parent string) error {
+	p, err := bc.Show(ctx, dir, parent)
+	if err != nil || p == nil {
+		return err
+	}
+	for _, l := range p.Labels {
+		if w, ok := beads.ParseWaitLabel(l); ok && w.Kind == beads.WaitUntil && w.Ref == beads.ManagerPlanWait {
+			if err := bc.SetLabel(ctx, dir, parent, l, false); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }

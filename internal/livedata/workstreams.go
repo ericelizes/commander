@@ -34,6 +34,10 @@ func NestObjectives(rows []ObjectiveRow) []NestedObjective {
 		switch {
 		case r.ParentBeadID != "" && present[r.ParentBeadID]:
 			children[r.ParentBeadID] = append(children[r.ParentBeadID], r)
+		case r.Task || r.KindTask:
+			// An Operator task bead (any kind:task label, also beside kind:objective
+			// after convert then --no-workstream) is never a workstream row: with no
+			// parent in the list it is not drawn, since no Manager may own it.
 		case r.Track:
 			// A nested workstream never becomes a row: without its parent in the
 			// list (closed, or a dotted-id guess that missed) it is not drawn.
@@ -140,6 +144,9 @@ func ObjectivesOf(data Data, projectID int64) []ObjectiveRow {
 
 // Workstreams is WorkstreamsInOrder over a loaded Data.
 func Workstreams(data Data) []Workstream {
+	if data.workstreams != nil {
+		return data.workstreams
+	}
 	return WorkstreamsInOrder(data.Projects, func(id int64) []ObjectiveRow { return ObjectivesOf(data, id) }, data.Ranks)
 }
 

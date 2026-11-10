@@ -2,6 +2,7 @@
 // list every chat menu, the usage-limit notice and the Settings agents table
 // share, and how an account's plan usage reads. Pure: no fetches, no store.
 
+import type { SnapExecution, SnapStep } from '../../shared/snapshot'
 import type { ChatAccount, ChatRuntime, Provider, Usage } from './chatApi'
 
 export type UsageState = 'ok' | 'warning' | 'out' | 'unknown'
@@ -74,7 +75,7 @@ export function switchTargets(accounts: ChatAccount[], cur: Provider | undefined
   const list = accounts.length > 0 ? accounts : [{ name: 'default', runtime: 'claude' as const, logged_in: true }, { name: 'codex', runtime: 'codex' as const, logged_in: true }]
   const out: SwitchTarget[] = []
   for (const a of list) {
-    if (!a.logged_in) continue
+    if (!a.logged_in || a.duplicate_of) continue
     const p: Provider = a.runtime === 'codex' ? { runtime: 'codex' } : { runtime: 'claude', account: a.name }
     const key = providerKey(p)
     out.push({
@@ -104,8 +105,9 @@ export interface AgentRow {
 
 /** The fields agentRows reads (subsets of the snapshot and chat statuses). */
 export interface AgentInputs {
+  executions?: SnapExecution[] | null
   agents: Record<string, { state: string; since: number }>
-  workstreams: { title: string; manager_role: string; project: string; bead_id: string }[]
+  workstreams: { title: string; manager_role: string; project: string; bead_id: string; project_id?: number; steps?: SnapStep[] }[]
   operators: { role: string; label: string; task?: string; wsTitle: string; wsKey: string; state: string }[]
   // watched is each running Operator process by its Manager (snapshot.watch), the
   // only record of a tmux-hosted Operator being alive.
@@ -131,6 +133,18 @@ export function agentRows(x: AgentInputs): AgentRow[] {
   const stateOf = (role: string) => (x.chats[role]?.running ? x.chats[role].state : x.agents[role]?.state) ?? ''
   const live = (role: string) => !!x.chats[role]?.running
   const watched = new Set(x.watched.map((w) => w.role))
+  if (x.executions != null) {
+    const descendants = (steps: SnapStep[], id: string): SnapStep | undefined => {
+      for (const st of steps) { if (st.bead_id === id) return st; const found = descendants(st.children ?? [], id); if (found) return found }
+    }
+    return x.executions.map((run): AgentRow => {
+      const op = x.operators.find((o) => o.role.replaceAll('.', '-') === run.role.replaceAll('.', '-'))
+      const ws = x.workstreams.find((w) => (w.project_id == null || w.project_id === run.project_id) && (w.bead_id === run.bead_id || descendants(w.steps ?? [], run.bead_id))) ?? x.workstreams.find((w) => `${w.project}:${w.bead_id}` === op?.wsKey)
+      const step = ws && descendants(ws.steps ?? [], run.bead_id)
+      const kind = run.role === 'commander' ? 'commander' : run.role.startsWith('manager-') ? 'manager' : 'operator'
+      return { role: run.role, name: kind === 'commander' ? 'Commander' : step?.title ?? op?.task ?? ws?.title ?? run.role, kind, workstream: ws?.title ?? '', wsKey: ws ? `${ws.project}:${ws.bead_id}` : undefined, provider: providerOf(run.role), state: run.state, since: x.agents[run.role]?.since }
+    })
+  }
   const rows: AgentRow[] = []
   if (live('commander')) rows.push({ role: 'commander', name: 'Commander', kind: 'commander', workstream: '', provider: providerOf('commander'), state: stateOf('commander'), since: x.agents.commander?.since })
   for (const w of x.workstreams) {

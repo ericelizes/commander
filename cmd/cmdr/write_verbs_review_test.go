@@ -148,7 +148,7 @@ func TestInternalCreateDepsBlocksGateRefused(t *testing.T) {
 	m := reviewMock(t)
 	m.CreateID = "x-9"
 	code, out := runVerb(t, func(o, e *os.File) int {
-		return runInternalCreateObjective([]string{"--project", "manifest", "--title", "work", "--parent", "x-1", "--deps", "blocks:x-gate"}, o, e)
+		return runInternalCreateObjective([]string{"--project", "manifest", "--title", "work", "--parent", "x-1", "--waiting", "review:rev", "--deps", "blocks:x-gate"}, o, e)
 	})
 	if code == 0 || !strings.Contains(out, "gate") {
 		t.Errorf("blocks:<gate> accepted: %d %s", code, out)

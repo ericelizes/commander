@@ -1,0 +1,20 @@
+{
+  "now": 1793000000,
+  "snapshot": {
+    "version": 1,
+    "generated_at": "2026-10-26T12:00:00Z",
+    "projects": [{"id": 1, "name": "lab", "type": "repo", "path": "/tmp/lab", "status": "active"}],
+    "fleet": {"cost_usd_24h": 0, "cost_usd_7d": 0, "cost_series_24h": [], "agents": 0, "active": 0, "blocked": 0, "idle_ratio": 0, "projects": 1, "chat_cost_usd_24h": 0, "roles_cost": []},
+    "agents": {"manager-lab-cy": {"state": "idle", "since": 1792990000}},
+    "unread": {},
+    "needs_you": [],
+    "workstreams": [
+      {"n": 1, "project": "lab", "project_id": 1, "bead_id": "lab-cy", "title": "Card lane sample", "state": "in-progress", "status": "in_progress", "manager_role": "manager-lab-cy", "done": 0, "total": 2,
+       "steps": [
+        {"bead_id": "lab-cy.1", "title": "Prepare the change", "state": "in-progress", "status": "in_progress", "owner": "manager-lab-cy", "waiting": "review (reviewer-a)", "viz": 3},
+        {"bead_id": "lab-cy.2", "title": "Change approved by the platform lead", "state": "not-started", "status": "open", "gate": true, "approvers": ["lead-a"], "criteria": "The platform lead approves.", "blocked_by": ["lab-cy.1"], "viz": 1,
+         "ask": "Relay the platform lead's approval?", "decision": {"question": "Did the platform lead approve?", "options": [{"label": "Yes"}, {"label": "No"}]}}
+       ]}
+    ]
+  }
+}

@@ -1,0 +1,5 @@
+#1 Card lane sample
+Card lane sample (lab-cy)
+▶ [Reviewers, reviewer-a] Prepare the change: Waiting for review (lab-cy.1)
+  [You] [gate, lead-a] Change approved by the platform lead: Not reached (lab-cy.2) after lab-cy.1
+      passes when: The platform lead approves.

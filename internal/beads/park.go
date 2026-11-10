@@ -153,7 +153,7 @@ var unparkStatuses = map[string]bool{"open": true, "in_progress": true, "blocked
 // Unpark restores the status the bead had before Park and drops the parking
 // labels. A bead that is not deferred is left alone (idempotent). It reports
 // whether it changed anything.
-func Unpark(ctx context.Context, c Client, dir, id, who string) (bool, error) {
+func Unpark(ctx context.Context, c Client, dir, id, who string, hold ...string) (bool, error) {
 	b, err := c.Show(ctx, dir, id)
 	if err != nil {
 		return false, err
@@ -172,20 +172,16 @@ func Unpark(ctx context.Context, c Client, dir, id, who string) (bool, error) {
 			status = normalizeStatus(v)
 		}
 	}
-	// One update carries the status and every label removal, so a failure
-	// cannot leave stale parking labels on an open bead.
-	w := NewStateWrite(c)
-	if err := w.SetStatus(ctx, dir, id, status); err != nil {
-		return false, err
-	}
+	// One update (one `update` call, UpdateFields) carries the status, the next holder (hold:
+	// cmdrd's Manager dispatch wait, the user's Manager to start receipt) and every parking label's
+	// removal, so no read sees the bead open with neither and a failure leaves nothing half done (m3).
+	f := Fields{Status: &status, AddLabels: hold}
 	for _, l := range b.Labels {
 		if l == ParkedLabel || strings.HasPrefix(l, ParkedFromPrefix) || strings.HasPrefix(l, ParkedUntilPrefix) || strings.HasPrefix(l, ParkedNotifiedPrefix) {
-			if err := w.SetLabel(ctx, dir, id, l, false); err != nil {
-				return false, err
-			}
+			f.RemoveLabels = append(f.RemoveLabels, l)
 		}
 	}
-	if err := w.Flush(ctx); err != nil {
+	if err := c.UpdateFields(ctx, dir, id, f); err != nil {
 		return false, err
 	}
 	return true, c.AddComment(ctx, dir, id, "unparked by "+who)

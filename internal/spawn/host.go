@@ -17,6 +17,7 @@ import (
 	"github.com/example-user/commander/internal/beads"
 	"github.com/example-user/commander/internal/chat"
 	"github.com/example-user/commander/internal/claudeacct"
+	"github.com/example-user/commander/internal/diskguard"
 	"github.com/example-user/commander/internal/mailstate"
 	"github.com/example-user/commander/internal/store"
 	promptassets "github.com/example-user/commander/prompts"
@@ -125,11 +126,18 @@ func (s *Spawner) spawnCodeHost(ctx context.Context, req SpawnRequest) (*SpawnRe
 	if prev != "" {
 		claimed = prev
 	}
+	beforeTakeoverClaim(prev)
 	release, err := claimWorktree(ctx, claimed)
 	if err != nil {
 		return bail(fmt.Errorf("spawn: %w", err))
 	}
 	defer release()
+	// The worktree was picked before the claim: cmdrd's finished-run sweep may
+	// have removed it (under this same claim) meanwhile, so look again now
+	// that nothing else can.
+	if err := recheckBranchWorktree(ctx, req.repoRoot(), req.Branch, prev); err != nil {
+		return bail(fmt.Errorf("spawn: %w", err))
+	}
 	if prev != "" && prev != worktreePath {
 		if sessionLive(ctx, hostSessionName(req.ProjectName, filepath.Base(prev))) {
 			return bail(fmt.Errorf("spawn: branch %s is checked out at %s by an Operator that is still running: wait for it to finish, or spawn on a new branch", req.Branch, prev))
@@ -197,12 +205,38 @@ func (s *Spawner) spawnCodeHost(ctx context.Context, req SpawnRequest) (*SpawnRe
 	// Not exec'd: when the Operator exits the launcher ends its own session, so a
 	// finished Operator never lingers as a session that looks alive. It first
 	// leaves an exit marker, so the reaper can tell a finish from a kill.
-	script := "#!/bin/sh\nunset TMUX TMUX_PANE\n" + hostOperatorCommand(req, agentName, sessionID, resuming) + "\n" +
-		"st=$?\nmkdir -p " + shellQuote(ExitMarkerDir()) + " && echo $st > " + shellQuote(ExitMarker(sessionName)) + "\n" +
+	// Its scratch goes to its own TMPDIR, removed as it ends (cmdrd sweeps what
+	// a run that never got here leaves).
+	script := "#!/bin/sh\nunset TMUX TMUX_PANE\n" + runTmpSetup(sessionName) + hostOperatorCommand(req, agentName, sessionID, resuming) + "\n" +
+		"st=$?\n" + runTmpCleanup() + "mkdir -p " + shellQuote(ExitMarkerDir()) + " && echo $st > " + shellQuote(ExitMarker(sessionName)) + "\n" +
 		hostSessionCleanup(sessionName) + "\n"
 	if err := os.WriteFile(launcher, []byte(script), 0o700); err != nil {
 		return bail(fmt.Errorf("spawn: write launcher %s: %w", launcher, err))
 	}
+	spawnTime := s.now()
+	runID, err := s.store.InsertAgentRun(ctx, store.AgentRun{
+		ProjectID:         req.ProjectID,
+		TaskBeadID:        req.TaskBeadID,
+		AgentName:         agentName,
+		OpencodeSessionID: sessionID,
+		TmuxPaneID:        sql.NullString{String: sessionName, Valid: true},
+		SpawnTime:         spawnTime.Unix(),
+		Status:            "running",
+		WorktreePath:      sql.NullString{String: worktreePath, Valid: true},
+	})
+	if err != nil {
+		return bail(fmt.Errorf("spawn: insert agent_runs: %w", err))
+	}
+	cleanups.push(func() error {
+		c, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		return s.store.MarkClosed(c, runID, "spawn-failed")
+	})
+	script = strings.Replace(script, "#!/bin/sh\n", "#!/bin/sh\nexport COMMANDER_RUN_ID="+fmt.Sprint(runID)+"\n", 1)
+	if err := os.WriteFile(launcher, []byte(script), 0700); err != nil {
+		return bail(err)
+	}
+
 	if !req.Resume {
 		s.markRunStart(agentName)
 	}
@@ -226,20 +260,6 @@ func (s *Spawner) spawnCodeHost(ctx context.Context, req SpawnRequest) (*SpawnRe
 
 	// TmuxPaneID carries the session name; ContainerID stays NULL. That is how
 	// the watchdog and the reaper tell a host Operator from a Docker one.
-	spawnTime := s.now()
-	runID, err := s.store.InsertAgentRun(ctx, store.AgentRun{
-		ProjectID:         req.ProjectID,
-		TaskBeadID:        req.TaskBeadID,
-		AgentName:         agentName,
-		OpencodeSessionID: sessionID,
-		TmuxPaneID:        sql.NullString{String: sessionName, Valid: true},
-		SpawnTime:         spawnTime.Unix(),
-		Status:            "running",
-		WorktreePath:      sql.NullString{String: worktreePath, Valid: true},
-	})
-	if err != nil {
-		return bail(fmt.Errorf("spawn: insert agent_runs: %w", err))
-	}
 	s.recordRuntime(ctx, req, agentName, spawnTime.Unix())
 
 	return &SpawnResult{
@@ -322,10 +342,33 @@ func (s *Spawner) spawnKnowledgeHost(ctx context.Context, req SpawnRequest) (*Sp
 		}
 	}
 	launcher := filepath.Join(operatorsDir, agentName+".sh")
-	script := "#!/bin/sh\nunset TMUX TMUX_PANE\nexec " + hostOperatorCommand(req, agentName, sessionID, resuming) + "\n"
+	script := "#!/bin/sh\nunset TMUX TMUX_PANE\n" + runTmpSetup(sessionName) + "exec " + hostOperatorCommand(req, agentName, sessionID, resuming) + "\n"
 	if err := os.WriteFile(launcher, []byte(script), 0o700); err != nil {
 		return bail(fmt.Errorf("spawn: write launcher %s: %w", launcher, err))
 	}
+	spawnTime := s.now()
+	runID, err := s.store.InsertAgentRun(ctx, store.AgentRun{
+		ProjectID:         req.ProjectID,
+		TaskBeadID:        req.TaskBeadID,
+		AgentName:         agentName,
+		OpencodeSessionID: sessionID,
+		TmuxPaneID:        sql.NullString{String: sessionName, Valid: true},
+		SpawnTime:         spawnTime.Unix(),
+		Status:            "running",
+	})
+	if err != nil {
+		return bail(fmt.Errorf("spawn: insert agent_runs: %w", err))
+	}
+	cleanups.push(func() error {
+		c, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		return s.store.MarkClosed(c, runID, "spawn-failed")
+	})
+	script = strings.Replace(script, "#!/bin/sh\n", "#!/bin/sh\nexport COMMANDER_RUN_ID="+fmt.Sprint(runID)+"\n", 1)
+	if err := os.WriteFile(launcher, []byte(script), 0700); err != nil {
+		return bail(err)
+	}
+
 	if !req.Resume {
 		s.markRunStart(agentName)
 	}
@@ -347,19 +390,6 @@ func (s *Spawner) spawnKnowledgeHost(ctx context.Context, req SpawnRequest) (*Sp
 		return bail(fmt.Errorf("spawn: bd set-state %s: %w", req.TaskBeadID, err))
 	}
 
-	spawnTime := s.now()
-	runID, err := s.store.InsertAgentRun(ctx, store.AgentRun{
-		ProjectID:         req.ProjectID,
-		TaskBeadID:        req.TaskBeadID,
-		AgentName:         agentName,
-		OpencodeSessionID: sessionID,
-		TmuxPaneID:        sql.NullString{String: sessionName, Valid: true},
-		SpawnTime:         spawnTime.Unix(),
-		Status:            "running",
-	})
-	if err != nil {
-		return bail(fmt.Errorf("spawn: insert agent_runs: %w", err))
-	}
 	s.recordRuntime(ctx, req, agentName, spawnTime.Unix())
 
 	// WorktreePath stays empty: the Operator works in the project path.
@@ -380,6 +410,19 @@ func createPaneOutput(path string) error {
 		return err
 	}
 	return f.Close()
+}
+
+// runTmpSetup gives the run its own TMPDIR under diskguard.TmpRoot, so its
+// scratch (go build/test temp dirs, tool downloads) never piles up in /tmp.
+func runTmpSetup(sessionName string) string {
+	dir := diskguard.RunTmpDir(agentrt.CommanderHome(), sessionName)
+	return "TMPDIR=" + shellQuote(dir) + "\nexport TMPDIR\nmkdir -p \"$TMPDIR\"\n"
+}
+
+// runTmpCleanup removes the run's TMPDIR (made writable first: Go leaves
+// read-only trees) once the agent has exited.
+func runTmpCleanup() string {
+	return "chmod -R u+w \"$TMPDIR\" 2>/dev/null; rm -rf \"$TMPDIR\"\n"
 }
 
 // The launcher has no TMUX; pin cleanup to the socket selected at spawn time.
@@ -417,7 +460,10 @@ func hostOperatorCommand(req SpawnRequest, agentName, sessionID string, resuming
 	// slot. -trimpath: Go keys its build and test caches on source paths, so
 	// without it every new worktree recompiled and re-ran everything (measured:
 	// 0 of 34 packages cached in a second fresh worktree, 31 of 34 with it).
-	parts := []string{"env", "-u", "TMUX", "-u", "TMUX_PANE", "-u", "ANTHROPIC_API_KEY", "-u", "CLAUDE_CONFIG_DIR", "GOFLAGS='-trimpath -p=2'", "COMMANDER_ROLE=" + shellQuote(agentName)}
+	parts := []string{"env", "-u", "TMUX", "-u", "TMUX_PANE", "-u", "ANTHROPIC_API_KEY", "-u", "CLAUDE_CONFIG_DIR", "GOFLAGS='-trimpath -p=2'", "COMMANDER_ROLE=" + shellQuote(agentName), "COMMANDER_RUN_SESSION=" + shellQuote(sessionID)}
+	for _, kv := range OperatorGitEnv(agentName) {
+		parts = append(parts, shellQuote(kv))
+	}
 	if role := req.managerRole; role != "" {
 		parts = append(parts, "COMMANDER_MANAGER_ROLE="+shellQuote(role))
 	}
@@ -461,6 +507,9 @@ func readSessionFile(path string) string {
 // a worktree's .beads is a stale copy, so point --db at
 // the project root's database.
 func BrCommand(projectRoot string) string {
+	if beads.PostgresConfigured() {
+		return "cmdr bead --project-dir " + shellQuote(projectRoot)
+	}
 	return "bd --db " + shellQuote(filepath.Join(projectRoot, ".beads", "beads.db"))
 }
 
@@ -527,6 +576,33 @@ func branchWorktree(ctx context.Context, repo, branch string) string {
 		}
 	}
 	return ""
+}
+
+// beforeTakeoverClaim runs between picking the branch's worktree and waiting
+// for its claim; tests use it to interleave a sweep there.
+var beforeTakeoverClaim = func(prev string) {}
+
+// recheckBranchWorktree reads, under the claim, where branch is checked out
+// and refuses unless it is still prev (and prev still exists): a sweep that
+// removed prev, or a checkout made elsewhere meanwhile, leaves nothing safe to
+// take over or add.
+func recheckBranchWorktree(ctx context.Context, repo, branch, prev string) error {
+	now := branchWorktree(ctx, repo, branch)
+	if prev == "" {
+		if now != "" {
+			return fmt.Errorf("branch %s was checked out at %s while this spawn waited for its worktree claim: retry", branch, now)
+		}
+		return nil
+	}
+	if now == "" || resolvedPath(now) != resolvedPath(prev) {
+		return fmt.Errorf("worktree %s of branch %s was removed (or the branch moved) while this spawn waited for its claim, likely by cmdrd's finished-run sweep: nothing was started, retry the spawn", prev, branch)
+	}
+	if info, err := os.Stat(prev); err != nil {
+		return fmt.Errorf("worktree %s of branch %s is gone (%v) while git still lists it: nothing was started, retry the spawn", prev, branch, err)
+	} else if !info.IsDir() {
+		return fmt.Errorf("worktree %s of branch %s is no longer a directory: nothing was started, retry the spawn", prev, branch)
+	}
+	return nil
 }
 
 // sessionLive reports whether a tmux session with this name exists.

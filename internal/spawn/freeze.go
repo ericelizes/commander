@@ -105,6 +105,13 @@ func claimWorktree(ctx context.Context, dir string) (func(), error) {
 	}
 }
 
+// TryClaimWorktree takes dir's claim if it is free (held false: a spawn or a
+// freeze has it). cmdrd's finished-run sweep holds it while it removes a
+// worktree, so a --branch takeover cannot start there meanwhile.
+func TryClaimWorktree(dir string) (release func(), held bool, err error) {
+	return tryClaimWorktree(dir)
+}
+
 // tryClaimWorktree takes dir's claim if it is free. Paths are real paths, as
 // .worktrees may link to .worktrees.noindex.
 func tryClaimWorktree(dir string) (release func(), held bool, err error) {

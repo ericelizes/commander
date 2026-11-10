@@ -42,12 +42,12 @@ func TestSpawnUsageScenario(t *testing.T) {
 			user, home := t.TempDir(), t.TempDir()
 			for _, d := range []string{filepath.Join(user, ".claude")} {
 				os.MkdirAll(d, 0o700)
-				os.WriteFile(filepath.Join(d, ".credentials.json"), []byte("{}"), 0o600)
+				os.WriteFile(filepath.Join(d, ".credentials.json"), []byte(`{"claudeAiOauth":{"accessToken":"test-token"}}`), 0o600)
 			}
 			for _, a := range scenario.Accounts {
 				d := filepath.Join(home, "claude-accounts", a)
 				os.MkdirAll(d, 0o700)
-				os.WriteFile(filepath.Join(d, ".credentials.json"), []byte("{}"), 0o600)
+				os.WriteFile(filepath.Join(d, ".credentials.json"), []byte(`{"claudeAiOauth":{"accessToken":"test-token"}}`), 0o600)
 			}
 			usage, _ := json.Marshal(scenario.Usage)
 			os.MkdirAll(filepath.Join(home, "chat"), 0o700)

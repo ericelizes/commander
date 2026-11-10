@@ -1,0 +1,12 @@
+{
+  "description": "Every way an Operator's run ends leaves its bead with a named holder, at every write of the settle and after a failure at any write (invariant I6, make before break). Private to cmdrd (runSettler), so it runs in internal/daemon:TestSettleDiedHeldScenario over an in-memory beads graph; the eval harness has no beads-graph backend.",
+  "bead": {"id": "p-ws.2.1", "status": "in_progress", "labels": ["kind:task", "owner:operator-x"]},
+  "cases": [
+    {"name": "exited with a report", "outcome": "exited", "report": true, "want_wait": "Manager to close", "want_owner": "manager-p-ws", "want_status": "in_progress"},
+    {"name": "exited with no report", "outcome": "exited", "report": false, "want_wait": "Manager to recover", "want_owner": "manager-p-ws", "want_status": "open"},
+    {"name": "died, not restarted", "outcome": "died", "want_wait": "Manager to recover", "want_owner": "manager-p-ws", "want_status": "open"},
+    {"name": "died in a restart, respawned", "outcome": "died", "restart": true, "spawn": true, "want_owner": "operator-op-x", "want_status": "in_progress"},
+    {"name": "died in a restart, respawn failed", "outcome": "died", "restart": true, "spawn_fails": true, "want_wait": "Manager to recover", "want_owner": "manager-p-ws", "want_status": "open"},
+    {"name": "stopped on request", "outcome": "stopped", "want_wait": "Manager to recover", "want_owner": "manager-p-ws", "want_status": "open"}
+  ]
+}

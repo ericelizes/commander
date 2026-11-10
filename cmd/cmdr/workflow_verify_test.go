@@ -214,6 +214,7 @@ func TestWorkflowCompleteBlockAndNewHeadInvalidation(t *testing.T) {
 func TestWorkflowClosedStepsRenewThroughTheCloseDoor(t *testing.T) {
 	ctx := context.Background()
 	mem := setupGateProject(t)
+	allowUnheld(t, "the fixture's later steps hold nothing; the renewal is under test") // the user's closes leave the next step to the Manager
 	pinOwnerRuns(t, true, true)
 	mem.Seed(beads.Bead{ID: "B", Status: "open"})
 	mem.Seed(beads.Bead{ID: "M", ParentID: "B", Title: "PR merged", Labels: []string{"gate", "kind:objective", "approver:user"}})
@@ -716,6 +717,7 @@ func plugBeforeM(t *testing.T, mem *beads.MemClient) *workflowPlugResult {
 // F1: the edge from a target to its own review block is the guard.
 func TestInternalDepRmRefusesTheTargetsReviewBlock(t *testing.T) {
 	mem := setupGateProject(t)
+	allowUnheld(t, "the fixture's waiters hold nothing else; the review-block refusal is under test")
 	res := plugBeforeM(t, mem)
 	mem.Seed(beads.Bead{ID: "other", ParentID: "B", Status: "open"})
 	mem.Seed(beads.Bead{ID: "after", ParentID: "B", Status: "open"})

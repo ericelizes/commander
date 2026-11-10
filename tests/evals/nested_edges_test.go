@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -39,6 +40,9 @@ func TestNestedEdgesScenario(t *testing.T) {
 			Argv   []string
 			Exit   int
 			Writes []string
+			// Receipt: the user's write put the Manager's "Manager to start" receipt on the waiter
+			// before the edge went (the user is never refused, il9.204.3.2).
+			Receipt string
 			Stderr string
 		}
 	}
@@ -112,6 +116,8 @@ show)
   fi ;;
 dep) case "$2" in list) printf '[]\n' ;; esac ;;
 list) printf '[]\n' ;;
+comments) case "$2" in add) ;; *) printf '[]\n' ;; esac ;;
+update) ;;
 *) echo "unexpected: $*" >&2; exit 2 ;;
 esac
 `)
@@ -145,6 +151,15 @@ esac
 			for _, line := range strings.Split(string(log), "\n") {
 				if strings.HasPrefix(line, "dep add") || strings.HasPrefix(line, "dep remove") {
 					writes = append(writes, line)
+				}
+			}
+			if c.Exit == 0 && slices.Contains(c.Argv, "--leave-unheld") && !strings.Contains(string(log), "comments add") {
+				t.Fatalf("--leave-unheld was not recorded on the bead:\n%s", log)
+			}
+			if c.Receipt != "" {
+				at, rm := strings.Index(string(log), "update "+c.Receipt+" --add-label"), strings.Index(string(log), "dep remove")
+				if at < 0 || !strings.Contains(string(log), "Manager_20to_20start") || rm < at {
+					t.Fatalf("no Manager receipt on %s before the edge went:\n%s", c.Receipt, log)
 				}
 			}
 			if strings.Join(writes, "|") != strings.Join(c.Writes, "|") {

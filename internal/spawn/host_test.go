@@ -13,9 +13,11 @@ import (
 	"time"
 
 	"github.com/example-user/commander/internal/agentmail"
+	"github.com/example-user/commander/internal/agentrt"
 	"github.com/example-user/commander/internal/beads"
 	"github.com/example-user/commander/internal/chat"
 	"github.com/example-user/commander/internal/claudeacct"
+	"github.com/example-user/commander/internal/diskguard"
 	"github.com/example-user/commander/internal/docker"
 	"github.com/example-user/commander/internal/mailstate"
 	"github.com/example-user/commander/internal/tmuxctl"
@@ -39,6 +41,35 @@ func TestHostOperatorCommandStripsTmuxEnvironment(t *testing.T) {
 	for _, line := range strings.Split(string(out), "\n") {
 		if strings.HasPrefix(line, "TMUX=") || strings.HasPrefix(line, "TMUX_PANE=") {
 			t.Fatalf("agent inherited %s", line)
+		}
+	}
+}
+
+// Every Operator commits under its own committer identity, on both runtimes,
+// overriding one it inherited: that header is how its commits are attributed.
+func TestHostOperatorCommandSetsTheRunsGitCommitter(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("COMMANDER_HOME", dir)
+	t.Setenv("GIT_COMMITTER_EMAIL", "user@example.com")
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	for _, bin := range []string{"claude", "cmdr"} {
+		if err := os.WriteFile(filepath.Join(dir, bin), []byte("#!/bin/sh\nexec env\n"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, rt := range []string{"", "codex"} {
+		out, err := exec.Command("sh", "-c", hostOperatorCommand(SpawnRequest{Runtime: rt}, "operator-op-X-t1.2", hostSessionID, false)).Output()
+		if err != nil {
+			t.Fatal(rt, err)
+		}
+		env := "\n" + string(out)
+		for _, want := range []string{"\nGIT_COMMITTER_EMAIL=operator-op-x-t1.2@operator.commander.invalid\n", "\nGIT_COMMITTER_NAME=operator-op-X-t1.2\n"} {
+			if !strings.Contains(env, want) {
+				t.Errorf("runtime %q: env lacks %q", rt, strings.TrimSpace(want))
+			}
+		}
+		if strings.Contains(env, "\nGIT_AUTHOR_") {
+			t.Errorf("runtime %q: the author is the user's, not set", rt)
 		}
 	}
 }
@@ -112,7 +143,8 @@ func TestSpawnCodeHost_HappyPath(t *testing.T) {
 		t.Fatalf("tmux calls: %v", tx.Calls)
 	}
 	cmd := launcherCmd(t, dir)
-	if !strings.HasPrefix(cmd, "#!/bin/sh\nunset TMUX TMUX_PANE\nenv -u TMUX -u TMUX_PANE -u ANTHROPIC_API_KEY -u CLAUDE_CONFIG_DIR GOFLAGS='-trimpath -p=2' COMMANDER_ROLE='operator-feat-auth' COMMANDER_MANAGER_ROLE='manager-bd-100' 'claude' '-p'") ||
+	runTmp := diskguard.RunTmpDir(agentrt.CommanderHome(), "cmdr-myproj-feat-auth")
+	if !strings.HasPrefix(cmd, "#!/bin/sh\nexport COMMANDER_RUN_ID=1\nunset TMUX TMUX_PANE\nTMPDIR='"+runTmp+"'\nexport TMPDIR\nmkdir -p \"$TMPDIR\"\nenv -u TMUX -u TMUX_PANE -u ANTHROPIC_API_KEY -u CLAUDE_CONFIG_DIR GOFLAGS='-trimpath -p=2' COMMANDER_ROLE='operator-feat-auth' COMMANDER_RUN_SESSION='"+res.SessionID+"' 'GIT_COMMITTER_NAME=operator-feat-auth' 'GIT_COMMITTER_EMAIL=operator-feat-auth@operator.commander.invalid' COMMANDER_MANAGER_ROLE='manager-bd-100' 'claude' '-p'") ||
 		!strings.Contains(cmd, "'--session-id' '"+res.SessionID+"'") { // minted up front, not captured
 		t.Fatalf("launcher: %s", cmd)
 	}
@@ -206,9 +238,10 @@ func TestSpawnCodeHost_RollbackKillsSessionAndRemovesWorktree(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, ".commander", "operators", "feat-auth.fifo")); err == nil {
 		t.Error("fifo should be removed")
 	}
-	// The only bead call before launch is the read that names the Manager.
-	if len(fs.runs) != 0 || len(bd.Calls) != 1 || !strings.HasPrefix(bd.Calls[0], "Details:") || len(am.Calls) != 0 {
-		t.Errorf("no bookkeeping before launch: %v %v %v", fs.runs, bd.Calls, am.Calls)
+	// Dispatch records its claim before launch; a failed launch closes that claim.
+	// No task mutation or mail registration occurs before launch.
+	if len(fs.runs) != 1 || fs.closed[fs.runs[0].ID] != "spawn-failed" || len(bd.Calls) != 1 || !strings.HasPrefix(bd.Calls[0], "Details:") || len(am.Calls) != 0 {
+		t.Errorf("pre-launch claim must be closed on failed launch: %v %v %v", fs.runs, bd.Calls, am.Calls)
 	}
 }
 
@@ -572,5 +605,38 @@ func TestSpawnCodeHost_MarksTheRunStartForItsMailHook(t *testing.T) {
 	old := agentmail.Mail{ID: "1", Subject: "earlier", SentAt: sp.now().Add(-time.Hour)}
 	if n := mailstate.HiddenByAge("operator-feat-auth", []agentmail.Mail{old}); n != 1 {
 		t.Fatalf("hidden = %d: the spawn left no run start", n)
+	}
+}
+
+// No spawn starts on a nearly full disk: refused before any worktree, session
+// or bead write, naming the disk.
+func TestSpawnRefusedOnAFullDisk(t *testing.T) {
+	dir := makeGitRepo(t)
+	sp, fs, _, _, _, tx := newHostSpawner(t, dir)
+	orig := diskguard.Stat
+	t.Cleanup(func() { diskguard.Stat = orig })
+	diskguard.Stat = func(p string) (diskguard.Usage, error) {
+		return diskguard.Usage{Path: p, Mount: "/data", Dev: 7, UsedPct: 96, Free: 2 << 30}, nil
+	}
+	req := goodRequest(t, dir)
+	_, err := sp.Spawn(context.Background(), req)
+	var refused *diskguard.RefuseError
+	if !errors.As(err, &refused) || !strings.Contains(err.Error(), "disk /data is 96% full") {
+		t.Fatalf("Spawn on a 96%% disk: %v, want a refusal naming the disk", err)
+	}
+	if len(tx.Calls) != 0 || len(fs.runs) != 0 {
+		t.Fatalf("a refused spawn touched tmux %v / runs %v", tx.Calls, fs.runs)
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".worktrees", req.slug())); !os.IsNotExist(err) {
+		t.Fatalf("a refused spawn made a worktree: %v", err)
+	}
+	if err := CheckDisk(req); err == nil {
+		t.Fatal("CheckDisk passed a 96% disk")
+	}
+	diskguard.Stat = func(p string) (diskguard.Usage, error) {
+		return diskguard.Usage{Path: p, Mount: "/data", Dev: 7, UsedPct: 94}, nil
+	}
+	if err := CheckDisk(req); err != nil {
+		t.Fatalf("CheckDisk refused a 94%% disk: %v", err)
 	}
 }

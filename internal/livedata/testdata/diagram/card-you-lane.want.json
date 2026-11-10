@@ -1,0 +1,32 @@
+{
+ "lab:lab-cy": {
+  "id": "lab-cy",
+  "title": "Card lane sample",
+  "current": "lab-cy.1",
+  "steps": [
+   {
+    "id": "lab-cy.1",
+    "title": "Prepare the change",
+    "kind": "waiting",
+    "text": "Waiting for review",
+    "lane": "elsewhere",
+    "actor": "reviewers",
+    "who": "reviewer-a"
+   },
+   {
+    "id": "lab-cy.2",
+    "title": "Change approved by the platform lead",
+    "kind": "idle",
+    "text": "Not reached",
+    "lane": "you",
+    "actor": "you",
+    "gate": true,
+    "approvers": "lead-a",
+    "criteria": "The platform lead approves.",
+    "after": [
+     "lab-cy.1"
+    ]
+   }
+  ]
+ }
+}

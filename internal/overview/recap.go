@@ -33,6 +33,9 @@ type Input struct {
 type Sentence struct {
 	Text    string   `json:"text"`
 	Sources []string `json:"sources"`
+	// Partial marks a draft sentence still being written: its text so far, no
+	// sources yet. Only drafts carry it.
+	Partial bool `json:"partial,omitempty"`
 }
 type Claim struct {
 	Sentences []Sentence `json:"sentences"`

@@ -90,6 +90,7 @@ never "about86seconds:2 clean"), and a blank line after a table. The card:
   describe (another team does it) gets `--lane elsewhere:<who>`. Every gate
   has `--criteria` (what counts as passed, one sentence; create it with `cmdr internal-create-objective --gate ... --criteria "<one sentence>"`, the verb that takes `--criteria`; a gate without criteria is replaced that way, and `cmdr internal-gate add` is only the older named-gate interface with no `--criteria`, never a way to edit an unanswered user card). Before you ask the user, run `cmdr graph
   check <workstream>`: it lists what reads wrong, each with its fix.
+- **Every write names who holds the work next:** a running Operator, a typed wait, a user card, an open blocker or child, or a park. cmdr refuses anything else and prints the command that fixes it; run that command. A Manager's name is not a holder (it says who is accountable): `--owner manager-...` is written with a Manager dispatch wait, and a new workstream is born waiting on you to plan. Name a new step's holder in the same `internal-create-objective` (`--waiting`, `--deps blocked-by:<id>` or `--owner <running operator>`); one that names none is born with your `Manager to start` receipt, and so is a step your own close releases: start it (spawn, wait or card) within the hour.
 - **State is always true.** A row that reads wrong (Stalled, State missing, a
   Needs you that is done, a wrong Waiting for) is yours to fix now, before your
   next report; never report a wrong state and wait for it to correct itself.

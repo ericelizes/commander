@@ -44,6 +44,10 @@ type Options struct {
 	Resolver Resolver // role -> Spec
 	States   StateSink
 	Costs    CostSink // optional: per-turn cost of each role
+	// OnUsageMove, when set, is told of every move a usage limit made (role, text).
+	OnUsageMove func(role, text string)
+	// CodexHooksReady gates a Manager's move onto Codex; default CodexHooksReady.
+	CodexHooksReady func() bool
 	// Usage keeps the latest plan usage per account; default OpenUsage(Home).
 	Usage *UsageStore
 	// Procs finds processes that reference a session id; default PSScanner.
@@ -384,8 +388,22 @@ func (e *Engine) start(ctx context.Context, role string, o StartOptions) (st Sta
 	}
 	// A Manager a share drew onto Codex goes back to Claude at a new process
 	// only: an adopted host above keeps running as it is, and a host findHost
-	// could not reach holds the lock, so it never gets this far.
-	if dropDrawnCodex(e.opts.Home, role) {
+	// could not reach holds the lock, so it never gets this far. For a
+	// Manager the steer below makes that call (only when Claude has usage), so
+	// an outage never flips it to Claude and back, losing its Codex thread.
+	resolve := !isManagedChatRole(role) && dropDrawnCodex(e.opts.Home, role)
+	// Every Manager start lands on a runtime and account with usage left.
+	moved := ""
+	if isManagedChatRole(role) {
+		var changed bool
+		if moved, changed, err = e.steerManager(role, e.NeverStarted(role)); err != nil {
+			lock.release()
+			e.releaseSession(spec.SessionID)
+			return Status{}, false, err
+		}
+		resolve = resolve || changed
+	}
+	if resolve {
 		again, err := e.opts.Resolver.Resolve(ctx, role)
 		if err != nil {
 			lock.release()
@@ -402,6 +420,9 @@ func (e *Engine) start(ctx context.Context, role string, o StartOptions) (st Sta
 		lock.release()
 		e.releaseSession(spec.SessionID)
 		return Status{}, false, err
+	}
+	if moved != "" {
+		e.startMoved(c, moved)
 	}
 	st, err = e.Status(role)
 	return st, true, err
@@ -1767,6 +1788,18 @@ func (s *Subscription) Close() {
 // in-memory ring, which also has the live-only deltas) and a feed of the
 // events that follow, with no gap or overlap between the two.
 func (e *Engine) Subscribe(role string, since uint64) ([]Event, *Subscription, error) {
+	return e.SubscribeBuffered(role, since, 4096)
+}
+
+// SubscribeBuffered lets internal observers bound their per-role memory. Slow
+// observers reconnect from their durable cursor just like UI subscribers.
+func (e *Engine) SubscribeBuffered(role string, since uint64, buffer int) ([]Event, *Subscription, error) {
+	if buffer < 16 {
+		buffer = 16
+	}
+	if buffer > 4096 {
+		buffer = 4096
+	}
 	c, err := e.chat(role)
 	if err != nil {
 		return nil, nil, err
@@ -1790,7 +1823,7 @@ func (e *Engine) Subscribe(role string, since uint64) ([]Event, *Subscription, e
 			replay = append(replay, ev)
 		}
 	}
-	ch := make(chan Event, 4096)
+	ch := make(chan Event, buffer)
 	s := &Subscription{C: ch, ch: ch, c: c}
 	c.subs[s] = struct{}{}
 	return replay, s, nil

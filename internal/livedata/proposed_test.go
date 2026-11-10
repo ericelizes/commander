@@ -3,6 +3,7 @@ package livedata
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/example-user/commander/internal/beads"
 )
@@ -118,5 +119,37 @@ func TestNoPitchWithoutProposalNeverReadsCommanderReviewing(t *testing.T) {
 	r := Rows(snap, nowSec)[0]
 	if strings.Contains(r.Line.Text, "Commander reviewing") {
 		t.Fatalf("row line %+v", r.Line)
+	}
+}
+
+// A recorded wait holds a step whether or not the step carries a proposed:
+// label (a review step or a long wait awaiting Commander): the holder check
+// never reads the proposal. A slug-labelled timer is the one wait that holds
+// nothing, proposed or not (TestInvariantFlagsAnUntypedWait).
+func TestProposedStepWithATimerWaitIsHeld(t *testing.T) {
+	until := time.Now().Add(6 * time.Hour)
+	waits := map[string][]beads.Wait{
+		"words":     {{Kind: beads.WaitUntil, Ref: "the quiet window opens", Until: until}},
+		"unlabeled": {{Kind: beads.WaitUntil, Until: until}},
+	}
+	for name, w := range waits {
+		for _, kind := range []string{beads.ProposedReview, beads.ProposedWait, ""} {
+			rows := []ObjectiveRow{
+				{BeadID: "p-1", Status: "open"},
+				{BeadID: "p-1.1", ParentBeadID: "p-1", Status: "open", Waits: w, Proposed: kind, ProposedAt: nowSec - 60},
+			}
+			if got := OpenBeadInvariant(rows, nil); len(got) != 0 {
+				t.Errorf("%s/%q: a proposed step with a timer wait flagged %v", name, kind, ids(got))
+			}
+		}
+	}
+	step := leaf("w.1", "", "", "")
+	step.Status, step.Waiting, step.WaitUntil = "open", "reconcile · soon", until.Unix()
+	snap := snapOf(SnapWorkstream{BeadID: "w", Steps: []SnapStep{step}}, idle)
+	snap.NoPitch = []NoPitch{{Project: "p", BeadID: "w.1", Title: "Re-review", Proposed: beads.ProposedReview, ProposedAt: nowSec - 60}}
+	for _, v := range SnapshotViolations(snap) {
+		if v.BeadID == "w.1" {
+			t.Errorf("snapshot reads a proposed step with a timer wait as unheld: %+v", v)
+		}
 	}
 }

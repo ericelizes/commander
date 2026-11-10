@@ -17,9 +17,10 @@ func TestShipDryRunScenario(t *testing.T) {
 		t.Fatal(err)
 	}
 	var sc struct {
-		Files    map[string]string            `json:"files"`
-		Branches map[string]map[string]string `json:"branches"`
-		Cases    []struct {
+		Files     map[string]string               `json:"files"`
+		Branches  map[string]map[string]string    `json:"branches"`
+		Histories map[string][]map[string]*string `json:"histories"`
+		Cases     []struct {
 			Name    string   `json:"name"`
 			Args    []string `json:"args"`
 			Needs   string   `json:"needs"`
@@ -44,6 +45,40 @@ func TestShipDryRunScenario(t *testing.T) {
 		}
 		env = append(env, name+"="+strings.TrimSpace(string(out)))
 	}
+	// A stand-in gitleaks: red when a commit in --log-opts adds the fake key,
+	// unless "fake-key" is listed in the --gitleaks-ignore-path file or in the
+	// --source tree's .gitleaksignore (real gitleaks reads both); a line with
+	// an inline gitleaks:allow passes unless --ignore-gitleaks-allow is given.
+	bin := filepath.Join(base, "bin")
+	if err := os.MkdirAll(bin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	fake := `#!/bin/sh
+src=. range= ignore=/dev/null allow=gitleaks:allow
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --ignore-gitleaks-allow) allow=no-inline-allow-is-honoured ;;
+    --source) src=$2; shift ;;
+    --log-opts) range=$2; shift ;;
+    --gitleaks-ignore-path) ignore=$2; shift ;;
+  esac
+  shift
+done
+echo '1:00AM INF scan completed in 1ms'
+patch=$(git -C "$src" log -p $range | grep -v "$allow")
+if ! printf '%s\n' "$patch" | grep -q AKIAFAKE; then
+  # A multiline stand-in only matches a complete added block in one patch.
+  printf '%s\n' "$patch" | awk '/^diff --git/ {start=0} /^\+BEGIN-INVENTED-KEY/ {start=1} /^\+END-INVENTED-KEY/ {if (start) found=1} END {exit !found}' || exit 0
+fi
+if grep -qx fake-key "$ignore" 2>/dev/null || grep -qx fake-key "$src/.gitleaksignore" 2>/dev/null; then exit 0; fi
+echo 'Finding: fake-key'
+echo '1:00AM WRN leaks found: 1'
+exit 1
+`
+	if err := os.WriteFile(filepath.Join(bin, "gitleaks"), []byte(fake), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	env = append(env, "PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	home := filepath.Join(base, "home")
 	env = append(env, "HOME="+base, "XDG_CACHE_HOME="+filepath.Join(base, "cache"), "COMMANDER_HOME="+home,
 		"COMMANDER_BUILD_SLOTS=1", "COMMANDER_SHIP_MAX_THREADS=0")
@@ -84,6 +119,23 @@ func TestShipDryRunScenario(t *testing.T) {
 	for branch, files := range sc.Branches {
 		git("checkout", "-b", branch, "main")
 		commit(files)
+	}
+	for branch, history := range sc.Histories {
+		git("checkout", "-b", branch, "main")
+		for _, files := range history {
+			for name, content := range files {
+				path := filepath.Join(repo, name)
+				if content == nil {
+					if err := os.Remove(path); err != nil {
+						t.Fatal(err)
+					}
+				} else if err := os.WriteFile(path, []byte(*content), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			git("add", ".")
+			git("commit", "-qm", "invented intermediate snapshot")
+		}
 	}
 	git("checkout", "main")
 

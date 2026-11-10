@@ -455,3 +455,39 @@ func TestMergeRuleNeverOffersARefusedPlug(t *testing.T) {
 		}
 	})
 }
+
+// NoPR (what internal-gate --no-pr may waive) marks only a target with no PR at
+// all: a plugged block, a waited-on block or a pr: label each leaves it unmarked.
+func TestMergeRuleNoPROnlyWithoutAnyPR(t *testing.T) {
+	noPR := func(nodes []Node) bool {
+		f := MergeRule("p", "o/r", nodes, map[string]bool{"M": true})
+		return len(f) == 1 && f[0].NoPR
+	}
+	bare := func() []Node { n := completeBlock(t); n[0].Waits = nil; return n }
+	if !noPR(bare()) {
+		t.Fatal("a merge with no PR is not marked NoPR")
+	}
+	open := completeBlock(t)
+	open[2].Bead.Status = "open"
+	if noPR(open) {
+		t.Fatal("a plugged block was marked NoPR")
+	}
+	other := bare()
+	other[1].Bead.Labels = slices.DeleteFunc(slices.Clone(other[1].Bead.Labels), func(l string) bool { return strings.HasPrefix(l, LabelInstance) })
+	other[0].Waits = []string{"R"} // waits on a review block not plugged for it
+	if noPR(other) {
+		t.Fatal("a waited-on review block was marked NoPR")
+	}
+	for _, on := range []int{0, -1} {
+		n := bare()
+		if on == 0 {
+			n[0].Bead.Labels = append(n[0].Bead.Labels, "pr:7")
+		} else {
+			n[0].Bead.Labels = append(n[0].Bead.Labels, "gate-of:ST")
+			n = append(n, Node{Bead: beads.Bead{ID: "ST", Status: "open", Labels: []string{"pr:7"}}})
+		}
+		if noPR(n) {
+			t.Fatalf("a pr: label (%d) was marked NoPR", on)
+		}
+	}
+}

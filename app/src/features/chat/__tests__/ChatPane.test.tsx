@@ -266,12 +266,13 @@ describe('composer', () => {
     expect(screen.queryByRole('menuitem', { name: /Pop out/ })).toBeNull()
   })
 
-  it('a Codex chat says so in the header and the model row', async () => {
+  it('shows the actual Codex model in the menu without a provider badge', async () => {
     const user = userEvent.setup()
     mount([{ kind: 'init', model: 'codex:gpt-5.5', seq: 1, session: 's', ts: Date.now() } as ChatEvent])
-    expect(await screen.findByText('Codex')).toBeInTheDocument()
+    await screen.findByTitle(/gpt-5.5/)
+    expect(screen.queryByText('Codex')).toBeNull()
     await user.click(screen.getByRole('button', { name: 'Chat menu' }))
-    expect(screen.getByText('GPT-5.5 · Codex')).toBeInTheDocument()
+    expect(screen.getByText('gpt-5.5')).toBeInTheDocument()
   })
 
   it('a Claude chat has no runtime badge', async () => {

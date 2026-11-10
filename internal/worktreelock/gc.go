@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 )
@@ -183,10 +184,23 @@ func GC(ctx context.Context, o GCOptions) (*GCReport, error) {
 	rep := &GCReport{Repo: o.Repo, Apply: o.Apply, Warning: warning, Before: len(entries), Kept: map[string]int{}, KeepFile: keepFile}
 	sort.SliceStable(entries, func(i, j int) bool { return entries[i].path < entries[j].path })
 	byPath := map[string]wtEntry{}
-	for _, e := range entries {
+	facts := make([]GCFacts, len(entries))
+	for i, e := range entries {
 		byPath[e.path] = e
-		rep.Entries = append(rep.Entries, g.decide(ctx, o, main, e))
+		if o.Lookup != nil {
+			facts[i] = o.Lookup(e.path, e.branch) // sequential: a Lookup may cache
+		}
 	}
+	// One read of every branch tip and one reachability walk for all of them,
+	// not three git calls per worktree (2,000+ worktrees took minutes).
+	ix, err := g.index(ctx, main)
+	if err != nil {
+		return nil, err
+	}
+	rep.Entries = make([]GCEntry, len(entries))
+	parallel(len(entries), gcWorkers, func(i int) {
+		rep.Entries[i] = g.decide(ctx, o, main, entries[i], facts[i], ix)
+	})
 	for i := range rep.Entries {
 		e := &rep.Entries[i]
 		if !e.Remove {
@@ -221,7 +235,11 @@ func GC(ctx context.Context, o GCOptions) (*GCReport, error) {
 				continue
 			}
 			// Minutes may have passed since decide: look again right before removing.
-			if now := g.decide(ctx, o, main, byPath[e.Path]); !now.Remove || now.Tip != e.Tip || now.Archive != e.Archive {
+			var f GCFacts
+			if o.Lookup != nil {
+				f = o.Lookup(e.Path, e.Branch)
+			}
+			if now := g.decide(ctx, o, main, byPath[e.Path], f, nil); !now.Remove || now.Tip != e.Tip || now.Archive != e.Archive {
 				e.Remove = false
 				e.Archive = ""
 				e.Reason = ReasonChanged
@@ -252,14 +270,84 @@ func GC(ctx context.Context, o GCOptions) (*GCReport, error) {
 	return rep, nil
 }
 
-// decide classifies one worktree. It only reads.
-func (g gitRunner) decide(ctx context.Context, o GCOptions, main string, e wtEntry) GCEntry {
+// gcWorkers bounds the git status calls a pass runs at once.
+const gcWorkers = 4
+
+// parallel runs f(0..n-1) on up to workers goroutines and waits.
+func parallel(n, workers int, f func(i int)) {
+	next := make(chan int)
+	var wg sync.WaitGroup
+	for w := 0; w < workers && w < n; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := range next {
+				f(i)
+			}
+		}()
+	}
+	for i := 0; i < n; i++ {
+		next <- i
+	}
+	close(next)
+	wg.Wait()
+}
+
+// gcIndex is what one pass reads for every branch at once.
+type gcIndex struct {
+	tips      map[string]string // branch (no refs/heads/) -> sha
+	unreached map[string]bool   // tip sha on none of main, a remote, an archive ref
+}
+
+// index reads every local branch tip (one for-each-ref) and which op/* tips
+// are on none of main, a remote-tracking branch or refs/archive/ (one rev-list
+// over all of them: a tip it prints is reachable from none of those).
+func (g gitRunner) index(ctx context.Context, main string) (*gcIndex, error) {
+	out, err := g.run(ctx, "for-each-ref", "--format=%(objectname) %(refname)", "refs/heads/")
+	if err != nil {
+		return nil, err
+	}
+	ix := &gcIndex{tips: map[string]string{}, unreached: map[string]bool{}}
+	var tips []string
+	for _, line := range strings.Split(out, "\n") {
+		sha, ref, ok := strings.Cut(strings.TrimSpace(line), " ")
+		if !ok {
+			continue
+		}
+		branch := strings.TrimPrefix(ref, "refs/heads/")
+		ix.tips[branch] = sha
+		if strings.HasPrefix(branch, "op/") {
+			tips = append(tips, sha)
+		}
+	}
+	if len(tips) == 0 {
+		return ix, nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, g.timeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "git", "-C", g.repo, "rev-list", "--stdin", "--not", "refs/heads/"+main, "--remotes", "--glob=refs/archive/")
+	cmd.Stdin = strings.NewReader(strings.Join(tips, "\n") + "\n")
+	listed, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("git rev-list (reachability of %d branches): %w", len(tips), err)
+	}
+	want := map[string]bool{}
+	for _, t := range tips {
+		want[t] = true
+	}
+	for _, sha := range strings.Fields(string(listed)) {
+		if want[sha] {
+			ix.unreached[sha] = true
+		}
+	}
+	return ix, nil
+}
+
+// decide classifies one worktree. It only reads. ix (nil = read this one
+// worktree's branch afresh) carries the pass's batched tips and reachability.
+func (g gitRunner) decide(ctx context.Context, o GCOptions, main string, e wtEntry, facts GCFacts, ix *gcIndex) GCEntry {
 	out := GCEntry{Path: e.path, Branch: e.branch}
 	keep := func(reason string) GCEntry { out.Reason = reason; return out }
-	facts := GCFacts{}
-	if o.Lookup != nil {
-		facts = o.Lookup(e.path, e.branch)
-	}
 	if o.ProjectDir != "" && !underProjectWorktrees(o.ProjectDir, e.path) {
 		return keep(ReasonOutside)
 	}
@@ -321,19 +409,24 @@ func (g gitRunner) decide(ctx context.Context, o GCOptions, main string, e wtEnt
 		}
 		return keep(ReasonIgnored + ": " + strings.Join(ignored, ", "))
 	}
-	tip, err := g.run(ctx, "rev-parse", "--verify", "refs/heads/"+e.branch)
-	if err != nil {
-		return keep("git error: " + err.Error())
+	var tip string
+	var merged bool
+	if t, ok := ix.tip(e.branch); ok {
+		tip, merged = t, !ix.unreached[t]
+	} else {
+		t, err := g.run(ctx, "rev-parse", "--verify", "refs/heads/"+e.branch)
+		if err != nil {
+			return keep("git error: " + err.Error())
+		}
+		tip = strings.TrimSpace(t)
+		if merged, err = g.reachable(ctx, tip, main); err != nil {
+			return keep("git error: " + err.Error())
+		}
 	}
-	tip = strings.TrimSpace(tip)
 	out.Tip = tip
-	merged, err := g.reachable(ctx, tip, main)
-	if err != nil {
-		return keep("git error: " + err.Error())
-	}
 	if merged {
 		out.Remove = true
-		out.Reason = "finished, all commits on main or origin"
+		out.Reason = "finished, all commits on main, origin or an archive ref"
 		return out
 	}
 	out.Archive = archiveRef(e.branch, tip)
@@ -355,14 +448,23 @@ func archiveRef(branch, tip string) string {
 	return "refs/archive/op/" + strings.TrimPrefix(branch, "op/") + "-" + short
 }
 
-// reachable reports whether sha is on main or on any remote-tracking branch.
+func (ix *gcIndex) tip(branch string) (string, bool) {
+	if ix == nil {
+		return "", false
+	}
+	t, ok := ix.tips[branch]
+	return t, ok
+}
+
+// reachable reports whether sha is on main, any remote-tracking branch or an
+// archive ref.
 func (g gitRunner) reachable(ctx context.Context, sha, main string) (bool, error) {
 	if _, err := g.run(ctx, "merge-base", "--is-ancestor", sha, main); err == nil {
 		return true, nil
 	} else if !isExit(err, 1) {
 		return false, err
 	}
-	out, err := g.run(ctx, "for-each-ref", "--contains", sha, "--count=1", "--format=%(refname)", "refs/remotes")
+	out, err := g.run(ctx, "for-each-ref", "--contains", sha, "--count=1", "--format=%(refname)", "refs/remotes", "refs/archive")
 	if err != nil {
 		return false, err
 	}

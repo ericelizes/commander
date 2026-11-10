@@ -221,7 +221,11 @@ func (f flow) diagramSteps(s SnapStep, w *WorkflowStep, after []string, depth in
 		st.Approvers = approverNames(s.Approvers)
 		// A gate waiting on someone other than its approvers is two moves:
 		// theirs now (a reviewer, CI), then the approvers'.
-		if a := approverHand(s.Approvers); h.actor != "" && a.actor != "" && h.actor != a.actor && !stepClosed(s) && !parked(s) {
+		a := approverHand(s.Approvers)
+		if onUserCard(s) {
+			a = hand{ActorYou, ""} // the user answers its open card, whoever the approver label names
+		}
+		if h.actor != "" && a.actor != "" && h.actor != a.actor && !stepClosed(s) && !parked(s) {
 			wait := DiagramStep{ID: s.BeadID + WaitStepSuffix, Title: gateWaitTitle(s, h), Kind: w.Kind, Text: w.Text, Since: w.Since,
 				Lane: st.Lane, Actor: h.actor, Who: h.who, After: st.After}
 			st.Kind, st.Text, st.Since = "idle", "Not reached", 0
@@ -527,7 +531,7 @@ func (f flow) leafHand(s SnapStep) hand {
 	if len(waits) > 0 {
 		return waitHand(waits[0])
 	}
-	if onUser(s) {
+	if onUserCard(s) {
 		return hand{ActorYou, ""}
 	}
 	if unfinishedBlocker(s, f.byID) || f.blockedAbove(s) {
@@ -549,6 +553,11 @@ func (f flow) leafHand(s SnapStep) hand {
 // gate's approvers', the lane label's, its owner's, else an Operator's (the
 // Manager spawns one for planned work).
 func restingHand(s SnapStep) hand {
+	// An open card the user answers is theirs, whatever the approver label says (a gate approved
+	// by a named person that the user answers by relaying).
+	if onUserCard(s) {
+		return hand{ActorYou, ""}
+	}
 	if s.Gate {
 		return approverHand(s.Approvers)
 	}

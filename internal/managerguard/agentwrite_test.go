@@ -166,3 +166,19 @@ func TestBeadsWriteVerbEval(t *testing.T) {
 		}
 	}
 }
+
+// M6/m4: a help, version or verbose flag before the verb does not hide it, and bd human's
+// respond/dismiss (they close beads) are writes; a bare version or help call stays a read.
+func TestBeadsWriteVerbFlagsBeforeTheVerbAndHuman(t *testing.T) {
+	for _, c := range []string{"bd -v close X", "br -v close X", "bd --verbose close X", "bd --help close X", "bd --version update X --status open",
+		"bd human respond X", "bd human dismiss X", "bd human"} {
+		if BeadsWriteVerb(c) == "" {
+			t.Errorf("%q passed the agent write guard", c)
+		}
+	}
+	for _, c := range []string{"bd --version", "bd -v", "bd --help", "bd -v show X", "bd human list", "bd close --help"} {
+		if v := BeadsWriteVerb(c); v != "" {
+			t.Errorf("%q refused as %q", c, v)
+		}
+	}
+}

@@ -47,7 +47,9 @@ func TestOperatorWaitSpawnScenario(t *testing.T) {
 			if (len(sent) == 1) != tc.Fire {
 				t.Fatalf("mail=%+v fire=%v", sent, tc.Fire)
 			}
-			cleared := strings.Contains(strings.Join(b.Calls, "\n"), "SetLabel:p-ws.1|label=waiting:100:operator:operator-op-build|on=false")
+			all := strings.Join(b.Calls, "\n")
+			cleared := strings.Contains(all, "SetLabel:p-ws.1|label=waiting:100:operator:operator-op-build|on=false") ||
+				strings.Contains(all, "--remove-label waiting:100:operator:operator-op-build")
 			if cleared != tc.Fire {
 				t.Fatalf("cleared=%v fire=%v calls=%v", cleared, tc.Fire, b.Calls)
 			}

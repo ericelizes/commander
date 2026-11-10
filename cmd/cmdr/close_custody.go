@@ -64,7 +64,7 @@ func holdForManager(ctx context.Context, bc beads.Client, dir string, ids []stri
 
 // custodyLabel is the "Manager to start" receipt holdForManager writes at now.
 func custodyLabel(now time.Time) string {
-	return beads.Wait{Kind: beads.WaitUntil, Since: now, Until: now.Add(custodyWithin), Ref: beads.ManagerStartWait}.Label()
+	return beads.StartReceiptLabel(now)
 }
 
 // releaseCustody takes back the receipts holdForManager wrote at now on ids

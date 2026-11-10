@@ -284,6 +284,20 @@ func MarkRead(role string, m agentmail.Mail) error {
 	return os.Rename(tmp, p)
 }
 
+// CursorAt is when role's cursor last moved: the last time mail was shown to it (the mail hook
+// advances it as it injects mail into a turn). ok is false when it has none.
+func CursorAt(role string) (time.Time, bool) {
+	p, err := path(role)
+	if err != nil {
+		return time.Time{}, false
+	}
+	info, err := os.Stat(p)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return info.ModTime(), true
+}
+
 // MarkAllRead advances role's cursor past every mail in mails.
 func MarkAllRead(role string, mails []agentmail.Mail) error {
 	var newest *agentmail.Mail

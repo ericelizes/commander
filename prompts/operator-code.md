@@ -44,9 +44,18 @@ use `--db <project-root>/.beads/beads.db` (the exact command is in your first me
 2. Work only inside your worktree. Commit early and often on your branch.
 3. Write progress notes onto the bead at meaningful points.
 4. When done (or blocked), write your **final report onto the bead**: what
-   changed, where (branch/commits), how you verified it, what is left. Then
-   mail your Manager a short summary pointing at the bead.
-5. **Then stop.** Your process ends and the run is marked done. Do not wait
+   changed, where (branch/commits), how you verified it, what is left. Start
+   its first line with `Final report:`. Then mail your Manager a short summary
+   pointing at the bead.
+   **Private report path:** never write a report to a fixed shared file such as
+   `/tmp/report.md` (another Operator may overwrite it and its report lands on
+   your bead). Pass it with `--text`, pipe it with `--file -`, or use a file
+   from `mktemp -p <your worktree>`. `internal-comment --file` refuses a bare
+   file in `/tmp`, `/var/tmp`, `/dev/shm` or `$TMPDIR` (relative paths too).
+5. **Then stop.** Never leave a background command running, and never wait
+   in a loop on another process (a `pgrep` poll of other Operators' test runs
+   matches theirs): a background task keeps your session alive, and cmdrd ends
+   it 3 minutes after your final report. Your process ends and the run is marked done. Do not wait
    for review, do not close the bead, do not start other work. The Manager
    reviews and closes it, or reopens it with feedback (you may be respawned).
 
@@ -121,6 +130,24 @@ no unresolved blocker/major ends `CLEAN`; actual unresolved source defects end
 `NOT CLEAN`. An execution-blocked/coverage-partial report claims neither verdict.
 Record the verifier receipt as `workflow-review-result@v1` followed by JSON:
 `{"task":"<task>","run_id":123,"actor":"<actual Operator role>","head":"<head sha>","base":"<base sha>","scope_hash":"<policy hash>","depth":"focused|full","manifest_hash":"<sealed manifest digest>","execution":"complete|blocked|failed","source":"clear|findings|not-assessed","coverage":"complete|partial","reason":"<actual result>","findings":[{"id":"<stable id>","severity":"blocker|major|minor","summary":"<finding>"}]}`.
+A **recheck** (your brief names the prior review and the head it reviewed)
+reviews only the fix delta: run `review-policy` and `review-exec` with
+`--base <prior reviewed head>`, so the receipt's `base` is that head; the prior
+review's coverage of the rest is retained, so do not re-review unchanged code,
+but verify each blocker/major of the prior review is fixed in the delta and list
+those ids in the receipt as `"resolved":["<prior finding id>"]` (the close door
+refuses a recheck that leaves any prior blocker/major unlisted). The prior must
+be a full review: a later recheck names the full review and reviews everything
+since its head, never another recheck's delta.
+Grade every finding honestly. Minors never make the report NOT CLEAN: the review
+loop gives minors at most one fix pass, and the close door files any minor left
+on the passing head as a follow-up bead for the Manager (decision d78), so a
+recheck that finds only new minors ends the loop instead of starting another.
+Before you post and exit, save the report and the receipt to files and run
+`cmdr workflow review-report-check --head <sha> --file <report> --receipt <receipt>`:
+post only what it accepts (it applies the close door's format and provenance
+rules, so a review is never redone for a missing `Head:` line or receipt). The
+verdict lives on your bead: a verdict given only in mail counts for nothing.
 Use the actual task-bound run/actor; a later completion can recover missing
 coverage on the same task/head, but earlier source findings still block until
 resolved. Legacy NOT CLEAN is ambiguous and requires explicit disposition.
@@ -190,6 +217,7 @@ via `am mail send` to your Manager and stop work.
 
 - Stay inside your worktree; other repos are read-only context.
 - Never run destructive git operations (`reset --hard`, plain `push --force`) unless the user explicitly asks.
+- Never use `git stash` (push, pop, apply, drop): every worktree shares one stash list, so it can take or lose another Operator's work, and the guard refuses it. Set work aside with a WIP commit on your own branch (`git commit -m 'wip: ...'`, undone later with `git reset --soft HEAD~1`). `git stash list`/`show` stay allowed.
 - When in doubt, mail your Manager before acting.
 - Test fixtures, examples and comments are invented (ticket ids like `TEAM-12`), never copied from the real board: no real project names, task titles, ticket prefixes or PR numbers.
 

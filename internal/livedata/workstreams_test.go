@@ -1,9 +1,12 @@
 package livedata
 
 import (
+	"context"
+	"slices"
 	"testing"
 
 	"github.com/example-user/commander/internal/beads"
+	"github.com/example-user/commander/internal/store"
 )
 
 // A bead with children shows what they add up to; a flag on the bead itself wins.
@@ -157,5 +160,50 @@ func TestNestObjectives_OpenOrphanWithUnlistedParentStaysRoot(t *testing.T) {
 	}
 	if len(depth1) != 1 || depth1[0] != "w.1" {
 		t.Fatalf("a step under an open workstream must still nest: %v", depth1)
+	}
+}
+
+func TestNestObjectives_TaskBeadsAreNeverWorkstreams(t *testing.T) {
+	rows := []ObjectiveRow{
+		{BeadID: "w", Title: "WS", Status: "open"},
+		{BeadID: "w.1", ParentBeadID: "w", Title: "Task under ws", Status: "open", Task: true},
+		{BeadID: "t-9", Title: "Detached task", Status: "open", Task: true},
+		{BeadID: "t-10", ParentBeadID: "gone", Title: "Orphan task", Status: "in_progress", Task: true},
+	}
+	var ids []string
+	for _, n := range NestObjectives(rows) {
+		ids = append(ids, n.Row.BeadID)
+	}
+	if len(ids) != 2 || ids[0] != "w" || ids[1] != "w.1" {
+		t.Fatalf("got %v, want [w w.1]", ids)
+	}
+}
+
+// Through the real row loader: a task bead that also carries kind:objective (an
+// internal-track convert, then --no-workstream, keeps both) is still a task bead,
+// so with its parent gone from the list it is no workstream row.
+func TestNestObjectives_ConvertedTaskBeadIsNeverAWorkstream(t *testing.T) {
+	m := &beads.MemClient{}
+	m.Seed(beads.Bead{ID: "w", Status: "open", Title: "WS", Labels: []string{"kind:objective"}})
+	m.Seed(beads.Bead{ID: "w.1", ParentID: "w", Status: "open", Title: "Step", Labels: []string{"kind:objective"}})
+	m.Seed(beads.Bead{ID: "t-3", Status: "in_progress", Title: "Converted back", Labels: []string{"kind:task", "kind:objective"}})
+	m.Seed(beads.Bead{ID: "t-4", Status: "open", Title: "Converted task", Labels: []string{"kind:task", "kind:objective", "kind:workstream"}})
+	m.Seed(beads.Bead{ID: "w.2", ParentID: "w", Status: "open", Title: "Task under a step", Labels: []string{"kind:task", "kind:objective"}})
+	rows, err := projectObjectiveRows(context.Background(), m, store.Project{ID: 1, Path: "/p"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var roots, all []string
+	for _, n := range NestObjectives(rows) {
+		all = append(all, n.Row.BeadID)
+		if n.Depth == 0 {
+			roots = append(roots, n.Row.BeadID)
+		}
+	}
+	if !slices.Equal(roots, []string{"w"}) {
+		t.Fatalf("roots %v, want [w] (all %v)", roots, all)
+	}
+	if !slices.Contains(all, "w.2") {
+		t.Fatalf("a task bead under a listed parent still nests: %v", all)
 	}
 }

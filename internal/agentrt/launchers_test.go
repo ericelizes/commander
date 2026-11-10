@@ -17,17 +17,18 @@ import (
 // fails TestEveryClaudeLauncherIsAccounted until it is listed here, so its
 // author decides what an inherited CLAUDE_CONFIG_DIR means for it.
 var claudeLaunchers = map[string]string{
-	"internal/agentrt/claude.go":    "ClaudeInteractiveCmd: always default, clears the variable; ClaudeHeadlessArgs: argv only, callers set the env",
-	"internal/chat/engine.go":       "childEnv clears the variable; extra sets a named account (also the --version probe)",
-	"internal/chat/handover.go":     "ClaudeInteractiveCmd",
-	"internal/chat/host.go":         "h.cfg.Binary under os.Environ: the Engine starts the host with childEnv (TestChatHostRunsUnderChildEnv)",
-	"internal/claudeacct/verify.go": "drops the variable, then Env(home, name)",
-	"internal/inspector/digest.go":  "env -u CLAUDE_CONFIG_DIR",
-	"internal/layout/layout.go":     "ClaudeInteractiveCmd through claudeChatCmd",
-	"internal/overview/recap.go":    "cleanEnv drops the variable, then the selected account's",
-	"internal/spawn/code.go":        "Docker: the container env is an allow-list without the variable",
-	"internal/spawn/host.go":        "env -u CLAUDE_CONFIG_DIR, then claudeacct.Env(req.Account)",
-	"internal/spawn/knowledge.go":   "env -u CLAUDE_CONFIG_DIR (legacy send-keys flow)",
+	"internal/statusclassify/runner.go": "subscriptionEnv clears inherited provider/config credentials, then claudeacct.Env(home, selected account); fake-runner tests verify the selected subscription environment",
+	"internal/agentrt/claude.go":        "ClaudeInteractiveCmd: always default, clears the variable; ClaudeHeadlessArgs: argv only, callers set the env",
+	"internal/chat/engine.go":           "childEnv clears the variable; extra sets a named account (also the --version probe)",
+	"internal/chat/handover.go":         "ClaudeInteractiveCmd",
+	"internal/chat/host.go":             "h.cfg.Binary under os.Environ: the Engine starts the host with childEnv (TestChatHostRunsUnderChildEnv)",
+	"internal/claudeacct/verify.go":     "drops the variable, then Env(home, name)",
+	"internal/inspector/digest.go":      "env -u CLAUDE_CONFIG_DIR",
+	"internal/layout/layout.go":         "ClaudeInteractiveCmd through claudeChatCmd",
+	"internal/overview/recap.go":        "cleanEnv drops the variable, then the selected account's",
+	"internal/spawn/code.go":            "Docker: the container env is an allow-list without the variable",
+	"internal/spawn/host.go":            "env -u CLAUDE_CONFIG_DIR, then claudeacct.Env(req.Account)",
+	"internal/spawn/knowledge.go":       "env -u CLAUDE_CONFIG_DIR (legacy send-keys flow)",
 }
 
 // configDirReaders may read CLAUDE_CONFIG_DIR from the environment. The fake

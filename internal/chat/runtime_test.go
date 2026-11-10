@@ -42,6 +42,7 @@ func codexHarness(t *testing.T) *harness {
 	t.Setenv("COMMANDER_CODEX_BIN", os.Args[0])
 	codexHome := t.TempDir()
 	t.Setenv("CODEX_HOME", codexHome)
+	_ = os.WriteFile(filepath.Join(codexHome, "auth.json"), []byte(`{"tokens":{"access_token":"test-token"}}`), 0600)
 	_ = os.WriteFile(filepath.Join(codexHome, "config.toml"), []byte("[mcp_servers.mcp_agent_mail]\nurl = \"http://127.0.0.1:1/mcp/\"\n"), 0o600)
 	base := h.opts.Resolver
 	h.opts.Resolver = ResolverFunc(func(ctx context.Context, role string) (Spec, error) {

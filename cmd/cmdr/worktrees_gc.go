@@ -144,28 +144,33 @@ func gcBeadIndex(ctx context.Context, bc beads.Client, dir string) (map[string]b
 // ends with "-<id>"; the longest id wins). A worktree with no run is not
 // Matched and is kept. Held reads the real parent edges (beads.Lineage), and
 // the last activity is the latest run start; GC adds when the run froze it.
+// Runs are indexed by task and parents read once for every task (gcParents),
+// so 2,000+ worktrees cost no read each.
 func gcLookup(ctx context.Context, c beads.Client, dir string, runs []store.AgentRun, byID map[string]beads.Bead) func(dir, branch string) worktreelock.GCFacts {
+	byTask := map[string][]store.AgentRun{}
+	for _, r := range runs {
+		if r.TaskBeadID != "" {
+			byTask[r.TaskBeadID] = append(byTask[r.TaskBeadID], r)
+		}
+	}
+	tasks := make([]string, 0, len(byTask))
+	for id := range byTask {
+		tasks = append(tasks, id)
+	}
+	sort.Strings(tasks)
+	parents := gcParents(ctx, c, dir, byID, tasks)
 	held := map[string]bool{}
 	return func(wt, branch string) worktreelock.GCFacts {
 		var f worktreelock.GCFacts
-		task := ""
-		for _, r := range runs {
-			id := r.TaskBeadID
-			if id == "" || !endsWithTask(filepath.Base(wt), id) && !endsWithTask(branch, id) {
-				continue
-			}
-			if len(id) > len(task) {
-				task = id
-			}
+		task := longestTask(filepath.Base(wt), byTask)
+		if t := longestTask(branch, byTask); len(t) > len(task) {
+			task = t
 		}
 		if task == "" {
 			return f
 		}
 		f.Matched, f.TaskID = true, task
-		for _, r := range runs {
-			if r.TaskBeadID != task {
-				continue
-			}
+		for _, r := range byTask[task] {
 			if r.Status == "running" {
 				f.Running = true
 			}
@@ -176,7 +181,7 @@ func gcLookup(ctx context.Context, c beads.Client, dir string, runs []store.Agen
 		f.TaskClosed = byID[task].Status == "closed"
 		h, ok := held[task]
 		if !ok {
-			for _, id := range beads.Lineage(ctx, c, dir, nil, task) {
+			for _, id := range beads.Lineage(ctx, c, dir, parents, task) {
 				for _, l := range byID[id].Labels {
 					if l == beads.HoldLabel {
 						h = true
@@ -188,6 +193,80 @@ func gcLookup(ctx context.Context, c beads.Client, dir string, runs []store.Agen
 		f.Held = h
 		return f
 	}
+}
+
+// longestTask is the longest task id name equals or ends with "-<id>".
+func longestTask(name string, byTask map[string][]store.AgentRun) string {
+	best := ""
+	if _, ok := byTask[name]; ok {
+		best = name
+	}
+	for i := 0; i < len(name); i++ {
+		if name[i] != '-' {
+			continue
+		}
+		if id := name[i+1:]; len(id) > len(best) {
+			if _, ok := byTask[id]; ok {
+				best = id
+			}
+		}
+	}
+	return best
+}
+
+// gcParents is every task's chain of real parents for beads.Lineage: the
+// parents the one list already carries, plus one batched fresh read of the
+// beads it names no parent for (roots, mostly), repeated while a read chain
+// goes further. A failed read leaves those ids out: Lineage then reads them
+// itself, as before.
+func gcParents(ctx context.Context, c beads.Client, dir string, byID map[string]beads.Bead, tasks []string) beads.Parents {
+	known := beads.Parents{}
+	for id, b := range byID {
+		if p := b.Parent; p != "" {
+			known[id] = p
+		} else if p := b.ParentID; p != "" {
+			known[id] = p
+		}
+	}
+	if c == nil {
+		return known
+	}
+	for round := 0; round < 8; round++ {
+		need := map[string]bool{}
+		for _, t := range tasks {
+			seen := map[string]bool{}
+			for cur := t; cur != "" && !seen[cur]; {
+				seen[cur] = true
+				p, ok := known[cur]
+				if !ok {
+					need[cur] = true
+					break
+				}
+				cur = p
+			}
+		}
+		if len(need) == 0 {
+			break
+		}
+		ids := make([]string, 0, len(need))
+		for id := range need {
+			ids = append(ids, id)
+		}
+		sort.Strings(ids)
+		got, err := beads.FreshDetails(ctx, c, dir, ids)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "worktrees gc: parents of %d beads in %s: %v (read one by one)\n", len(ids), dir, err)
+			break
+		}
+		for _, id := range ids {
+			if d, ok := got[id]; ok {
+				known[id] = d.Parent
+			} else {
+				known[id] = beads.ParentOf(id) // not readable: the dotted id, as Lineage would
+			}
+		}
+	}
+	return known
 }
 
 func endsWithTask(name, id string) bool {

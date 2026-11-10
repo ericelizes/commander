@@ -68,6 +68,11 @@ func (b board) stalledLevel(ws SnapWorkstream, title string) []stalledPlace {
 	whole := ws
 	whole.Steps = b.heldFromOutside(ws.Steps)
 	l := b.workstreamLine(whole, manager, hasManager, 0)
+	// A level with no step left (its tracks and cards are read apart) says nothing here: a scope
+	// born empty and unheld is the invariant's to report (Snapshot.broken), not a place to move.
+	if len(whole.Steps) == 0 && l.text == "State missing" {
+		return out
+	}
 	if l.kind != "stalled" || slices.ContainsFunc(out, func(p stalledPlace) bool { return p.line.text == l.text }) {
 		return out
 	}

@@ -156,6 +156,15 @@ func (m *MemClient) UpdateFields(_ context.Context, _, issueID string, f Fields)
 	if f.Description != nil {
 		b.Description = *f.Description
 	}
+	if f.Status != nil {
+		b.Status = *f.Status
+	}
+	for _, l := range f.AddLabels {
+		if !slices.Contains(b.Labels, l) {
+			b.Labels = append(b.Labels, l)
+		}
+	}
+	b.Labels = slices.DeleteFunc(b.Labels, func(l string) bool { return slices.Contains(f.RemoveLabels, l) })
 	return nil
 }
 

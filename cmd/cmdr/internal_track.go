@@ -8,6 +8,8 @@ import (
 	"slices"
 
 	"github.com/example-user/commander/internal/beads"
+	"github.com/example-user/commander/internal/holding"
+	"github.com/example-user/commander/internal/wsmgr"
 )
 
 type internalTrackResult struct {
@@ -73,6 +75,9 @@ func convertToTrack(ctx context.Context, bc beads.Client, dir, beadID, into stri
 	if err := beads.CheckPlacement(ctx, bc, dir, into, beads.Placement{Workstream: true, Self: beadID}); err != nil {
 		return err
 	}
+	if err := requireMoveHeld(ctx, bc, dir, beadID, into, "moving "+beadID+" under "+into); err != nil {
+		return err
+	}
 	if err := bc.SetParent(ctx, dir, beadID, into); err != nil {
 		return err
 	}
@@ -81,5 +86,26 @@ func convertToTrack(ctx context.Context, bc beads.Client, dir, beadID, into stri
 			return err
 		}
 	}
+	// wsmgr refuses kind:task targets, so a converted bead must not keep it.
+	if err := bc.SetLabel(ctx, dir, beadID, "kind:task", false); err != nil {
+		return err
+	}
 	return bc.SetLabel(ctx, dir, beadID, beads.TrackLabel, false)
+}
+
+// requireMoveHeld keeps a move from leaving work with no holder: a parent the move empties (its
+// last open child walks away) is an empty scope, so it gets the Manager to plan wait (and its
+// Manager's name), written BEFORE the move (make before break), exactly as a newborn scope does.
+// Judged on fresh reads; a closure it cannot read is left as is (fail open).
+func requireMoveHeld(ctx context.Context, bc beads.Client, dir, bead, parent, verb string) error {
+	g, err := loadGraph(ctx, bc, dir, bead)
+	if err != nil {
+		return nil
+	}
+	for _, v := range holding.NewlyUnheld(g, bead, map[string]holding.Edit{bead: func(b *holding.Bead) { b.Parent = parent }}) {
+		if err := holdWithManager(ctx, bc, dir, v.ID, wsmgr.Role(wsmgr.Owner(ctx, bc, dir, v.ID)), beads.ManagerPlanWait); err != nil {
+			return fmt.Errorf("refused: %s would leave %s with no holder and its Manager to plan wait could not be written (%v). Nothing was moved", verb, v.ID, err)
+		}
+	}
+	return nil
 }

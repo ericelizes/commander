@@ -2,6 +2,7 @@ package wsmgr
 
 import (
 	"context"
+	"errors"
 	"github.com/example-user/commander/internal/testguard"
 	"os"
 	"path/filepath"
@@ -425,27 +426,6 @@ func TestFind_FallsBackToFreshReadForNewWorkstream(t *testing.T) {
 	}
 }
 
-// A new Manager starts on the runtime the Manager share draws for its
-// workstream (unpinned); one that ran before, or has a runtime, is not touched.
-func TestEnsureNative_NewManagerDrawsItsRuntime(t *testing.T) {
-	f := newFixture(t)
-	home := os.Getenv("COMMANDER_HOME")
-	old := codexHooksReady
-	codexHooksReady = func() bool { return true }
-	t.Cleanup(func() { codexHooksReady = old })
-	t.Setenv("COMMANDER_CODEX_MANAGER_SHARE", "1")
-	f.m.Native = &fakeNative{fresh: map[string]bool{"manager-example-app-t11": true, "manager-example-app-t01": false}}
-	if err := f.m.EnsureNative(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	if rt := chat.ReadRuntime(home, "manager-example-app-t11"); rt != chat.RuntimeCodex || chat.RuntimePinned(home, "manager-example-app-t11") {
-		t.Errorf("new Manager: runtime %s, pinned %v", rt, chat.RuntimePinned(home, "manager-example-app-t11"))
-	}
-	if _, err := os.Stat(chat.RuntimeFile(home, "manager-example-app-t01")); !os.IsNotExist(err) {
-		t.Errorf("a Manager that ran before got a runtime: %v", err)
-	}
-}
-
 // scopeBeads: t07 is a track with its own prefix under ws-t08; ws-other is a
 // separate workstream; ws-t08.9 was moved under ws-other.
 func scopeBeads() *beads.MemClient {
@@ -496,5 +476,39 @@ func TestOpen_NativeFailureIsNotHiddenByMissingTmux(t *testing.T) {
 	_, err := f.m.Open(context.Background(), "example-app", "example-app-t11", OpenOptions{})
 	if err == nil || !strings.Contains(err.Error(), "native start of") || !strings.Contains(err.Error(), "file does not exist") {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+// cmdrd refusing a Manager start for lack of usage (its HTTP answer's text)
+// is an error, never a terminal window on an account that is out.
+func TestOpen_NoUsageRefusalOpensNoTerminal(t *testing.T) {
+	f := newFixture(t)
+	f.m.Native = &fakeNative{down: errors.New("cmdrd: 409: " + chat.ErrNoUsage.Error() + " for manager-example-app-t11")}
+	_, err := f.m.Open(context.Background(), "example-app", "example-app-t11", OpenOptions{})
+	if err == nil || !strings.Contains(err.Error(), "no account has usage left") {
+		t.Fatalf("err = %v", err)
+	}
+	if hasNewWindow(f) {
+		t.Fatal("opened a terminal window")
+	}
+}
+
+func TestNoteOnWorkstreamCommentsTheBead(t *testing.T) {
+	f := newFixture(t)
+	if err := f.m.NoteOnWorkstream(context.Background(), "manager-example-app-t11", "moved to Claude"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.m.NoteOnWorkstream(context.Background(), "commander", "x"); err != nil {
+		t.Fatal(err)
+	}
+	var notes []string
+	for _, c := range f.bc.Calls {
+		if strings.HasPrefix(c, "AddComment:") {
+			notes = append(notes, c)
+		}
+	}
+	want := "AddComment:example-app-t11|text=cmdrd: moved to Claude|dir=" + f.proj.Path
+	if len(notes) != 1 || notes[0] != want {
+		t.Fatalf("comments %q, want only %q", notes, want)
 	}
 }

@@ -14,9 +14,12 @@ const textKey = (text: string) => text.slice(0, 120)
 const MIN_CPS = 90 // the calm pace when the stream keeps up
 const CATCH_UP_MS = 400 // a burst is drained over about this long
 
-/** useSmoothText paces `text` toward its full length; it returns what to show and where fading starts. */
-export function useSmoothText(text: string, streaming: boolean): { shown: string; settled: number; animating: boolean } {
-  const [settled] = useState(() => shownByText.get(textKey(text)) ?? (streaming ? 0 : text.length))
+/**
+ * useSmoothText paces `text` toward its full length; it returns what to show and where fading starts.
+ * `start`, when given, is how much counts as already shown at mount (0 = pace it all from the start).
+ */
+export function useSmoothText(text: string, streaming: boolean, start?: number): { shown: string; settled: number; animating: boolean } {
+  const [settled] = useState(() => start ?? shownByText.get(textKey(text)) ?? (streaming ? 0 : text.length))
   const [count, setCount] = useState(settled)
   const target = useRef(text)
   target.current = text

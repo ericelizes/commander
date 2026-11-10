@@ -118,3 +118,18 @@ func routeReadContext(ctx context.Context) (context.Context, context.CancelFunc)
 	}
 	return context.WithTimeout(ctx, time.Until(deadline)/2)
 }
+
+// NoteOnWorkstream writes text as a comment on the workstream bead role
+// manages (a usage move recorded for whoever reads the bead). A role naming no
+// bead of a registered project writes nothing.
+func (m *Manager) NoteOnWorkstream(ctx context.Context, role, text string) error {
+	bead, ok := strings.CutPrefix(role, "manager-")
+	if !ok || bead == "" {
+		return nil
+	}
+	p, err := m.projectOfBead(ctx, bead)
+	if err != nil || p == nil {
+		return err
+	}
+	return m.Beads.AddComment(ctx, p.Path, bead, "cmdrd: "+text)
+}

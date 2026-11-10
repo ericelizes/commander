@@ -101,3 +101,67 @@ func TestWrite_SettledIsFalseWhenAnOverlappedReadKeptLastGood(t *testing.T) {
 		t.Fatalf("recovery: settled=%v shown=%q", out.Settled, shown())
 	}
 }
+
+// flakyClient overlaps a writer on its first n Lists only.
+type flakyClient struct {
+	*beads.MemClient
+	n atomic.Int64 // Lists still to overlap
+	k atomic.Int64
+}
+
+func (c *flakyClient) List(ctx context.Context, dir string, opts beads.ListOptions) ([]beads.Bead, error) {
+	if c.n.Add(-1) >= 0 {
+		_ = os.WriteFile(filepath.Join(dir, ".beads", "last-touched"), []byte(strings.Repeat("x", int(c.k.Add(1)))), 0o600)
+	}
+	return c.MemClient.List(ctx, dir, opts)
+}
+
+// The board is never older than a write the door answered: one load that overlapped a writer and kept
+// the last rows is followed by another, so the same call settles once the overlap is over.
+func TestWrite_SettleLoadsAgainAfterAKeptRead(t *testing.T) {
+	old := beads.ReadRetryBackoff
+	beads.ReadRetryBackoff = func() time.Duration { return time.Millisecond }
+	defer func() { beads.ReadRetryBackoff = old }()
+	ctx := context.Background()
+	st, err := store.Open(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	dir := projectDir(t)
+	if _, err := st.InsertProject(ctx, store.Project{Name: "example", Type: "code", Path: dir, ActivatedAt: 1, Status: "active"}); err != nil {
+		t.Fatal(err)
+	}
+	mem := &beads.MemClient{Prefix: "p"}
+	id, err := mem.Create(ctx, dir, "Before", beads.CreateOptions{Labels: []string{"kind:objective"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	bc := &flakyClient{MemClient: mem}
+	src := &livedata.Source{Deps: livedata.Deps{Store: st, Beads: bc}}
+	var title atomic.Pointer[string]
+	s := New(Options{Token: testToken, Source: src.Snapshot, Write: func(ctx context.Context, dir string, args []string) ([]byte, []byte, error) {
+		return nil, nil, mem.UpdateFields(ctx, dir, id, beads.Fields{Title: title.Load()})
+	}})
+	defer s.settling.Wait()
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+	write := func(to string) beads.DoorResponse {
+		title.Store(&to)
+		_, out := postWrite(t, ts.URL, testToken, beads.DoorRequest{Dir: dir, Args: []string{"update", id, "--title", to}})
+		if out.Exit != 0 {
+			t.Fatalf("write: %+v", out)
+		}
+		return out
+	}
+	write("Before")
+	bc.n.Store(1 << 30) // every List overlaps a writer, until the writer is done (after the first load gave up)
+	time.AfterFunc(120*time.Millisecond, func() { bc.n.Store(0) })
+	out := write("After")
+	if !out.Settled {
+		t.Fatalf("settled=false although a reload after the overlap shows the write")
+	}
+	if got := s.current(ctx).Workstreams[0].Title; got != "After" {
+		t.Fatalf("the answered write is not on the board: %q", got)
+	}
+}

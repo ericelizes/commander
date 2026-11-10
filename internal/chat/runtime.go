@@ -27,7 +27,7 @@ func WriteRuntime(home, role, rt string) error {
 		return err
 	}
 	_ = os.Remove(RuntimeAutoFile(home, role))
-	return nil
+	return removeFallback(home, role)
 }
 
 // RuntimePinFile stores explicit intent separately from the effective runtime.

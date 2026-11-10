@@ -7549,3 +7549,15 @@ button.xf-step.xf-open:hover {
 .rv-head {
   font-variant-numeric: tabular-nums;
 }
+
+/* The active chat's model sits beside its title as plain secondary text. */
+.app-top-model {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-top-pane.app-top-chat { display: flex; align-items: center; gap: 10px; }

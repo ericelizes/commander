@@ -191,7 +191,38 @@ func workflowNode(b beads.Bead, d beads.Detail) workflowtemplate.Node {
 // judged on (edges, comments, status) are read fresh, never from the display's
 // export; evidence is recorded before the close and never inferred from closed status.
 func checkWorkflowClose(ctx context.Context, bc beads.Client, dir, project, id string) error {
+	return checkWorkflowCloseWaiving(ctx, bc, dir, project, id, nil)
+}
+
+// checkWorkflowCloseWaiving is checkWorkflowClose with an optional no-PR waiver:
+// a merge target the rule finds only "has no PR yet" (no pr: label on it or its
+// stage, no review block plugged before or waited on) passes once the waiver is
+// recorded on it. Any other finding still refuses.
+func checkWorkflowCloseWaiving(ctx context.Context, bc beads.Client, dir, project, id string, w *noPRWaiver) error {
 	bc = freshReader(bc)
+	var seen settleSeen
+	err := checkWorkflowCloseOnce(ctx, bc, dir, project, id, &seen, w)
+	if err == nil || seen.pr == "" {
+		return err
+	}
+	return settleHint(ctx, project, seen, err)
+}
+
+// settleSeen is the block a refused step belongs to, once the close read it.
+type settleSeen struct{ block, pr string }
+
+// settleHint names settle-block when a refused step's block PR has merged: no
+// check of a merged PR can pass anymore, so only the owning Manager's settle is
+// left. It reads GitHub only (the block was already read); a failed read leaves
+// the refusal as it was.
+func settleHint(ctx context.Context, project string, seen settleSeen, refused error) error {
+	if h, err := workflowtemplate.ReadHead(ctx, workflowGH, seen.pr); err != nil || h.State != "MERGED" {
+		return refused
+	}
+	return fmt.Errorf("%w. %s merged outside the review: if it will not be reviewed, the owning Manager settles the block (closes its open steps as settled, not reviewed, keeping earlier checks): cmdr workflow settle-block --project %s --block %s --reason '<why the review was not completed>'", refused, seen.pr, project, seen.block)
+}
+
+func checkWorkflowCloseOnce(ctx context.Context, bc beads.Client, dir, project, id string, seen *settleSeen, w *noPRWaiver) error {
 	b, err := bc.Show(ctx, dir, id)
 	if err != nil {
 		return err
@@ -229,6 +260,9 @@ func checkWorkflowClose(ctx context.Context, bc beads.Client, dir, project, id s
 		if !ok {
 			return fmt.Errorf("workflow step %s has no block", id)
 		}
+		if workflowtemplate.IsReviewBlock(block.Bead) {
+			seen.block, seen.pr = block.Bead.ID, workflowtemplate.BlockPR(block.Bead)
+		}
 		tpl, err := workflowtemplate.Definition(block.Bead)
 		if err != nil {
 			return err
@@ -238,7 +272,7 @@ func checkWorkflowClose(ctx context.Context, bc beads.Client, dir, project, id s
 			return err
 		}
 		if binding.PR != workflowtemplate.BlockPR(block.Bead) {
-			return fmt.Errorf("writer binding PR differs from block; ask the owning Manager to run cmdr workflow bind-writers --project %s --block %s --writers <original-task,actual-fix-task> --head <current-full-sha>", project, block.Bead.ID)
+			return fmt.Errorf("writer binding PR differs from block; ask the owning Manager to run %s", workflowtemplate.RebindCommand(project, block.Bead.ID, &binding, ""))
 		}
 		instance := workflowtemplate.Label(block.Bead, workflowtemplate.LabelInstance)
 		if instance == "" || workflowtemplate.Label(*b, workflowtemplate.LabelInstance) != instance || workflowtemplate.Label(*b, workflowtemplate.LabelHash) != tpl.Hash() {
@@ -313,6 +347,17 @@ func checkWorkflowClose(ctx context.Context, bc beads.Client, dir, project, id s
 					return workflowtemplate.Review{}, fmt.Errorf("reviewer must differ from writer task %s", task)
 				}
 			}
+			if binding.External != nil {
+				wrote, err := workflowOperatorCommits(ctx, project, reviewID, binding.External.Commits)
+				if err != nil {
+					return workflowtemplate.Review{}, fmt.Errorf("cannot check reviewer %s against the external commits: %w", reviewID, err)
+				}
+				for _, sha := range binding.External.Commits {
+					if why, ok := wrote[sha]; ok {
+						return workflowtemplate.Review{}, fmt.Errorf("reviewer must differ from the writer of bound external commit %s: %s", sha, why)
+					}
+				}
+			}
 			if strings.Contains(step, "adversarial") {
 				found := false
 				for _, s := range nodes {
@@ -324,13 +369,24 @@ func checkWorkflowClose(ctx context.Context, bc beads.Client, dir, project, id s
 						if !ok || e.Binding != binding.Revision || e.Head != binding.Head || e.PR != binding.PR || e.Proof == nil {
 							continue
 						}
-						first, err := workflowRolesInScope(ctx, bc, dir, project, root, e.Proof.ReviewBead)
-						if err != nil {
-							return workflowtemplate.Review{}, err
-						}
+						// Every review the primary evidence stands on (its retained
+						// prior review too); this reader also judges the adversarial
+						// proof's own prior_review, so neither can borrow the primary's.
 						found = true
-						if roleOverlap(roles, first) {
-							return workflowtemplate.Review{}, fmt.Errorf("adversarial reviewer must differ from first reviewer")
+						for _, primary := range []string{e.Proof.ReviewBead, e.Proof.PriorReview} {
+							if primary == "" {
+								continue
+							}
+							if primary == reviewID {
+								return workflowtemplate.Review{}, fmt.Errorf("adversarial review must not name the primary step's review %s", primary)
+							}
+							first, err := workflowRolesInScope(ctx, bc, dir, project, root, primary)
+							if err != nil {
+								return workflowtemplate.Review{}, err
+							}
+							if roleOverlap(roles, first) {
+								return workflowtemplate.Review{}, fmt.Errorf("adversarial reviewer must differ from first reviewer (review %s)", primary)
+							}
 						}
 					}
 				}
@@ -349,6 +405,9 @@ func checkWorkflowClose(ctx context.Context, bc beads.Client, dir, project, id s
 			if err = loadReviewResults(ctx, project, reviewID, &review); err != nil {
 				return workflowtemplate.Review{}, err
 			}
+			review.FileFollowUps = func(ctx context.Context, reviewID, head string, findings []workflowtemplate.ReviewFinding) ([]string, error) {
+				return fileReviewFollowUps(ctx, bc, dir, block.Bead, instance, step, reviewID, head, findings)
+			}
 			review.ValidateAddendum = func(ctx context.Context, h workflowtemplate.Head, p *workflowtemplate.Proof) error {
 				return resolveWorkflowAddendum(ctx, bc, dir, project, block.Bead, id, binding, h, p, review)
 			}
@@ -362,7 +421,7 @@ func checkWorkflowClose(ctx context.Context, bc beads.Client, dir, project, id s
 			return err
 		}
 		if e.Head != binding.Head {
-			return fmt.Errorf("stale writer binding: ask the owning Manager to run cmdr workflow bind-writers --project %s --block %s --writers <original-task,actual-fix-task> --head %s", project, block.Bead.ID, e.Head)
+			return fmt.Errorf("stale writer binding: ask the owning Manager to run %s", workflowtemplate.RebindCommand(project, block.Bead.ID, &binding, e.Head))
 		}
 		e.Binding = binding.Revision
 		if verifier == "head-current" {
@@ -438,6 +497,15 @@ func checkWorkflowClose(ctx context.Context, bc beads.Client, dir, project, id s
 	}
 	findings := workflowtemplate.MergeRule(project, repo, nodes, scope)
 	if len(findings) > 0 {
+		if w != nil && !managed && onlyNoPR(findings, id) {
+			if namesPR(*b) {
+				return fmt.Errorf("%s (--no-pr refused: the gate's own check names a PR; label it pr:<n> and plug its review, or redefine the check)", findings[0].Text)
+			}
+			return bc.AddComment(ctx, dir, id, w.comment())
+		}
+		if w != nil {
+			return fmt.Errorf("%s (--no-pr waives only a merge with no pr: label and no review block; this one has a PR to review)", findings[0].Text)
+		}
 		return fmt.Errorf("%s", findings[0].Text)
 	}
 	for _, n := range nodes {

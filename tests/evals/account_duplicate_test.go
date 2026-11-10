@@ -36,7 +36,7 @@ func TestAccountDuplicateScenario(t *testing.T) {
 			cfg = filepath.Join(dir, ".claude.json")
 		}
 		os.MkdirAll(dir, 0700)
-		os.WriteFile(filepath.Join(dir, ".credentials.json"), []byte("{}"), 0600)
+		os.WriteFile(filepath.Join(dir, ".credentials.json"), []byte(`{"claudeAiOauth":{"accessToken":"test-token"}}`), 0600)
 		raw, _ := json.Marshal(map[string]any{"oauthAccount": map[string]string{"emailAddress": p.Email, "accountUuid": p.UUID}})
 		os.WriteFile(cfg, raw, 0600)
 	}
@@ -76,7 +76,7 @@ func TestAccountListBinaryScenario(t *testing.T) {
 			cfg = filepath.Join(dir, ".claude.json")
 		}
 		os.MkdirAll(dir, 0o700)
-		os.WriteFile(filepath.Join(dir, ".credentials.json"), []byte("{}"), 0o600)
+		os.WriteFile(filepath.Join(dir, ".credentials.json"), []byte(`{"claudeAiOauth":{"accessToken":"test-token"}}`), 0o600)
 		raw, _ := json.Marshal(map[string]any{"oauthAccount": map[string]string{"emailAddress": p.Email, "accountUuid": p.UUID}})
 		os.WriteFile(cfg, raw, 0o600)
 	}

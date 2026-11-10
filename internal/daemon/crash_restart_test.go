@@ -59,7 +59,7 @@ func TestCrashRestartsOnceThenHandsTheStepBack(t *testing.T) {
 		t.Fatalf("spawn requests: %+v", sp.reqs)
 	}
 	calls := strings.Join(b.Calls, "\n")
-	for _, want := range []string{"label=crash-respawn:1793214000|on=true", "SetStatus:p-ws.2.1|status=in_progress", "label=owner:operator-op-x|on=true", "AddComment:p-ws.2.1|text=cmdrd: operator-x ended without the process finishing (killed or crashed)"} {
+	for _, want := range []string{"label=crash-respawn:1793214000|on=true", "status=in_progress", "label=owner:operator-op-x|on=true", "AddComment:p-ws.2.1|text=cmdrd: operator-x ended without the process finishing (killed or crashed)"} {
 		if !strings.Contains(calls, want) {
 			t.Fatalf("missing %q in:\n%s", want, calls)
 		}

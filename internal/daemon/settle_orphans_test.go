@@ -14,12 +14,17 @@ import (
 func addedWaits(calls []string, id string) []beads.Wait {
 	var out []beads.Wait
 	for _, c := range calls {
-		rest, ok := strings.CutPrefix(c, "SetLabel:"+id+"|label=")
-		if !ok || !strings.Contains(rest, "|on=true") {
+		if !strings.HasPrefix(c, "SetLabel:"+id+"|") && !strings.HasPrefix(c, "UpdateFields:"+id+"|") {
 			continue
 		}
-		if w, ok := beads.ParseWaitLabel(rest[:strings.Index(rest, "|on=")]); ok {
-			out = append(out, w)
+		// A label added: "|label=<l>|on=true" (one SetLabel, or a part of one UpdateFields).
+		for _, part := range strings.Split(c, "|label=")[1:] {
+			l, rest, ok := strings.Cut(part, "|on=")
+			if ok && strings.HasPrefix(rest, "true") {
+				if w, ok := beads.ParseWaitLabel(l); ok {
+					out = append(out, w)
+				}
+			}
 		}
 	}
 	return out
@@ -88,7 +93,7 @@ func TestSweepOrphansSettlesStaleOperatorClaims(t *testing.T) {
 	}})
 	touched := map[string]bool{}
 	for _, c := range b.Calls {
-		if id, _, ok := strings.Cut(strings.TrimPrefix(strings.TrimPrefix(c, "SetLabel:"), "SetStatus:"), "|"); ok && strings.HasPrefix(c, "Set") {
+		if id, _, ok := strings.Cut(strings.TrimPrefix(strings.TrimPrefix(strings.TrimPrefix(c, "SetLabel:"), "SetStatus:"), "UpdateFields:"), "|"); ok && (strings.HasPrefix(c, "Set") || strings.HasPrefix(c, "UpdateFields:")) {
 			touched[id] = true
 		}
 	}
@@ -97,8 +102,8 @@ func TestSweepOrphansSettlesStaleOperatorClaims(t *testing.T) {
 	}
 	calls := strings.Join(b.Calls, "\n")
 	for _, want := range []string{
-		"SetLabel:p-ws.1|label=owner:manager-p-ws|on=true", "SetStatus:p-ws.1|status=in_progress",
-		"SetLabel:p-ws.2|label=owner:operator-gone|on=false", "SetLabel:p-ws.2|label=" + beads.OperatorDiedLabel + "|on=true", "SetStatus:p-ws.2|status=open",
+		"label=owner:manager-p-ws|on=true", "status=in_progress",
+		"label=owner:operator-gone|on=false", "label=" + beads.OperatorDiedLabel + "|on=true", "status=open",
 	} {
 		if !strings.Contains(calls, want) {
 			t.Fatalf("missing %q in:\n%s", want, calls)

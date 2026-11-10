@@ -11,10 +11,12 @@ import (
 	"unicode/utf8"
 
 	"github.com/example-user/commander/internal/beads"
+	"github.com/example-user/commander/internal/holding"
 	"github.com/example-user/commander/internal/livedata"
 	"github.com/example-user/commander/internal/ownercompat"
 	"github.com/example-user/commander/internal/spawn"
 	"github.com/example-user/commander/internal/store"
+	"github.com/example-user/commander/internal/wsmgr"
 )
 
 // The checks at the door: a state write is refused when the state it leaves
@@ -355,32 +357,61 @@ func (h thenHold) args(project, step string) []string {
 
 const thenFlags = "--then-waiting until:<RFC3339>:<what happens then, in plain words> (or ci:#N, review:<login>, operator:<running role>), --then-owner <running Operator>, or --then-decision '<card json>' when it is the user's call; --then-step <id> picks the step (default: every step left unheld)"
 
-// checkCloseLeavesWorkHeld refuses a close that leaves open work nothing holds
-// (no live agent, no recorded wait, not the user's): the user's board would read
-// State missing until another write names the holder. The predicate is the
-// board's own (livedata.UnheldAfter). It returns the steps the hold goes on.
-// The user's own close (no role) and the workstream's Manager, whose turn is
-// running and holds the work until it ends, are not refused: the steps they
-// leave unheld come back as custody, which the close writes as the Manager's
-// "Manager to start" receipt (holdForManager), so the board never reads State
-// missing once the turn ends.
-func checkCloseLeavesWorkHeld(snap *livedata.Snapshot, beadID, role string, hold thenHold) (targets []string, custody []livedata.Violation, err error) {
-	if snap == nil {
+// holdingEdit is the hold as the one predicate reads it.
+func (h thenHold) holdingEdit(b *holding.Bead) {
+	b.Waits += len(h.waiting)
+	if h.owner != "" {
+		b.Owner, b.OwnerState, b.Status = h.owner, "", holding.StatusInProgress
+	}
+	if h.decision != "" {
+		b.NeedsUser = true
+	}
+}
+
+// checkCloseLeavesWorkHeld judges a close on FRESH reads of its closure (holding.NewlyUnheld,
+// the board's own predicate), never on cmdrd's snapshot, which can lag the write by minutes. It
+// returns the steps the --then-* hold goes on, and the steps it leaves with no holder that the
+// close itself hands to their Manager (custody: a "Manager to start" receipt, holdForManager,
+// written before the close). The user's own close (no role, the app's Complete button included),
+// an Operator closing its own work (role "" from closeDoorRole) and the workstream's own Manager
+// are never refused: what they leave unheld becomes custody, so the board never reads State
+// missing. Any other agent is refused with the flags that name the next holder. The user's
+// recorded --leave-unheld skips the custody. An ancestor the close leaves unheld (the stage above,
+// closed next) is never refused and always gets custody.
+func checkCloseLeavesWorkHeld(ctx context.Context, bc beads.Client, dir, beadID, role string, hold thenHold) (targets, custody []string, err error) {
+	g, err := loadGraph(ctx, bc, dir, beadID)
+	if err != nil {
 		if hold.set() && hold.step == "" {
-			return nil, nil, fmt.Errorf("cmdrd's board is not readable, so the steps this close releases are unknown: name the one to hold with --then-step <id>")
+			return nil, nil, fmt.Errorf("the beads around %s could not be read (%v), so the steps this close releases are unknown: name the one to hold with --then-step <id>", beadID, err)
 		}
 		if hold.step != "" {
 			return []string{hold.step}, nil, nil
 		}
-		return nil, nil, nil
+		custody, err := closeCustodyFromBoard(ctx, bc, dir, beadID, role, err)
+		return nil, custody, err
 	}
-	closeStep := func(st *livedata.SnapStep) { st.Status, st.State = "closed", beads.StateDone }
-	holes := livedata.UnheldAfter(*snap, map[string]func(*livedata.SnapStep){beadID: closeStep})
+	closeEdit := func(b *holding.Bead) { b.Status = holding.StatusClosed }
+	up := map[string]bool{}
+	for cur, n := g.Beads[beadID].Parent, 0; cur != "" && n < 32; n++ {
+		up[cur] = true
+		cur = g.Beads[cur].Parent
+	}
+	// An ancestor the close leaves unheld (a stage whose last open child this was) is the
+	// Manager's to close or carry on next: never refused, always custody.
+	for _, v := range holding.NewlyUnheld(g, beadID, map[string]holding.Edit{beadID: closeEdit}) {
+		if up[v.ID] {
+			custody = append(custody, v.ID)
+		}
+	}
+	unheld := func(edits map[string]holding.Edit) []holding.Violation {
+		return slices.DeleteFunc(holding.NewlyUnheld(g, beadID, edits), func(v holding.Violation) bool { return up[v.ID] })
+	}
+	holes := unheld(map[string]holding.Edit{beadID: closeEdit})
 	targets = []string{hold.step}
 	if hold.step == "" {
 		targets = nil
 		for _, v := range holes {
-			targets = append(targets, v.BeadID)
+			targets = append(targets, v.ID)
 		}
 	}
 	if hold.set() && len(targets) == 0 {
@@ -388,30 +419,95 @@ func checkCloseLeavesWorkHeld(snap *livedata.Snapshot, beadID, role string, hold
 	}
 	left := holes
 	if hold.set() {
-		edits := map[string]func(*livedata.SnapStep){beadID: closeStep}
+		edits := map[string]holding.Edit{beadID: closeEdit}
 		for _, t := range targets {
-			edits[t] = hold.edit
+			edits[t] = hold.holdingEdit
 		}
-		left = livedata.UnheldAfter(*snap, edits)
+		left = unheld(edits)
 	}
-	var unheld []string
+	var names []string
 	for _, v := range left {
-		if role == "" || spawn.CanonicalRole(role) == spawn.CanonicalRole(v.ManagerRole) {
-			custody = append(custody, v)
+		if role == "" || ownsStep(ctx, bc, dir, role, v.ID) {
+			custody = append(custody, v.ID)
 			continue
 		}
-		unheld = append(unheld, fmt.Sprintf("%s %q", v.BeadID, v.Title))
+		names = append(names, fmt.Sprintf("%s %q", v.ID, v.Title))
 	}
-	if len(unheld) == 0 {
+	if len(custody) > 0 && holdingRole() == "" {
+		var all []string
+		for _, v := range left {
+			all = append(all, fmt.Sprintf("%s %q", v.ID, v.Title))
+		}
+		if ok, err := leaveUnheld(ctx, bc, dir, beadID, "closing "+beadID, all); err != nil {
+			return nil, nil, err
+		} else if ok {
+			custody = nil // the user's recorded choice: no receipt
+		}
+	}
+	if len(names) == 0 {
 		if !hold.set() {
 			return nil, custody, nil
 		}
 		return targets, custody, nil
 	}
 	if hold.set() {
-		return nil, nil, fmt.Errorf("closing %s with that hold still leaves %s with nothing holding it, so the user's board reads State missing. Hold it too: %s. Nothing was closed", beadID, strings.Join(unheld, ", "), thenFlags)
+		return nil, nil, fmt.Errorf("refused: closing %s with that hold still leaves %s with no holder, so the user's board reads State missing. Hold it too: %s. Nothing was closed", beadID, strings.Join(names, ", "), thenFlags)
 	}
-	return nil, nil, fmt.Errorf("closing %s leaves %s open with nothing holding it (no running agent, no recorded wait, no user decision), so the user's board reads State missing until someone writes its state. Name the next holder in the same command: %s. Nothing was closed", beadID, strings.Join(unheld, ", "), thenFlags)
+	return nil, nil, fmt.Errorf("refused: closing %s would leave %s open with no holder (no running Operator, no recorded wait, no user decision), so the user's board reads State missing until someone writes its state. Name the next holder in the same command: %s. Nothing was closed", beadID, strings.Join(names, ", "), thenFlags)
+}
+
+// closeCustodyFromBoard is the close door's judgment when the fresh closure cannot be read (a
+// read error, or holdread.ErrTooLarge): never "nothing left unheld". It falls back to cmdrd's board
+// (livedata.UnheldAfter, the judgment before the fresh read): the steps this caller may release
+// are handed to their Manager (custody), so the result is held; any other agent is refused as
+// on fresh reads; the user's recorded --leave-unheld skips the receipt. A board that cannot be
+// read either leaves the close unjudged, said on stderr.
+func closeCustodyFromBoard(ctx context.Context, bc beads.Client, dir, beadID, role string, readErr error) ([]string, error) {
+	snap := boardSnapshot()
+	if snap == nil {
+		fmt.Fprintf(os.Stderr, "warning: the beads around %s could not be read (%v) and cmdrd's board is not readable: what this close releases was not judged\n", beadID, readErr)
+		return nil, nil
+	}
+	closeStep := func(st *livedata.SnapStep) { st.Status, st.State = "closed", beads.StateDone }
+	var custody, names, all []string
+	for _, v := range livedata.UnheldAfter(*snap, map[string]func(*livedata.SnapStep){beadID: closeStep}) {
+		name := fmt.Sprintf("%s %q", v.BeadID, v.Title)
+		all = append(all, name)
+		if role == "" || spawn.CanonicalRole(role) == spawn.CanonicalRole(v.ManagerRole) || ownsStep(ctx, bc, dir, role, v.BeadID) {
+			custody = append(custody, v.BeadID)
+			continue
+		}
+		names = append(names, name)
+	}
+	if len(names) > 0 {
+		return nil, fmt.Errorf("refused: closing %s would leave %s open with no holder (judged on cmdrd's board: the beads around it could not be read fresh: %v). Name the next holder in the same command: %s. Nothing was closed", beadID, strings.Join(names, ", "), readErr, thenFlags)
+	}
+	if len(custody) > 0 && holdingRole() == "" {
+		if ok, err := leaveUnheld(ctx, bc, dir, beadID, "closing "+beadID, all); err != nil {
+			return nil, err
+		} else if ok {
+			return nil, nil
+		}
+	}
+	return custody, nil
+}
+
+// ownsStep: role is a Manager over id (its nearest owner or one that coordinates it, fresh
+// parents): the work it leaves unheld is its own to start, so the receipt names the right Manager.
+func ownsStep(ctx context.Context, bc beads.Client, dir, role, id string) bool {
+	if !strings.HasPrefix(role, "manager-") {
+		return false
+	}
+	owners, err := wsmgr.OwnerChain(ctx, bc, dir, id)
+	if err != nil {
+		return false
+	}
+	for _, o := range owners {
+		if spawn.CanonicalRole(wsmgr.Role(o)) == spawn.CanonicalRole(role) {
+			return true
+		}
+	}
+	return false
 }
 
 // boardSnapshot is cmdrd's board for the doors that read it; nil when it is

@@ -3,14 +3,7 @@ import { createPortal } from 'react-dom'
 import { fmtCost, fmtTokens, type ChatState } from './events'
 import type { TerminalSession } from './ChatPane'
 import { Icon } from './icons'
-
-function prettyModel(m?: string): string {
-  if (!m) return '…'
-  // A Codex chat reports "codex:<model>" (cmdrd's bridge): say which CLI it runs on.
-  if (m.startsWith('codex:')) return `${m.slice(6).replace(/^gpt/, 'GPT') || 'default'} · Codex`
-  const x = /^claude-([a-z]+)-(\d+)-(\d+)/.exec(m)
-  return x ? `${x[1][0].toUpperCase()}${x[1].slice(1)} ${x[2]}.${x[3]}` : m
-}
+import { modelName } from './modelName'
 
 function Meter({ value, warnAt = 0.7 }: { value: number; warnAt?: number }) {
   const pct = Math.max(0, Math.min(1, value))
@@ -81,8 +74,7 @@ export function Header({
   const seven = state.rateLimit?.windows.seven_day
   const tokensUsed = state.usage.input + state.usage.output + state.usage.cacheRead + state.usage.cacheCreate
   const items = extraMenu ?? []
-  const model = state.model ? prettyModel(state.model) : ''
-  const codex = !!state.model?.startsWith('codex:')
+  const model = modelName(state.model)
 
   const controls = (
     <div className="cc-header">
@@ -97,11 +89,6 @@ export function Header({
             </button>
           )}
         </>
-      )}
-      {codex && (
-        <span className="cc-badge" title={`Runs on Codex (${state.model?.slice(6) || 'default model'})`}>
-          Codex
-        </span>
       )}
       <div className="cc-menu" ref={menuRef}>
         <button

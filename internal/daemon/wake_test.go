@@ -68,7 +68,7 @@ func TestWakeFromSleepMarksVanishedRunsDiedAndMailsTheManagerOnce(t *testing.T) 
 		t.Fatalf("died=%d retried=%d", n, retried)
 	}
 	calls := strings.Join(b.Calls, "\n")
-	if !strings.Contains(calls, "label=owner:operator-x|on=false") || !strings.Contains(calls, "SetStatus:p-ws.2.1|status=open") {
+	if !strings.Contains(calls, "label=owner:operator-x|on=false") || !strings.Contains(calls, "|status=open|") {
 		t.Fatalf("calls:\n%s", calls)
 	}
 	if len(sent) != 1 || sent[0].to != "manager-p-ws" || !strings.Contains(sent[0].subject, "died while the Mac slept (gap 600 min)") {

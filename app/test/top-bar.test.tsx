@@ -45,3 +45,16 @@ describe('the top bar', () => {
     expect(screen.queryByText('Commander')).toBeNull()
   })
 })
+
+it('shows the reported model beside Commander and follows a provider change', () => {
+  useStore.setState({ chats: { commander: { role: 'commander', running: true, state: 'idle', last_seq: 1, total_cost_usd: 0, pending: [], model: 'codex:gpt-6.1-sol' } } })
+  render(<TopBar left={397} chat={640} />)
+  const model = screen.getByText('Sol 6.1')
+  expect(model).toHaveClass('app-top-model')
+  expect(model.previousElementSibling).toHaveTextContent('Commander')
+  expect(screen.queryByText('Codex')).toBeNull()
+  act(() => useStore.setState({ chats: { commander: { ...useStore.getState().chats.commander, model: 'claude-opus-5-5' } } }))
+  expect(screen.getByText('Opus 5.5')).toHaveClass('app-top-model')
+  expect(screen.queryByText('Sol 6.1')).toBeNull()
+  useStore.setState({ chats: {} })
+})

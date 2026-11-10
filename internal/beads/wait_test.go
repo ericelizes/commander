@@ -178,3 +178,34 @@ func TestCutTimeWaitReadsAtAWord(t *testing.T) {
 		t.Fatalf("uncut wait reads %q", short.Text())
 	}
 }
+
+func TestLongUntilLabelKeepsWholeWordsAndParsesTyped(t *testing.T) {
+	for _, label := range []string{
+		"Commander's settle-block command lands and is installed",
+		"the quick brown fox jumps over the lazy dog again and again",
+	} {
+		w, err := ParseWait("until:2026-11-10T10:00:00Z:" + label)
+		if err != nil {
+			t.Fatalf("%q: %v", label, err)
+		}
+		w.Since = time.Unix(1700000000, 0)
+		l := w.Label()
+		if len(l) > MaxLabelLen {
+			t.Fatalf("label %q is %d long", l, len(l))
+		}
+		p, ok := ParseWaitLabel(l)
+		if !ok || p.Untyped() || !strings.Contains(strings.TrimSpace(p.Ref), " ") {
+			t.Fatalf("%q stored as %q reads untyped or one word: %+v", label, l, p)
+		}
+		if !strings.HasPrefix(label, strings.TrimSpace(p.Ref)) {
+			t.Fatalf("stored ref %q is not whole leading words of %q", p.Ref, label)
+		}
+	}
+}
+
+func TestUntilLabelThatCannotFitTwoWordsIsRefused(t *testing.T) {
+	_, err := ParseWait("until:2026-11-10T10:00:00Z:Commander's-extraordinarily-long-first-word rest")
+	if err == nil || !strings.Contains(err.Error(), "too long") {
+		t.Fatalf("want a too-long refusal, got %v", err)
+	}
+}

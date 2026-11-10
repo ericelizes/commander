@@ -35,7 +35,14 @@ type Verdict struct {
 	Credential bool
 	// Cockpit is set when refused for opening the cockpit (bare cmdr and its targets).
 	Cockpit bool
+	// Stash is set when refused for git stash: every worktree shares one stash list (refs/stash),
+	// so a push, pop, apply or drop can take or lose another task's work.
+	Stash bool
 }
+
+// StashReason tells an Operator how to set work aside without the shared stash.
+const StashReason = "Refused: git stash. Every worktree of the repo shares one stash list (refs/stash), so a stash, pop, apply or drop can take or lose another Operator's work. " +
+	"Set work aside with a WIP commit on your own branch instead (git add -A && git commit -m 'wip: ...'; undo it later with git reset --soft HEAD~1). git stash list and git stash show stay allowed."
 
 // DenyReason tells a refused Operator how to proceed.
 func DenyReason(why string) string {
@@ -76,6 +83,9 @@ func HookOutputFor(v Verdict) []byte {
 	}
 	if v.Scan {
 		return hookOutput(ScanDenyReason(v.Why))
+	}
+	if v.Stash {
+		return hookOutput(StashReason)
 	}
 	return HookOutput(v.Why)
 }
@@ -201,6 +211,10 @@ ready:
 		return Verdict{Deny: true, Why: strings.Join(words, " "), Scan: true}
 	}
 	switch cmd {
+	case "git":
+		if sub, rest := gitSubcommand(args); sub == "stash" && !(len(rest) > 0 && (rest[0] == "list" || rest[0] == "show")) {
+			return Verdict{Deny: true, Why: strings.Join(words, " "), Stash: true}
+		}
 	case "cmdr", "commander":
 		if len(args) >= 2 && args[0] == "linear" && args[1] == "set-key" {
 			return Verdict{Deny: true, Why: "cmdr linear set-key belongs to the user", Credential: true}
@@ -463,3 +477,26 @@ func hasFileArg(args []string, ignore ...string) bool {
 }
 
 func base(w string) string { return filepath.Base(w) }
+
+// gitSubcommand skips git's global options (-C <dir>, -c <k=v>, --git-dir=..., -P ...) and
+// returns the subcommand and its arguments.
+// gitValueOpts are git's global options that take their value as the next word (m5): skipped with
+// it, so `git --attr-source HEAD stash pop` still finds stash.
+var gitValueOpts = map[string]bool{
+	"-C": true, "-c": true, "--git-dir": true, "--work-tree": true, "--namespace": true,
+	"--config-env": true, "--attr-source": true, "--super-prefix": true, "--exec-path": true, "--list-cmds": true,
+}
+
+func gitSubcommand(args []string) (string, []string) {
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case gitValueOpts[a]:
+			i++
+		case strings.HasPrefix(a, "-"):
+		default:
+			return a, args[i+1:]
+		}
+	}
+	return "", nil
+}

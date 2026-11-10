@@ -14,6 +14,12 @@ import (
 	"time"
 )
 
+func TestMain(m *testing.M) {
+	// Hermetic: a real gitleaks on PATH would add a call to every check list.
+	lookPath = func(string) (string, error) { return "", exec.ErrNotFound }
+	os.Exit(m.Run())
+}
+
 func git(t *testing.T, dir string, args ...string) string {
 	t.Helper()
 	cmd := exec.Command("git", append([]string{"-c", "user.name=t", "-c", "user.email=t@t"}, args...)...)
@@ -39,6 +45,7 @@ func newRepo(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	git(t, dir, "init", "-b", "main")
+	addWorkflowPolicy(t, dir)
 	commit(t, dir, "a")
 	git(t, dir, "branch", "feat")
 	git(t, dir, "checkout", "feat")
@@ -50,7 +57,7 @@ func newRepo(t *testing.T) string {
 func TestShipFastForwards(t *testing.T) {
 	dir := newRepo(t)
 	var out bytes.Buffer
-	if err := Run(context.Background(), Options{Root: dir, Branch: "feat", Run: okRun}, &out); err != nil {
+	if err := runFakeShip(context.Background(), Options{Root: dir, Branch: "feat", Run: okRun}, &out); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 	if git(t, dir, "rev-parse", "main") != git(t, dir, "rev-parse", "feat") {
@@ -69,7 +76,7 @@ func TestShipIgnoresBeadsDirt(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, ".beads", "issues.jsonl"), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := Run(context.Background(), Options{Root: dir, Branch: "feat", Run: okRun}, &bytes.Buffer{}); err != nil {
+	if err := runFakeShip(context.Background(), Options{Root: dir, Branch: "feat", Run: okRun}, &bytes.Buffer{}); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 }
@@ -86,7 +93,7 @@ func TestShipIgnoresBrBackupDirs(t *testing.T) {
 	if err := os.WriteFile(backup+".gitignore", []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := Run(context.Background(), Options{Root: dir, Branch: "feat", Run: okRun}, &bytes.Buffer{}); err != nil {
+	if err := runFakeShip(context.Background(), Options{Root: dir, Branch: "feat", Run: okRun}, &bytes.Buffer{}); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 }
@@ -102,7 +109,7 @@ func TestShipIgnoresWorktreesDirAndSymlink(t *testing.T) {
 	if err := os.Symlink(".worktrees.noindex", filepath.Join(dir, ".worktrees")); err != nil {
 		t.Fatal(err)
 	}
-	if err := Run(context.Background(), Options{Root: dir, Branch: "feat", Run: okRun}, &bytes.Buffer{}); err != nil {
+	if err := runFakeShip(context.Background(), Options{Root: dir, Branch: "feat", Run: okRun}, &bytes.Buffer{}); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 }
@@ -128,7 +135,7 @@ func TestShipRefusals(t *testing.T) {
 				dir := newRepo(t)
 				tc.setup(t, dir)
 				head := git(t, dir, "rev-parse", "main")
-				err := Run(context.Background(), Options{Root: dir, Branch: tc.branch, Run: okRun, DryRun: dry}, &bytes.Buffer{})
+				err := runFakeShip(context.Background(), Options{Root: dir, Branch: tc.branch, Run: okRun, DryRun: dry}, &bytes.Buffer{})
 				if err == nil || !strings.Contains(err.Error(), tc.want) {
 					t.Fatalf("err = %v, want containing %q", err, tc.want)
 				}
@@ -155,7 +162,7 @@ func TestDryRunChecksEverythingAndMovesNothing(t *testing.T) {
 		return "", nil
 	}
 	var out bytes.Buffer
-	err := Run(context.Background(), Options{
+	err := runFakeShip(context.Background(), Options{
 		Root: dir, Branch: "feat", Run: run, DryRun: true,
 		Exclusive: func(context.Context, io.Writer) (func(), error) { exclusive++; return func() { released++ }, nil },
 		Hold:      func(context.Context) error { holds++; return nil },
@@ -176,7 +183,7 @@ func TestDryRunChecksEverythingAndMovesNothing(t *testing.T) {
 		t.Errorf("hold checked %d times, want 3 as on a real ship", holds)
 	}
 	var realChecks []string
-	if err := Run(context.Background(), Options{Root: dir, Branch: "feat", Run: func(_ context.Context, _, name string, args ...string) (string, error) {
+	if err := runFakeShip(context.Background(), Options{Root: dir, Branch: "feat", Run: func(_ context.Context, _, name string, args ...string) (string, error) {
 		realChecks = append(realChecks, strings.Join(append([]string{name}, args...), " "))
 		return "", nil
 	}}, &bytes.Buffer{}); err != nil {
@@ -203,7 +210,7 @@ func TestDryRunRefusesARedBranch(t *testing.T) {
 		return "", nil
 	}
 	var out bytes.Buffer
-	err := Run(context.Background(), Options{Root: dir, Branch: "feat", Run: red, DryRun: true}, &out)
+	err := runFakeShip(context.Background(), Options{Root: dir, Branch: "feat", Run: red, DryRun: true}, &out)
 	if err == nil || !strings.Contains(err.Error(), "is red") || !strings.Contains(err.Error(), "undefined: y") {
 		t.Fatalf("err = %v, want the red check", err)
 	}
@@ -225,7 +232,7 @@ func TestDryRunHoldRefuses(t *testing.T) {
 		}
 		return nil
 	}
-	err := Run(context.Background(), Options{Root: dir, Branch: "feat", Run: okRun, DryRun: true, Hold: held}, &bytes.Buffer{})
+	err := runFakeShip(context.Background(), Options{Root: dir, Branch: "feat", Run: okRun, DryRun: true, Hold: held}, &bytes.Buffer{})
 	if err == nil || !strings.Contains(err.Error(), "held by manager-x") {
 		t.Fatalf("err = %v, want the hold set during the verify", err)
 	}
@@ -238,7 +245,7 @@ func TestDryRunReplayMovesNoRef(t *testing.T) {
 	tip := git(t, dir, "rev-parse", "feat")
 	var moved string
 	var out bytes.Buffer
-	err := Run(context.Background(), Options{
+	err := runFakeShip(context.Background(), Options{
 		Root: dir, Branch: "feat", Run: okRun, DryRun: true,
 		Exclusive: func(context.Context, io.Writer) (func(), error) {
 			commit(t, dir, "landed-meanwhile")
@@ -318,6 +325,7 @@ func newAppRepo(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	git(t, dir, "init", "-b", "main")
+	addWorkflowPolicy(t, dir)
 	commit(t, dir, "a")
 	git(t, dir, "checkout", "-b", "feat")
 	if err := os.MkdirAll(filepath.Join(dir, "app"), 0o755); err != nil {
@@ -331,7 +339,7 @@ func newAppRepo(t *testing.T) string {
 func TestShipRunsChecksInTheReusedVerifyTree(t *testing.T) {
 	dir := newRepo(t)
 	var calls []call
-	if err := Run(context.Background(), Options{Root: dir, Branch: "feat", Run: recorder("", &calls)}, &bytes.Buffer{}); err != nil {
+	if err := runFakeShip(context.Background(), Options{Root: dir, Branch: "feat", Run: recorder("", &calls)}, &bytes.Buffer{}); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 	if len(calls) != 3 || calls[0].cmd != "go build ./..." || calls[1].cmd != "sh -c go test -p 1 $(go list ./... | grep -v /tests/evals)" || calls[2].cmd != "go test -p 1 ./tests/evals/..." {
@@ -358,7 +366,7 @@ func TestShipRunsChecksInTheReusedVerifyTree(t *testing.T) {
 	git(t, dir, "commit", "-qm", "more")
 	git(t, dir, "checkout", "-q", "main")
 	calls = nil
-	if err := Run(context.Background(), Options{Root: dir, Branch: "feat", Run: recorder("", &calls)}, &bytes.Buffer{}); err != nil {
+	if err := runFakeShip(context.Background(), Options{Root: dir, Branch: "feat", Run: recorder("", &calls)}, &bytes.Buffer{}); err != nil {
 		t.Fatalf("second Run: %v", err)
 	}
 	if len(calls) == 0 || calls[0].dir != want {
@@ -374,7 +382,7 @@ func TestShipRefusesRedBranch(t *testing.T) {
 		dir := newRepo(t)
 		head := git(t, dir, "rev-parse", "main")
 		var calls []call
-		err := Run(context.Background(), Options{Root: dir, Branch: "feat", Run: recorder(failOn, &calls)}, &bytes.Buffer{})
+		err := runFakeShip(context.Background(), Options{Root: dir, Branch: "feat", Run: recorder(failOn, &calls)}, &bytes.Buffer{})
 		if err == nil || !strings.Contains(err.Error(), "is red: "+failOn) || !strings.Contains(err.Error(), "boom output") {
 			t.Fatalf("%s: err = %v", failOn, err)
 		}
@@ -387,7 +395,7 @@ func TestShipRefusesRedBranch(t *testing.T) {
 func TestShipChecksAppWhenItChanged(t *testing.T) {
 	dir := newAppRepo(t)
 	var calls []call
-	if err := Run(context.Background(), Options{Root: dir, Branch: "feat", Run: recorder("", &calls)}, &bytes.Buffer{}); err != nil {
+	if err := runFakeShip(context.Background(), Options{Root: dir, Branch: "feat", Run: recorder("", &calls)}, &bytes.Buffer{}); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 	var got []string
@@ -408,7 +416,7 @@ func TestShipRefusesRedAppBranch(t *testing.T) {
 		dir := newAppRepo(t)
 		head := git(t, dir, "rev-parse", "main")
 		var calls []call
-		err := Run(context.Background(), Options{Root: dir, Branch: "feat", Run: recorder(failOn, &calls)}, &bytes.Buffer{})
+		err := runFakeShip(context.Background(), Options{Root: dir, Branch: "feat", Run: recorder(failOn, &calls)}, &bytes.Buffer{})
 		if err == nil || !strings.Contains(err.Error(), "is red: "+failOn) {
 			t.Fatalf("%s: err = %v", failOn, err)
 		}
@@ -430,7 +438,7 @@ func TestShipRefusesDirtyBranchWorktree(t *testing.T) {
 			setup(wt)
 			head := git(t, dir, "rev-parse", "main")
 			var calls []call
-			err := Run(context.Background(), Options{Root: dir, Branch: "feat", Run: recorder("", &calls)}, &bytes.Buffer{})
+			err := runFakeShip(context.Background(), Options{Root: dir, Branch: "feat", Run: recorder("", &calls)}, &bytes.Buffer{})
 			if err == nil || !strings.Contains(err.Error(), "uncommitted or untracked") {
 				t.Fatalf("err = %v", err)
 			}
@@ -456,7 +464,7 @@ func TestShipHoldsSlotForWholeVerify(t *testing.T) {
 	exclusive := func(ctx context.Context, out io.Writer) (func(), error) {
 		return holdVerifyLock(ctx, t.TempDir(), dir, out, testPoll, slot)
 	}
-	if err := Run(context.Background(), Options{Root: dir, Branch: "feat", Run: run, Exclusive: exclusive}, &bytes.Buffer{}); err != nil {
+	if err := runFakeShip(context.Background(), Options{Root: dir, Branch: "feat", Run: run, Exclusive: exclusive}, &bytes.Buffer{}); err != nil {
 		t.Fatal(err)
 	}
 	if len(steps) == 0 {
@@ -480,7 +488,7 @@ func TestShipSlotFailureStopsBeforeChecks(t *testing.T) {
 	exclusive := func(ctx context.Context, out io.Writer) (func(), error) {
 		return holdVerifyLock(ctx, t.TempDir(), dir, out, testPoll, slot)
 	}
-	err := Run(context.Background(), Options{Root: dir, Branch: "feat", Run: run, Exclusive: exclusive}, &bytes.Buffer{})
+	err := runFakeShip(context.Background(), Options{Root: dir, Branch: "feat", Run: run, Exclusive: exclusive}, &bytes.Buffer{})
 	if err == nil || ran {
 		t.Fatalf("err=%v ran=%v", err, ran)
 	}
@@ -494,7 +502,7 @@ func TestShipHoldRefusedAtStart(t *testing.T) {
 	var calls []call
 	opts := Options{Root: dir, Branch: "feat", Run: recorder("", &calls),
 		Hold: func(context.Context) error { return errors.New("held by manager-x: wait") }}
-	err := Run(context.Background(), opts, io.Discard)
+	err := runFakeShip(context.Background(), opts, io.Discard)
 	if err == nil || !strings.Contains(err.Error(), "held by manager-x") {
 		t.Fatalf("err = %v", err)
 	}
@@ -514,7 +522,7 @@ func TestShipHoldSetDuringVerifyRefusesFinalMerge(t *testing.T) {
 			}
 			return nil
 		}}
-	err := Run(context.Background(), opts, io.Discard)
+	err := runFakeShip(context.Background(), opts, io.Discard)
 	if err == nil || !strings.Contains(err.Error(), "held by") {
 		t.Fatalf("err = %v", err)
 	}
@@ -526,7 +534,7 @@ func TestShipHoldSetDuringVerifyRefusesFinalMerge(t *testing.T) {
 func TestShipHoldUnheldShips(t *testing.T) {
 	dir := newRepo(t)
 	opts := Options{Root: dir, Branch: "feat", Run: okRun, Hold: func(context.Context) error { return nil }}
-	if err := Run(context.Background(), opts, io.Discard); err != nil {
+	if err := runFakeShip(context.Background(), opts, io.Discard); err != nil {
 		t.Fatal(err)
 	}
 	if git(t, dir, "rev-parse", "main") != git(t, dir, "rev-parse", "feat") {
@@ -550,7 +558,7 @@ func TestShipReplaysOntoAMainThatMovedDuringTheCheck(t *testing.T) {
 		return "", nil
 	}
 	var out bytes.Buffer
-	if err := Run(context.Background(), Options{Root: dir, Branch: "feat", Run: run}, &out); err != nil {
+	if err := runFakeShip(context.Background(), Options{Root: dir, Branch: "feat", Run: run}, &out); err != nil {
 		t.Fatalf("Run: %v\n%s", err, out.String())
 	}
 	if checks != 2 {
@@ -614,5 +622,142 @@ func TestRunCommandDropsTheShippersRole(t *testing.T) {
 	}
 	if strings.Contains(out, "COMMANDER_ROLE=") {
 		t.Fatalf("the check inherited the role:\n%s", out)
+	}
+}
+
+func TestShipRefusesOnGitleaksFindings(t *testing.T) {
+	dir := newRepo(t)
+	var calls []call
+	gl := func(string) (string, error) { return "/bin/gitleaks", nil }
+	var out bytes.Buffer
+	clean := func(ctx context.Context, dir, name string, args ...string) (string, error) {
+		recorder("", &calls)(ctx, dir, name, args...)
+		if name == "gitleaks" {
+			return gitleaksClean, nil
+		}
+		return "", nil
+	}
+	mainSHA := git(t, dir, "rev-parse", "main")
+	err := Run(context.Background(), Options{Root: dir, Branch: "feat", LookPath: gl, Run: clean}, &out)
+	if err != nil || len(calls) != 4 || (!strings.HasPrefix(calls[0].cmd, "gitleaks detect --source ") || !strings.Contains(calls[0].cmd, "--no-renames --diff-merges=first-parent "+mainSHA+"..")) || calls[0].dir != dir {
+		t.Fatalf("clean scan: err=%v calls=%+v", err, calls)
+	}
+	if !strings.Contains(calls[0].cmd, " --ignore-gitleaks-allow ") {
+		t.Fatalf("inline gitleaks:allow comments are honoured: %s", calls[0].cmd)
+	}
+	failing := func(_ context.Context, _ string, name string, _ ...string) (string, error) {
+		if name == "gitleaks" {
+			return "Finding: aws-key\n" + gitleaksLeak, os.ErrInvalid
+		}
+		t.Fatalf("ran %s after a red scan", name)
+		return "", nil
+	}
+	err = Run(context.Background(), Options{Root: newRepo(t), Branch: "feat", LookPath: gl, Run: failing}, &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "secret findings") || !strings.Contains(err.Error(), "aws-key") {
+		t.Fatalf("want refusal, got %v", err)
+	}
+}
+
+// Neither main nor the branch supplies rules or ignores; the tool owns policy
+// and the detector uses a private source directory.
+func TestShipGitleaksUsesToolConfigNeverRepositoryPolicy(t *testing.T) {
+	gl := func(string) (string, error) { return "/bin/gitleaks", nil }
+	scan := func(t *testing.T, dir string) (config, ignore, source string) {
+		t.Helper()
+		run := func(_ context.Context, rdir, name string, args ...string) (string, error) {
+			if name != "gitleaks" {
+				return "", nil
+			}
+			flag := func(f string) string {
+				for i, a := range args {
+					if a == f && i+1 < len(args) {
+						return args[i+1]
+					}
+				}
+				t.Fatalf("gitleaks without %s: %v", f, args)
+				return ""
+			}
+			c, err := os.ReadFile(flag("--config"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			i, err := os.ReadFile(flag("--gitleaks-ignore-path"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if rdir == flag("--source") {
+				t.Errorf("gitleaks must use a private source, ran in %s, source %s", rdir, flag("--source"))
+			}
+			config, ignore, source = string(c), string(i), flag("--source")
+			return gitleaksClean, nil
+		}
+		if err := Run(context.Background(), Options{Root: dir, Branch: "feat", LookPath: gl, Run: run}, &bytes.Buffer{}); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+	branchAllowsItself := func(t *testing.T, dir string) {
+		git(t, dir, "checkout", "-q", "feat")
+		os.WriteFile(filepath.Join(dir, ".gitleaksignore"), []byte("branch-fingerprint\n"), 0o644)
+		os.WriteFile(filepath.Join(dir, ".gitleaks.toml"), []byte("[allowlist]\npaths = [\".*\"]\n"), 0o644)
+		git(t, dir, "add", ".gitleaksignore", ".gitleaks.toml")
+		git(t, dir, "commit", "-qm", "allow everything")
+		git(t, dir, "checkout", "-q", "main")
+	}
+
+	t.Run("main has none", func(t *testing.T) {
+		dir := newRepo(t)
+		branchAllowsItself(t, dir)
+		config, ignore, source := scan(t, dir)
+		if config != defaultGitleaksConfig || ignore != "" || source == dir {
+			t.Fatalf("config=%q ignore=%q source=%s, want the default rules, an empty list, the main checkout", config, ignore, source)
+		}
+	})
+	t.Run("main has its own", func(t *testing.T) {
+		dir := newRepo(t)
+		os.WriteFile(filepath.Join(dir, ".gitleaksignore"), []byte("main-fingerprint\n"), 0o644)
+		os.WriteFile(filepath.Join(dir, ".gitleaks.toml"), []byte("title = \"main\"\n"), 0o644)
+		git(t, dir, "add", ".gitleaksignore", ".gitleaks.toml")
+		git(t, dir, "commit", "-qm", "main rules")
+		git(t, dir, "checkout", "-q", "feat")
+		git(t, dir, "rebase", "-q", "main")
+		git(t, dir, "checkout", "-q", "main")
+		branchAllowsItself(t, dir)
+		config, ignore, _ := scan(t, dir)
+		if config != defaultGitleaksConfig || ignore != "" {
+			t.Fatalf("config=%q ignore=%q, want main's", config, ignore)
+		}
+	})
+}
+
+// A gitleaks on the tester's PATH must not reach a test that injects no
+// LookPath: TestMain pins the package default to "not found".
+func TestShipTestsIgnoreAGitleaksOnPATH(t *testing.T) {
+	bin := t.TempDir()
+	if err := os.WriteFile(filepath.Join(bin, "gitleaks"), []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	var calls []call
+	if err := Run(context.Background(), Options{Root: newRepo(t), Branch: "feat", Run: recorder("", &calls)}, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range calls {
+		if strings.HasPrefix(c.cmd, "gitleaks") {
+			t.Fatalf("the PATH's gitleaks ran: %+v", calls)
+		}
+	}
+}
+
+func TestShipSkipsGitleaksWithAWarningWhenAbsent(t *testing.T) {
+	dir := newRepo(t)
+	var calls []call
+	var out bytes.Buffer
+	missing := func(string) (string, error) { return "", os.ErrNotExist }
+	if err := Run(context.Background(), Options{Root: dir, Branch: "feat", LookPath: missing, Run: recorder("", &calls)}, &out); err != nil {
+		t.Fatal(err)
+	}
+	if len(calls) != 3 || !strings.Contains(out.String(), "gitleaks not found") {
+		t.Fatalf("calls=%d out=%q", len(calls), out.String())
 	}
 }

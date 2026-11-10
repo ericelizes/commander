@@ -692,6 +692,49 @@ func TestDeliveryAuthorityAndReadinessContract(t *testing.T) {
 	}
 }
 
+// Every role is taught the one holder rule cmdr enforces, and none teaches a Manager owner as a way to hold work.
+func TestHolderRuleInPrompts(t *testing.T) {
+	for _, role := range []string{RoleCommander, RoleManager} {
+		body, err := roleBody(role)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(body, "Every write names who holds the work next") || !strings.Contains(body, "a Manager's name is not a holder") && !strings.Contains(body, "A Manager's name is not a holder") {
+			t.Errorf("%s prompt does not teach the holder rule", role)
+		}
+	}
+	op, err := roleBody(operatorCodePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, needle := range []string{"Final report:", "Never leave a background command running"} {
+		if !strings.Contains(op, needle) {
+			t.Errorf("operator prompt missing %q", needle)
+		}
+	}
+	for _, role := range []string{RoleCommander, RoleManager, operatorCodePath} {
+		body, _ := roleBody(role)
+		for _, line := range strings.Split(body, "\n") {
+			if strings.Contains(line, "--owner manager-") && !strings.Contains(line, "not a holder") && !strings.Contains(line, "is written with") {
+				t.Errorf("%s prompt teaches --owner manager-* as a way to hold work: %s", role, line)
+			}
+		}
+	}
+}
+
+// The Operator prompt says why git stash is refused and what to do instead.
+func TestOperatorPromptForbidsGitStash(t *testing.T) {
+	raw, err := os.ReadFile("operator-code.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"Never use `git stash`", "shares one stash list", "WIP commit"} {
+		if !strings.Contains(string(raw), want) {
+			t.Errorf("operator-code.md lacks %q", want)
+		}
+	}
+}
+
 // Nested Managers: the parent dispatches, rolls up and links across siblings; a
 // nested Manager reports to its parent; Operators learn a reroute means a new Manager.
 func TestNestedManagersInPrompts(t *testing.T) {

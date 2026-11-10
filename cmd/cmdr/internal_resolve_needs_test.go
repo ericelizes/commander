@@ -45,6 +45,17 @@ func (c *decidedCardClient) SetStatus(ctx context.Context, dir, id, status strin
 func (c *decidedCardClient) Close(ctx context.Context, dir, id string) error {
 	return c.SetStatus(ctx, dir, id, "closed")
 }
+func (c *decidedCardClient) UpdateFields(ctx context.Context, dir, id string, f beads.Fields) error {
+	if err := c.MockClient.UpdateFields(ctx, dir, id, f); err != nil {
+		return err
+	}
+	for i := range c.ListResult {
+		if c.ListResult[i].ID == id && f.Description != nil {
+			c.ListResult[i].Description = *f.Description
+		}
+	}
+	return nil
+}
 func (c *decidedCardClient) Show(_ context.Context, _, id string) (*beads.Bead, error) {
 	for i := range c.ListResult {
 		if c.ListResult[i].ID == id {
@@ -281,5 +292,53 @@ func TestGateCardApproves_ResumeClosesAnsweredOpenGate(t *testing.T) {
 	}
 	if len(mailer.sent) != 0 {
 		t.Fatalf("resume mailed again: %d", len(mailer.sent))
+	}
+}
+
+// Approving a gate never widens production authority: the card is not
+// written into the gate's description, so a description-less approval is no
+// --prod-gate, and a workflow approval is refused whatever its description. An
+// explicit production gate's scope is its own description, verbatim: the text
+// the user's card showed and the user approved.
+func TestApprovingAGateNeverWidensProductionAuthority(t *testing.T) {
+	const card = `{"question":"Approve?","options":[{"label":"Approve","approves":true,"implications":"Starts the build."},{"label":"Not yet"}]}`
+	for _, tc := range []struct {
+		name, title, desc, wantErr string
+	}{
+		{"workflow approval, no description", "Workflow approved", "", "no description"},
+		{"greenlight, no description", "Greenlight: rebuild", "", "no description"},
+		{"workflow approval with a description", "Dev flow: workflow approved", "The plan in ms-1.", "workflow approval"},
+		{"explicit production gate", "Greenlight: deploy v3", "Deploy tag v3 to the VM once.", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			stubMail(t)
+			bc, _, _ := approvingChoiceSetup(t, card)
+			bc.ListResult[1].Title = tc.title
+			bc.ListResult[1].Description = tc.desc
+			bc.ListResult[1].Labels = append(bc.ListResult[1].Labels, "gate-of:"+beads.EscapeLabel("ms-1"))
+			stdout, stderr, output := withTempOutputFiles(t)
+			args := []string{"--project", "manifest", "--bead", "ms-1.1", "--action", "decide", "--choice", "Approve", "--text", "tonight only"}
+			if code := runInternalResolveNeeds(args, stdout, stderr); code != 0 {
+				_, errOut := output()
+				t.Fatalf("exit %d: %s", code, errOut)
+			}
+			b, _ := bc.Show(context.Background(), "", "ms-1.1")
+			if b.Status != "closed" {
+				t.Fatalf("gate not closed: %s", b.Status)
+			}
+			if b.Description != tc.desc {
+				t.Fatalf("approval rewrote the description: %q, want %q", b.Description, tc.desc)
+			}
+			scope, err := checkProdGate(context.Background(), bc, "", "ms-1", "ms-1.1", "manager-ms-1")
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("--prod-gate accepted an approval (scope %q, err %v), want %q", scope, err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil || scope != tc.desc {
+				t.Fatalf("scope %q err %v, want %q verbatim", scope, err, tc.desc)
+			}
+		})
 	}
 }

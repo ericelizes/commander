@@ -1,0 +1,10 @@
+{
+  "role": "operator-op-sample-1",
+  "session": "op-sample-1",
+  "cases": [
+    {"name": "a disk over the refuse line refuses the respawn and changes nothing", "refuse_pct": "0.001", "exit": 1,
+     "says": ["% full", "new Operators are refused until it drops", "nothing was changed"]},
+    {"name": "a disk under the line gets past the disk check", "refuse_pct": "100", "exit": -1, "says": ["end op-sample-1"],
+     "never": ["new Operators are refused"]}
+  ]
+}

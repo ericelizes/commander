@@ -786,6 +786,20 @@ func TestDiagram_NeedsYouLaneBoardIsClean(t *testing.T) {
 	}
 }
 
+// An open card the user answers puts the step in the You lane, whatever its approver label says.
+func TestDiagram_OpenCardIsTheYouLaneWhoeverApproves(t *testing.T) {
+	defer func(l *time.Location) { time.Local = l }(time.Local)
+	time.Local = time.UTC
+	var d *Diagram
+	for _, r := range fixtureBoard(t, "testdata/diagram/card-you-lane.json").Workstreams {
+		d = r.Diagram
+	}
+	g := diagramStep(d, "lab-cy.2")
+	if g == nil || g.Actor != ActorYou || g.Lane != "you" {
+		t.Fatalf("a gate approved by a named person, with the user's card open, is %+v", g)
+	}
+}
+
 func TestDiagram_PlainUserOwnedDecisionLane(t *testing.T) {
 	ws := SnapWorkstream{BeadID: "w", Project: "p", Steps: []SnapStep{{BeadID: "w.1", Title: "Choose a region", Status: "open", State: "needs-user", Owner: "user"}}}
 	r := Board(snapOf(ws, idle, NeedsYou{BeadID: "w.1", Project: "p", Title: "Choose a region"}), nowSec).Workstreams[0]

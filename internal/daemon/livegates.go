@@ -298,11 +298,17 @@ func (w *gateWatcher) recheck(ctx context.Context, p store.Project, n gates.Node
 		log.Printf("daemon: gates: record %s: %v", n.ID, err)
 		return
 	}
-	if !(g.Status == store.GatePassed && status == store.GateFailed) && !(g.Status == store.GateFailed && status == store.GatePassed) {
+	// Passing for the first time closes the gate and releases what waited on it: that work has no
+	// holder until its Manager dispatches it, so the Manager is told as for any other change.
+	released := status == store.GatePassed && g.Status != store.GatePassed && g.Status != store.GateFailed
+	if !(g.Status == store.GatePassed && status == store.GateFailed) && !(g.Status == store.GateFailed && status == store.GatePassed) && !released {
 		return
 	}
 	verb := "stopped holding"
-	if status == store.GatePassed {
+	switch {
+	case released:
+		verb = "passed; the work behind it is released, dispatch it"
+	case status == store.GatePassed:
 		verb = "holds again"
 	}
 	subject := fmt.Sprintf("[gate] %s: %s %s", g.BeadID, g.Name, verb)

@@ -3,7 +3,11 @@ import type { WebviewBridge } from '../features/inspector/types'
 // The JSON cmdrd serves at /api/snapshot and pushes over /api/events.
 // Mirrors internal/livedata/snapshot.go; keep the two in sync.
 
+export interface SnapExecution { role: string; state: string; project_id: number; bead_id: string; run_id?: number; session_id?: string }
+
 export interface Snapshot {
+  storage?: string
+  executions?: SnapExecution[] | null
   pr_states?: Record<string, string>
   answers?: Record<string, number>
   version: number
@@ -19,6 +23,7 @@ export interface Snapshot {
   error?: string
   // Set when cmdrd cannot read its state: the rest of the snapshot is stale or empty.
   degraded?: { reason: string }
+  pending?: string[] // steps shown as a write the door answered left them, before a load read them back
   // What keeps failing in cmdrd right now (mail that cannot reach an agent, a
   // plan that breaks the rules): each a problem until it clears.
   health?: { key: string; detail: string; since: number }[]
@@ -123,6 +128,7 @@ export interface ReviewBlock {
   done: number
   total: number
   stale?: number
+  settled?: number // checks closed by settle-block after the PR merged outside the review (not in done)
   checks: ReviewCheck[]
 }
 
@@ -136,6 +142,7 @@ export interface ReviewCheck {
   head?: string // the head its evidence was recorded on
   finding?: string // what the check found
   stale?: boolean // closed, but the PR moved since its check
+  settled?: boolean // closed by settle-block: the PR merged, this check never ran
 }
 
 export interface DiagramFinding {

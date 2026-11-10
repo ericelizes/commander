@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/example-user/commander/internal/claudeacct"
@@ -110,7 +111,10 @@ func (e *Engine) settleLimit(c *chatRole, p *process, ev Event) {
 
 	c.publish(Event{Kind: KindNotice, Source: SourceEngine, Subtype: "usage_limit",
 		Text: fmt.Sprintf("%s hit its usage limit: %s", who, u.Text)})
-	if u.Runtime == RuntimeClaude && AutoSwitch(e.opts.Home, c.role) {
+	switch {
+	case isManagedChatRole(c.role):
+		go e.moveManager(c)
+	case u.Runtime == RuntimeClaude && AutoSwitch(e.opts.Home, c.role):
 		go e.autoSwitch(c, u.Account)
 	}
 }
@@ -159,6 +163,9 @@ func sharesLogin(a claudeacct.Account, spent []claudeacct.Account) bool {
 	return false
 }
 
+// SetUsageMoveHook sets Options.OnUsageMove after construction.
+func (e *Engine) SetUsageMoveHook(f func(role, text string)) { e.opts.OnUsageMove = f }
+
 func (e *Engine) autoSwitch(c *chatRole, from string) {
 	next := e.NextAccount(from)
 	if next == "" {
@@ -168,13 +175,27 @@ func (e *Engine) autoSwitch(c *chatRole, from string) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	if _, err := e.SetAccount(ctx, c.role, next, SwitchOptions{Continue: true}); err != nil {
+	if _, err := e.SetAccount(ctx, c.role, next, e.moveOptions(c.role)); err != nil {
 		c.publish(Event{Kind: KindNotice, Source: SourceEngine, Subtype: "usage_limit_switch",
 			Text: fmt.Sprintf("Auto-switch to Claude account %s failed: %v", next, err)})
 		return
 	}
 	c.publish(Event{Kind: KindNotice, Source: SourceEngine, Subtype: "usage_limit_switch",
 		Text: fmt.Sprintf("Switched from Claude account %s to %s after its usage limit.", from, next)})
+}
+
+func isManagerRole(role string) bool { return strings.HasPrefix(role, "manager-") }
+
+func isManagedChatRole(role string) bool { return role == "commander" || isManagerRole(role) }
+
+// moveOptions continue a limited turn; a Manager is also told to read its
+// handover again, since the limit may have stopped it before it did.
+func (e *Engine) moveOptions(role string) SwitchOptions {
+	o := SwitchOptions{Continue: true}
+	if isManagedChatRole(role) {
+		o.Message = ContinueMessage + "; first re-read your handover and unread mail (cmdr internal-inbox --agent " + role + ")"
+	}
+	return o
 }
 
 func accountName(a string) string {

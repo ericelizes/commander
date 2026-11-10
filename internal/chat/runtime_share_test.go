@@ -1,25 +1,14 @@
 package chat
 
 import (
+	"errors"
 	"os"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/example-user/commander/internal/agentrt"
 )
-
-// Share 0 never draws Codex, whatever the hooks say.
-func TestAssignNewManagerRuntimeAtShareZeroIsClaude(t *testing.T) {
-	home := t.TempDir()
-	for _, ws := range []string{"ws-1", "ws-2", "ws-3", "ws-4", "ws-5", "ws-6", "ws-7", "ws-8"} {
-		role := "manager-" + ws
-		if err := AssignNewManagerRuntime(home, role, ws, 0, func() bool { return true }); err != nil {
-			t.Fatal(err)
-		}
-		if got := ReadRuntime(home, role); got != RuntimeClaude || RuntimePinned(home, role) {
-			t.Errorf("%s: runtime %s, pinned %v", role, got, RuntimePinned(home, role))
-		}
-	}
-}
 
 // A Manager a share once drew onto Codex starts on Claude when the share is now
 // 0, with the handoff; a person's pin is kept, and so is a draw under a share a
@@ -58,5 +47,187 @@ func TestDropDrawnCodexAtShareZero(t *testing.T) {
 	}
 	if dropDrawnCodex(home, "manager-kept") || WithRuntime(Spec{Role: "manager-kept"}, home).Runtime != RuntimeCodex {
 		t.Error("a draw under a configured share was dropped")
+	}
+}
+
+func out(m map[string]Usage, key string) {
+	m[key] = Usage{Status: UsageOut, OutUntil: time.Now().Add(time.Hour).Unix()}
+}
+
+// A never-started Manager draws its runtime from the Manager share: Codex only
+// with hooks and usage left; share 0, a started one or an out Codex is Claude.
+func TestPlanManagerStartDraw(t *testing.T) {
+	home := t.TempDir()
+	now, yes, no := time.Now(), func() bool { return true }, func() bool { return false }
+	codexOut := map[string]Usage{}
+	out(codexOut, UsageKey(RuntimeCodex, ""))
+	for _, tc := range []struct {
+		name  string
+		share string
+		fresh bool
+		usage map[string]Usage
+		hooks func() bool
+		want  string
+	}{
+		{"share 0", "0", true, nil, yes, RuntimeClaude},
+		{"share 1", "1", true, nil, yes, RuntimeCodex},
+		{"no hooks", "1", true, nil, no, RuntimeClaude},
+		{"codex out", "1", true, codexOut, yes, RuntimeClaude},
+		{"started before", "1", false, nil, yes, RuntimeClaude},
+	} {
+		t.Setenv(agentrt.CodexManagerShareEnvVar, tc.share)
+		p, err := planManagerStart(home, "manager-ws-1", tc.fresh, tc.usage, now, tc.hooks)
+		if err != nil || p.runtime != tc.want {
+			t.Errorf("%s: %+v %v", tc.name, p, err)
+		}
+	}
+	for _, f := range []string{RuntimeFile(home, "manager-ws-1"), AccountFile(home, "manager-ws-1")} {
+		if _, err := os.Stat(f); !os.IsNotExist(err) {
+			t.Errorf("plan wrote %s", f)
+		}
+	}
+}
+
+// An unpinned Codex Manager whose Codex is out runs on Claude; a pinned one
+// stays. With every Claude account out an unpinned Manager goes to Codex; a
+// pinned one, or no Codex, is refused with ErrNoUsage.
+func TestPlanManagerStartRuntimeFallbacks(t *testing.T) {
+	home := t.TempDir()
+	now, yes, no := time.Now(), func() bool { return true }, func() bool { return false }
+	codexOut := map[string]Usage{}
+	out(codexOut, UsageKey(RuntimeCodex, ""))
+	_ = WriteAutoRuntime(home, "manager-auto", RuntimeCodex)
+	_ = WriteRuntime(home, "manager-pin", RuntimeCodex)
+	if p, _ := planManagerStart(home, "manager-auto", false, codexOut, now, yes); p.runtime != RuntimeClaude {
+		t.Errorf("unpinned out Codex: %+v", p)
+	}
+	// d82: a Codex pin with Codex out (or without hooks) runs on Claude, pin kept.
+	if p, err := planManagerStart(home, "manager-pin", false, codexOut, now, yes); err != nil || p.runtime != RuntimeClaude || p.pin != RuntimeCodex {
+		t.Errorf("pinned Codex, Codex out: %+v %v", p, err)
+	}
+	if p, err := planManagerStart(home, "manager-pin", false, map[string]Usage{}, now, no); err != nil || p.runtime != RuntimeClaude || p.pin != RuntimeCodex {
+		t.Errorf("pinned Codex, no hooks: %+v %v", p, err)
+	}
+	if p, _ := planManagerStart(home, "manager-pin", false, map[string]Usage{}, now, yes); p.runtime != RuntimeCodex {
+		t.Errorf("pinned Codex with usage: %+v", p)
+	}
+	allOut := map[string]Usage{}
+	out(allOut, UsageKey(RuntimeCodex, ""))
+	out(allOut, UsageKey(RuntimeClaude, "default"))
+	if _, err := planManagerStart(home, "manager-pin", false, allOut, now, yes); !errors.Is(err, ErrNoUsage) || !strings.Contains(err.Error(), "pinned to Codex") {
+		t.Errorf("pinned Codex, everything out: %v", err)
+	}
+
+	claudeOut := map[string]Usage{}
+	out(claudeOut, UsageKey(RuntimeClaude, "default"))
+	if p, err := planManagerStart(home, "manager-a", false, claudeOut, now, yes); err != nil || p.runtime != RuntimeCodex {
+		t.Errorf("all Claude out, Codex ready: %+v %v", p, err)
+	}
+	if _, err := planManagerStart(home, "manager-a", false, claudeOut, now, no); !errors.Is(err, ErrNoUsage) || !strings.Contains(err.Error(), "hooks") {
+		t.Errorf("no hooks: %v", err)
+	}
+	out(claudeOut, UsageKey(RuntimeCodex, ""))
+	if _, err := planManagerStart(home, "manager-a", false, claudeOut, now, yes); !errors.Is(err, ErrNoUsage) {
+		t.Errorf("everything out: %v", err)
+	}
+	_ = WriteRuntime(home, "manager-claude", RuntimeClaude)
+	delete(claudeOut, UsageKey(RuntimeCodex, ""))
+	if _, err := planManagerStart(home, "manager-claude", false, claudeOut, now, yes); !errors.Is(err, ErrNoUsage) || !strings.Contains(err.Error(), "pinned") {
+		t.Errorf("pinned Claude: %v", err)
+	}
+}
+
+// An account a person chose keeps a Manager nobody pinned unpinned (d82): with
+// every Claude account out and Codex ready it still falls back to Codex. A
+// pinned Manager's account choice pins it to Claude and drops a Codex fallback.
+func TestAccountChoiceKeepsTheManagerUnpinned(t *testing.T) {
+	home := t.TempDir()
+	now, yes := time.Now(), func() bool { return true }
+	if err := WriteAccountRuntime(home, "manager-fresh"); err != nil {
+		t.Fatal(err)
+	}
+	if RuntimePinned(home, "manager-fresh") || ReadRuntime(home, "manager-fresh") != RuntimeClaude {
+		t.Fatalf("an account choice pinned the runtime: pinned=%v", RuntimePinned(home, "manager-fresh"))
+	}
+	claudeOut := map[string]Usage{}
+	out(claudeOut, UsageKey(RuntimeClaude, "default"))
+	if p, err := planManagerStart(home, "manager-fresh", false, claudeOut, now, yes); err != nil || p.runtime != RuntimeCodex {
+		t.Fatalf("all Claude out, Codex ready: %+v %v", p, err)
+	}
+
+	if err := WriteRuntime(home, "manager-pin", RuntimeCodex); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(RuntimeFallbackFile(home, "manager-pin"), []byte("codex\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteAccountRuntime(home, "manager-pin"); err != nil {
+		t.Fatal(err)
+	}
+	if ManagerPin(home, "manager-pin") != RuntimeClaude || ReadRuntimePin(home, "manager-pin") != RuntimeCodex {
+		t.Fatalf("pinned Manager: pin %q, pin file %q", ManagerPin(home, "manager-pin"), ReadRuntimePin(home, "manager-pin"))
+	}
+
+	if err := WriteAccountRuntime(home, "operator-x"); err != nil {
+		t.Fatal(err)
+	}
+	if fileExists(RuntimeAutoFile(home, "operator-x")) {
+		t.Fatal("an Operator got a Manager's auto marker")
+	}
+}
+
+// A Manager a share drew onto Codex, with the share now 0, goes to Claude only
+// when Claude has usage; with every Claude account out it stays on Codex, so an
+// outage never flips it to Claude and back (losing its Codex thread).
+func TestPlanManagerStartDrawnCodexStaysWhileClaudeIsOut(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv(agentrt.CodexManagerShareEnvVar, "0")
+	now, yes := time.Now(), func() bool { return true }
+	if err := WriteAutoRuntime(home, "manager-drawn", RuntimeCodex); err != nil {
+		t.Fatal(err)
+	}
+	if p, err := planManagerStart(home, "manager-drawn", false, map[string]Usage{}, now, yes); err != nil || p.runtime != RuntimeClaude || p.leave == "out of usage" {
+		t.Errorf("share 0, Claude has usage: %+v %v", p, err)
+	}
+	claudeOut := map[string]Usage{}
+	out(claudeOut, UsageKey(RuntimeClaude, "default"))
+	if p, err := planManagerStart(home, "manager-drawn", false, claudeOut, now, yes); err != nil || p.runtime != RuntimeCodex {
+		t.Errorf("share 0, Claude out: %+v %v", p, err)
+	}
+}
+
+// One failed hooks check does not move a pinned Codex Manager.
+func TestPlanManagerStartRetriesATransientHooksCheck(t *testing.T) {
+	home := t.TempDir()
+	now := time.Now()
+	_ = WriteRuntime(home, "manager-pin", RuntimeCodex)
+	calls := 0
+	flaky := func() bool { calls++; return calls > 1 }
+	p, err := planManagerStart(home, "manager-pin", false, map[string]Usage{}, now, flaky)
+	if err != nil || p.runtime != RuntimeCodex || calls != 2 {
+		t.Errorf("pinned Codex, one failed check: %+v %v calls=%d", p, err, calls)
+	}
+}
+
+// The fallback marker is on disk before the runtime file changes, so a crash
+// between the writes keeps the Codex pin.
+func TestWriteManagerRuntimeWritesTheFallbackFirst(t *testing.T) {
+	home := t.TempDir()
+	_ = WriteRuntime(home, "manager-pin", RuntimeCodex)
+	// Block the runtime write: a directory where the runtime file goes.
+	rf := RuntimeFile(home, "manager-pin")
+	if err := os.Remove(rf); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(rf, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	plan := managerPlan{runtime: RuntimeClaude, account: "default", pin: RuntimeCodex}
+	if err := writeManagerRuntime(home, "manager-pin", plan); err == nil {
+		t.Fatal("runtime write should have failed")
+	}
+	b, err := os.ReadFile(RuntimeFallbackFile(home, "manager-pin"))
+	if err != nil || strings.TrimSpace(string(b)) != RuntimeCodex {
+		t.Errorf("fallback after a failed runtime write: %q %v", b, err)
 	}
 }

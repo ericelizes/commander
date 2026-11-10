@@ -1,6 +1,7 @@
 package livedata
 
 import (
+	"iter"
 	"strconv"
 
 	"github.com/example-user/commander/internal/store"
@@ -60,11 +61,28 @@ func agentBusy(a SnapAgent, ok bool) bool {
 }
 
 func flattenSteps(steps []SnapStep) []SnapStep {
-	var out []SnapStep
-	for _, s := range steps {
-		out = append(out, s)
-		out = append(out, flattenSteps(s.Children)...)
+	n := 0
+	var count func([]SnapStep)
+	count = func(ss []SnapStep) {
+		n += len(ss)
+		for i := range ss {
+			if len(ss[i].Children) > 0 {
+				count(ss[i].Children)
+			}
+		}
 	}
+	count(steps)
+	out := make([]SnapStep, 0, n)
+	var walk func([]SnapStep)
+	walk = func(ss []SnapStep) {
+		for i := range ss {
+			out = append(out, ss[i])
+			if len(ss[i].Children) > 0 {
+				walk(ss[i].Children)
+			}
+		}
+	}
+	walk(steps)
 	return out
 }
 
@@ -110,4 +128,24 @@ func ageOf(since, now int64) string {
 		return ""
 	}
 	return FmtAge(now - since)
+}
+
+// stepValues traverses a tree without allocating a flattened copy for read-only
+// board passes. The iterator also preserves early loop exits.
+func stepValues(steps []SnapStep) iter.Seq[SnapStep] {
+	return func(yield func(SnapStep) bool) {
+		var walk func([]SnapStep) bool
+		walk = func(ss []SnapStep) bool {
+			for i := range ss {
+				if !yield(ss[i]) {
+					return false
+				}
+				if len(ss[i].Children) > 0 && !walk(ss[i].Children) {
+					return false
+				}
+			}
+			return true
+		}
+		walk(steps)
+	}
 }

@@ -34,7 +34,7 @@ func TestNextAccountSkipsSameIdentity(t *testing.T) {
 			cfg = filepath.Join(dir, ".claude.json")
 		}
 		os.MkdirAll(dir, 0700)
-		os.WriteFile(filepath.Join(dir, ".credentials.json"), []byte("{}"), 0600)
+		os.WriteFile(filepath.Join(dir, ".credentials.json"), []byte(`{"claudeAiOauth":{"accessToken":"test-token"}}`), 0600)
 		os.WriteFile(cfg, []byte(`{"oauthAccount":{"emailAddress":"one@example.test","accountUuid":"one"}}`), 0600)
 	}
 	e := New(Options{Home: home})
@@ -52,10 +52,10 @@ func TestNextAccountSkipsSameIdentity(t *testing.T) {
 // A default chat's claude drops an inherited CLAUDE_CONFIG_DIR and writes under
 // ~/.claude, so the Engine must look there too or a restart starts a new session.
 func TestRestartDefaultChatResumesUnderInheritedConfigDir(t *testing.T) {
+	h := newHarness(t)
 	user := t.TempDir()
 	t.Setenv("HOME", user)
 	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
-	h := newHarness(t)
 	projects := filepath.Join(user, ".claude", "projects")
 	t.Setenv(chattest.ProjectsVar, projects)
 	h.opts.ProjectsDir = "" // as cmdrd builds it
@@ -142,7 +142,7 @@ func profile(t *testing.T, user, home, name, email, uuid string) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	os.WriteFile(filepath.Join(dir, ".credentials.json"), []byte("{}"), 0o600)
+	os.WriteFile(filepath.Join(dir, ".credentials.json"), []byte(`{"claudeAiOauth":{"accessToken":"test-token"}}`), 0o600)
 	os.WriteFile(cfg, []byte(`{"oauthAccount":{"emailAddress":"`+email+`","accountUuid":"`+uuid+`"}}`), 0o600)
 }
 
@@ -226,7 +226,7 @@ func TestSetAccountOnATerminalHeldRoleKeepsThePane(t *testing.T) {
 	if err := os.MkdirAll(claudeacct.Dir(h.home, "second"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(claudeacct.Dir(h.home, "second"), ".credentials.json"), []byte("{}"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(claudeacct.Dir(h.home, "second"), ".credentials.json"), []byte(`{"claudeAiOauth":{"accessToken":"test-token"}}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	claudeacct.ForgetProbes()

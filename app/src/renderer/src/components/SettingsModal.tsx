@@ -200,6 +200,7 @@ export function useAgentRows(): AgentRow[] {
       snapshot
         ? agentRows({
             agents: snapshot.agents ?? {},
+            executions: snapshot.executions,
             workstreams: snapshot.workstreams,
             operators: operatorsVM(snapshot, chats),
             watched: Object.entries(snapshot.watch ?? {}).flatMap(([manager, w]) => (w.operators ?? []).map((o) => ({ role: o.role, manager, task: stepTitle(snapshot.workstreams, o.bead_id) }))),

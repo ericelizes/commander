@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"hash/fnv"
+	"log"
+	"maps"
 	"math/rand/v2"
 	"os"
 	"path/filepath"
@@ -55,6 +57,23 @@ var beadsFiles = []string{"beads.db", "beads.db-wal", "last-touched", "issues.js
 // counting it made a busy project's own flush look like a write: the cache
 // dropped and ReadConsistent re-read the whole project, up to 3 times a load.
 func fingerprint(projectDir string) string {
+	if PostgresConfigured() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		s, e := postgresStore()
+		if e != nil {
+			return ""
+		}
+		pid, e := projectID(ctx, s.DB(), projectDir)
+		if e != nil {
+			return ""
+		}
+		var revision int64
+		if e = s.DB().QueryRowContext(ctx, `SELECT state_revision FROM projects WHERE id=?`, pid).Scan(&revision); e != nil {
+			return ""
+		}
+		return fmt.Sprint(revision)
+	}
 	journals, err := filepath.Glob(filepath.Join(projectDir, ".beads", "dolt", "*", ".dolt", "noms", "vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv"))
 	if err != nil {
 		return ""
@@ -232,6 +251,9 @@ func (c *CachedClient) forget(dir string) {
 // Callers append to and edit what they get back, so each gets its own copy.
 
 func (c *CachedClient) List(ctx context.Context, dir string, opts ListOptions) ([]Bead, error) {
+	if PostgresConfigured() {
+		return c.Client.List(ctx, dir, opts)
+	}
 	if labelsOnly(opts) {
 		// One `bd list --status all` answers every label filter of all statuses
 		// (same beads, same order: bd filters after it sorts). The board asks for
@@ -262,11 +284,17 @@ func cloneBeads(v []Bead) []Bead {
 }
 
 func (c *CachedClient) Deps(ctx context.Context, dir, id string) ([]Dep, error) {
+	if PostgresConfigured() {
+		return c.Client.Deps(ctx, dir, id)
+	}
 	v, err := cached(c, ctx, dir, "deps:"+id, func() ([]Dep, error) { return c.Client.Deps(ctx, dir, id) })
 	return slices.Clone(v), err
 }
 
 func (c *CachedClient) Details(ctx context.Context, dir string, ids []string) (map[string]Detail, error) {
+	if PostgresConfigured() {
+		return c.Client.Details(ctx, dir, ids)
+	}
 	key := "details:" + strings.Join(ids, ",")
 	v, err := cached(c, ctx, dir, key, func() (map[string]Detail, error) { return c.detailsSalvaging(ctx, dir, ids) })
 	if v == nil {
@@ -333,11 +361,29 @@ func (c *CachedClient) detailsSalvaging(ctx context.Context, dir string, ids []s
 // cannot answer for, a file past the limit, or an entry that owes a show goes to br
 // show.
 func (c *CachedClient) detailsIncremental(ctx context.Context, dir string, ids []string, noExport bool) (map[string]Detail, error) {
+	if PostgresConfigured() {
+		return c.Client.Details(ctx, dir, ids)
+	}
+	start := time.Now()
+	caller := readCaller(ctx, noExport)
+	trace := &detailTrace{}
+	ctx = context.WithValue(ctx, detailTraceKey{}, trace)
 	release, err := c.acquireReread(ctx, dir)
+	waited := time.Since(start)
 	if err != nil {
+		log.Printf("beads: details caller=%s project=%s requested=%d noExport=%t wait=%s cancelled=%v", caller, dir, len(ids), noExport, waited.Round(time.Millisecond), err)
 		return nil, err
 	}
-	defer release()
+	acquired := time.Now()
+	staleCount := 0
+	reason := "warm"
+	defer func() {
+		release()
+		held := time.Since(acquired)
+		if waited >= time.Second || held >= time.Second || noExport || err != nil {
+			log.Printf("beads: details caller=%s project=%s requested=%d stale=%d show_batches=%d reason=%s noExport=%t wait=%s hold=%s err=%v", caller, dir, len(ids), staleCount, trace.batches.Load(), reason, noExport, waited.Round(time.Millisecond), held.Round(time.Millisecond), err)
+		}
+	}()
 
 	c.mu.Lock()
 	store := c.details[dir]
@@ -351,6 +397,9 @@ func (c *CachedClient) detailsIncremental(ctx context.Context, dir string, ids [
 		}
 	}
 	first := len(store) == 0
+	if first {
+		reason = "cold"
+	}
 	exportNow := exportMTime(dir)
 
 	out := make(map[string]Detail, len(ids))
@@ -380,6 +429,7 @@ func (c *CachedClient) detailsIncremental(ctx context.Context, dir string, ids [
 		}
 	}
 
+	staleCount = len(stale)
 	var got map[string]Detail
 	var usedExport time.Time
 	var owesShow bool
@@ -452,10 +502,100 @@ func (c *CachedClient) acquireReread(ctx context.Context, dir string) (func(), e
 	}
 }
 
+// tryAcquireReread takes dir's reread slot only when it is free.
+func (c *CachedClient) tryAcquireReread(dir string) (func(), bool) {
+	c.mu.Lock()
+	if c.reread == nil {
+		c.reread = map[string]chan struct{}{}
+	}
+	slot, ok := c.reread[dir]
+	if !ok {
+		slot = make(chan struct{}, 1)
+		c.reread[dir] = slot
+	}
+	c.mu.Unlock()
+	select {
+	case slot <- struct{}{}:
+		return func() { <-slot }, true
+	default:
+		return nil, false
+	}
+}
+
+// seedFromExport offers f, an export holding at least the state of the Dolt
+// journals seen (stat'ed before the flush that wrote it), to dir's detail cache.
+// Each bead is keyed by one bd list, read only while the journals and the file
+// still stand where they were: then the list, the export and the database are
+// one state. An empty cache is filled with export-sourced entries (export = f's
+// mtime), so the rules for those hold: trusted while that file stands, re-taken
+// from a newer one under maxExportAge, else shown. In a filled cache an
+// export-sourced entry from an older file whose list key did not move takes its
+// Detail and stamp from f; an entry read through br show (no export stamp, or
+// owing a show) is never replaced. A write anywhere in the meantime changes
+// nothing. It returns false when another read holds the cache (not waited for),
+// so the caller offers f again later.
+func (c *CachedClient) seedFromExport(ctx context.Context, dir string, f *exportFile, seen map[string]fileStamp) bool {
+	release, ok := c.tryAcquireReread(dir)
+	if !ok {
+		return false
+	}
+	defer release()
+	export := filepath.Join(dir, ".beads", "issues.jsonl")
+	standing := func() bool {
+		fi, err := os.Stat(export)
+		return err == nil && fi.Size() == f.size && fi.ModTime().Equal(f.mtime) &&
+			maps.EqualFunc(doltJournals(dir), seen, func(a, b fileStamp) bool { return a.size == b.size && a.mtime.Equal(b.mtime) })
+	}
+	if !standing() {
+		return true
+	}
+	all, err := c.List(ctx, dir, ListOptions{Status: "all"})
+	if err != nil || !standing() {
+		return true
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.details == nil {
+		c.details = map[string]map[string]detailEntry{}
+	}
+	store := c.details[dir]
+	if len(store) == 0 {
+		store = make(map[string]detailEntry, len(all))
+		for _, b := range all {
+			if d, ok := f.detail(b.ID); ok {
+				store[b.ID] = detailEntry{key: detailKey(b), detail: d, export: f.mtime}
+			}
+		}
+		c.details[dir] = store
+		return true
+	}
+	// A new map: a read holding an earlier copy of it reads on unlocked.
+	store = maps.Clone(store)
+	c.details[dir] = store
+	for _, b := range all {
+		e, ok := store[b.ID]
+		if !ok || e.export.IsZero() || e.owesShow || !e.export.Before(f.mtime) || e.key != detailKey(b) {
+			continue
+		}
+		if d, ok := f.detail(b.ID); ok {
+			store[b.ID] = detailEntry{key: e.key, detail: d, export: f.mtime}
+		}
+	}
+	return true
+}
+
 // Incremental reads Details through c's shared per-bead store like a display
 // read (only beads whose list key moved go to br show) but never from an export,
 // so a cold first read is DB-backed. Action verbs keep FreshDetails/ForActions.
 func Incremental(c *CachedClient) Client { return incrementalClient{c} }
+
+// IsolatedIncremental keeps a persistent DB-backed detail cache and reread slot
+// separate from display hydration. Construct once, not once per pass. The backing
+// client still shares the process/cross-process DB limiter and write priority.
+// Action reads continue to bypass both caches through FreshDetails/ForActions.
+func IsolatedIncremental(c *CachedClient) Client {
+	return Incremental(NewCached(c.Client))
+}
 
 type incrementalClient struct{ *CachedClient }
 
@@ -464,6 +604,9 @@ func (c incrementalClient) Details(ctx context.Context, dir string, ids []string
 }
 
 func (c *CachedClient) Show(ctx context.Context, dir, id string) (*Bead, error) {
+	if PostgresConfigured() {
+		return c.Client.Show(ctx, dir, id)
+	}
 	v, err := cached(c, ctx, dir, "show:"+id, func() (*Bead, error) { return c.Client.Show(ctx, dir, id) })
 	if v == nil {
 		return nil, err
@@ -473,6 +616,9 @@ func (c *CachedClient) Show(ctx context.Context, dir, id string) (*Bead, error) 
 }
 
 func (c *CachedClient) Comments(ctx context.Context, dir, id string) ([]Comment, error) {
+	if PostgresConfigured() {
+		return c.Client.Comments(ctx, dir, id)
+	}
 	v, err := cached(c, ctx, dir, "comments:"+id, func() ([]Comment, error) { return c.Client.Comments(ctx, dir, id) })
 	return slices.Clone(v), err
 }

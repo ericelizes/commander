@@ -342,8 +342,17 @@ const probeTTL = 5 * time.Second
 // loggedIn reports whether dir has credentials: the plaintext file, or the
 // Keychain item for override (the CLAUDE_CONFIG_DIR value, "" = none).
 func loggedIn(dir, override string) bool {
-	if fi, err := os.Stat(filepath.Join(dir, ".credentials.json")); err == nil && fi.Size() > 0 {
-		return true
+	// The file also holds MCP OAuth credentials after Claude signs out.
+	// Those are not a Claude account and cannot supply plan usage.
+	if raw, err := os.ReadFile(filepath.Join(dir, ".credentials.json")); err == nil {
+		var credentials struct {
+			OAuth struct {
+				AccessToken string `json:"accessToken"`
+			} `json:"claudeAiOauth"`
+		}
+		if json.Unmarshal(raw, &credentials) == nil && credentials.OAuth.AccessToken != "" {
+			return true
+		}
 	}
 	svc := KeychainService(override)
 	probeCache.Lock()

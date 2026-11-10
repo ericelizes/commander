@@ -130,3 +130,38 @@ func TestSetNestedManagers_AtomicAndUnreadableIsOff(t *testing.T) {
 		}
 	}
 }
+
+func TestChainOwners_KindTaskOwnsNothing(t *testing.T) {
+	bs := map[string]Bead{
+		"top": {ID: "top", Labels: []string{WorkstreamLabel}, Status: "open"},
+		"t":   {ID: "t", Labels: []string{WorkstreamLabel, "kind:task"}, Status: "open"},
+		"w":   {ID: "w", Labels: []string{WorkstreamLabel}, Status: "open"},
+	}
+	if OwnsWork(bs["t"]) {
+		t.Fatal("a kind:task bead owns work")
+	}
+	chain := []string{"step", "t", "w", "top"}
+	got := ChainOwners(chain, bs)
+	if len(got) != 1 || got[0] != "w" {
+		t.Fatalf("ChainOwners = %v, want [w]", got)
+	}
+	if n := NearestOwner([]string{"step", "t", "top"}, bs); n != "top" {
+		t.Fatalf("NearestOwner = %s, want top", n)
+	}
+	// An out-of-play kind:task workstream still ends the walk: nothing under
+	// a closed, parked or superseded bead owns.
+	for _, out := range []Bead{
+		{ID: "t", Labels: []string{WorkstreamLabel, "kind:task"}, Status: "closed"},
+		{ID: "t", Labels: []string{WorkstreamLabel, "kind:task"}, Status: StatusDeferred},
+		{ID: "t", Labels: []string{WorkstreamLabel, "kind:task", "superseded"}, Status: "open"},
+	} {
+		bs := map[string]Bead{
+			"top": {ID: "top", Labels: []string{WorkstreamLabel}, Status: "open"},
+			"t":   out,
+			"w2":  {ID: "w2", Labels: []string{WorkstreamLabel}, Status: "open"},
+		}
+		if got := ChainOwners([]string{"step", "w2", "t", "top"}, bs); len(got) != 0 {
+			t.Fatalf("t %s %v: ChainOwners = %v, want []", out.Status, out.Labels, got)
+		}
+	}
+}

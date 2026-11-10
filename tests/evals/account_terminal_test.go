@@ -37,7 +37,7 @@ func TestAccountUseOnATerminalHeldRoleScenario(t *testing.T) {
 			user, home := t.TempDir(), t.TempDir()
 			dir := filepath.Join(home, "claude-accounts", scenario.Account)
 			os.MkdirAll(dir, 0o700)
-			os.WriteFile(filepath.Join(dir, ".credentials.json"), []byte("{}"), 0o600)
+			os.WriteFile(filepath.Join(dir, ".credentials.json"), []byte(`{"claudeAiOauth":{"accessToken":"test-token"}}`), 0o600)
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "status": c.Status})
 			}))

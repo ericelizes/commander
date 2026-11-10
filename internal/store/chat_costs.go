@@ -33,10 +33,10 @@ type RoleCost struct {
 // a row was added.
 func (s *Store) InsertChatCost(ctx context.Context, c ChatCost) (bool, error) {
 	res, err := s.db.ExecContext(ctx, `
-		INSERT OR IGNORE INTO chat_costs(
+		INSERT INTO chat_costs(
 			role, session_id, total_usd, delta_usd,
 			input_tokens, output_tokens, cache_read, cache_create, occurred_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING
 	`, c.Role, c.SessionID, c.TotalUSD, c.DeltaUSD,
 		c.InputTokens, c.OutputTokens, c.CacheRead, c.CacheCreate, c.OccurredAt)
 	if err != nil {

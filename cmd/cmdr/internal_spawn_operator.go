@@ -23,6 +23,7 @@ import (
 	"github.com/example-user/commander/internal/config"
 	"github.com/example-user/commander/internal/docker"
 	"github.com/example-user/commander/internal/gates"
+	"github.com/example-user/commander/internal/holding"
 	"github.com/example-user/commander/internal/livedata"
 	"github.com/example-user/commander/internal/opencode"
 	"github.com/example-user/commander/internal/ownercompat"
@@ -188,11 +189,15 @@ func spawnOperatorAttempt(args []string, stdout, stderr *os.File, retried bool) 
 		if keep == "" {
 			dctx, dcancel := context.WithTimeout(context.Background(), spawnStepTimeout)
 			defer dcancel()
+			// What the task held (its step, when nothing else does) goes to the Manager first.
+			holdReleased(dctx, bc, projectDir, id, map[string]holding.Edit{id: func(h *holding.Bead) { h.Status = holding.StatusClosed }}, manager(), beads.ManagerDispatchWait)
 			err := bc.Delete(dctx, projectDir, id, reason)
 			if err == nil {
 				return
 			}
 			keep = fmt.Sprintf("could not be removed (%v)", err)
+			// It stays, open with nobody on it: its Manager holds it.
+			_ = holdWithManager(dctx, bc, projectDir, id, manager(), beads.ManagerRecoverWait)
 		}
 		repeatable = false
 		left = fmt.Sprintf("; task %s %s and stays: look at it before spawning again", id, keep)
@@ -280,6 +285,11 @@ func spawnOperatorAttempt(args []string, stdout, stderr *os.File, retried bool) 
 		if err := checkReached(ctx, bc, project.Path, project.Name, *step, "spawning an Operator"); err != nil {
 			return fail(err.Error())
 		}
+	}
+	// Before the task bead is made: no Operator starts on a nearly full disk.
+	if err := spawn.CheckDisk(spawn.SpawnRequest{ProjectPath: project.Path, RepoPath: project.RepoPath}); err != nil {
+		emitErr(stderr, fmt.Sprintf("spawn operator: %v; no task was created", err))
+		return 1
 	}
 	// Before the task bead is made: what the run would really start on (the
 	// Manager's account, a share draw either way) has usage left.
@@ -445,7 +455,8 @@ const prodGateLabelPrefix = "prod-gate:"
 
 // checkProdGate validates a --prod-gate bead and returns its description, the
 // exact action allowed: only a Manager may pass it, the bead is a gate (kind:gate),
-// closed, approved by the user, and linked to the step (gate-of: the step or an
+// closed, approved by the user, not a workflow approval, with a description
+// (never written by an approval), and linked to the step (gate-of: the step or an
 // ancestor, a blocks edge from one of them, or its approval covering the step
 // on the board).
 func checkProdGate(ctx context.Context, bc beads.Client, dir, step, gateID, caller string) (string, error) {
@@ -473,6 +484,11 @@ func checkProdGate(ctx context.Context, bc beads.Client, dir, step, gateID, call
 	}
 	if strings.TrimSpace(gate.Description) == "" {
 		return "", fmt.Errorf("--prod-gate %s: gate has no description naming the exact action it covers", gateID)
+	}
+	// A workflow approval approves a plan, never a production action, whatever
+	// its description says: approving one must not widen production authority.
+	if firstGateRE.MatchString(strings.TrimSpace(gate.Title)) {
+		return "", fmt.Errorf("--prod-gate %s: %q is a workflow approval, not a production gate; ask the user for a gate whose description names the one production action", gateID, gate.Title)
 	}
 	chain := beads.Lineage(ctx, bc, dir, nil, step)
 	linked := false

@@ -25,7 +25,7 @@ func fakeUser(t *testing.T, keychain ...string) (home, user string) {
 	}
 	os.WriteFile(filepath.Join(claude, "settings.json"), []byte(`{"model":"opus"}`), 0o644)
 	os.WriteFile(filepath.Join(claude, "CLAUDE.md"), []byte("# prefs"), 0o644)
-	os.WriteFile(filepath.Join(claude, ".credentials.json"), []byte(`{"secret":1}`), 0o600)
+	os.WriteFile(filepath.Join(claude, ".credentials.json"), []byte(`{"claudeAiOauth":{"accessToken":"test-token"}}`), 0o600)
 	os.WriteFile(filepath.Join(user, ".claude.json"), []byte(`{"oauthAccount":{"emailAddress":"me@example.com"},"mcpServers":{"linear":{"type":"http","url":"https://mcp.linear.app/mcp"}}}`), 0o600)
 	held := map[string]bool{}
 	for _, s := range keychain {
@@ -45,6 +45,17 @@ func TestKeychainServiceMatchesClaudeCode(t *testing.T) {
 	}
 	if got := KeychainService("/tmp/example/.commander/claude-accounts/work"); got != "Claude Code-credentials-467b6b41" {
 		t.Errorf("named = %q", got)
+	}
+}
+
+func TestMCPOnlyCredentialsAreNotAConnectedClaudeAccount(t *testing.T) {
+	home, user := fakeUser(t)
+	for _, raw := range []string{`{"mcpOAuth":{"example":{"accessToken":"mcp-only"}}}`, `{}`, `{"claudeAiOauth":null}`, `{broken`} {
+		os.WriteFile(filepath.Join(user, ".claude", ".credentials.json"), []byte(raw), 0600)
+		ForgetProbes()
+		if Get(home, Default).LoggedIn {
+			t.Fatal("non-Claude credentials counted as a connected account")
+		}
 	}
 }
 
@@ -108,7 +119,7 @@ func TestLoggedInFollowsTheAccountsOwnKeychainItem(t *testing.T) {
 		t.Errorf("default email = %+v", List(home)[0])
 	}
 	// The plaintext fallback counts too.
-	os.WriteFile(filepath.Join(home, "claude-accounts", "spare", ".credentials.json"), []byte("{}"), 0o600)
+	os.WriteFile(filepath.Join(home, "claude-accounts", "spare", ".credentials.json"), []byte(`{"claudeAiOauth":{"accessToken":"test-token"}}`), 0o600)
 	if !Get(home, "spare").LoggedIn {
 		t.Error("credentials file not seen")
 	}
@@ -152,7 +163,7 @@ func TestDefaultIgnoresCallerConfigDirAndMarksDuplicates(t *testing.T) {
 	}
 	os.WriteFile(filepath.Join(user, ".claude.json"), []byte(`{"oauthAccount":{"emailAddress":"one@example.test","accountUuid":"account-one","organizationUuid":"org-one"}}`), 0600)
 	os.WriteFile(filepath.Join(a.Dir, ".claude.json"), []byte(`{"oauthAccount":{"emailAddress":"one@example.test","accountUuid":"account-one"}}`), 0600)
-	os.WriteFile(filepath.Join(a.Dir, ".credentials.json"), []byte("{}"), 0600)
+	os.WriteFile(filepath.Join(a.Dir, ".credentials.json"), []byte(`{"claudeAiOauth":{"accessToken":"test-token"}}`), 0600)
 	t.Setenv("CLAUDE_CONFIG_DIR", a.Dir)
 	got := List(home)
 	if got[0].Dir != filepath.Join(user, ".claude") || got[0].AccountUUID != "account-one" || got[0].OrgUUID != "org-one" || got[1].DuplicateOf != Default {

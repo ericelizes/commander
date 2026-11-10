@@ -168,7 +168,7 @@ it('keeps a disconnected profile listed with its note, then reconnects it', asyn
 it('lists a signed-out profile agents are bound to, with a Reconnect', () => {
   useStore.setState({ accounts: [{ name: 'default', runtime: 'claude', logged_in: false }] })
   render(<UsageTab rows={[{ provider: { runtime: 'claude', account: 'default' } } as never, { provider: { runtime: 'claude', account: 'default' } } as never]} />)
-  const card = screen.getByRole('region', { name: 'Claude: Identity unknown' })
+  const card = screen.getByRole('region', { name: 'Claude: Claude · default' })
   expect(card).toHaveTextContent("2 agents on this profile can't run until you sign it in again.")
   expect(within(card).getByRole('button', { name: 'Reconnect' })).toBeInTheDocument()
   useStore.setState({ accounts: [] })
@@ -178,14 +178,14 @@ it('Add with an existing profile name lists it for sign-in and never creates it 
   useStore.setState({ accounts: [{ name: 'spare', runtime: 'claude', logged_in: false }, { name: 'codex', runtime: 'codex', logged_in: true, email: 'one@example.test' }] })
   render(<UsageTab rows={[]} />)
   expect(screen.queryByRole('region', { name: /Identity unknown/ })).toBeNull()
-  fireEvent.click(screen.getByRole('button', { name: 'Add or reconnect a Claude account' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Add account' }))
   fireEvent.change(screen.getByRole('textbox', { name: 'Account name' }), { target: { value: 'spare' } })
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Add account' })) })
   expect(addAccount).not.toHaveBeenCalled()
-  expect(screen.getByRole('region', { name: 'Claude: Identity unknown' })).toBeInTheDocument()
+  expect(screen.getByRole('region', { name: 'Claude: Claude · spare' })).toBeInTheDocument()
   expect(screen.getByText(/already exists/)).toBeInTheDocument()
   // codex is Codex's name: refused before any call.
-  fireEvent.click(screen.getByRole('button', { name: 'Add or reconnect a Claude account' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Add account' }))
   fireEvent.change(screen.getByRole('textbox', { name: 'Account name' }), { target: { value: 'codex' } })
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Add account' })) })
   expect(addAccount).not.toHaveBeenCalled()
@@ -202,7 +202,7 @@ it('Connect Codex lists the signed-out Codex account and its device-code flow ru
     render(<UsageTab rows={[]} />)
     expect(screen.queryByRole('region', { name: /^Codex/ })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Connect Codex' }))
-    const card = screen.getByRole('region', { name: 'Codex: Identity unknown' })
+    const card = screen.getByRole('region', { name: 'Codex: Codex account' })
     expect(screen.queryByRole('button', { name: 'Connect Codex' })).toBeNull()
     await act(async () => { fireEvent.click(within(card).getByRole('button', { name: 'Connect' })) })
     expect(startSignin).toHaveBeenCalledWith('codex')
@@ -217,4 +217,21 @@ it('Connect Codex lists the signed-out Codex account and its device-code flow ru
     vi.useRealTimers()
     useStore.setState({ accounts: [] })
   }
+})
+
+it('names a connected profile without suggesting failed identity verification', () => {
+  render(<UsageCard a={{ name: 'work', runtime: 'claude', logged_in: true }} agents={0} nowSec={1} />)
+  expect(screen.getByRole('region', { name: 'Claude: Claude · work' })).toBeInTheDocument()
+  expect(screen.getByText('Connected. This account has no saved email address.')).toBeInTheDocument()
+})
+
+it('adds either provider from the same account form', () => {
+  useStore.setState({ accounts: [{ name: 'codex', runtime: 'codex', logged_in: false }] })
+  render(<UsageTab rows={[]} />)
+  fireEvent.click(screen.getByRole('button', { name: 'Add account' }))
+  fireEvent.change(screen.getByRole('combobox', { name: 'Account provider' }), { target: { value: 'codex' } })
+  expect(screen.queryByRole('textbox', { name: 'Account name' })).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: 'Add account' }))
+  expect(screen.getByRole('region', { name: 'Codex: Codex account' })).toHaveTextContent('not connected')
+  useStore.setState({ accounts: [] })
 })

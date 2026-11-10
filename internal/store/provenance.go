@@ -13,6 +13,13 @@ import (
 // migrations. This compatibility reader deliberately supports schema 20 onward;
 // the queries below use only columns already present in schema 20.
 func OpenProvenance(path string) (*Store, error) {
+	dsn, e := PostgresDSN(path)
+	if e != nil {
+		return nil, e
+	}
+	if dsn != "" {
+		return OpenPostgres(dsn)
+	}
 	u := url.URL{Scheme: "file", Path: filepath.ToSlash(path)}
 	db, err := sql.Open("sqlite", u.String()+"?mode=ro&_pragma=query_only(1)&_pragma=busy_timeout(5000)")
 	if err != nil {

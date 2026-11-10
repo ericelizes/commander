@@ -180,10 +180,6 @@ func TestPrepareAllSkipsInvalidTargetsAndKeepsValidWindows(t *testing.T) {
 func TestEnsureNativeValidatesBeforeAnySideEffect(t *testing.T) {
 	f := newFixture(t)
 	mixedRegistration(f)
-	old := codexHooksReady
-	codexHooksReady = func() bool { return true }
-	t.Cleanup(func() { codexHooksReady = old })
-	t.Setenv("COMMANDER_CODEX_MANAGER_SHARE", "1") // a draw would write a runtime file
 	n := &fakeNative{}
 	f.m.Native = n
 	err := f.m.EnsureNative(context.Background())

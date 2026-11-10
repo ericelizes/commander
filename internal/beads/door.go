@@ -41,6 +41,33 @@ type DoorRequest struct {
 	// Env is the caller's attribution env (see DoorEnvKeep); cmdrd applies the
 	// allowed entries to br so the audit author stays the caller's.
 	Env []string `json:"env,omitempty"`
+	// Intent asks the door to judge the write as a whole before it runs (the guarded holding
+	// layer): it reads the closure of Intent.Bead fresh, simulates the ops on it, refuses a write
+	// that would leave a bead with no holder (for every caller, the user too, who alone may pass
+	// LeaveUnheld) and runs holder-adding ops first. Without it the door runs the ops as given.
+	Intent *DoorIntent `json:"intent,omitempty"`
+}
+
+// DoorIntent names what a write is about, for the door's holder check.
+type DoorIntent struct {
+	Bead        string `json:"bead"`
+	Verb        string `json:"verb,omitempty"`
+	LeaveUnheld string `json:"leave_unheld,omitempty"` // the user's recorded reason to leave work unheld
+}
+
+type intentKey struct{}
+
+// WithIntent marks the writes made under ctx with the door's holder check (DoorRequest.Intent):
+// cmdrd judges what they leave on fresh reads, orders holder-adding ops first and lays the
+// result on the board at once. A verb puts it on its decisive write (a close, a state flush),
+// whose result is the state it promised, never on an intermediate one.
+func WithIntent(ctx context.Context, in DoorIntent) context.Context {
+	return context.WithValue(ctx, intentKey{}, &in)
+}
+
+func intentOf(ctx context.Context) *DoorIntent {
+	in, _ := ctx.Value(intentKey{}).(*DoorIntent)
+	return in
 }
 
 // DoorResponse is its answer. Exit 0 with Error "" is success.
@@ -64,6 +91,9 @@ type DoorResponse struct {
 	BackendMS         float64 `json:"backend_ms,omitempty"`
 	ProjectionMS      float64 `json:"projection_ms,omitempty"`
 	ProjectionPending bool    `json:"projection_pending,omitempty"`
+	// Holders is, for an intent write, what holds each bead of its closure once the write
+	// landed ("" = nothing: only with the user's leave_unheld), as the door's simulation read it.
+	Holders map[string]string `json:"holders,omitempty"`
 }
 
 // DoorEnabled reports whether this process may use the door.
@@ -236,10 +266,16 @@ func viaDoor(ctx context.Context, dir string, req DoorRequest) (DoorResponse, er
 // runWrite is how a br write leaves a client: through the door when it is on and
 // cmdrd answers, else directly (logged).
 func runWrite(ctx context.Context, dir, name string, args ...string) ([]byte, []byte, error) {
+	if PostgresConfigured() && !inDoorServer && !DoorEnabled() {
+		return nil, nil, fmt.Errorf("Postgres write door cannot be disabled")
+	}
 	if dir != "" && !inDoorServer && DoorEnabled() && DoorWritable(args) {
-		out, err := viaDoor(ctx, dir, DoorRequest{Args: args, NoWait: true})
+		out, err := viaDoor(ctx, dir, DoorRequest{Args: args, NoWait: true, Intent: intentOf(ctx)})
 		if !errors.Is(err, errDoorDown) {
 			return []byte(out.Stdout), []byte(out.Stderr), err
+		}
+		if PostgresConfigured() {
+			return nil, nil, fmt.Errorf("Postgres writes require the Commander service: %w", err)
 		}
 		logDoorFallback(dir, args, err)
 	}

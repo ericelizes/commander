@@ -1,0 +1,20 @@
+{
+  "schema": "review-report-check@v1",
+  "runner": "cmd/cmdr:TestReviewReportCheckScenario",
+  "about": "cmdr workflow review-report-check refuses, before the reviewer exits, the report formats the close door would refuse later, against the real sealed launch registry. want = exit code; verdict or refusal words.",
+  "cases": [
+    {"name": "clean report with its receipt as its own comment", "want": 0, "says": "\"verdict\":\"CLEAN\""},
+    {"name": "minor-only findings still CLEAN", "findings": "minor", "want": 0, "says": "\"verdict\":\"CLEAN\""},
+    {"name": "major ends NOT CLEAN", "findings": "major", "verdict": "NOT CLEAN", "want": 0, "says": "\"verdict\":\"NOT CLEAN\""},
+    {"name": "no Head line", "drop_head": true, "want": 1, "says": "no line `Head:"},
+    {"name": "Head line names another sha", "head_line": "f", "want": 1, "says": "no line `Head:"},
+    {"name": "verdict only in mail, no receipt", "no_receipt": true, "want": 1, "says": "no workflow-review-result@v1 receipt"},
+    {"name": "major reported CLEAN", "findings": "major", "want": 1, "says": "NOT CLEAN"},
+    {"name": "minors reported NOT CLEAN", "findings": "minor", "verdict": "NOT CLEAN", "want": 1, "says": "minors never make NOT CLEAN"},
+    {"name": "invented manifest", "manifest": "0", "want": 1, "says": "no sealed launch record"},
+    {"name": "receipt for another head", "receipt_head": "f", "want": 1, "says": "not the reviewed head"},
+    {"name": "blocked review claims CLEAN", "blocked": true, "want": 1, "says": "claims no verdict"},
+    {"name": "embedded receipt in the report", "embedded": true, "want": 0, "says": "\"verdict\":\"CLEAN\""},
+    {"name": "embedded receipt with findings null (the close door refuses it)", "embedded": true, "null_findings": true, "want": 1, "says": "own comment"}
+  ]
+}

@@ -186,19 +186,23 @@ func runInternalMail(args []string, stdout, stderr *os.File) int {
 
 // canonicalRecipients maps an Operator recipient written with dots or dashes
 // to the role actually registered (rolemail.Registered: as written, else any
-// registered operator-* role with the same canonical spelling). One that
+// registered operator-*/manager-* role with the same canonical spelling). One that
 // matches nothing fails here, so mail is never reported sent without a receipt;
 // the hint names a real registered candidate only.
 func canonicalRecipients(ctx context.Context, st amAgentStore, amProjectKey string, toRoles []string, stderr io.Writer) ([]string, error) {
 	out := make([]string, len(toRoles))
 	for i, r := range toRoles {
 		out[i] = r
-		if !strings.HasPrefix(r, "operator-") {
+		isManager := strings.HasPrefix(r, "manager-")
+		if !strings.HasPrefix(r, "operator-") && !isManager {
 			continue
 		}
 		reg, _, err := rolemail.Registered(ctx, st, amProjectKey, r)
 		if err != nil {
 			return nil, fmt.Errorf("look up role %q: %w", r, err)
+		}
+		if reg == "" && isManager {
+			continue // not registered yet: delivery may start it, as before
 		}
 		if reg == "" {
 			return nil, fmt.Errorf("no am agent registered for role %q (check mail_role in internal-spawn-operator's output)", r)

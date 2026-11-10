@@ -17,8 +17,11 @@ const partialJSON = `{"summary":{"sentences":[{"text":"The PR is \"open\".","sou
 
 func TestPartialRecapKeepsOnlyFinishedSentences(t *testing.T) {
 	r := PartialRecap(partialJSON)
-	if len(r.Summary.Sentences) != 1 || r.Summary.Sentences[0].Text != `The PR is "open".` {
+	if len(r.Summary.Sentences) != 2 || r.Summary.Sentences[0].Text != `The PR is "open".` || r.Summary.Sentences[0].Partial {
 		t.Fatal(r)
+	}
+	if p := r.Summary.Sentences[1]; !p.Partial || p.Text != "Second sent" || len(p.Sources) != 0 {
+		t.Fatal(p)
 	}
 	full := `{"summary":{"sentences":[{"text":"A.","sources":["pr"]}]},"changes":[{"sentences":[{"text":"B.","sources":["pr"]},{"text":"C.","sources":["pr"]}]},{"sentences":[{"text":"D.","sources":["x"]}]}],"next":[{"sentences":[{"text":"E.","sources":[]}]}]}`
 	r = PartialRecap(full)
@@ -48,7 +51,7 @@ func TestCacheShowsDraftWhileWritingAndSignalsChange(t *testing.T) {
 		t.Fatal("no change signal")
 	}
 	r := c.Get(in)
-	if r.State != "updating" || r.Draft == nil || len(r.Draft.Summary.Sentences) != 1 {
+	if r.State != "updating" || r.Draft == nil || len(r.Draft.Summary.Sentences) != 2 {
 		t.Fatalf("%+v", r)
 	}
 	close(release)
@@ -126,16 +129,71 @@ func TestChangedEvidenceWaitsOutTheCooldownAndDraftCarriesItsOwnEvidence(t *test
 	waitReady(t, c, in)
 }
 
-func TestFirstDeltaPublishesNoDraftAndDraftsAreNonNil(t *testing.T) {
+func TestFirstDeltaPublishesPartialDraftAndDraftsAreNonNil(t *testing.T) {
 	in := Input{Evidence: []Evidence{{ID: "a"}}}
-	// Before any sentence finishes the partial recap holds nothing to show.
-	if p := PartialRecap(`{"summary":{"sentences":[{"text":"Half wri`); len(p.Summary.Sentences) != 0 {
-		t.Fatalf("draft before a finished sentence: %+v", p)
+	// The first sentence shows as it is written, marked partial.
+	if p := PartialRecap(`{"summary":{"sentences":[{"text":"Half wri`); len(p.Summary.Sentences) != 1 || !p.Summary.Sentences[0].Partial {
+		t.Fatalf("first partial sentence: %+v", p)
+	}
+	if p := PartialRecap(`{"summary":{"sentences":[{"te`); len(p.Summary.Sentences) != 0 {
+		t.Fatalf("no text yet: %+v", p)
 	}
 	// A sentence citing only unknown ids still encodes arrays, never null.
 	d := onlyKnown(PartialRecap(`{"summary":{"sentences":[{"text":"x","sources":["zz"]}]},"changes":[],"next":[]}`), in)
 	b, _ := json.Marshal(d)
 	if strings.Contains(string(b), "null") {
 		t.Fatalf("draft encodes null: %s", b)
+	}
+}
+
+// Every prefix of the answer yields text that only grows, one character at a time.
+func TestPartialRecapStreamsCharacterByCharacter(t *testing.T) {
+	full := `{"summary":{"sentences":[{"text":"Caf\u00e9 \"ok\" done.","sources":["pr"]}]},"changes":[{"sentences":[{"text":"Next one","sources":[]}]}],"next":[]}`
+	prev := ""
+	grew := 0
+	for i := 1; i <= len(full); i++ {
+		r := PartialRecap(full[:i])
+		cur := ""
+		if n := len(r.Summary.Sentences); n > 0 {
+			cur = r.Summary.Sentences[0].Text
+		}
+		if !strings.HasPrefix(cur, prev) || len([]rune(cur))-len([]rune(prev)) > 1 {
+			t.Fatalf("at %d: %q after %q", i, cur, prev)
+		}
+		if cur != prev {
+			grew++
+		}
+		prev = cur
+	}
+	if prev != `Café "ok" done.` || grew != len([]rune(prev)) {
+		t.Fatalf("%q grew %d", prev, grew)
+	}
+	r := PartialRecap(full[:strings.Index(full, `"Next one"`)+5])
+	if len(r.Changes) != 1 || len(r.Changes[0].Sentences) != 1 || r.Changes[0].Sentences[0].Text != "Next" || !r.Changes[0].Sentences[0].Partial {
+		t.Fatalf("%+v", r.Changes)
+	}
+}
+
+// An escaped emoji arrives as two \u escapes; until the low half lands the
+// draft holds the high half back instead of showing U+FFFD. Raw UTF-8 cut
+// mid-character is held back the same way.
+func TestPartialRecapHoldsAHighSurrogateBack(t *testing.T) {
+	bs := `\`
+	emoji := bs + "u" + "d83d" + bs + "u" + "de00"
+	for _, text := range []string{"Hi " + emoji + " there", "Hi " + string(rune(0x1F600)) + " there"} {
+		full := `{"summary":{"sentences":[{"text":"` + text + `","sources":[]}]}}`
+		for i := 1; i <= len(full); i++ {
+			r := PartialRecap(full[:i])
+			if n := len(r.Summary.Sentences); n > 0 && strings.ContainsRune(r.Summary.Sentences[0].Text, 0xFFFD) {
+				t.Fatalf("at %d: %q", i, r.Summary.Sentences[0].Text)
+			}
+		}
+		if got := PartialRecap(full).Summary.Sentences[0].Text; got != "Hi "+string(rune(0x1F600))+" there" {
+			t.Fatalf("%q", got)
+		}
+	}
+	// An escaped backslash before u is no escape: the text stays as written.
+	if got := openText(`{"text":"a` + bs + bs + "u" + "d83d"); got != "a"+bs+"u"+"d83d" {
+		t.Fatalf("%q", got)
 	}
 }

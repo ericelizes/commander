@@ -1,0 +1,207 @@
+{
+  "schema": "review-minor-policy@v1",
+  "runner": "cmd/cmdr:TestReviewMinorPolicyScenario",
+  "about": "The bounded review loop (d78) through the real close door: blockers and majors are fixed and rechecked; minors get at most one fix pass; a recheck reviews only the fix delta; minors left on the passing head become Manager-held follow-ups and the step passes. Shas are symbolic (h1, h2, fix, pr-base). A renewal round reuses its review bead (no new review) and the verifier measures the fix delta itself through the scripted compare. A recheck must verify each prior blocker/major fixed (receipt resolved), retains only a full review (never another delta), and a renewal of a recheck names the full review it retained.",
+  "rounds": [
+    {
+      "name": "primary review leaves two minors, no fix required",
+      "step": 1,
+      "head": "h1",
+      "review": "review-1",
+      "base": "pr-base",
+      "findings": [
+        {
+          "id": "m1",
+          "severity": "minor",
+          "summary": "rename a helper"
+        },
+        {
+          "id": "m2",
+          "severity": "minor",
+          "summary": "tighten a comment"
+        }
+      ],
+      "proof": {
+        "no_fix_required": true
+      },
+      "want": "pass",
+      "follow_ups": 2
+    },
+    {
+      "name": "a retried close files no follow-up twice",
+      "step": 1,
+      "retry": true,
+      "want": "pass",
+      "follow_ups": 2
+    },
+    {
+      "name": "no_findings cannot hide typed minors",
+      "step": 2,
+      "head": "h2",
+      "review": "review-hide",
+      "base": "h1",
+      "findings": [
+        {
+          "id": "m9",
+          "severity": "minor",
+          "summary": "hidden nit"
+        }
+      ],
+      "proof": {
+        "no_findings": true,
+        "fix_commits": []
+      },
+      "want": "contradicts",
+      "follow_ups": 2
+    },
+    {
+      "name": "a recheck of the whole PR cannot claim to be the delta",
+      "step": 2,
+      "head": "h2",
+      "review": "review-wide",
+      "base": "pr-base",
+      "findings": [],
+      "proof": {
+        "fix_commits": [
+          "fix"
+        ],
+        "prior_review": "review-1",
+        "prior_head": "h1"
+      },
+      "want": "fix delta",
+      "follow_ups": 2
+    },
+    {
+      "name": "a major on the delta recheck still blocks",
+      "step": 2,
+      "head": "h2",
+      "review": "review-major",
+      "base": "h1",
+      "findings": [
+        {
+          "id": "x1",
+          "severity": "major",
+          "summary": "a real bug"
+        }
+      ],
+      "proof": {
+        "fix_commits": [
+          "fix"
+        ],
+        "prior_review": "review-1",
+        "prior_head": "h1"
+      },
+      "want": "source findings",
+      "follow_ups": 2
+    },
+    {
+      "name": "one fix pass, delta recheck finds a new minor: filed, step passes",
+      "step": 2,
+      "head": "h2",
+      "review": "review-2",
+      "base": "h1",
+      "findings": [
+        {
+          "id": "m3",
+          "severity": "minor",
+          "summary": "a further nit"
+        }
+      ],
+      "proof": {
+        "fix_commits": [
+          "fix"
+        ],
+        "prior_review": "review-1",
+        "prior_head": "h1"
+      },
+      "want": "pass",
+      "follow_ups": 3
+    },
+    {
+      "name": "a code fix after the recheck cannot be renewed without review",
+      "step": 2,
+      "head": "h3",
+      "review": "review-2",
+      "renew": true,
+      "compare": {
+        "status": "ahead",
+        "files": [
+          {
+            "filename": "internal/x.go",
+            "status": "modified",
+            "additions": 1,
+            "deletions": 1,
+            "patch": "@@ -1 +1 @@\n-a\n+b"
+          }
+        ]
+      },
+      "proof": {
+        "fix_commits": [
+          "fix2"
+        ],
+        "prior_head": "h2",
+        "delta_renewal": true,
+        "prior_review": "review-1"
+      },
+      "want": "not documentation",
+      "follow_ups": 3
+    },
+    {
+      "name": "a recheck's delta-only review is no full coverage to renew alone",
+      "step": 2,
+      "head": "h3",
+      "review": "review-2",
+      "renew": true,
+      "compare": {
+        "status": "ahead",
+        "files": [
+          {
+            "filename": "docs/runbook.md",
+            "status": "modified",
+            "additions": 1,
+            "deletions": 1,
+            "patch": "@@ -1 +1 @@\n-Run it nightly.\n+Run it every night."
+          }
+        ]
+      },
+      "proof": {
+        "fix_commits": [
+          "fix2"
+        ],
+        "prior_head": "h2",
+        "delta_renewal": true
+      },
+      "want": "reviewed only the delta",
+      "follow_ups": 3
+    },
+    {
+      "name": "a one-line runbook fix renews the recheck (naming the full review it retained) with no new review",
+      "step": 2,
+      "head": "h3",
+      "review": "review-2",
+      "renew": true,
+      "compare": {
+        "status": "ahead",
+        "files": [
+          {
+            "filename": "docs/runbook.md",
+            "status": "modified",
+            "additions": 1,
+            "deletions": 1,
+            "patch": "@@ -1 +1 @@\n-Run it nightly.\n+Run it every night."
+          }
+        ]
+      },
+      "proof": {
+        "fix_commits": [
+          "fix2"
+        ],
+        "prior_head": "h2",
+        "delta_renewal": true,
+        "prior_review": "review-1"
+      },
+      "want": "pass",
+      "follow_ups": 3
+    }
+  ]
+}

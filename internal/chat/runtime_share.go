@@ -66,17 +66,3 @@ func CodexByShare(id string, share float64) bool {
 	_, _ = h.Write([]byte(id))
 	return float64(h.Sum32())/(1<<32) < share
 }
-
-// AssignNewManagerRuntime picks a never-started Manager's runtime from the
-// Manager share (deterministic per workstream id) unless one is already set.
-// Codex only while it runs hooks (hooksReady).
-func AssignNewManagerRuntime(home, role, workstreamID string, share float64, hooksReady func() bool) error {
-	if fileExists(RuntimeFile(home, role)) {
-		return nil
-	}
-	rt := RuntimeClaude
-	if CodexByShare(workstreamID, share) && hooksReady() {
-		rt = RuntimeCodex
-	}
-	return WriteAutoRuntime(home, role, rt)
-}

@@ -38,6 +38,9 @@ const pingInterval = 20 * time.Second
 
 // Options configures a Server.
 type Options struct {
+	Changes    <-chan struct{} // committed database notifications; nil retains legacy polling
+	StateStore *store.Store    // canonical Postgres state and replay endpoint
+
 	OverviewGenerate overview.Generate  // optional read-only recap reader; nil uses the Commander Claude account
 	Linear           *linearsync.Client // optional injected sprint reader
 	Token            string
@@ -76,6 +79,9 @@ type Options struct {
 	Batch BatchRunner
 	// Beads reads the bead state the write checks need; nil = beads.New().
 	Beads beads.Client
+	// LiveOwner answers whether an agent role runs, for an intent's holder check; nil = every
+	// owner is taken as live (the check cannot say otherwise).
+	LiveOwner func(owner string) (state string, known bool)
 }
 
 // Server holds the latest snapshot and fans changes out to WebSocket clients.
@@ -94,6 +100,7 @@ type Server struct {
 	settling      sync.WaitGroup // the loads settles started, which can outlive settleWait
 
 	mu      sync.Mutex
+	pending map[string]pendingPatch // writes the door answered that no load has read back yet
 	cur     livedata.Snapshot
 	hash    [32]byte
 	version uint64
@@ -120,15 +127,18 @@ func New(opts Options) *Server {
 func (s *Server) Refresh(ctx context.Context) bool {
 	s.refreshMu.Lock()
 	defer s.refreshMu.Unlock()
-	return s.refreshLocked(ctx)
+	return s.refreshLocked(beads.WithReadCaller(ctx, "api-refresh"))
 }
 
 func (s *Server) refreshLocked(ctx context.Context) bool {
 	s.loadStarted = time.Now()
 	snap := s.opts.Source(ctx)
+	if s.opts.StateStore != nil && (ctx.Err() != nil || snap.Degraded != nil || snap.KeptLastGood || snap.PreserveVersion) {
+		snap = unavailablePostgresSnapshot()
+	}
 	// Its own context ended (a settle's budget, a shutdown): what it read is not
 	// the board. Keep the one we have; a settle answers settled:false.
-	if err := ctx.Err(); err != nil {
+	if err := ctx.Err(); err != nil && s.opts.StateStore == nil {
 		s.loadKept.Store(true)
 		log.Printf("api: snapshot load ended after %s (%v), kept the last board (%s)", time.Since(s.loadStarted).Round(time.Millisecond), err, snap.LoadTimes())
 		return false
@@ -136,11 +146,23 @@ func (s *Server) refreshLocked(ctx context.Context) bool {
 	if took := time.Since(s.loadStarted); took > s.slowLoad {
 		log.Printf("api: snapshot load took %s (%s)", took.Round(time.Millisecond), snap.LoadTimes())
 	}
-	s.loadKept.Store(snap.PreserveVersion || snap.KeptLastGood || snap.Degraded != nil)
-	h := contentHash(snap)
+	kept := snap.PreserveVersion || snap.KeptLastGood || snap.Degraded != nil
+	s.loadKept.Store(kept)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// A clean load that began after a write has read it: its patch is done. A load that kept the
+	// last rows (or any load begun before the write) shows the patched rows, not the pre-write ones.
+	for id, p := range s.pending {
+		if !kept && p.at.Before(s.loadStarted) || time.Since(p.at) > pendingPatchTTL {
+			delete(s.pending, id)
+		}
+	}
+	if s.opts.StateStore != nil && snap.Degraded != nil {
+		s.pending = map[string]pendingPatch{}
+	}
+	snap = livedata.Patched(snap, s.pendingPatches(), time.Now().Unix())
+	h := contentHash(snap)
 	if s.version > 0 && h == s.hash {
 		return false
 	}
@@ -160,6 +182,60 @@ func (s *Server) refreshLocked(ctx context.Context) bool {
 
 const defaultSlowLoad = livedata.SlowLoad
 
+// pendingPatchTTL bounds how long a patch outlives loads that kept the last rows (degraded, busy):
+// past it the bead reads as the loads show it, so a later write to it (one with no intent, no patch
+// of its own) can never stay hidden behind an old patch (m7).
+const pendingPatchTTL = 2 * time.Minute
+
+// pendingPatch is one bead's state after a write the door answered, and when.
+type pendingPatch struct {
+	patch livedata.StepPatch
+	at    time.Time
+}
+
+func (s *Server) pendingPatches() map[string]livedata.StepPatch {
+	out := make(map[string]livedata.StepPatch, len(s.pending))
+	for id, p := range s.pending {
+		out[id] = p.patch
+	}
+	return out
+}
+
+// patchNow lays a write's result on the current board and publishes it (a new version), so no
+// reader after the door's answer sees the board from before the write. Pending until a clean load
+// that began after it.
+func (s *Server) patchNow(after map[string]livedata.StepPatch) {
+	if len(after) == 0 {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.pending == nil {
+		s.pending = map[string]pendingPatch{}
+	}
+	now := time.Now()
+	for id, p := range after {
+		s.pending[id] = pendingPatch{patch: p, at: now}
+	}
+	if s.version == 0 {
+		return // nothing published yet: the first load shows it
+	}
+	snap := livedata.Patched(s.cur, s.pendingPatches(), now.Unix())
+	h := contentHash(snap)
+	if h == s.hash {
+		return
+	}
+	s.version++
+	snap.Version = s.version
+	s.cur, s.hash = snap, h
+	for ch := range s.subs {
+		select {
+		case ch <- struct{}{}:
+		default:
+		}
+	}
+}
+
 // contentHash ignores the fields that change on every load.
 func contentHash(s livedata.Snapshot) [32]byte {
 	s.Version, s.GeneratedAt = 0, time.Time{}
@@ -169,14 +245,45 @@ func contentHash(s livedata.Snapshot) [32]byte {
 
 // Poll refreshes every interval until ctx is done.
 func (s *Server) Poll(ctx context.Context) {
+	changes := s.opts.Changes
 	t := time.NewTicker(s.opts.Interval)
 	defer t.Stop()
 	for {
-		s.Refresh(ctx)
+		readCtx := ctx
+		cancel := func() {}
+		if s.opts.StateStore != nil {
+			readCtx, cancel = context.WithTimeout(ctx, 3*time.Second)
+		}
+		s.Refresh(readCtx)
+		cancel()
 		select {
 		case <-ctx.Done():
 			return
 		case <-t.C:
+		case _, ok := <-changes:
+			if !ok {
+				changes = nil
+			} else {
+				timer := time.NewTimer(100 * time.Millisecond)
+				select {
+				case <-timer.C:
+				case <-ctx.Done():
+					timer.Stop()
+					return
+				}
+			drain:
+				for {
+					select {
+					case _, ok := <-changes:
+						if !ok {
+							changes = nil
+							break drain
+						}
+					default:
+						break drain
+					}
+				}
+			}
 		}
 	}
 }
@@ -217,6 +324,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/overview", s.auth(http.HandlerFunc(s.serveOverview)))
 	mux.Handle("GET /api/snapshot", s.auth(http.HandlerFunc(s.serveSnapshot)))
 	mux.Handle("GET /api/events", s.auth(http.HandlerFunc(s.serveEvents)))
+	mux.Handle("GET /api/state/events", s.auth(http.HandlerFunc(s.serveStateEvents)))
 	mux.Handle("GET /api/livedata", s.auth(http.HandlerFunc(s.serveLiveData)))
 	mux.Handle("POST "+beads.DoorPath, s.auth(http.HandlerFunc(s.serveWrite)))
 	mux.Handle("POST /api/cmd", s.auth(http.HandlerFunc(s.serveCmd)))
@@ -293,7 +401,12 @@ func (s *Server) auth(next http.Handler) http.Handler {
 }
 
 func (s *Server) serveSnapshot(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, s.current(r.Context()))
+	snap := s.current(r.Context())
+	status := http.StatusOK
+	if s.opts.StateStore != nil && snap.Degraded != nil {
+		status = http.StatusServiceUnavailable
+	}
+	writeJSON(w, status, snap)
 }
 
 // Event is one WebSocket message. Type is "snapshot" for now; more kinds
@@ -420,6 +533,10 @@ func (s *Server) serveLiveData(w http.ResponseWriter, r *http.Request) {
 	d, ok := s.opts.LiveData()
 	if !ok {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"ok": false, "error": "no data loaded yet"})
+		return
+	}
+	if d.Postgres && d.LoadErr != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"ok": false, "error": "current database state unavailable"})
 		return
 	}
 	writeJSON(w, http.StatusOK, livedata.ToWire(d))

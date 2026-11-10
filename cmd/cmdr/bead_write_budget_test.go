@@ -100,7 +100,7 @@ func TestCreateThatLandedNeverLooksFailed(t *testing.T) {
 		mock := &beads.MockClient{CreateID: "obj-1.4", CreateErr: fmt.Errorf("strip inherited labels: busy")}
 		setupObjectiveProject(t, mock)
 		stdout, stderr, read := withTempOutputFiles(t)
-		code := runInternalCreateObjective([]string{"--project", "manifest", "--title", "child", "--parent", "obj-1"}, stdout, stderr)
+		code := runInternalCreateObjective([]string{"--project", "manifest", "--title", "child", "--parent", "obj-1", "--waiting", "review:rev"}, stdout, stderr)
 		out, errOut := read()
 		if code != 0 || !strings.Contains(out, `"bead_id":"obj-1.4"`) || !strings.Contains(errOut, "warning") {
 			t.Fatalf("exit=%d out=%s err=%s", code, out, errOut)
@@ -125,7 +125,7 @@ func TestCreateThatLandedNeverLooksFailed(t *testing.T) {
 		}
 		setupObjectiveProject(t, mock)
 		stdout, stderr, read := withTempOutputFiles(t)
-		code := runInternalCreateObjective([]string{"--project", "manifest", "--title", "child", "--parent", "obj-1"}, stdout, stderr)
+		code := runInternalCreateObjective([]string{"--project", "manifest", "--title", "child", "--parent", "obj-1", "--waiting", "review:rev"}, stdout, stderr)
 		out, errOut := read()
 		if code != 0 || !strings.Contains(out, `"bead_id":"obj-1.6"`) {
 			t.Fatalf("exit=%d out=%s err=%s", code, out, errOut)
@@ -146,7 +146,7 @@ func TestCreateKilledInTheDoorIsLookedUp(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			setupObjectiveProject(t, &beads.MockClient{CreateErr: cerr, ListResult: []beads.Bead{{ID: "obj-1.7", Title: "child", CreatedAt: now}}})
 			stdout, stderr, read := withTempOutputFiles(t)
-			code := runInternalCreateObjective([]string{"--project", "manifest", "--title", "child", "--parent", "obj-1"}, stdout, stderr)
+			code := runInternalCreateObjective([]string{"--project", "manifest", "--title", "child", "--parent", "obj-1", "--waiting", "review:rev"}, stdout, stderr)
 			out, errOut := read()
 			if code != 0 || !strings.Contains(out, `"bead_id":"obj-1.7"`) {
 				t.Fatalf("exit=%d out=%s err=%s", code, out, errOut)
@@ -156,7 +156,7 @@ func TestCreateKilledInTheDoorIsLookedUp(t *testing.T) {
 	t.Run("not found says to look first", func(t *testing.T) {
 		setupObjectiveProject(t, &beads.MockClient{CreateErr: errors.New("signal: killed")})
 		stdout, stderr, read := withTempOutputFiles(t)
-		code := runInternalCreateObjective([]string{"--project", "manifest", "--title", "child", "--parent", "obj-1"}, stdout, stderr)
+		code := runInternalCreateObjective([]string{"--project", "manifest", "--title", "child", "--parent", "obj-1", "--waiting", "review:rev"}, stdout, stderr)
 		_, errOut := read()
 		if code != 1 || !strings.Contains(errOut, "before creating it again") {
 			t.Fatalf("exit=%d err=%s", code, errOut)
@@ -166,7 +166,7 @@ func TestCreateKilledInTheDoorIsLookedUp(t *testing.T) {
 		mock := &beads.MockClient{CreateErr: errors.New("no such parent"), ListResult: []beads.Bead{{ID: "obj-1.7", Title: "child", CreatedAt: now}}}
 		setupObjectiveProject(t, mock)
 		stdout, stderr, read := withTempOutputFiles(t)
-		code := runInternalCreateObjective([]string{"--project", "manifest", "--title", "child", "--parent", "obj-1"}, stdout, stderr)
+		code := runInternalCreateObjective([]string{"--project", "manifest", "--title", "child", "--parent", "obj-1", "--waiting", "review:rev"}, stdout, stderr)
 		out, errOut := read()
 		if code != 1 || strings.Contains(out, "obj-1.7") {
 			t.Fatalf("exit=%d out=%s err=%s", code, out, errOut)

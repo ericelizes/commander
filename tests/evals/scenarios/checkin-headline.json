@@ -134,8 +134,9 @@
         "needs_you": [{"project": "p", "bead_id": "w.2", "workstream": "Alpha", "title": "Plan approved"}],
         "agents": {"manager-w": {"state": "idle", "since": 1}}
       },
-      "head": "action needed: 0 workflow errors, 0 blockers, 0 advisories, 0 sanity-audit suspects, 1 stopped or stalled, 1 needs you, 0 screen mismatches",
-      "instruction": "Act on the stopped or stalled rows below.",
+      "head": "action needed: 0 workflow errors, 0 blockers, 0 advisories, 1 sanity-audit suspects, 1 stopped or stalled, 1 needs you, 0 screen mismatches",
+      "instruction": "Act on the sanity-audit suspects and the stopped or stalled rows below.",
+      "suspect_line": true,
       "stalled_lines": ["- w.1 | Alpha (w) | Build | Agent stopped on build: the Manager's move · why: its session is gone"]
     },
     {

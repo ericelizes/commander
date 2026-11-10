@@ -85,6 +85,11 @@ type harness struct {
 
 func newHarness(t *testing.T) *harness {
 	t.Helper()
+	// Every fake chat has a connected account in its own HOME, never the user's.
+	user := t.TempDir()
+	t.Setenv("HOME", user)
+	os.MkdirAll(filepath.Join(user, ".claude"), 0700)
+	os.WriteFile(filepath.Join(user, ".claude", ".credentials.json"), []byte(`{"claudeAiOauth":{"accessToken":"test-token"}}`), 0600)
 	h := &harness{t: t, home: t.TempDir(), projects: t.TempDir(), fakeDir: t.TempDir(), work: t.TempDir(),
 		sink: &fakeSink{}, procs: &fakeProcs{procs: map[string][]Proc{}}, ids: map[string]string{}}
 	t.Setenv(chattest.EnvVar, "1")

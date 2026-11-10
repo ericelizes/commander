@@ -372,6 +372,10 @@ The sidebar is the user's priority list, worked top to bottom, and it is drawn f
   - A PR or commit in another repo: its typed wait, which mails that same Manager. `ci:<owner/repo>#N` fires when the PR's checks settle, not on merge. `main-ci:<owner/repo>@<short sha of 7-12 hex>` fires when the CI runs on that commit finish. `prod-tag:<owner/repo>@<short sha of 7-12 hex>` fires when a tag contains the commit, reading only the last 15 tags by name that start with cmdrd's one prefix (`prod-` unless `$COMMANDER_PROD_TAG_PREFIX` says otherwise), so on a repo with no such tags it never fires. A full sha is too long to record, and a long repo name can be refused even with a short one.
 - Run `cmdr graph check` on the workstream afterwards.
 
+## Every write names who holds the work next
+
+Every write names who holds the work next: a running Operator, a typed wait, a user card, an open blocker or child, or a park. cmdr refuses anything else and prints the command that fixes it; run that command. A Manager's name is not a holder.
+
 ## Guardrails — enforced only by you
 
 Claude sessions in this cockpit run with permission prompts OFF: nothing stops a

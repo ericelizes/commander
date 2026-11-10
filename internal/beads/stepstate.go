@@ -1,9 +1,7 @@
 package beads
 
-import "regexp"
-import "github.com/example-user/commander/internal/ownercompat"
-
 import "strings"
+import "github.com/example-user/commander/internal/ownercompat"
 
 // Step states shown in the Active Projects tree. A step's state is derived from
 // its bead status plus two marker labels, so `br` stays the source of truth.
@@ -88,11 +86,16 @@ func StepState(status string, labels []string) (state, owner string) {
 	return state, owner
 }
 
-var ownerUnsafe = regexp.MustCompile(`[^A-Za-z0-9_:-]`)
-
 // OwnerLabelName makes an owner name safe as a label value: br accepts only
 // letters, digits, hyphen, underscore and colon (a dotted bead id is not valid).
-func OwnerLabelName(owner string) string { return ownerUnsafe.ReplaceAllString(owner, "-") }
+func OwnerLabelName(owner string) string {
+	return strings.Map(func(r rune) rune {
+		if r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '_' || r == ':' || r == '-' {
+			return r
+		}
+		return '-'
+	}, owner)
+}
 
 // VizOf is the level a bead's viz:<n> label sets (1 to 3); 0 when it has none.
 func VizOf(labels []string) int {

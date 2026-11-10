@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -387,6 +388,29 @@ func TestParkUntilExpiryUnparksAndMailsOnce(t *testing.T) {
 	if len(sent) != 1 || sent[0].to != "manager-p-ws" || sent[0].subject != "[parked] parked ask p-ws.1 is due again" {
 		t.Fatalf("mail: %+v", sent)
 	}
+	// A gate with its card holds itself: no dispatch wait beside it.
+	if len(beads.WaitsOf(b.Labels)) != 0 {
+		t.Fatalf("a card's gate got a wait: %v", b.Labels)
+	}
+}
+
+// A parked step with nothing of its own to hold it comes back held by the Manager dispatch wait,
+// written in the unpark's own update.
+func TestUnparkHoldsAStepWithNoOtherHolder(t *testing.T) {
+	m := &beads.MemClient{}
+	m.Seed(beads.Bead{ID: "p-ws.1", Title: "Port the importer", Status: "open", Labels: []string{"kind:objective"}})
+	ctx := context.Background()
+	if err := beads.Park(ctx, m, "/p", "p-ws.1", "manager-p-ws", "after the release", epoch.Add(10*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	var sent []sentMail
+	w := watcher(&beads.MockClient{}, nil, &sent, epoch.Add(11*time.Minute))
+	w.beads = m
+	w.pollUntil(ctx)
+	b, _ := m.Show(ctx, "/p", "p-ws.1")
+	if ws := beads.WaitsOf(b.Labels); b.Status != "open" || len(ws) != 1 || ws[0].Ref != beads.ManagerDispatchWait {
+		t.Fatalf("unparked unheld: %s %v", b.Status, b.Labels)
+	}
 }
 
 // A review wait on a PR that merged (or closed) unreviewed can never be
@@ -430,6 +454,29 @@ func TestOperatorWaitClearsWhenTheOperatorStops(t *testing.T) {
 	}
 	if !strings.Contains(strings.Join(b.Calls, "\n"), "waiting:100:operator:operator-op-build|on=false") {
 		t.Errorf("wait not cleared: %v", b.Calls)
+	}
+}
+
+// The running set is read once at the start of a poll. An Operator spawned during the poll (its wait
+// written after the read) is not in it: the watcher must read again before it clears the wait.
+func TestOperatorWaitWrittenMidPollIsNotCleared(t *testing.T) {
+	b := waitBead("waiting:100:operator:operator-op-new")
+	var sent []sentMail
+	w := watcher(b, nil, &sent, time.Unix(200, 0))
+	reads := 0
+	w.running = func(context.Context) (map[string]bool, error) {
+		reads++
+		if reads == 1 {
+			return map[string]bool{}, nil // the capture at the start of the poll, before the spawn
+		}
+		return map[string]bool{"operator-op-new": true}, nil
+	}
+	w.poll(context.Background())
+	if len(sent) != 0 || strings.Contains(strings.Join(b.Calls, "\n"), "|on=false") {
+		t.Fatalf("a running Operator's wait was judged against a stale set: mail %+v calls %v", sent, b.Calls)
+	}
+	if reads < 2 {
+		t.Fatalf("the set was not read again before clearing: %d reads", reads)
 	}
 }
 
@@ -614,11 +661,45 @@ func TestOperatorWaitMailsOnceOverManyTicks(t *testing.T) {
 			t.Fatalf("%s: want one mail over 5 ticks, got %d: %+v", label, len(sent), sent)
 		}
 		b, _ := m.Show(context.Background(), "/p", "p-ws.1")
-		for _, l := range b.Labels {
-			if strings.HasPrefix(l, "waiting:") {
-				t.Errorf("%s: wait label still on the bead: %v", label, b.Labels)
-			}
+		// The fired wait is gone; the step it alone held is the Manager's (dispatch), never unheld.
+		if ws := beads.WaitsOf(b.Labels); slices.Contains(b.Labels, label) || len(ws) != 1 || ws[0].Ref != beads.ManagerDispatchWait {
+			t.Errorf("%s: want only the Manager dispatch wait: %v", label, b.Labels)
 		}
+	}
+}
+
+// A wait that fires is cleared in the same write that names the next holder: the Manager dispatch
+// wait when nothing else of the bead's own holds it; nothing is added beside another wait or a card.
+func TestWakeClearKeepsAHolder(t *testing.T) {
+	for name, extra := range map[string][]string{
+		"only holder":     nil,
+		"another wait":    {"waiting:150:review:reviewer-z"},
+		"the user's card": {"needs-user"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			label := "waiting:100:operator:operator-op-build"
+			m := &beads.MemClient{}
+			m.Seed(beads.Bead{ID: "p-ws.1", Status: "open", Labels: append([]string{"kind:objective", label}, extra...)})
+			calls := &beads.MockClient{}
+			var sent []sentMail
+			w := watcher(calls, nil, &sent, time.Unix(200, 0))
+			w.beads = m
+			w.running = func(context.Context) (map[string]bool, error) { return map[string]bool{}, nil }
+			w.poll(context.Background())
+			b, _ := m.Show(context.Background(), "/p", "p-ws.1")
+			if slices.Contains(b.Labels, label) {
+				t.Fatalf("fired wait stays: %v", b.Labels)
+			}
+			dispatch := 0
+			for _, wt := range beads.WaitsOf(b.Labels) {
+				if wt.Ref == beads.ManagerDispatchWait {
+					dispatch++
+				}
+			}
+			if want := map[bool]int{true: 1, false: 0}[extra == nil]; dispatch != want {
+				t.Fatalf("dispatch waits %d, want %d: %v", dispatch, want, b.Labels)
+			}
+		})
 	}
 }
 
@@ -682,5 +763,25 @@ func TestOperatorWaitRechecksRunListAfterReadingNewWait(t *testing.T) {
 	}
 	if calls != 2 {
 		t.Fatalf("run reads = %d", calls)
+	}
+}
+
+// m2: onlyHolder is the one predicate: a Manager handoff wait past its window holds nothing, so
+// it never stops the fired wait's dispatch hand-on; a live one does.
+func TestOnlyHolderReadsHandoffExpiryLikeTheBoard(t *testing.T) {
+	label := "waiting:100:operator:operator-op-build"
+	w := &waitWatcher{runningNow: map[string]bool{}}
+	old := time.Now().Add(-3 * time.Hour)
+	expired := beads.Wait{Kind: beads.WaitUntil, Since: old, Until: old.Add(time.Hour), Ref: beads.ManagerCloseWait}.Label()
+	if !w.onlyHolder(beads.Bead{ID: "s", Status: "open", Labels: []string{label, expired}}, label) {
+		t.Fatal("an expired handoff wait counted as a holder")
+	}
+	live := beads.Wait{Kind: beads.WaitUntil, Since: time.Now(), Until: time.Now().Add(time.Hour), Ref: beads.ManagerCloseWait}.Label()
+	if w.onlyHolder(beads.Bead{ID: "s", Status: "open", Labels: []string{label, live}}, label) {
+		t.Fatal("a live handoff wait did not count as a holder")
+	}
+	w.runningNow = map[string]bool{"operator-x": true}
+	if w.onlyHolder(beads.Bead{ID: "s", Status: "in_progress", Labels: []string{label, "owner:operator-x"}}, label) {
+		t.Fatal("a running Operator owner did not count as a holder")
 	}
 }

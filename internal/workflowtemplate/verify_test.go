@@ -15,7 +15,7 @@ const testURL = "https://github.com/o/r/pull/7"
 func fakeGH(head string, unresolved bool) GHRunner {
 	return func(_ context.Context, args ...string) ([]byte, error) {
 		if args[0] == "pr" {
-			return []byte(`{"headRefOid":"` + head + `","state":"MERGED","author":{"login":"writer"},"commits":[{"oid":"fix"}],"statusCheckRollup":[{"status":"COMPLETED","conclusion":"SUCCESS"}]}`), nil
+			return []byte(`{"headRefOid":"` + head + `","baseRefOid":"` + strings.Repeat("b", 40) + `","state":"MERGED","author":{"login":"writer"},"commits":[{"oid":"fix"}],"statusCheckRollup":[{"status":"COMPLETED","conclusion":"SUCCESS"}]}`), nil
 		}
 		if args[0] == "run" {
 			return []byte(`[{"headSha":"` + head + `","status":"completed","conclusion":"success"}]`), nil

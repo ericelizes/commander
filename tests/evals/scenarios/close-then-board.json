@@ -1,0 +1,12 @@
+{
+  "description": "Close a step with its next holder in the same intent write while every load overlaps writes (kept last-good rows): no board cmdrd serves after the door's answer shows the closed step open or its successor open with no holder. Private to the write door's in-memory snapshot, so it runs in internal/api:TestCloseThenBoardScenario over an in-memory beads graph; the eval harness has no beads-graph backend.",
+  "beads": [
+    {"id": "w", "title": "Area", "labels": ["kind:objective"]},
+    {"id": "w.1", "title": "Build", "status": "in_progress", "labels": ["waiting:1:ci:7"], "parent": "w"},
+    {"id": "w.2", "title": "Ship", "status": "open", "parent": "w", "blocked_by": ["w.1"]}
+  ],
+  "write": [["close", "w.1"], ["update", "w.2", "--add-label", "waiting:2:ci:9"]],
+  "intent_bead": "w.1",
+  "kept_loads": 8,
+  "want": {"w.1": "closed", "w.2": "open"}
+}

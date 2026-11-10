@@ -290,3 +290,31 @@ func TestTxnDirectKeepsMaybeApplied(t *testing.T) {
 		t.Fatalf("resp=%+v err=%v", resp, err)
 	}
 }
+
+// M3: a write made under WithIntent carries the intent to the door (the CLI verbs' decisive
+// writes: a close, a state flush); one without it carries none.
+func TestRunWrite_CarriesTheIntentFromItsContext(t *testing.T) {
+	var got []*DoorIntent
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req DoorRequest
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		got = append(got, req.Intent)
+		_ = json.NewEncoder(w).Encode(DoorResponse{Settled: true, Applied: 1})
+	}))
+	defer srv.Close()
+	home := t.TempDir()
+	t.Setenv("COMMANDER_HOME", home)
+	os.WriteFile(filepath.Join(home, "api-url"), []byte(srv.URL), 0o600)
+	os.WriteFile(filepath.Join(home, "api-token"), []byte("t"), 0o600)
+	dir := t.TempDir()
+	ctx := WithIntent(context.Background(), DoorIntent{Bead: "x-1", Verb: "closing x-1"})
+	if _, _, err := runWrite(ctx, dir, "br", "close", "x-1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := runWrite(context.Background(), dir, "br", "comments", "add", "x-1", "hi"); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0] == nil || got[0].Bead != "x-1" || got[0].Verb != "closing x-1" || got[1] != nil {
+		t.Fatalf("intents sent: %+v", got)
+	}
+}

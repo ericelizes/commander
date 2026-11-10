@@ -58,7 +58,7 @@ Agent stopped. Update it the moment state changes:
 - Set who has it: `cmdr internal-set-objective --project <project> --bead <id> --owner operator-<x>|user|none` (use `user` for work running in the user's own sessions)
 - **Never end a turn with work in flight without recording what you wait on**; nothing else wakes you. Push, open a PR, ask a reviewer, hand the user something: then `cmdr internal-set-objective --project <project> --bead <id> --waiting ci:#<pr> [--waiting review:<github login>] [--waiting user] [--waiting operator:<role>]` (repeatable; `ci:<owner/repo>#N` for another repo; `main-ci:<sha>` = the CI runs on main for that commit finish, `prod-tag:<sha>` = a prod tag (`prod-*`, or `$COMMANDER_PROD_TAG_PREFIX`) now contains the commit, both also as `<owner/repo>@<sha>`; record a short sha, 7-12 hex, since a full one does not fit the label and cmdrd resolves it; there is no `deploy:` kind, `prod-tag` covers it; `until:<RFC3339>:<label>` = a point in time, e.g. a scheduled job at `until:2026-10-22T21:45:00Z:the nightly reconcile runs`; the label is plain words saying what happens then (a slug like `spec-review-first` is refused: name the real wait instead, `review:<login>`, `prod-tag:<sha>`, `operator:<role>`, or needs-user with a card), and a timer never goes on the user's decision (their approval gate or a step they own: that is needs-user with --decision); no GitHub call, cmdrd mails `[wait] <label> time reached` within about a minute of the target and clears it, the row reads `Waiting for <label> · <local time>`; a review wait needs the step's `--review <pr>` set). It replaces the step's earlier waits; `--waiting none` clears them. cmdrd polls GitHub every minute and mails you `[ci] #N finished: <k failing|all green>`, `[main-ci] <sha> finished: <k failing|all green>`, `[main-ci] <sha> not found in <repo>` (GitHub has no such commit 30 minutes on: the wait is cleared, so check the sha and record it again), `[prod-tag] <sha> is in <tag>` or `[review] <login> approved|requested changes on|commented on #N` (or `[review] #N merged|closed without <login>'s review`) once, clearing that wait; an `operator:` wait clears with `[operator] <role> is no longer running` when that Operator stops; with no event nothing is mailed, however long it takes: there is no reminder. Your sidebar row reads `Waiting for CI` instead of idle. A `user` wait is never woken by cmdrd; it clears when the user answers the card. Both must be real or the CLI refuses them: a `user` wait needs a question in the user's NEEDS YOU queue on that step or one under it (set the step needs-user with --decision; that is the wait), and an `operator:` wait needs that Operator running (spawn it first). Never invent a role name for something you are waiting on, and never write a wait label by hand (`bd label add ... waiting:`/`w:` is refused, and agents do not run bd/br writes at all: use the cmdr verbs): only `--waiting` records one.
 - Mark a step done (PR merged, decision made, check finished): `cmdr internal-close-objective --project <project> --bead <id>`. Before your turn ends, whatever the close released needs a holder (an Operator, a wait or a card), or its row reads State missing. To hold it in the same command: `--then-waiting <wait>` (the `--waiting` grammar), `--then-owner <running Operator>` or `--then-decision '<card>'`, with `--then-step <id>`; Commander's closes are refused without one.
-- Add a missing step under a workstream: `cmdr internal-create-objective --project <project> --parent <workstream-id> --title "<step>"`
+- Add a missing step under a workstream: `cmdr internal-create-objective --project <project> --parent <workstream-id> --title "<step>" --waiting <ci:#N|review:<who>|until:<time>:<what>> | --deps blocked-by:<open bead> | --owner <running operator-...>` (a step is born with its holder; naming none, it is born with your "Manager to start" receipt: start it, or give it a holder, within the hour)
 - Rename a vague step: `cmdr internal-rename-objective --project <project> --bead <id> --title "<title>"`
 - Ids: `bd list --label kind:objective --status all --json` in the project dir.
 
@@ -246,8 +246,16 @@ edge already gone counts as done, so after a failure run the same command again.
    Before checks, explicitly bind the original writer and every actual fix writer
    relevant to the reviewed diff, selected from known commit reports:
    `cmdr workflow bind-writers --project P --block R --writers original-task,fix-task --head <current-full-sha>`.
+   Commits the user made in their own sessions (no task) bind as an external writer:
+   add `--external-writer user --commits <base-sha>..<last-user-sha>` (or a comma
+   list of full SHAs on the PR), with `--writers` only for actual fix tasks.
    Confirm the writer list yourself; never auto-select reviewers or all descendants.
    Rebind after head/selection changes, then renew checks in template order.
+   If the PR merged before its review finished (the user merged it), its checks
+   can no longer pass: settle the block with
+   `cmdr workflow settle-block --project P --block R --reason '<why>'`. It closes
+   the open steps as settled (PR merged, not reviewed), keeps earlier checks and
+   closes the block; never fake proofs or bindings to close them.
    Compute `cmdr workflow review-policy --repo <checkout> --base <base ref> --head <head ref>`
    before dispatch; attach its version, resolved refs, scope hash, depth and reason
    unchanged to the brief. Respect explicit full-review requests with `--full`.
@@ -276,6 +284,30 @@ edge already gone counts as done, so after a failure run the same command again.
    review bead closed before you post the proof) and
    `cmdr internal-comment --project P --bead S --text 'workflow-review-proof@v1 {"review_bead":"<separate-review-task>","head":"<full-sha>","fix_commits":["<full-fix-sha>"]}'`
    (no findings: `"no_findings":true,"fix_commits":[]`).
+   **Bounded review loop (d78, `one-minor-fix-pass@v1`).** Blockers and majors are
+   fixed and rechecked, as ever. Minors get at most ONE fix pass: fix them once (or
+   skip the fix with `"no_fix_required":true`), then never chase a recheck's new
+   minors with another round. A recheck reviews only the fix delta: brief the
+   recheck reviewer with the prior review bead and the head it reviewed, have it run
+   policy with `--base <prior head>`, and prove it with
+   `"prior_review":"<prior-review-task>","prior_head":"<prior-full-sha>","fix_commits":["<full-fix-sha>"]`
+   added to the proof (the verifier checks the receipt's base is the prior head,
+   that the prior review completed a FULL typed review of it (never another
+   recheck: a second recheck names the full review and covers every fix since), and
+   that the recheck's receipt lists every prior blocker/major in `resolved`). A
+   review that read only a delta never stands as a plain proof. Any minor left on the
+   passing head is filed by the close door as a follow-up bead under your
+   workstream (label `workflow-followup-of:<block>`, a Manager-to-start receipt,
+   yours to schedule or close) and the step passes; `no_findings` can never hide
+   typed minors. **Tiny documentation fixes need no new review:** after a review
+   of head H, a fix delta the verifier itself measures on GitHub as documentation
+   only (at most 3 files on the prose allow-list: docs/** prose or a top-level
+   README/CHANGELOG, never agent or build files such as CLAUDE*/AGENTS*/requirements*;
+   20 lines, nothing reviewpolicy reads as sensitive) renews that typed review with
+   `{"review_bead":"<the review of H>","head":"<current-full-sha>","prior_head":"<H>","fix_commits":["<full-fix-sha>"],"delta_renewal":true}`
+   (renewing a delta recheck: add `"prior_review":"<the full review it retained>"`);
+   anything bigger is refused with the reason and needs a delta recheck. Brief
+   every reviewer to run `cmdr workflow review-report-check` before it exits.
 
    **Code review is never yours.** Every code change is reviewed by a SEPARATE
    review Operator, never the one who wrote it and never you. Lifecycle: writer

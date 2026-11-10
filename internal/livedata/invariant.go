@@ -1,9 +1,11 @@
 package livedata
 
 import (
+	"time"
+
 	"github.com/example-user/commander/internal/beads"
+	"github.com/example-user/commander/internal/holding"
 	"github.com/example-user/commander/internal/store"
-	"strings"
 )
 
 // Violation is an open bead that breaks the open-bead invariant: it has no
@@ -29,52 +31,21 @@ type Violation struct {
 // list blocks nothing, so the bead is still checked).
 // live may be nil (then only the Operator state speaks for an owner).
 func OpenBeadInvariant(rows []ObjectiveRow, live LiveAgent) []Violation {
-	byID := make(map[string]ObjectiveRow, len(rows))
-	hasOpenChild := map[string]bool{}
-	for _, r := range rows {
-		byID[r.BeadID] = r
-	}
-	for _, r := range rows {
-		if r.Status != "closed" && r.Status != beads.StatusDeferred && r.ParentBeadID != "" {
-			hasOpenChild[r.ParentBeadID] = true
-		}
-	}
-	memo := map[string]bool{}
-	var fine func(id string) bool
-	fine = func(id string) bool {
-		if v, ok := memo[id]; ok {
-			return v
-		}
-		r, ok := byID[id]
-		if !ok || r.Status == "closed" {
-			return false
-		}
-		if r.Status == beads.StatusDeferred {
-			memo[id] = true // parked: out of play, covered
-			return true
-		}
-		if untypedWait(r) != "" {
-			memo[id] = false // nothing but the clock clears it, so it covers nothing
-			return false
-		}
-		if ownBead(r, live, hasOpenChild[id]) {
-			memo[id] = true
-			return true
-		}
-		if r.Status != "in_progress" {
-			for _, b := range r.BlockedBy {
-				if blocker, ok := byID[b]; ok && rowBlocks(blocker) {
-					memo[id] = true // waiting behind an open blocker: not ready, nothing to own yet
-					return true
-				}
-			}
-		}
-		memo[id] = false
-		return false
-	}
+	return OpenBeadInvariantAt(rows, live, time.Time{})
+}
+
+// OpenBeadInvariantAt is OpenBeadInvariant judged at now: a Manager handoff wait overdue past
+// beads.HandoffWindow holds nothing (invariant I1). The snapshot build passes its load time.
+func OpenBeadInvariantAt(rows []ObjectiveRow, live LiveAgent, now time.Time) []Violation {
+	w := newRowWorld(rows, live)
+	w.now = now
+	byID := w.rows
 	var out []Violation
 	for _, r := range rows {
-		if r.Status == "closed" || r.Status == beads.StatusDeferred || fine(r.BeadID) {
+		if r.Status == "closed" || r.Status == beads.StatusDeferred {
+			continue
+		}
+		if _, held, _ := holding.Held(rowBead(r, now), w); held {
 			continue
 		}
 		// The nearest owner: a nested workstream's Manager fixes its own beads.
@@ -101,38 +72,56 @@ func untypedWait(r ObjectiveRow) string {
 	return ""
 }
 
-// rowBlocks reports whether a blocker still holds its dependant back: it is open
-// and in play (a closed, parked or superseded blocker may never finish or is done).
-func rowBlocks(r ObjectiveRow) bool {
-	return r.Status != "closed" && r.Status != beads.StatusDeferred && !r.Superseded
+// rowWorld is the holding.World of a list of rows.
+type rowWorld struct {
+	rows      map[string]ObjectiveRow
+	openChild map[string]bool
+	live      LiveAgent
+	now       time.Time
 }
 
-// ownBead is the invariant on the row's own markers: an agent, a wait, the user,
-// or an open child.
-func ownBead(r ObjectiveRow, live LiveAgent, openChild bool) bool {
-	switch {
-	case r.Gate, r.State == beads.StateNeedsUser, openChild:
-		return true
-	case r.OwnerState == OwnerDied || r.OwnerState == OwnerFinished:
-		// Its Operator is gone: a wait it or its Manager wrote names nobody who
-		// will act on it.
-		return false
-	case len(r.Waits) > 0, r.Until != "":
-		return true
-	case r.Owner == "":
-		return false
-	case r.OwnerState != "":
-		return r.OwnerState == OwnerWorking
-	case live != nil:
-		// A Manager (or Commander) owns everything in its workstream, so its name on
-		// a step proves nothing between turns: only a turn in progress does. Without
-		// one, the step needs a recorded wait, an Operator or the user.
-		if strings.HasPrefix(r.Owner, "manager-") || r.Owner == "commander" {
-			return live(r.Owner) == "working"
-		}
-		return live(r.Owner) != ""
+func newRowWorld(rows []ObjectiveRow, live LiveAgent) *rowWorld {
+	w := &rowWorld{rows: make(map[string]ObjectiveRow, len(rows)), openChild: map[string]bool{}, live: live}
+	for _, r := range rows {
+		w.rows[r.BeadID] = r
 	}
-	return true
+	for _, r := range rows {
+		if r.Status != "closed" && r.Status != beads.StatusDeferred && r.ParentBeadID != "" {
+			w.openChild[r.ParentBeadID] = true
+		}
+	}
+	return w
+}
+
+func (w *rowWorld) Bead(id string) (holding.Bead, bool) {
+	r, ok := w.rows[id]
+	return rowBead(r, w.now), ok
+}
+
+func (w *rowWorld) HasOpenChild(id string) bool { return w.openChild[id] }
+
+func (w *rowWorld) OwnerLive(owner string) (string, bool) {
+	if w.live == nil {
+		return "", false
+	}
+	return w.live(owner), true
+}
+
+// rowBead is a row as the one predicate reads it at now (zero: no wait has expired, as a
+// snapshot's text waits carry no deadline to judge).
+func rowBead(r ObjectiveRow, now time.Time) holding.Bead {
+	waits := 0
+	for _, w := range r.Waits {
+		if now.IsZero() || beads.WaitHolds(w, now) {
+			waits++
+		}
+	}
+	return holding.Bead{
+		ID: r.BeadID, Parent: r.ParentBeadID, Status: r.Status, Gate: r.Gate,
+		NeedsUser: r.State == beads.StateNeedsUser, Superseded: r.Superseded,
+		Owner: r.Owner, OwnerState: r.OwnerState, Waits: waits, Untyped: untypedWait(r),
+		Until: r.Until != "", BlockedBy: r.BlockedBy,
+	}
 }
 
 // SnapshotViolations is OpenBeadInvariant over a snapshot (what `cmdr graph
@@ -141,11 +130,31 @@ func ownBead(r ObjectiveRow, live LiveAgent, openChild bool) bool {
 // the rule needs.
 func SnapshotViolations(s Snapshot) []Violation {
 	var rows []ObjectiveRow
-	var walk func(project, parent string, steps []SnapStep)
-	walk = func(project, parent string, steps []SnapStep) {
+	for _, ws := range s.Workstreams {
+		rows = append(rows, ObjectiveRow{BeadID: ws.BeadID, Title: ws.Title, ProjectName: ws.Project, Status: ws.Status, State: ws.State, Owner: ws.Owner})
+		rows = append(rows, workstreamRows(ws)...)
+	}
+	return OpenBeadInvariant(rows, func(owner string) string { return s.Agents[owner].State })
+}
+
+// workstreamRows lists a workstream's gate nodes and steps as rows (not the
+// workstream bead itself). Gate beads are blockers too, so a bead behind one
+// resolves; a snapshot carries a step's recorded waits as text, which is all the
+// rule needs.
+func workstreamRows(ws SnapWorkstream) []ObjectiveRow {
+	var rows []ObjectiveRow
+	for _, g := range ws.GateNodes {
+		status := "open"
+		if g.Status == "passed" {
+			status = "closed"
+		}
+		rows = append(rows, ObjectiveRow{BeadID: g.BeadID, ParentBeadID: ws.BeadID, Title: g.Name, ProjectName: ws.Project, Status: status, Gate: true})
+	}
+	var walk func(parent string, steps []SnapStep)
+	walk = func(parent string, steps []SnapStep) {
 		for _, st := range steps {
 			row := ObjectiveRow{
-				BeadID: st.BeadID, ParentBeadID: parent, Title: st.Title, ProjectName: project, Status: st.Status,
+				BeadID: st.BeadID, ParentBeadID: parent, Title: st.Title, ProjectName: ws.Project, Status: st.Status,
 				State: st.State, Owner: st.Owner, OwnerState: st.OwnerState, BlockedBy: st.BlockedBy, Until: st.Until, Gate: st.Gate, Superseded: st.Superseded,
 				Owns: st.ManagerRole != "",
 			}
@@ -153,22 +162,11 @@ func SnapshotViolations(s Snapshot) []Violation {
 				row.Waits = []beads.Wait{{}}
 			}
 			rows = append(rows, row)
-			walk(project, st.BeadID, st.Children)
+			walk(st.BeadID, st.Children)
 		}
 	}
-	for _, ws := range s.Workstreams {
-		// Gate beads are blockers too (not steps): list them so a bead behind one resolves.
-		for _, g := range ws.GateNodes {
-			status := "open"
-			if g.Status == "passed" {
-				status = "closed"
-			}
-			rows = append(rows, ObjectiveRow{BeadID: g.BeadID, ParentBeadID: ws.BeadID, Title: g.Name, ProjectName: ws.Project, Status: status, Gate: true})
-		}
-		rows = append(rows, ObjectiveRow{BeadID: ws.BeadID, Title: ws.Title, ProjectName: ws.Project, Status: ws.Status, State: ws.State, Owner: ws.Owner})
-		walk(ws.Project, ws.BeadID, ws.Steps)
-	}
-	return OpenBeadInvariant(rows, func(owner string) string { return s.Agents[owner].State })
+	walk(ws.BeadID, ws.Steps)
+	return rows
 }
 
 // WithEdits is the snapshot as it reads once edits land: each edit changes a

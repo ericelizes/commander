@@ -1,0 +1,9 @@
+{
+  "projects": [{"name": "demo", "path": "/tmp/demo"}],
+  "workstreams": [
+    {"n": 1, "project": "demo", "bead_id": "demo-ew", "title": "Born empty, unheld", "status": "open", "state": "in-progress", "manager_role": "manager-demo-ew"},
+    {"n": 2, "project": "demo", "bead_id": "demo-ep", "title": "Born with a planning handoff", "status": "open", "state": "in-progress", "manager_role": "manager-demo-ep",
+     "waiting": "Manager to plan", "wait_since": 1000, "wait_until": 1120, "wait_until_as": "Manager to plan"}
+  ],
+  "agents": {"manager-demo-ew": {"state": "idle", "since": 1}, "manager-demo-ep": {"state": "idle", "since": 1}}
+}

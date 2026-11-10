@@ -69,16 +69,18 @@ func (f failStartReceipt) SetLabel(ctx context.Context, dir, id, label string, o
 	return f.MemClient.SetLabel(ctx, dir, id, label, on)
 }
 
-// The bead exists once the create landed: a receipt that could not be written
-// is a warning naming how to hold the step, never a failed create (repeating it
-// would make a second bead).
+// The bead exists once the create landed: a receipt that could not be written after it (the
+// named blocker turned out finished) is a warning naming how to hold the step, never a failed
+// create (repeating it would make a second bead). A step naming no holder carries the receipt in
+// the create itself, so there is no later write to fail.
 func TestCreateWhoseReceiptFailsStillReportsTheBead(t *testing.T) {
 	m := &beads.MemClient{}
 	m.Seed(beads.Bead{ID: "w", Title: "Notify", Status: "open", Labels: []string{"kind:objective"}})
+	m.Seed(beads.Bead{ID: "w.done", Title: "Plan", Status: "closed", Labels: []string{"kind:objective"}, ParentID: "w"})
 	setupObjectiveProject(t, failStartReceipt{m})
 	t.Setenv("COMMANDER_ROLE", "manager-w")
 	stdout, stderr, read := withTempOutputFiles(t)
-	if code := runInternalCreateObjective([]string{"--project", "manifest", "--title", "Send the notice", "--parent", "w"}, stdout, stderr); code != 0 {
+	if code := runInternalCreateObjective([]string{"--project", "manifest", "--title", "Send the notice", "--parent", "w", "--deps", "blocked-by:w.done"}, stdout, stderr); code != 0 {
 		_, e := read()
 		t.Fatalf("exit %d: %s", code, e)
 	}

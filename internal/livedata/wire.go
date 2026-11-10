@@ -107,6 +107,19 @@ func (s *Source) LastLoadErr() error {
 // reads (tens of seconds under load) and read its ranks first, so a move written
 // meanwhile would otherwise not show until the next load finished.
 func (s *Source) Last() (Data, bool) {
+	if s.Deps.Store != nil && s.Deps.Store.IsPostgres() {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		s.mu.Lock()
+		deps := s.Deps
+		s.mu.Unlock()
+		data := Load(ctx, deps)
+		if ctx.Err() != nil {
+			data.LoadErr = ctx.Err()
+		}
+		return data, true
+	}
+
 	s.last.mu.RLock()
 	d, ok := s.last.data, s.last.ok
 	s.last.mu.RUnlock()

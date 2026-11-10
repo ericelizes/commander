@@ -1,0 +1,15 @@
+[Unit]
+Description=Commander local PostgreSQL
+After=default.target
+
+[Service]
+Type=simple
+ExecStartPre=-/usr/bin/docker rm commander-postgres
+ExecStart=/usr/bin/docker run --name commander-postgres --env-file %h/.commander/postgres.env --mount type=volume,src=commander-postgres,dst=/var/lib/postgresql/data --publish 127.0.0.1:55433:5432 postgres:17 -c max_connections=64
+ExecStop=/usr/bin/docker stop --time 30 commander-postgres
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=45
+
+[Install]
+WantedBy=default.target

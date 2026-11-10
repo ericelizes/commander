@@ -41,6 +41,7 @@ import (
 	"github.com/example-user/commander/internal/config"
 	"github.com/example-user/commander/internal/docker"
 	"github.com/example-user/commander/internal/gates"
+	"github.com/example-user/commander/internal/holding"
 	"github.com/example-user/commander/internal/inbox"
 	"github.com/example-user/commander/internal/layout"
 	"github.com/example-user/commander/internal/linearsync"
@@ -50,6 +51,7 @@ import (
 	"github.com/example-user/commander/internal/rolemail"
 	"github.com/example-user/commander/internal/scheduler"
 	"github.com/example-user/commander/internal/spawn"
+	"github.com/example-user/commander/internal/statusclassify"
 	"github.com/example-user/commander/internal/store"
 	"github.com/example-user/commander/internal/tmuxctl"
 	"github.com/example-user/commander/internal/tui"
@@ -340,6 +342,11 @@ func New() (*Daemon, error) {
 			return out
 		},
 	}
+	if st.IsPostgres() {
+		live.Deps.Scrape = nil
+		liveOps.every = time.Second
+	}
+
 	watch := opWatch{store: st, issues: st, activeAt: transcriptActiveAt, now: time.Now, latest: func() (livedata.Snapshot, bool) {
 		data, ok := live.Last()
 		if !ok {
@@ -364,6 +371,13 @@ func New() (*Daemon, error) {
 		managers := &wsmgr.Manager{Store: st, Beads: cached, Reg: amServer, AmKey: commanderRepo, Dir: dir, Numbered: liveWorkstreams(live)}
 		deliverer := chatDeliverer{chat: chatEngine, tmux: &wake.TmuxDeliverer{Projects: st, Director: dir, Managers: managers}}
 		if chatEngine != nil {
+			chatEngine.SetUsageMoveHook(func(role, text string) {
+				ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+				defer cancel()
+				if err := managers.NoteOnWorkstream(ctx, role, text); err != nil {
+					log.Printf("usage move note for %s: %v", role, err)
+				}
+			})
 			managers.Native = nativeChats{e: chatEngine}
 			deliverer.managers = managers
 			ensured = managers
@@ -422,11 +436,11 @@ func New() (*Daemon, error) {
 		}
 		invariant = newInvariantWatcher(watch.latest, waits.mail)
 		pitch = newPitchWatcher(home, watch.latest, waits.mail)
-		invariantReads = beads.ExportReads(beads.Incremental(cached))
+		invariantReads = beads.ExportReads(beads.IsolatedIncremental(cached))
 		invariant.fresh = func(ctx context.Context) (livedata.Snapshot, bool) {
-			data := livedata.Load(ctx, livedata.Deps{Store: st, Beads: invariantReads, Scrape: livedata.ScrapeAgentStates})
+			data, ok := loadInvariant(ctx, livedata.Deps{Store: st, Beads: invariantReads, Scrape: livedata.ScrapeAgentStates})
 			data.Objectives = livedata.MarkReported(data.Objectives, reported.list(), nil)
-			return livedata.BuildSnapshot(data, nil), data.LoadErr == nil
+			return livedata.BuildSnapshot(data, nil), ok
 		}
 	}
 
@@ -486,6 +500,11 @@ func (d *Daemon) Run(ctx context.Context) error {
 			go d.ensureManagers(ctx)
 		}
 		go d.chat.Heartbeat(ctx, time.Minute)
+		if d.store.IsPostgres() {
+			go d.store.MaintainEventHistory(ctx)
+			worker := &statusclassify.Worker{Store: d.store, Engine: d.chat, Home: d.home}
+			go worker.Run(ctx)
+		}
 		go chat.RunCaptureSweep(ctx, d.home, time.Hour)
 	}
 	if !d.skipSocket {
@@ -499,11 +518,16 @@ func (d *Daemon) Run(ctx context.Context) error {
 	d.inbox.Start(ctx)
 	if d.store != nil && !d.skipSocket {
 		go d.reapHostRuns(ctx)
+		if d.store.IsPostgres() && d.live != nil && d.live.Live != nil {
+			go d.reconcilePostgresPresence(ctx)
+			go d.observeLegacyPostgresOperators(ctx)
+		}
 		sweepReads := d.reads
 		if sweepReads == nil {
 			sweepReads = d.beads
 		}
 		go worktreeSweeper{runs: d.store, projects: d.store, beads: sweepReads}.Run(ctx)
+		go (&diskWatcher{home: d.home, health: d.health, projects: d.store, runs: d.store}).Run(ctx)
 		go d.runTokenLedger(ctx)
 	}
 	if d.waker != nil {
@@ -848,6 +872,11 @@ func (d *Daemon) startAPI(ctx context.Context) {
 		return
 	}
 	opts := d.apiOptions(token)
+	if d.store.IsPostgres() {
+		opts.StateStore = d.store
+		opts.Changes = d.store.WatchState(ctx)
+		opts.Interval = 30 * time.Second
+	}
 	srv := api.New(opts)
 	port := 0
 	if d.cfg != nil {
@@ -868,7 +897,7 @@ func (d *Daemon) startAPI(ctx context.Context) {
 func (d *Daemon) apiOptions(token string) api.Options {
 	src := d.live
 	lin := linearsync.New(linearsync.Options{Home: d.home})
-	return api.Options{Token: token, Source: withBoards(d.home, src.Snapshot, &sprintFeed{lin: lin}), Linear: lin, Run: api.ExecRunner(cmdrPath()), AppDir: appDir(), AppDevURL: appDevURL(), Tabs: &api.Tabs{Store: d.store}, Pitches: d.store, LiveData: src.Last, Interval: time.Second, Chat: d.chat, ShotsDir: filepath.Join(d.home, "shots"), ConfigPath: filepath.Join(d.home, "config.toml"), MailToRole: mailUserToRole, WaitingMail: livedata.NewUnreadListFunc(d.store), UsageByAgent: d.store.UsageByAgent, Update: d.newUpdater()}
+	return api.Options{Token: token, Source: withBoards(d.home, src.Snapshot, &sprintFeed{lin: lin}), Linear: lin, Run: api.ExecRunner(cmdrPath()), AppDir: appDir(), AppDevURL: appDevURL(), Tabs: &api.Tabs{Store: d.store}, Pitches: d.store, LiveData: src.Last, Interval: time.Second, Chat: d.chat, ShotsDir: filepath.Join(d.home, "shots"), ConfigPath: filepath.Join(d.home, "config.toml"), MailToRole: mailUserToRole, WaitingMail: livedata.NewUnreadListFunc(d.store), UsageByAgent: d.store.UsageByAgent, Update: d.newUpdater(), LiveOwner: d.liveOwner}
 }
 
 // appDir is the built app renderer the API serves at /app/:
@@ -964,6 +993,8 @@ func (d *Daemon) reapHostRuns(ctx context.Context) {
 		retries.run(ctx)
 		battery.check(ctx)
 		d.settle.reported.beginSweep()
+		// Before the sweep, so a run past its final report is closed and settled this minute.
+		d.settle.endFinishedRuns(ctx, nil)
 		res, err := spawn.ReapHostRuns(ctx, d.store)
 		if len(res.ClosedRuns) > 0 || err != nil {
 			log.Printf("daemon: closed operator runs %v: %d exited, %d died (err=%v)", res.ClosedRuns, len(res.Exited), len(res.Died), err)
@@ -1034,4 +1065,26 @@ func (d *Daemon) ensureManagers(ctx context.Context) {
 		case <-t.C:
 		}
 	}
+}
+
+// liveOwner answers the write door's holder check (an intent): an Operator holds only while its
+// process is alive (the snapshot's own liveness look); a Manager's or Commander's name holds
+// nothing by itself. known is false when liveness could not be looked up.
+func (d *Daemon) liveOwner(owner string) (string, bool) {
+	if holding.IsManager(owner) {
+		return "idle", true
+	}
+	if d.liveOps == nil {
+		return "", false
+	}
+	names, _, ok := d.liveOps.get()
+	if !ok {
+		return "", false
+	}
+	for _, n := range names {
+		if spawn.CanonicalRole(n) == spawn.CanonicalRole(owner) {
+			return "working", true
+		}
+	}
+	return "", true
 }

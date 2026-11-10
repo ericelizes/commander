@@ -89,6 +89,9 @@ func runAccount(args []string, stdout, stderr io.Writer) int {
 		if chat.AutoSwitch(home, role) {
 			state = "on"
 		}
+		if role == "commander" || strings.HasPrefix(role, "manager-") {
+			state = "on (automatically moves to an account with usage left)"
+		}
 		fmt.Fprintf(stdout, "%s auto-switch at a usage limit: %s\n", role, state)
 		return 0
 	}
@@ -104,6 +107,19 @@ func useAccount(home, role, name string, stdout, stderr io.Writer) int {
 	if !chat.ValidRole(role) {
 		fmt.Fprintf(stderr, "cmdr account use: invalid role %q (commander, manager-<bead>, operator-<name>)\n", role)
 		return 2
+	}
+	if name == chat.RuntimeCodex {
+		connected := false
+		for _, a := range chat.Accounts(home, nil, time.Now()) {
+			if a.Runtime == chat.RuntimeCodex {
+				connected = a.LoggedIn
+			}
+		}
+		if !connected {
+			fmt.Fprintln(stderr, "cmdr account use: Codex is not connected (cmdr account list)")
+			return 1
+		}
+		return runRuntime([]string{role, chat.RuntimeCodex}, stdout, stderr)
 	}
 	if !claudeacct.Exists(home, name) {
 		fmt.Fprintf(stderr, "cmdr account use: no Claude account %q (cmdr account list)\n", name)
@@ -139,7 +155,7 @@ func useAccount(home, role, name string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "cmdr account use: %v\n", err)
 		return 1
 	}
-	if err := chat.WriteEffectiveRuntime(home, role, chat.RuntimeClaude); err != nil {
+	if err := chat.WriteAccountRuntime(home, role); err != nil {
 		fmt.Fprintf(stderr, "cmdr account use: %v\n", err)
 		return 1
 	}

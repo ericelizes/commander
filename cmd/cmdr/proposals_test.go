@@ -128,7 +128,7 @@ func TestProposal_OverruleUndoesTheAskAndTellsTheManagerWhy(t *testing.T) {
 	if len(mailer.sent) != 1 || mailer.sent[0].to[0] != "GoldTiger" || !strings.HasPrefix(mailer.sent[0].subject, "[overruled] ask") {
 		t.Fatalf("the Manager is mailed: %+v", mailer.sent)
 	}
-	if ws := beads.WaitsOf(b.Labels); len(ws) != 1 || ws[0].Ref != beads.ManagerStartWait {
+	if ws := beads.WaitsOf(b.Labels); len(ws) != 1 || ws[0].Ref != beads.ManagerDispatchWait {
 		t.Fatalf("the overruled ask left the step with no holder: %v", b.Labels)
 	}
 	for _, want := range []string{"the user said pick them yourself", "Do not add it again", "You now hold ms-1.92"} {
@@ -154,8 +154,9 @@ func TestProposal_LongWaitAndParkAreProposedShortOnesAreNot(t *testing.T) {
 	t.Setenv("COMMANDER_ROLE", "commander")
 	runOK(t, runProposals, "overrule", "--project", "manifest", "--bead", "ms-1.92", "--reason", "come back later means today")
 	b, _ := m.Show(context.Background(), "", "ms-1.92")
-	if ws := beads.WaitsOf(b.Labels); len(ws) != 1 || ws[0].Ref != beads.ManagerStartWait {
-		t.Fatalf("the overruled wait stays, or the step has no holder: %v", b.Labels)
+	// The overruled wait goes; the step it alone held goes to its Manager (never left unheld).
+	if ws := beads.WaitsOf(b.Labels); len(ws) != 1 || ws[0].Ref != beads.ManagerDispatchWait {
+		t.Fatalf("want only the Manager dispatch wait left: %v", b.Labels)
 	}
 	if body := mailer.sent[len(mailer.sent)-1].body; !strings.Contains(body, "You now hold ms-1.92") {
 		t.Fatalf("the mail does not say the Manager holds the step:\n%s", body)
@@ -190,7 +191,7 @@ func TestProposal_OverruleLeavesNoStepWithoutAHolder(t *testing.T) {
 	runOK(t, runProposals, "overrule", "--project", "manifest", "--bead", "ms-1.92", "--reason", "no ask")
 	b, _ := m.Show(context.Background(), "", "ms-1.92")
 	for _, w := range beads.WaitsOf(b.Labels) {
-		if w.Ref == beads.ManagerStartWait {
+		if w.Ref == beads.ManagerDispatchWait {
 			t.Fatalf("a step another holder keeps got a receipt: %v", b.Labels)
 		}
 	}
@@ -199,13 +200,13 @@ func TestProposal_OverruleLeavesNoStepWithoutAHolder(t *testing.T) {
 	}
 }
 
-func hasStartReceipt(t *testing.T, m *beads.MemClient, id string) bool {
+func hasDispatchReceipt(t *testing.T, m *beads.MemClient, id string) bool {
 	t.Helper()
 	b, err := m.Show(context.Background(), "", id)
 	if err != nil || b == nil {
 		t.Fatalf("show %s: %v", id, err)
 	}
-	return hasManagerStart(b.Labels)
+	return handoffWaits(b.Labels, beads.ManagerDispatchWait) > 0
 }
 
 // overruleOut runs the overrule as Commander and returns its result JSON.
@@ -251,19 +252,19 @@ func TestProposal_OverruledCreatedGateHoldsTheStepsThatWaitedOnIt(t *testing.T) 
 					t.Fatal(err)
 				}
 			}
-			if hasStartReceipt(t, m, "ms-1.95") {
+			if hasDispatchReceipt(t, m, "ms-1.95") {
 				t.Fatal("the waiter is held before the overrule")
 			}
 			mailer.sent = nil
 			out := overruleOut(t, r.BeadID)
-			if !hasStartReceipt(t, m, "ms-1.95") {
+			if !hasDispatchReceipt(t, m, "ms-1.95") {
 				b, _ := m.Show(context.Background(), "", "ms-1.95")
 				t.Fatalf("the step that waited on the retired %s has no holder: %v", tc.name, b.Labels)
 			}
 			if held, _ := out["held"].([]any); len(held) != 1 || held[0] != "ms-1.95" {
 				t.Fatalf("held: %v", out["held"])
 			}
-			if hasStartReceipt(t, m, "ms-1") {
+			if hasDispatchReceipt(t, m, "ms-1") {
 				t.Fatal("the workstream bead got a step's receipt")
 			}
 			if len(mailer.sent) != 1 || !strings.Contains(mailer.sent[0].body, "You now hold ms-1.95") {
@@ -291,7 +292,7 @@ func TestProposal_OverruleWritesNoHoldOnAStepAlreadyHeld(t *testing.T) {
 		withCloseSnapshot(t, snap, "commander")
 		mailer.sent = nil
 		out := overruleOut(t, "ms-1.92")
-		if hasStartReceipt(t, m, "ms-1.92") {
+		if hasDispatchReceipt(t, m, "ms-1.92") {
 			t.Fatal("a step the live Manager holds got a receipt")
 		}
 		if held, _ := out["held"].([]any); held == nil || len(held) != 0 {
@@ -302,7 +303,7 @@ func TestProposal_OverruleWritesNoHoldOnAStepAlreadyHeld(t *testing.T) {
 		t.Setenv("COMMANDER_ROLE", "manager-ms-1")
 		runOK(t, runInternalSetObjective, askArgs("ms-1.92")...)
 		overruleOut(t, "ms-1.92")
-		if !hasStartReceipt(t, m, "ms-1.92") {
+		if !hasDispatchReceipt(t, m, "ms-1.92") {
 			t.Fatal("an idle Manager's step got no receipt")
 		}
 	})
@@ -315,7 +316,7 @@ func TestProposal_OverruleWritesNoHoldOnAStepAlreadyHeld(t *testing.T) {
 		t.Setenv("COMMANDER_ROLE", "manager-ms-1")
 		runOK(t, runInternalSetObjective, askArgs("ms-1.92")...)
 		overruleOut(t, "ms-1.92")
-		if hasStartReceipt(t, m, "ms-1.92") {
+		if hasDispatchReceipt(t, m, "ms-1.92") {
 			t.Fatal("a step with an open child got a receipt")
 		}
 	})
@@ -339,6 +340,56 @@ func TestProposal_OverruleRetryAfterTheUndo(t *testing.T) {
 	overruleOut(t, r.BeadID)
 	if len(mailer.sent) != 1 || !strings.Contains(mailer.sent[0].body, "You now hold ms-1.95") {
 		t.Fatalf("the retry's mail: %+v", mailer.sent)
+	}
+}
+
+// A retried wait overrule (the first run held the step, then its undo failed) removes only the
+// proposed timed wait and keeps the Manager dispatch receipt it reports holding.
+func TestProposal_OverruleWaitRetryKeepsTheReceipt(t *testing.T) {
+	m, mailer := proposalFixture(t, true)
+	t.Setenv("COMMANDER_ROLE", "manager-ms-1")
+	later := time.Now().Add(48 * time.Hour).UTC().Format(time.RFC3339)
+	runOK(t, runInternalSetObjective, "--project", "manifest", "--bead", "ms-1.92", "--waiting", "until:"+later+":come back to the dev box")
+	b, _ := m.Show(context.Background(), "", "ms-1.92")
+	wait := proposedWaitLabels(b.Labels)
+	p, ok := beads.ProposalOf(b.Labels)
+	if len(wait) != 1 || !ok {
+		t.Fatalf("no proposed wait: %v", b.Labels)
+	}
+	overruleOut(t, "ms-1.92")
+	if !hasDispatchReceipt(t, m, "ms-1.92") {
+		t.Fatal("the first overrule held nothing")
+	}
+	// Back to the state a failed undo leaves: receipt written, proposed wait and label still there.
+	for _, l := range []string{wait[0], p.Label} {
+		if err := m.SetLabel(context.Background(), "", "ms-1.92", l, true); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mailer.sent = nil
+	out := overruleOut(t, "ms-1.92")
+	b, _ = m.Show(context.Background(), "", "ms-1.92")
+	if ws := beads.WaitsOf(b.Labels); len(ws) != 1 || ws[0].Ref != beads.ManagerDispatchWait {
+		t.Fatalf("the retry must keep only the dispatch receipt: %v", b.Labels)
+	}
+	if held, _ := out["held"].([]any); len(held) != 1 || held[0] != "ms-1.92" {
+		t.Fatalf("held: %v", out["held"])
+	}
+	if len(mailer.sent) != 1 || !strings.Contains(mailer.sent[0].body, "You now hold ms-1.92") {
+		t.Fatalf("the retry's mail: %+v", mailer.sent)
+	}
+}
+
+// An expired receipt holds nothing: it is not counted as this write's earlier hold.
+func TestHandoffWaitsSkipsAnExpiredReceipt(t *testing.T) {
+	old := time.Now().Add(-3 * time.Hour)
+	expired := beads.Wait{Kind: beads.WaitUntil, Since: old, Until: old.Add(time.Minute), Ref: beads.ManagerDispatchWait}.Label()
+	if n := handoffWaits([]string{expired}, beads.ManagerDispatchWait); n != 0 {
+		t.Fatalf("an expired receipt counted: %d", n)
+	}
+	fresh := beads.Wait{Kind: beads.WaitUntil, Since: time.Now(), Until: time.Now().Add(time.Minute), Ref: beads.ManagerDispatchWait}.Label()
+	if n := handoffWaits([]string{fresh, expired}, beads.ManagerDispatchWait); n != 1 {
+		t.Fatalf("want the one live receipt: %d", n)
 	}
 }
 
@@ -369,7 +420,7 @@ func TestProposal_GateAfterTheApprovedWorkflowIsProposed(t *testing.T) {
 	if strings.Contains(out, "proposed") {
 		t.Fatalf("a new track's own workflow gate is part of its workflow: %s", out)
 	}
-	out = runOK(t, runInternalCreateObjective, "--project", "manifest", "--parent", "ms-1", "--title", "Re-review the fix")
+	out = runOK(t, runInternalCreateObjective, "--project", "manifest", "--parent", "ms-1", "--title", "Re-review the fix", "--waiting", "review:rev")
 	if !strings.Contains(out, `"proposed":"review"`) {
 		t.Fatalf("a re-review step past the approved workflow is proposed: %s", out)
 	}
@@ -531,10 +582,10 @@ func TestProposal_OverruleNeverHoldsAGateBead(t *testing.T) {
 		}
 	}
 	out := overruleOut(t, r.BeadID)
-	if hasStartReceipt(t, m, "ms-1.96") {
+	if hasDispatchReceipt(t, m, "ms-1.96") {
 		t.Fatal("a gate bead got a custody receipt")
 	}
-	if !hasStartReceipt(t, m, "ms-1.95") {
+	if !hasDispatchReceipt(t, m, "ms-1.95") {
 		t.Fatal("the plain step lost its receipt")
 	}
 	if held, _ := out["held"].([]any); len(held) != 1 || held[0] != "ms-1.95" {
@@ -551,7 +602,7 @@ func TestProposal_OverruledParkOnAGateGivesNoReceipt(t *testing.T) {
 		t.Skip("park was not proposed in this fixture")
 	}
 	overruleOut(t, "ms-1.96")
-	if hasStartReceipt(t, m, "ms-1.96") {
+	if hasDispatchReceipt(t, m, "ms-1.96") {
 		t.Fatal("an unparked gate bead got a custody receipt")
 	}
 }

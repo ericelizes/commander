@@ -41,7 +41,7 @@ export function demoChat(): ChatBackend {
   const providers: Record<string, Provider> = { [ZIM_OP]: { runtime: 'codex' }, 'manager-example-app-t03': { runtime: 'claude', account: 'second' } }
   sessions['manager-example-app-t03'].account = 'second'
   sessions[ZIM_OP].runtime = 'codex'
-  sessions[ZIM_OP].model = 'codex:gpt-5.5'
+  sessions[ZIM_OP].model = 'codex:gpt-6.1-sol'
   // The t06 Manager is mid-turn in API retries (the stall hint shows after 2 min).
   const history = (role: string): ChatEvent[] => {
     if (!sessions[role]?.last_seq) return []
@@ -78,11 +78,11 @@ export function demoChat(): ChatBackend {
     async call(role, verb, body) {
       const s = (sessions[role] ??= status(role, false, 0, 0))
       if (verb === 'account') {
-        s.runtime = 'claude'
-        s.account = String(body?.account ?? 'default')
+        s.runtime = body?.account === 'codex' ? 'codex' : 'claude'
+        s.account = s.runtime === 'codex' ? undefined : String(body?.account ?? 'default')
         s.usage_limit = null
-        providers[role] = { runtime: 'claude', account: s.account }
-        s.model = 'claude-sonnet-5-5'
+        providers[role] = s.runtime === 'codex' ? { runtime: 'codex' } : { runtime: 'claude', account: s.account }
+        s.model = s.runtime === 'codex' ? 'codex:gpt-6.1-sol' : 'claude-sonnet-5-5'
         if (s.running) transportFor(role).emit({ kind: 'init', model: s.model })
         return { ok: true, code: 200 }
       }
@@ -90,7 +90,7 @@ export function demoChat(): ChatBackend {
         s.runtime = body?.runtime === 'codex' ? 'codex' : 'claude'
         s.usage_limit = null
         providers[role] = s.runtime === 'codex' ? { runtime: 'codex' } : { runtime: 'claude', account: s.account }
-        s.model = s.runtime === 'codex' ? 'codex:gpt-5.5' : 'claude-sonnet-5-5'
+        s.model = s.runtime === 'codex' ? 'codex:gpt-6.1-sol' : 'claude-sonnet-5-5'
         if (s.running) transportFor(role).emit({ kind: 'init', model: s.model }) // the restarted process's session event
         return { ok: true, code: 200 }
       }

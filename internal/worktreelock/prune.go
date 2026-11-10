@@ -8,9 +8,11 @@ import (
 
 // Prune removes a frozen Operator worktree, and its branch, once nothing in it
 // is only there: no uncommitted change (the borrowed app/node_modules aside)
-// and HEAD already on the project's main. Otherwise it changes nothing and
-// returns false. The caller decides the bead is done (closed), so no respawn
-// will want the worktree back.
+// and HEAD already on the project's main or kept by an archive ref
+// (refs/archive/..., what worktrees gc --archive writes; main can be rebuilt,
+// so "on main" alone misses work that is safe). Otherwise it changes nothing
+// and returns false. The caller decides the bead is done (closed), so no
+// respawn will want the worktree back.
 func Prune(projectDir, dir string) (bool, error) {
 	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
 		return false, nil
@@ -28,7 +30,12 @@ func Prune(projectDir, dir string) (bool, error) {
 	if main == "" {
 		return false, nil
 	}
-	if exec.Command("git", "-C", projectDir, "merge-base", "--is-ancestor", headOf(dir), main).Run() != nil {
+	head := headOf(dir)
+	if head == "" {
+		return false, nil
+	}
+	onMain := exec.Command("git", "-C", projectDir, "merge-base", "--is-ancestor", head, main).Run() == nil
+	if !onMain && !archived(projectDir, head) {
 		return false, nil
 	}
 	branch := headBranch(dir)
@@ -40,11 +47,27 @@ func Prune(projectDir, dir string) (bool, error) {
 		return false, &gitError{"worktree remove", string(out), err}
 	}
 	if branch != "" {
-		// -d, not -D: git refuses if the branch somehow is not on main.
-		_ = exec.Command("git", "-C", projectDir, "branch", "-d", branch).Run()
+		if onMain {
+			// -d, not -D: git refuses if the branch somehow is not on main.
+			_ = exec.Command("git", "-C", projectDir, "branch", "-d", branch).Run()
+		} else {
+			// Archived: delete only while the branch still points at the tip
+			// the archive ref keeps.
+			_ = exec.Command("git", "-C", projectDir, "update-ref", "-d", "refs/heads/"+branch, head).Run()
+		}
 	}
 	return true, nil
 }
+
+// archived reports whether sha is reachable from any refs/archive/ ref.
+func archived(projectDir, sha string) bool {
+	out, err := exec.Command("git", "-C", projectDir, "for-each-ref", "--contains", sha, "--count=1", "--format=%(refname)", "refs/archive/").Output()
+	return err == nil && strings.TrimSpace(string(out)) != ""
+}
+
+// IsProjectWorktree reports whether path is inside <project>/.worktrees or
+// <project>/.worktrees.noindex (real paths compared).
+func IsProjectWorktree(projectDir, path string) bool { return underProjectWorktrees(projectDir, path) }
 
 func mainBranch(projectDir string) string {
 	for _, b := range []string{"main", "master"} {

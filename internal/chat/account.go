@@ -74,8 +74,11 @@ func WriteRunAccount(home, role, name, intended string) error {
 // itself at a usage limit (off by default).
 func AutoSwitchFile(home, role string) string { return filepath.Join(home, "chat", role+".autoswitch") }
 
-// AutoSwitch reports whether role switches accounts by itself at a usage limit.
-func AutoSwitch(home, role string) bool { return fileExists(AutoSwitchFile(home, role)) }
+// AutoSwitch reports whether role switches accounts by itself at a usage
+// limit: always for a Manager (decision d82), else when its file is set.
+func AutoSwitch(home, role string) bool {
+	return role == "commander" || isManagerRole(role) || fileExists(AutoSwitchFile(home, role))
+}
 
 // SetAutoSwitch turns role's auto-switch on or off.
 func SetAutoSwitch(home, role string, on bool) error {
@@ -105,6 +108,8 @@ type SwitchOptions struct {
 	// Continue sends ContinueMessage after the restart, so the agent picks up
 	// the turn a usage limit stopped.
 	Continue bool
+	// Message replaces ContinueMessage when Continue is set.
+	Message string
 }
 
 // ContinueMessage is the first message after a switch made to get past a usage limit.
@@ -120,6 +125,12 @@ func (e *Engine) SetAccount(ctx context.Context, role, name string, o SwitchOpti
 	if !ValidRole(role) {
 		return Status{}, fmt.Errorf("chat: invalid role %q", role)
 	}
+	if name == RuntimeCodex {
+		if !codexConnected() {
+			return Status{}, fmt.Errorf("chat: Codex is not connected; connect it in Settings > Accounts")
+		}
+		return e.SetRuntime(ctx, role, RuntimeCodex, o)
+	}
 	if !claudeacct.Exists(e.opts.Home, name) {
 		return Status{}, fmt.Errorf("chat: no Claude account %q (cmdr account add %s)", name, name)
 	}
@@ -133,7 +144,7 @@ func (e *Engine) SetAccount(ctx context.Context, role, name string, o SwitchOpti
 	if err := WriteAccount(e.opts.Home, role, name); err != nil {
 		return Status{}, err
 	}
-	if err := WriteEffectiveRuntime(e.opts.Home, role, RuntimeClaude); err != nil {
+	if err := WriteAccountRuntime(e.opts.Home, role); err != nil {
 		return Status{}, err
 	}
 	if err := claudeacct.Sync(e.opts.Home, name); err != nil {
@@ -143,6 +154,24 @@ func (e *Engine) SetAccount(ctx context.Context, role, name string, o SwitchOpti
 		return e.Status(role)
 	}
 	return e.restart(ctx, role, o)
+}
+
+// WriteAccountRuntime puts role on Claude for an account a person chose. No
+// pin file changes. A Manager nobody pinned stays unpinned (a share's choice),
+// so its d82 fallback to Codex still applies when every Claude account runs
+// out; a pinned Manager now runs pinned on Claude (choosing a Claude account
+// chose Claude), its Codex fallback marker gone.
+func WriteAccountRuntime(home, role string) error {
+	switch {
+	case strings.HasPrefix(role, "operator-"):
+		return WriteEffectiveRuntime(home, role, RuntimeClaude)
+	case RuntimePinned(home, role):
+		if err := WriteEffectiveRuntime(home, role, RuntimeClaude); err != nil {
+			return err
+		}
+		return removeFallback(home, role)
+	}
+	return WriteAutoRuntime(home, role, RuntimeClaude)
 }
 
 // idleProcess is role's process when it may be restarted now: nil when it is
@@ -173,7 +202,11 @@ func (e *Engine) restart(ctx context.Context, role string, o SwitchOptions) (Sta
 	if err != nil || !o.Continue {
 		return st, err
 	}
-	if err := e.send(role, ContinueMessage, "mail"); err != nil {
+	msg := o.Message
+	if msg == "" {
+		msg = ContinueMessage
+	}
+	if err := e.send(role, msg, "mail"); err != nil {
 		return st, err
 	}
 	return e.Status(role)

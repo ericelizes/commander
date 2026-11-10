@@ -359,7 +359,7 @@ export function connect(onFirstRender?: (ok: boolean, detail: string) => void): 
       // cmdrd builds its first snapshot after a restart cold (br and the
       // store under load: a minute or more), and sends it only then. It is up
       // now, so keep showing the snapshot we hold instead of the start screen.
-      if (useStore.getState().snapshot) useStore.getState().setConn('live')
+      if (useStore.getState().snapshot && useStore.getState().snapshot?.storage !== 'postgres') useStore.getState().setConn('live')
     }
     sock.onmessage = (ev) => {
       try {

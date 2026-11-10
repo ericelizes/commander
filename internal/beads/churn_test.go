@@ -186,7 +186,7 @@ func (c *blockingFlusher) FlushExport(context.Context, string) error {
 	return nil
 }
 
-// A Dolt load never waits for the export it asks for: bd answers now.
+// A Dolt load after the first never waits for the export it asks for: bd answers now.
 func TestDoltLoadDoesNotWaitForTheExport(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
@@ -196,6 +196,7 @@ func TestDoltLoadDoesNotWaitForTheExport(t *testing.T) {
 	doltJournal(t, dir, e.Add(time.Second))
 	inner := &blockingFlusher{countingClient: &countingClient{MemClient: &MemClient{}}, release: make(chan struct{})}
 	c := ExportReads(inner)
+	warmExport(c, dir)
 	defer func() { close(inner.release); StopBackground(c) }()
 	done := make(chan error, 1)
 	go func() {

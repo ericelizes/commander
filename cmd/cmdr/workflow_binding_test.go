@@ -92,7 +92,7 @@ func TestWorkflowBindWritersScopeAndRevision(t *testing.T) {
 	})
 	t.Setenv("COMMANDER_ROLE", "manager-B")
 	bind := func(tasks []string) (*workflowtemplate.WriterBinding, error) {
-		return bindWorkflowWriters(ctx, mem, "/d", "p", res.Container, head, tasks)
+		return bindWorkflowWriters(ctx, mem, "/d", "p", res.Container, head, tasks, nil)
 	}
 	b, err := bind([]string{"writer-task"})
 	if err != nil {
@@ -145,7 +145,7 @@ func TestWorkflowBindWritersScopeAndRevision(t *testing.T) {
 		t.Fatal("Operator bound writers")
 	}
 	t.Setenv("COMMANDER_ROLE", "manager-B")
-	if _, err := bindWorkflowWriters(ctx, mem, "/d", "p", res.Container, strings.Repeat("b", 40), []string{"writer-task"}); err == nil {
+	if _, err := bindWorkflowWriters(ctx, mem, "/d", "p", res.Container, strings.Repeat("b", 40), []string{"writer-task"}, nil); err == nil {
 		t.Fatal("stale head accepted")
 	}
 }
@@ -261,7 +261,7 @@ func TestWorkflowBindWritersCallerAuthorization(t *testing.T) {
 			t.Setenv("COMMANDER_ROLE", tc.role)
 			t.Setenv("COMMANDER_MANAGER_ROLE", tc.manager)
 			before, _ := mem.Comments(context.Background(), "/d", res.Container)
-			_, err := bindWorkflowWriters(context.Background(), mem, "/d", "p", res.Container, strings.Repeat("a", 40), []string{"writer-task"})
+			_, err := bindWorkflowWriters(context.Background(), mem, "/d", "p", res.Container, strings.Repeat("a", 40), []string{"writer-task"}, nil)
 			if err == nil || !strings.Contains(err.Error(), "writer selection belongs") {
 				t.Fatal(err)
 			}
@@ -271,7 +271,7 @@ func TestWorkflowBindWritersCallerAuthorization(t *testing.T) {
 			}
 			if tc.role == "" || strings.HasPrefix(tc.role, "operator-") {
 				// A nil client would panic if authorization allowed any read.
-				if _, err := bindWorkflowWriters(context.Background(), nil, "", "", "", "", nil); err == nil {
+				if _, err := bindWorkflowWriters(context.Background(), nil, "", "", "", "", nil, nil); err == nil {
 					t.Fatal("Operator passed early authorization")
 				}
 			}
@@ -347,6 +347,240 @@ func TestWorkflowBindWritersDispatchRefusesBeforeIO(t *testing.T) {
 			entries, err := os.ReadDir(home)
 			if err != nil || len(entries) != 0 {
 				t.Fatalf("home changed: %v %v", entries, err)
+			}
+		})
+	}
+}
+
+// The adversarial step can borrow no review the primary evidence stands on: its
+// retained prior review counts as the primary's too (M4 of the bounded loop's review).
+func TestWorkflowAdversarialCannotBorrowThePrimarysPriorReview(t *testing.T) {
+	ctx := context.Background()
+	mem := &beads.MemClient{}
+	res := seedReviewWorkflow(t, mem)
+	pinWorkflowGH(t, workflowFakeGH)
+	for _, task := range []string{"primary", "earlier", "peer"} {
+		mem.Seed(beads.Bead{ID: task, Status: "closed", Labels: []string{"owner:manager-B"}})
+		mem.SetParent(ctx, "/d", task, "B")
+		mem.AddComment(ctx, "/d", task, "Head: head1\nCLEAN")
+	}
+	for _, s := range res.Remaining[:3] {
+		if s.Step != "devin-comments" {
+			raw, _ := json.Marshal(workflowtemplate.Proof{ReviewBead: "primary", Head: "head1", NoFindings: true})
+			mem.AddComment(ctx, "/d", s.BeadID, workflowtemplate.ProofPrefix+string(raw))
+		}
+		if err := checkWorkflowClose(ctx, mem, "/d", "p", s.BeadID); err != nil {
+			t.Fatal(err)
+		}
+		mem.Close(ctx, "/d", s.BeadID)
+		if s.Step != "review" {
+			continue
+		}
+		// The primary's evidence as a delta recheck would record it: it retains "earlier".
+		comments, _ := mem.Comments(ctx, "/d", s.BeadID)
+		for _, c := range comments {
+			if e, ok := workflowtemplate.ParseEvidence(c.Text); ok && e.Proof != nil {
+				e.Proof.PriorReview, e.Proof.PriorHead = "earlier", strings.Repeat("1", 40)
+				mem.AddComment(ctx, "/d", s.BeadID, e.Comment())
+			}
+		}
+	}
+	raw, _ := json.Marshal(workflowtemplate.Proof{ReviewBead: "peer", Head: "head1", NoFindings: true})
+	mem.AddComment(ctx, "/d", res.Remaining[3].BeadID, workflowtemplate.ProofPrefix+string(raw))
+	old := workflowTaskRoles
+	workflowTaskRoles = func(_ context.Context, _, task string) ([]string, error) {
+		if task == "peer" || task == "earlier" {
+			return []string{"operator-common"}, nil
+		}
+		return []string{"operator-" + task}, nil
+	}
+	t.Cleanup(func() { workflowTaskRoles = old })
+	if err := checkWorkflowClose(ctx, mem, "/d", "p", res.Remaining[3].BeadID); err == nil || !strings.Contains(err.Error(), "review earlier") {
+		t.Fatal(err)
+	}
+}
+
+// The user's own commits bind as an external writer: exact SHAs on the PR, no
+// task, and only the user, Commander or the owning Manager may record them.
+func TestWorkflowBindExternalUserWriter(t *testing.T) {
+	ctx := context.Background()
+	mem := &beads.MemClient{}
+	res := seedReviewWorkflow(t, mem)
+	head, u1, u2, off := strings.Repeat("c", 40), strings.Repeat("1", 40), strings.Repeat("2", 40), strings.Repeat("9", 40)
+	var compares int
+	pinWorkflowGH(t, func(ctx context.Context, args ...string) ([]byte, error) {
+		if args[0] == "pr" {
+			return []byte(`{"headRefOid":"` + head + `","state":"OPEN","commits":[{"oid":"` + u1 + `"},{"oid":"` + u2 + `"},{"oid":"` + strings.Repeat("3", 40) + `"},{"oid":"` + head + `"}]}`), nil
+		}
+		if args[0] == "api" && strings.Contains(args[1], "/compare/base...") {
+			compares++
+			if slices.Contains(args, "--paginate") {
+				return []byte(u2 + "\n" + u1 + "\n"), nil
+			}
+			return []byte("ahead 2\n"), nil
+		}
+		return workflowFakeGH(ctx, args...)
+	})
+	opSHA := strings.Repeat("3", 40)
+	pinOperatorCommits(t, map[string]string{opSHA: "writer-task"}, false)
+	bind := func(tasks []string, commits string) (*workflowtemplate.WriterBinding, error) {
+		return bindWorkflowWriters(ctx, mem, "/d", "p", res.Container, head, tasks, &externalWriterSpec{Author: "user", Commits: commits})
+	}
+	t.Setenv("COMMANDER_MANAGER_ROLE", "")
+	t.Setenv("COMMANDER_ROLE", "manager-B")
+	b, err := bind(nil, "base..u2tip")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if compares == 0 || len(b.Tasks) != 0 || b.External == nil || b.External.Author != "user" || !slices.Equal(b.External.Commits, []string{u1, u2}) {
+		t.Fatal(b)
+	}
+	cs, _ := mem.Comments(ctx, "/d", res.Container)
+	if stored, err := workflowtemplate.Binding(cs); err != nil || stored.Revision != b.Revision || !slices.Equal(stored.External.Commits, []string{u1, u2}) {
+		t.Fatal(stored, err)
+	}
+	// The same selection as a list keeps the revision; any change bumps it.
+	if same, err := bind(nil, u2+","+u1); err != nil || same.Revision != b.Revision {
+		t.Fatal(same, err)
+	}
+	if fewer, err := bind(nil, u1); err != nil || fewer.Revision == b.Revision {
+		t.Fatal(fewer, err)
+	}
+	mem.Seed(beads.Bead{ID: "fix-task", Status: "closed"})
+	mem.SetParent(ctx, "/d", "fix-task", "B")
+	withFix, err := bind([]string{"fix-task"}, u1+","+u2)
+	if err != nil || withFix.Revision == b.Revision || !slices.Equal(withFix.Tasks, []string{"fix-task"}) {
+		t.Fatal(withFix, err)
+	}
+	// Adding or removing the external writer alone, same PR, head and tasks, bumps the revision.
+	tasksOnly, err := bindWorkflowWriters(ctx, mem, "/d", "p", res.Container, head, []string{"fix-task"}, nil)
+	if err != nil || tasksOnly.Revision == withFix.Revision || tasksOnly.External != nil {
+		t.Fatal(tasksOnly, err)
+	}
+	again, err := bind([]string{"fix-task"}, u1+","+u2)
+	if err != nil || again.Revision == tasksOnly.Revision || again.Revision == withFix.Revision {
+		t.Fatal(again, err)
+	}
+	// Commander may bind the user's commits, never a task-only selection.
+	t.Setenv("COMMANDER_ROLE", "commander")
+	if kept, err := bind(nil, u1); err != nil || !slices.Equal(kept.Tasks, []string{"fix-task"}) || kept.Revision == again.Revision {
+		t.Fatal("Commander's bind must keep the Manager's task writers:", kept, err)
+	}
+	if _, err := bindWorkflowWriters(ctx, mem, "/d", "p", res.Container, head, []string{"fix-task"}, nil); err == nil || !strings.Contains(err.Error(), "writer selection belongs") {
+		t.Fatal(err)
+	}
+	// Nor task writers riding along with the user's commits.
+	if _, err := bind([]string{"fix-task"}, u1); err == nil || !strings.Contains(err.Error(), "writer selection belongs") {
+		t.Fatal(err)
+	}
+	// The user's own CLI has no role.
+	t.Setenv("COMMANDER_ROLE", "")
+	if _, err := bind(nil, u1+","+u2); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct{ role, manager, want string }{
+		{"operator-fix", "manager-B", "writer selection belongs"},
+		{"", "manager-B", "writer selection belongs"},
+		{"manager-other", "", "writer selection belongs"},
+	} {
+		t.Setenv("COMMANDER_ROLE", tc.role)
+		t.Setenv("COMMANDER_MANAGER_ROLE", tc.manager)
+		before, _ := mem.Comments(ctx, "/d", res.Container)
+		if _, err := bind(nil, u1); err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Fatalf("%s: %v", tc.role, err)
+		}
+		if after, _ := mem.Comments(ctx, "/d", res.Container); len(after) != len(before) {
+			t.Fatal("refusal wrote a binding")
+		}
+	}
+	t.Setenv("COMMANDER_ROLE", "manager-B")
+	t.Setenv("COMMANDER_MANAGER_ROLE", "")
+	for _, tc := range []struct {
+		name string
+		spec *externalWriterSpec
+		want string
+	}{
+		{"commit off the PR", &externalWriterSpec{Author: "user", Commits: u1 + "," + off}, "not on the PR"},
+		{"short sha", &externalWriterSpec{Author: "user", Commits: u1[:7]}, "full 40-character"},
+		{"three dots", &externalWriterSpec{Author: "user", Commits: "base...tip"}, "two dots"},
+		{"no commits", &externalWriterSpec{Author: "user"}, "--commits"},
+		{"another author", &externalWriterSpec{Author: "someone", Commits: u1}, "--external-writer must be"},
+		{"an Operator's commit", &externalWriterSpec{Author: "user", Commits: u1 + "," + opSHA}, "is not the user's own"},
+	} {
+		before, _ := mem.Comments(ctx, "/d", res.Container)
+		if _, err := bindWorkflowWriters(ctx, mem, "/d", "p", res.Container, head, nil, tc.spec); err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Fatalf("%s: %v", tc.name, err)
+		}
+		if after, _ := mem.Comments(ctx, "/d", res.Container); len(after) != len(before) {
+			t.Fatalf("%s wrote a binding", tc.name)
+		}
+	}
+	if _, err := bindWorkflowWriters(ctx, mem, "/d", "p", res.Container, strings.Repeat("d", 40), nil, &externalWriterSpec{Author: "user", Commits: u1}); err == nil {
+		t.Fatal("stale head accepted")
+	}
+}
+
+// With the user's commits bound, reviewer independence is judged against the
+// bound Operator tasks and against the bound commits: a reviewer task whose
+// runs wrote one of them is their writer.
+func TestWorkflowExternalWriterReviewIndependence(t *testing.T) {
+	user := strings.Repeat("1", 40)
+	for _, tc := range []struct {
+		name  string
+		tasks []string
+		wrote bool
+		want  string
+	}{
+		{name: "user commits only", tasks: nil},
+		{name: "reviewer shares the bound fix task", tasks: []string{"fix-task"}, want: "differ from writer"},
+		{name: "reviewer wrote a bound external commit", wrote: true, want: "differ from the writer of bound external commit"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			mem := &beads.MemClient{}
+			res := seedReviewWorkflow(t, mem)
+			pinWorkflowGH(t, workflowFakeGH)
+			mem.Seed(beads.Bead{ID: "fix-task", Status: "closed"})
+			mem.SetParent(ctx, "/d", "fix-task", "B")
+			mem.AddComment(ctx, "/d", res.Container, workflowtemplate.WriterBinding{Revision: "ext", PR: testPR, Head: "head1", Tasks: tc.tasks,
+				External: &workflowtemplate.ExternalWriter{Author: "user", Commits: []string{user}}}.Comment())
+			if err := checkWorkflowClose(ctx, mem, "/d", "p", res.Remaining[0].BeadID); err != nil {
+				t.Fatal(err)
+			}
+			mem.Close(ctx, "/d", res.Remaining[0].BeadID)
+			mem.Seed(beads.Bead{ID: "review-task", Status: "closed"})
+			mem.SetParent(ctx, "/d", "review-task", "B")
+			mem.AddComment(ctx, "/d", "review-task", "Head: head1\nCLEAN")
+			raw, _ := json.Marshal(workflowtemplate.Proof{ReviewBead: "review-task", Head: "head1", NoFindings: true})
+			mem.AddComment(ctx, "/d", res.Remaining[1].BeadID, workflowtemplate.ProofPrefix+string(raw))
+			// The binding was recorded before the reviewer's branch showed the commit.
+			wrote := map[string]string{}
+			if tc.wrote {
+				wrote[user] = "review-task"
+			}
+			pinOperatorCommits(t, wrote, true)
+			old := workflowTaskRoles
+			// The reviewer ran as fix-task: a writer only while fix-task is bound.
+			workflowTaskRoles = func(_ context.Context, _, task string) ([]string, error) {
+				if task == "review-task" {
+					return []string{"operator-review", "operator-fix-task"}, nil
+				}
+				return []string{"operator-" + task}, nil
+			}
+			t.Cleanup(func() { workflowTaskRoles = old })
+			t.Setenv("COMMANDER_ROLE", "manager-B")
+			err := checkWorkflowClose(ctx, mem, "/d", "p", res.Remaining[1].BeadID)
+			if tc.want == "" {
+				if err != nil {
+					t.Fatal(err)
+				}
+				cs, _ := mem.Comments(ctx, "/d", res.Remaining[1].BeadID)
+				e, ok := workflowtemplate.ParseEvidence(cs[len(cs)-1].Text)
+				if !ok || e.Binding != "ext" {
+					t.Fatal(cs)
+				}
+			} else if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("got %v want %s", err, tc.want)
 			}
 		})
 	}
