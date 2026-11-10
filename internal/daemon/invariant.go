@@ -9,12 +9,16 @@ import (
 	"strings"
 	"time"
 
+	"github.com/example-user/commander/internal/beads"
 	"github.com/example-user/commander/internal/livedata"
 )
 
 const (
-	invariantEvery  = 3 * time.Minute
-	invariantJitter = 2 * time.Minute
+	// Whole-project validation must not occupy backend read capacity for minutes.
+	// A spent pass preserves seen/told and sends nothing; the next pass retries.
+	invariantReadBudget = 15 * time.Second
+	invariantEvery      = 3 * time.Minute
+	invariantJitter     = 2 * time.Minute
 )
 
 // invariantWatcher enforces "every open bead has an agent, a recorded wait, or
@@ -110,4 +114,13 @@ Fix each one:
 - or close it if it is done or dropped.
 You are mailed once per bead; it is forgotten when fixed.`, b.String())
 	return
+}
+
+// loadInvariant gives the whole-project validation its own bounded read budget.
+// Spent/partial data is never sufficient to send or clear an invariant alert.
+func loadInvariant(ctx context.Context, deps livedata.Deps) (livedata.Data, bool) {
+	ctx, cancel := context.WithTimeout(beads.WithReadCaller(ctx, "invariant"), invariantReadBudget)
+	defer cancel()
+	data := livedata.Load(ctx, deps)
+	return data, ctx.Err() == nil && data.LoadErr == nil
 }

@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/example-user/commander/internal/beads"
 	"github.com/example-user/commander/internal/livedata"
 	"github.com/example-user/commander/internal/wsmgr"
 )
@@ -43,7 +44,7 @@ const healthGrace = 2 * time.Minute
 // per-project read slot as the API's, so a slow one is what an API load waits behind.
 func timedHealthLoad(ctx context.Context, load func(context.Context) livedata.Snapshot, slow time.Duration) {
 	start := time.Now()
-	snap := load(ctx)
+	snap := load(beads.WithReadCaller(ctx, "health"))
 	if took := time.Since(start); took > slow {
 		log.Printf("daemon: health loop load took %s (%s)", took.Round(time.Millisecond), snap.LoadTimes())
 	}

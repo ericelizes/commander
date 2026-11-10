@@ -430,11 +430,11 @@ func New() (*Daemon, error) {
 		}
 		invariant = newInvariantWatcher(watch.latest, waits.mail)
 		pitch = newPitchWatcher(home, watch.latest, waits.mail)
-		invariantReads = beads.ExportReads(beads.Incremental(cached))
+		invariantReads = beads.ExportReads(beads.IsolatedIncremental(cached))
 		invariant.fresh = func(ctx context.Context) (livedata.Snapshot, bool) {
-			data := livedata.Load(ctx, livedata.Deps{Store: st, Beads: invariantReads, Scrape: livedata.ScrapeAgentStates})
+			data, ok := loadInvariant(ctx, livedata.Deps{Store: st, Beads: invariantReads, Scrape: livedata.ScrapeAgentStates})
 			data.Objectives = livedata.MarkReported(data.Objectives, reported.list(), nil)
-			return livedata.BuildSnapshot(data, nil), data.LoadErr == nil
+			return livedata.BuildSnapshot(data, nil), ok
 		}
 	}
 
