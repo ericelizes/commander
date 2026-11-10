@@ -13,8 +13,11 @@ import (
 )
 
 const (
-	invariantEvery  = 3 * time.Minute
-	invariantJitter = 2 * time.Minute
+	// Whole-project validation must not occupy backend read capacity for minutes.
+	// A spent pass preserves seen/told and sends nothing; the next pass retries.
+	invariantReadBudget = 15 * time.Second
+	invariantEvery      = 3 * time.Minute
+	invariantJitter     = 2 * time.Minute
 )
 
 // invariantWatcher enforces "every open bead has an agent, a recorded wait, or

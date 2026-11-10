@@ -246,6 +246,14 @@ func (c *cmdClient) details(ctx context.Context, projectDir string, ids []string
 		for inflight >= parallelism(projectDir, fresh) {
 			cond.Wait()
 		}
+		if ctx.Err() != nil {
+			failed = append(failed, missing[start:]...)
+			if firstEr == nil {
+				firstEr = ctx.Err()
+			}
+			mu.Unlock()
+			break
+		}
 		inflight++
 		mu.Unlock()
 		wg.Add(1)
@@ -295,6 +303,9 @@ func (c *cmdClient) showOnce(ctx context.Context, projectDir string, batch []str
 	for attempt := 0; attempt < 2; attempt++ {
 		if ctx.Err() != nil {
 			break
+		}
+		if trace, ok := ctx.Value(detailTraceKey{}).(*detailTrace); ok {
+			trace.batches.Add(1)
 		}
 		stdout, stderr, err := c.run(ctx, projectDir, beadsBinary(), args...)
 		if err != nil {

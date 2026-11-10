@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"hash/fnv"
+	"log"
 	"maps"
 	"math/rand/v2"
 	"os"
@@ -334,11 +335,26 @@ func (c *CachedClient) detailsSalvaging(ctx context.Context, dir string, ids []s
 // cannot answer for, a file past the limit, or an entry that owes a show goes to br
 // show.
 func (c *CachedClient) detailsIncremental(ctx context.Context, dir string, ids []string, noExport bool) (map[string]Detail, error) {
+	start := time.Now()
+	caller := readCaller(ctx, noExport)
+	trace := &detailTrace{}
+	ctx = context.WithValue(ctx, detailTraceKey{}, trace)
 	release, err := c.acquireReread(ctx, dir)
+	waited := time.Since(start)
 	if err != nil {
+		log.Printf("beads: details caller=%s project=%s requested=%d noExport=%t wait=%s cancelled=%v", caller, dir, len(ids), noExport, waited.Round(time.Millisecond), err)
 		return nil, err
 	}
-	defer release()
+	acquired := time.Now()
+	staleCount := 0
+	reason := "warm"
+	defer func() {
+		release()
+		held := time.Since(acquired)
+		if waited >= time.Second || held >= time.Second || noExport || err != nil {
+			log.Printf("beads: details caller=%s project=%s requested=%d stale=%d show_batches=%d reason=%s noExport=%t wait=%s hold=%s err=%v", caller, dir, len(ids), staleCount, trace.batches.Load(), reason, noExport, waited.Round(time.Millisecond), held.Round(time.Millisecond), err)
+		}
+	}()
 
 	c.mu.Lock()
 	store := c.details[dir]
@@ -352,6 +368,9 @@ func (c *CachedClient) detailsIncremental(ctx context.Context, dir string, ids [
 		}
 	}
 	first := len(store) == 0
+	if first {
+		reason = "cold"
+	}
 	exportNow := exportMTime(dir)
 
 	out := make(map[string]Detail, len(ids))
@@ -381,6 +400,7 @@ func (c *CachedClient) detailsIncremental(ctx context.Context, dir string, ids [
 		}
 	}
 
+	staleCount = len(stale)
 	var got map[string]Detail
 	var usedExport time.Time
 	var owesShow bool
@@ -539,6 +559,14 @@ func (c *CachedClient) seedFromExport(ctx context.Context, dir string, f *export
 // read (only beads whose list key moved go to br show) but never from an export,
 // so a cold first read is DB-backed. Action verbs keep FreshDetails/ForActions.
 func Incremental(c *CachedClient) Client { return incrementalClient{c} }
+
+// IsolatedIncremental keeps a persistent DB-backed detail cache and reread slot
+// separate from display hydration. Construct once, not once per pass. The backing
+// client still shares the process/cross-process DB limiter and write priority.
+// Action reads continue to bypass both caches through FreshDetails/ForActions.
+func IsolatedIncremental(c *CachedClient) Client {
+	return Incremental(NewCached(c.Client))
+}
 
 type incrementalClient struct{ *CachedClient }
 
