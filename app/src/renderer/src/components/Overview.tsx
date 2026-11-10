@@ -260,8 +260,8 @@ export function Overview({ ws, row, track, onWorkflow, onTrack }: {
         {asks.length === 0 && <p className="ov-live"><span className="ov-dot" data-tone={toneOf(target.kind)} />{target.text || 'No current activity has been recorded.'}</p>}
         {target.why && <p className="ov-warning">{target.why}</p>}
         {degraded && <p role="status" className="ov-warning">Connection interrupted. This status may be out of date.</p>}
-        {(asks.length > 0 || pendingDecision || stalled) && <section className={`ov-attention${asks.length ? ' ov-needs' : ''}${stalled ? ' ov-stalled' : ''}`} aria-label="Needs you">
-          <h2>{asks.length ? 'Needs you' : pendingDecision ? 'Decision details pending' : 'Recovery needed'}</h2>
+        {(asks.length > 0 || pendingDecision || stalled) && <section className={`ov-attention${asks.length ? ' ov-needs' : ''}${stalled ? ' ov-stalled' : ''}`} aria-label={asks.length || pendingDecision ? "Needs you" : "Automation failure"}>
+          <h2>{asks.length ? 'Needs you' : pendingDecision ? 'Decision details pending' : 'Automation failure — Manager recovery needed'}</h2>
           {asks.length ? asks.map((ask) => (
             <div className="ov-ask" key={ask.bead_id}>
               <h3>{ask.decision?.question || ask.ask || ask.title}</h3>

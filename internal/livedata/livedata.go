@@ -734,6 +734,14 @@ func projectObjectiveRows(ctx context.Context, bc beads.Client, project store.Pr
 	if err != nil {
 		return nil, err
 	}
+	// Operational dependencies are real work even though they are not objectives
+	// or Operator tasks. Keep them in the graph so label filtering cannot release
+	// a task that still waits on an open operational bead.
+	operational, err := bc.List(ctx, project.Path, beads.ListOptions{Labels: []string{"kind:operational"}, Status: "all"})
+	if err != nil {
+		return nil, err
+	}
+	taskBeads = append(taskBeads, operational...)
 	childCount := make(map[string]int, len(objectiveBeads))
 	for _, task := range taskBeads {
 		if task.ParentID != "" && task.Status != "closed" {
@@ -747,7 +755,8 @@ func projectObjectiveRows(ctx context.Context, bc beads.Client, project store.Pr
 		seen[o.ID] = true
 	}
 	for _, t := range taskBeads {
-		if !seen[t.ID] && slices.Contains(t.Labels, "kind:task") {
+		if !seen[t.ID] {
+			seen[t.ID] = true
 			objectiveBeads = append(objectiveBeads, t)
 		}
 	}
@@ -862,7 +871,7 @@ func projectObjectiveRows(ctx context.Context, bc beads.Client, project store.Pr
 			Waits:         beads.WaitsOf(objective.Labels),
 			ParkedUntil:   beads.ParkedUntil(objective.Labels),
 			Viz:           beads.VizOf(objective.Labels),
-			Task:          slices.Contains(objective.Labels, "kind:task") && !slices.Contains(objective.Labels, "kind:objective") && !slices.Contains(objective.Labels, beads.GateLabel) && !beads.IsWorkstream(objective.Labels),
+			Task:          (slices.Contains(objective.Labels, "kind:task") || slices.Contains(objective.Labels, "kind:operational")) && !slices.Contains(objective.Labels, "kind:objective") && !slices.Contains(objective.Labels, beads.GateLabel) && !beads.IsWorkstream(objective.Labels),
 			KindTask:      slices.Contains(objective.Labels, "kind:task"),
 			Track:         beads.IsNested(objective.Labels, parent),
 			Owns:          parent != "" && beads.OwnsWork(objective),

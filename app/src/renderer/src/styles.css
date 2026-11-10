@@ -876,13 +876,13 @@ body.resizing .splitter:active {
   color: var(--text-3);
 }
 
-/* Red is waiting on the user; stalled and nothing to do are muted. */
+/* Automation failures and user asks are red; ownership stays separate. */
 .agent-needs {
   color: var(--err);
 }
 
 .agent-stalled {
-  color: var(--text-3);
+  color: var(--err);
 }
 
 .agent-stalled .agent-icon {
@@ -3372,7 +3372,6 @@ kbd {
 }
 
 .ws-state.agent-quiet .ws-state-text,
-.ws-state.agent-stalled .ws-state-text,
 .ws-state.agent-idle .ws-state-text {
   color: var(--text-3);
   font-weight: 500;
@@ -6435,7 +6434,7 @@ button.xf-step.xf-open:hover {
 .wf .wf-step.agent-waiting { --dot: var(--attn); }
 .wf .wf-step.agent-working { --dot: var(--ok); }
 .wf .wf-step.agent-stalled,
-.wf .wf-step.agent-stuck { --dot: var(--text-3); }
+.wf .wf-step.agent-stuck { --dot: var(--err); }
 
 .wf-row {
   position: relative;
@@ -7584,3 +7583,8 @@ button.xf-step.xf-open:hover {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* Failed automation stays visibly red while its Manager repairs it. */
+.ws-state.agent-stalled .ws-state-text,
+.ws-state.agent-stuck .ws-state-text { color: var(--err); font-weight: 600; }
+.ws-state.agent-stalled .ws-state-why,
+.ws-state.agent-stuck .ws-state-why { color: var(--err); }

@@ -305,11 +305,7 @@ func (b board) row(ws SnapWorkstream) BoardRow {
 	if b.s.ManagerCapacity[ws.ManagerRole] != "" {
 		manager.State, manager.Wait = store.AgentIdle, ""
 	}
-	reacting := managerReacting(b.s, ws.ManagerRole)
 	pickingUp := func(l line) line {
-		if b.s.OrchestrationMode != "active" && l.kind == "stalled" && reacting {
-			l = line{kind: "working", text: "Manager picking it up", why: l.why, ageAs: l.ageAs}
-		}
 		return humanWait(l, b.tasks)
 	}
 	byTrack := map[string]line{}
@@ -513,7 +509,7 @@ func (b board) workstreamLine(ws SnapWorkstream, agent SnapAgent, hasAgent bool,
 			}
 		}
 	}
-	return l
+	return recoveryLine(l, ws)
 }
 func (b board) workstreamBaseLine(ws SnapWorkstream, agent SnapAgent, hasAgent bool, asks int) line {
 	g := gateVMOf(ws, b.needsIDs, asks)

@@ -166,6 +166,12 @@ func (f flow) decision(s SnapStep) bool {
 
 // leafLine is a step's own state, by who has to act, in the board's words.
 func (f flow) leafLine(s SnapStep) line {
+	ws := f.ws
+	ws.BeadID, ws.Steps = s.BeadID, []SnapStep{s}
+	return recoveryLine(f.leafBaseLine(s), ws)
+}
+
+func (f flow) leafBaseLine(s SnapStep) line {
 	if stepClosed(s) {
 		return line{kind: "done", text: "Done"}
 	}
