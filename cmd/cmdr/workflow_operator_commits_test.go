@@ -333,3 +333,120 @@ func TestOperatorAuthorshipIgnoresReplaceRefs(t *testing.T) {
 		t.Fatalf("replace ref hid the Operator: %v %v", got, err)
 	}
 }
+
+// The change's first appearance decides: the user's own change stays the
+// user's after an Operator copies it (a rebase of the PR branch) and the user
+// copies that copy again (another rebase, GitHub's update-branch).
+func TestOperatorAuthorshipFirstAppearanceWins(t *testing.T) {
+	ctx := context.Background()
+	r, _, _ := newOpRepo(t)
+	const t0 = int64(1_800_000_000)
+	r.gitAt(t0, r.repo, "", "checkout", "-q", "-b", "pr", "main")
+	u := r.change(t0+10, r.repo, "", "u.txt", "the user's change\n")
+	r.gitAt(t0+10, r.repo, "", "checkout", "-q", "main")
+	r.change(t0+20, r.repo, "", "main.txt", "main moved\n")
+
+	w, run := r.worktree("op-fix-t2")
+	a := run.AgentName
+	r.gitAt(t0+30, w, a, "checkout", "-q", "-B", "op/fix-t2", "pr")
+	r.gitAt(t0+30, w, a, "rebase", "-q", "main") // the Operator's copy O of u
+	o := r.gitAt(t0+30, w, a, "rev-parse", "HEAD")
+	if o == u {
+		t.Fatal("rebase made no copy")
+	}
+	r.gitAt(t0+40, r.repo, "", "checkout", "-q", "main")
+	r.change(t0+40, r.repo, "", "main2.txt", "main moved again\n")
+	r.gitAt(t0+50, r.repo, "", "checkout", "-q", "-b", "fin", "main")
+	r.gitAt(t0+50, r.repo, "", "cherry-pick", o) // the user's copy FIN of O
+	fin := r.gitAt(t0+50, r.repo, "", "rev-parse", "HEAD")
+
+	// A change an Operator wrote first, copied by the user, then by an
+	// Operator, then by the user again, stays the Operator's.
+	op := r.change(t0+60, w, a, "op.txt", "the Operator's change\n")
+	r.gitAt(t0+70, r.repo, "", "checkout", "-q", "-b", "u2", "main")
+	r.gitAt(t0+70, r.repo, "", "cherry-pick", op)
+	u2 := r.gitAt(t0+70, r.repo, "", "rev-parse", "HEAD")
+	r.gitAt(t0+80, r.repo, "", "checkout", "-q", "main")
+
+	for _, any := range []bool{true, false} {
+		got, err := operatorAuthorship(ctx, r.repo, []store.AgentRun{run}, any, []string{u, fin, u2})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if why, ok := got[fin]; ok {
+			t.Errorf("the user's re-copy of the user's own change attributed: %s", why)
+		}
+		if why, ok := got[u]; ok {
+			t.Errorf("the user's original attributed: %s", why)
+		}
+		if !strings.Contains(got[u2], a) {
+			t.Errorf("the user's copy of the Operator's change: got %q", got[u2])
+		}
+	}
+
+	// Failing closed: the same change in the same second as the user's
+	// original counts as the Operator's.
+	r.gitAt(t0+90, r.repo, "", "checkout", "-q", "-b", "tie", "main")
+	tu := r.change(t0+90, r.repo, "", "tie.txt", "same\n")
+	r.gitAt(t0+90, w, a, "checkout", "-q", "-B", "op/fix-t2", "main")
+	r.change(t0+90, w, a, "tie.txt", "same\n")
+	r.gitAt(t0+95, r.repo, "", "commit", "-q", "--amend", "-m", "reworded")
+	tfin := r.gitAt(t0+95, r.repo, "", "rev-parse", "HEAD")
+	got, err := operatorAuthorship(ctx, r.repo, []store.AgentRun{run}, false, []string{tu, tfin})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got[tu] == "" || got[tfin] == "" {
+		t.Errorf("same-second tie not counted as the Operator's: %v", got)
+	}
+
+	// Any git failure refuses.
+	cancelled, cancel := context.WithCancel(ctx)
+	cancel()
+	if _, err := operatorAuthorship(cancelled, r.repo, []store.AgentRun{run}, true, []string{fin}); err == nil {
+		t.Fatal("a failed git read passed")
+	}
+}
+
+// Originals are found wherever the local repo keeps them: a root commit, a
+// change over more paths than the pathspec bound, a commit only a worktree's
+// HEAD reflog still holds.
+func TestOperatorAuthorshipFindsEveryOriginal(t *testing.T) {
+	ctx := context.Background()
+	r, _, _ := newOpRepo(t)
+	const t0 = int64(1_800_000_000)
+	w, run := r.worktree("op-w-t2")
+	a := run.AgentName
+
+	r.gitAt(t0+10, w, a, "checkout", "-q", "--orphan", "op-root")
+	r.gitAt(t0+10, w, a, "rm", "-rq", "--cached", "--ignore-unmatch", ".")
+	root := r.change(t0+10, w, a, "root.txt", "a root commit\n")
+
+	r.gitAt(t0+20, w, a, "checkout", "-q", "-f", "--detach", "main")
+	for i := range maxCopyPaths + 1 {
+		if err := os.WriteFile(filepath.Join(w, fmt.Sprintf("m%03d.txt", i)), []byte("many\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	r.gitAt(t0+20, w, a, "add", ".")
+	r.gitAt(t0+20, w, a, "commit", "-q", "-m", "many paths")
+	many := r.gitAt(t0+20, w, a, "rev-parse", "HEAD")
+	detached := r.change(t0+21, w, a, "detached.txt", "only in the HEAD reflog\n")
+	r.gitAt(t0+22, w, a, "checkout", "-q", "op/w-t2") // now nothing but HEAD's reflog holds them
+
+	r.gitAt(t0+30, r.repo, "", "checkout", "-q", "-b", "copies", "main")
+	var copies []string
+	for _, sha := range []string{root, many, detached} {
+		r.gitAt(t0+30, r.repo, "", "cherry-pick", sha)
+		copies = append(copies, r.gitAt(t0+30, r.repo, "", "rev-parse", "HEAD"))
+	}
+	got, err := operatorAuthorship(ctx, r.repo, []store.AgentRun{run}, false, copies)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, name := range []string{"root commit", "many paths", "HEAD reflog only"} {
+		if !strings.Contains(got[copies[i]], "same change") {
+			t.Errorf("%s: copy %s not matched: %q", name, copies[i], got[copies[i]])
+		}
+	}
+}

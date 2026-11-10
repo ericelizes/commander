@@ -61,10 +61,11 @@ var workflowOperatorCommits = func(ctx context.Context, project, task string, sh
 // A copy of an Operator's commit made outside an Operator (the user's rebase,
 // amend or cherry-pick, GitHub's "Update branch" fetched back) carries the
 // user's or GitHub's identities, so the rest are matched by change: a commit
-// whose git patch-id equals that of an earlier Operator commit in the local
-// repo (any ref or reflog, every worktree) is that Operator's. "Earlier" is by
+// whose change (git patch-id) first appeared in an Operator commit in the local
+// repo (any ref or reflog, every worktree) is that Operator's. "First" is by
 // committer time: a rebase or cherry-pick stamps its copy with the time it ran,
-// so the user's own commit an Operator later copied stays the user's.
+// so the user's own commit stays the user's even after an Operator copied it
+// and the user copied that again (a rebase of the PR branch, update-branch).
 //
 // anyOperator (the project-wide read at bind) counts every identity under
 // spawn.OperatorGitDomain, a run of this project or not; otherwise only the
@@ -75,7 +76,12 @@ var workflowOperatorCommits = func(ctx context.Context, project, task string, sh
 // that unsets it, commits as the configured user and is not attributed; a copy
 // whose change differs (a squash, a conflict resolved, moved context lines, an
 // edit while amending) or whose Operator original is gone from the local repo
-// is not matched.
+// is not matched. A copy made with --committer-date-is-author-date (or a set
+// GIT_COMMITTER_DATE) can date itself before an Operator's amended or rebased
+// commit and then stays the user's. Failing closed: the same change made
+// independently (a chmod, a version bump) or in the same second counts as the
+// Operator's when an Operator commit has it no later than every other, and so
+// does a copy whose user original is gone from the local repo.
 func operatorAuthorship(ctx context.Context, repo string, runs []store.AgentRun, anyOperator bool, shas []string) (map[string]string, error) {
 	found := map[string]string{}
 	if len(shas) == 0 || (len(runs) == 0 && !anyOperator) {
@@ -158,92 +164,156 @@ func operatorAuthorship(ctx context.Context, repo string, runs []store.AgentRun,
 	return found, nil
 }
 
-// maxCopyPaths bounds the pathspec of the Operator commit scan (an argument
-// list); past it every Operator commit is read.
+// maxCopyPaths bounds the pathspec of the commit scan (an argument list); past
+// it every commit is read.
 const maxCopyPaths = 500
 
-// operatorCopies adds to found every commit of rest whose patch-id equals
-// that of an Operator commit (operator != "") in the local repo committed no
-// later than it (when: committer time of each commit of rest).
+// scanned is one commit of a scan: committer time, identities, changed paths.
+type scanned struct {
+	at                int64
+	author, committer string
+	paths             string // sorted, NUL-joined: the key of its change's path set
+}
+
+// operatorCopies adds to found every commit of rest whose change first
+// appeared in an Operator commit: of all commits in the local repo with its
+// patch-id committed no later than it (itself included), the earliest is an
+// Operator's (a tie with an Operator commit counts as the Operator's, failing
+// closed). So a copy of the Operator's change is the Operator's, and the
+// user's own change stays the user's however often an Operator and then the
+// user copy it again.
 func operatorCopies(ctx context.Context, repo string, rest []string, when map[string]int64, operator func(author, committer string) string, found map[string]string) error {
-	ids, err := patchIDs(ctx, repo, rest)
+	mine, err := scanCommits(ctx, repo, strings.Join(rest, "\n")+"\n", nil, "log", "--stdin", "--no-walk=unsorted")
 	if err != nil {
 		return err
 	}
-	if len(ids) == 0 { // only empty commits or merges: no change to match
+	sets := map[string]bool{}
+	var until int64
+	for _, sha := range rest {
+		if c, ok := mine[sha]; ok && c.paths != "" {
+			sets[c.paths] = true
+			until = max(until, when[sha])
+		}
+	}
+	if len(sets) == 0 { // only empty commits or merges: no change to match
 		return nil
-	}
-	// Only a commit touching the same paths can have the same patch-id.
-	names, err := gitRead(ctx, repo, strings.Join(rest, "\n")+"\n",
-		"diff-tree", "--stdin", "-r", "--no-commit-id", "--name-only", "--no-renames", "-z")
-	if err != nil {
-		return err
 	}
 	var paths []string
-	for _, p := range strings.Split(names, "\x00") {
-		if p != "" && !slices.Contains(paths, p) {
-			paths = append(paths, p)
+	seen := map[string]bool{}
+	for set := range sets {
+		for _, p := range strings.Split(set, "\x00") {
+			if !seen[p] {
+				seen[p] = true
+				paths = append(paths, p)
+			}
 		}
 	}
-	if len(paths) == 0 {
-		return nil
+	// Every ref and reflog of every worktree: a rebased-away or deleted branch
+	// is still in its reflog. Nothing committed after the last commit of rest
+	// can be first.
+	if len(paths) > maxCopyPaths {
+		paths = nil
 	}
-	// Every ref and reflog of every worktree: a rebased-away or deleted
-	// Operator branch is still in its reflog.
-	logArgs := []string{"log", "--all", "--reflog", "--full-history", "--no-merges", "--no-show-signature",
-		"--format=%H%x09%ct%x09%ae%x09%ce"}
-	if len(paths) <= maxCopyPaths {
-		logArgs = append(append(logArgs, "--"), paths...)
-	}
-	list, err := gitRead(ctx, repo, "", logArgs...)
+	all, err := scanCommits(ctx, repo, "", paths, "log", "--all", "--reflog", "--full-history", fmt.Sprintf("--until=@%d", until))
 	if err != nil {
 		return err
 	}
-	ops := map[string]string{} // Operator commit -> why
-	opTime := map[string]int64{}
-	var opShas []string
-	for _, line := range strings.Split(list, "\n") {
-		f := strings.Split(line, "\t")
-		if len(f) != 4 || ops[f[0]] != "" {
-			continue
+	for sha, c := range mine {
+		all[sha] = c
+	}
+	// Only a commit touching the same path set can have the same patch-id, and
+	// only a set an Operator commit has can be attributed.
+	opSets := map[string]bool{}
+	var ops []string
+	for sha, c := range all {
+		if sets[c.paths] && operator(c.author, c.committer) != "" {
+			opSets[c.paths] = true
+			ops = append(ops, sha)
 		}
-		why := operator(f[2], f[3])
-		if why == "" {
-			continue
+	}
+	if len(ops) == 0 {
+		return nil
+	}
+	ids, err := patchIDs(ctx, repo, ops)
+	if err != nil {
+		return err
+	}
+	// The earliest Operator commit of each patch-id, then whatever is earlier.
+	firstOp := map[string]string{}
+	for _, op := range ops {
+		if id := ids[op]; id != "" {
+			if f, ok := firstOp[id]; !ok || all[op].at < all[f].at || (all[op].at == all[f].at && op < f) {
+				firstOp[id] = op
+			}
 		}
-		t, err := strconv.ParseInt(f[1], 10, 64)
+	}
+	var others []string
+	for sha, c := range all {
+		if opSets[c.paths] && operator(c.author, c.committer) == "" {
+			others = append(others, sha)
+		}
+	}
+	firstOther := map[string]int64{} // earliest commit time of each patch-id outside an Operator
+	if len(others) > 0 {
+		more, err := patchIDs(ctx, repo, others)
 		if err != nil {
-			return fmt.Errorf("commit time of %s: %w", f[0], err)
+			return err
 		}
-		ops[f[0]], opTime[f[0]] = why, t
-		opShas = append(opShas, f[0])
-	}
-	if len(opShas) == 0 {
-		return nil
-	}
-	opIDs, err := patchIDs(ctx, repo, opShas)
-	if err != nil {
-		return err
-	}
-	byID := map[string][]string{}
-	for _, op := range opShas {
-		if id := opIDs[op]; id != "" {
-			byID[id] = append(byID[id], op)
+		for sha, id := range more {
+			ids[sha] = id
+			if t, ok := firstOther[id]; !ok || all[sha].at < t {
+				firstOther[id] = all[sha].at
+			}
 		}
 	}
 	for _, sha := range rest {
 		id := ids[sha]
-		if id == "" {
+		op, ok := firstOp[id]
+		if id == "" || !ok || op == sha || all[op].at > when[sha] {
 			continue
 		}
-		for _, op := range byID[id] {
-			if op != sha && opTime[op] <= when[sha] {
-				found[sha] = "same change (patch-id " + id[:12] + ") as " + op[:12] + ", " + ops[op]
-				break
-			}
+		if t, ok := firstOther[id]; ok && t < all[op].at {
+			continue // a commit that is not an Operator's had the change first
 		}
+		found[sha] = "same change (patch-id " + id[:12] + ") as " + op[:12] + ", " + operator(all[op].author, all[op].committer)
 	}
 	return nil
+}
+
+// scanCommits runs a git log (args, stdin) of non-merge commits and reads each
+// one's time, raw identities and changed paths (the whole change, whatever
+// pathspec chose it; a root commit's too).
+func scanCommits(ctx context.Context, repo, stdin string, pathspec []string, args ...string) (map[string]scanned, error) {
+	args = append(args[:len(args):len(args)], "--no-merges", "--no-show-signature", "--no-renames", "--full-diff",
+		"--name-only", "-z", "--format=%x01%H%x09%ct%x09%ae%x09%ce")
+	if len(pathspec) > 0 {
+		args = append(append(args, "--"), pathspec...)
+	}
+	out, err := gitRead(ctx, repo, stdin, args...)
+	if err != nil {
+		return nil, err
+	}
+	commits := map[string]scanned{}
+	for _, chunk := range strings.Split(out, "\x01") {
+		head, names, _ := strings.Cut(chunk, "\x00")
+		f := strings.Split(head, "\t")
+		if len(f) != 4 {
+			continue
+		}
+		t, err := strconv.ParseInt(f[1], 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("commit time of %s: %w", f[0], err)
+		}
+		var ps []string
+		for _, p := range strings.Split(strings.TrimPrefix(names, "\n"), "\x00") {
+			if p != "" {
+				ps = append(ps, p)
+			}
+		}
+		slices.Sort(ps)
+		commits[f[0]] = scanned{at: t, author: f[2], committer: f[3], paths: strings.Join(slices.Compact(ps), "\x00")}
+	}
+	return commits, nil
 }
 
 // patchIDs is git patch-id --stable of each non-merge commit with a change.
@@ -258,10 +328,14 @@ func patchIDs(ctx context.Context, repo string, shas []string) (map[string]strin
 	if err != nil {
 		return nil, err
 	}
+	want := map[string]bool{}
+	for _, sha := range shas {
+		want[sha] = true
+	}
 	ids := map[string]string{}
 	for _, line := range strings.Split(out, "\n") {
 		f := strings.Fields(line)
-		if len(f) == 2 && slices.Contains(shas, f[1]) {
+		if len(f) == 2 && want[f[1]] {
 			ids[f[1]] = f[0]
 		}
 	}

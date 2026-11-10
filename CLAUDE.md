@@ -1467,10 +1467,12 @@ author stays the user's), git writes it on every object a process makes (commit,
 rebase) and on none for a ref move (reset, fast-forward, checkout), so a reviewer that reset onto the PR head is no writer.
 An author or committer under that domain is an Operator's (the bind counts any; reviewer independence only the review
 task's runs' identities). A copy made outside an Operator (user rebase/amend/cherry-pick, GitHub update-branch) is matched
-by change: same `git patch-id --stable` as an Operator commit in the local repo (`--all --reflog`, every worktree) committed
-no later than it (`operatorCopies`; so an Operator's later copy of the user's own commit leaves it the user's). All reads
+by change: its `git patch-id --stable` first appeared (committer time, ties = the Operator's) in an Operator commit of the local repo
+(`--all --reflog`, every worktree; `operatorCopies`; so the user's own commit stays the user's after an Operator copies it and the
+user copies that again). All reads
 ignore replace refs. A git error refuses, a commit not in the local repo passes. Limits: an Operator started before the
-install, or one that unsets the variables, commits as the user and is not attributed; a copy with a different change (squash,
+install, or one that unsets the variables, commits as the user and is not attributed; `--committer-date-is-author-date` can date a
+user copy before an amended Operator commit; the same change made independently counts as the Operator's when its commit is first; a copy with a different change (squash,
 conflict, moved context, edited amend) or whose original left the repo (branch, worktree and reflogs gone) passes. Reviewer independence is judged against
 the bound tasks AND the bound commits (a review task whose runs wrote one is refused). The user's CLI, Commander (external
 commits only; the Manager's stored task writers for the PR are kept) or the owning Manager may bind one;
