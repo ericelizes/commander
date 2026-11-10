@@ -398,7 +398,7 @@ func reviewProof(ctx context.Context, run GHRunner, read ReviewReader, pr string
 		} else if err := deltaRecheck(ctx, run, read, pr, h, &Proof{ReviewBead: r.ID, PriorReview: p.PriorReview, PriorHead: current.Base, FixCommits: p.FixCommits}, current); err != nil {
 			return nil, fmt.Errorf("renewing delta recheck %s: %w", r.ID, err)
 		}
-		on, err := onPR(ctx, run, pr, h, p.PriorHead)
+		on, err := OnPR(ctx, run, pr, h, p.PriorHead)
 		if err != nil {
 			return nil, fmt.Errorf("prior head %s: %w", p.PriorHead, err)
 		}
@@ -456,7 +456,7 @@ func fullCoverage(ctx context.Context, run GHRunner, pr string, h Head, review s
 	if h.Base != "" && res.Base == h.Base {
 		return nil
 	}
-	on, err := onPR(ctx, run, pr, h, res.Base)
+	on, err := OnPR(ctx, run, pr, h, res.Base)
 	if err != nil {
 		return fmt.Errorf("review %s base %s: %w", review, res.Base, err)
 	}
@@ -574,7 +574,7 @@ func deltaRecheck(ctx context.Context, run GHRunner, read ReviewReader, pr strin
 	if len(unverified) > 0 {
 		return fmt.Errorf("delta recheck %s does not verify the prior review's blocker/major finding(s) %s fixed: its receipt must list each one in resolved", p.ReviewBead, strings.Join(unverified, ", "))
 	}
-	on, err := onPR(ctx, run, pr, h, p.PriorHead)
+	on, err := OnPR(ctx, run, pr, h, p.PriorHead)
 	if err != nil {
 		return fmt.Errorf("prior head %s: %w", p.PriorHead, err)
 	}
