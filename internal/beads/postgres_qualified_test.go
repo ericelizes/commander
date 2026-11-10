@@ -428,3 +428,40 @@ func TestPostgresQualifiedStoppedAndUnknownCustody(t *testing.T) {
 		t.Fatalf("unknown evidence became stopped: %v", e)
 	}
 }
+
+func TestPostgresQualifiedRunRetirementSerializesWithAuthority(t *testing.T) {
+	f := newQualifiedFixture(t)
+	ctx := context.Background()
+	run, e := f.s.InsertAgentRun(ctx, store.AgentRun{ProjectID: f.pid, TaskBeadID: f.source, AgentName: "operator-fixture-race", SpawnTime: time.Now().Unix()})
+	if e != nil {
+		t.Fatal(e)
+	}
+	actor := WithDoorEnv(ctx, []string{"COMMANDER_ROLE=operator-fixture-race"})
+	e = f.s.WithTx(ctx, func(q store.Querier) error {
+		// This is the same serialization interval as an actual qualified write.
+		if _, e := pgGuardedOps(actor, q, f.dir, [][]string{{"dep", "add", f.source, f.target, "--source-project", f.dir, "--target-project", f.foreign}}); e != nil {
+			return e
+		}
+		competitor, e := f.s.DB().BeginTx(ctx, nil)
+		if e != nil {
+			return e
+		}
+		defer competitor.Rollback()
+		if _, e = competitor.ExecContext(ctx, `SET LOCAL lock_timeout='50ms'`); e != nil {
+			return e
+		}
+		if _, e = competitor.ExecContext(ctx, `UPDATE agent_runs SET status='done' WHERE id=?`, run); e == nil {
+			t.Fatal("run retired inside an authorized dependency transaction")
+		}
+		return nil
+	})
+	if e != nil {
+		t.Fatal(e)
+	}
+	if _, e = f.s.DB().Exec(`UPDATE agent_runs SET status='done' WHERE id=?`, run); e != nil {
+		t.Fatal(e)
+	}
+	if e = QualifiedDependency(actor, f.dir, f.foreign, "rm", f.source, f.target); !IsCrossProjectError(e) {
+		t.Fatalf("retired source actor retained authority: %v", e)
+	}
+}

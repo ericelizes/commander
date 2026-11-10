@@ -26,6 +26,10 @@ END $$;
 CREATE TRIGGER qualified_tasks_lock BEFORE INSERT OR UPDATE OR DELETE ON bead_tasks FOR EACH STATEMENT EXECUTE FUNCTION commander_qualified_lock();
 CREATE TRIGGER qualified_projects_lock BEFORE INSERT OR UPDATE OR DELETE ON projects FOR EACH STATEMENT EXECUTE FUNCTION commander_qualified_lock();
 CREATE TRIGGER qualified_dependencies_lock BEFORE INSERT OR UPDATE OR DELETE ON bead_dependencies FOR EACH ROW EXECUTE FUNCTION commander_qualified_lock();
+-- Run retirement/replacement changes source custody and must serialize with
+-- the authority check. Accounting-only updates do not take the graph lock.
+CREATE TRIGGER qualified_runs_birth_lock BEFORE INSERT OR DELETE ON agent_runs FOR EACH STATEMENT EXECUTE FUNCTION commander_qualified_lock();
+CREATE TRIGGER qualified_runs_custody_lock BEFORE UPDATE OF status,project_id,task_bead_id,agent_name,spawn_time ON agent_runs FOR EACH STATEMENT EXECUTE FUNCTION commander_qualified_lock();
 CREATE TRIGGER qualified_managers_lock BEFORE INSERT OR UPDATE OR DELETE ON workstream_managers FOR EACH STATEMENT EXECUTE FUNCTION commander_qualified_lock();
 CREATE TRIGGER qualified_tasks_revision AFTER INSERT OR UPDATE OR DELETE ON bead_tasks FOR EACH STATEMENT EXECUTE FUNCTION commander_qualified_revision();
 CREATE TRIGGER qualified_projects_revision AFTER INSERT OR UPDATE OR DELETE ON projects FOR EACH STATEMENT EXECUTE FUNCTION commander_qualified_revision();
