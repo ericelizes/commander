@@ -1114,6 +1114,9 @@ func (b board) managerState(ws SnapWorkstream, agent SnapAgent, live line) line 
 	if handoff, ok := resultHandoff(ws.Steps, b.now); ok && handoff.kind == "stalled" {
 		return handoff
 	}
+	if l, ok := goneLine(leaves); ok {
+		return l
+	}
 	operators := workingOperators(ws) > 0
 	if busy := agentBusy(agent, true); busy || operators {
 		// Name the work (the step it is on), not the tool it is running.

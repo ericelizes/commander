@@ -55,3 +55,35 @@ func TestOverdueHandoffStaysRedDuringManagerReaction(t *testing.T) {
 		}
 	}
 }
+
+func TestStoppedWorkNeverTurnsGreenWhileManagerReacts(t *testing.T) {
+	for _, receipt := range []string{"", beads.ManagerRecoverWait} {
+		ws := SnapWorkstream{BeadID: "sample-flow", Project: "sample", ManagerRole: "manager-sample-flow", Steps: []SnapStep{{BeadID: "sample-flow.1", Status: "open", State: "not-started", OwnerState: OwnerDied, Waiting: receipt, WaitUntil: 200, WaitUntilAs: receipt}}}
+		snap := Snapshot{Workstreams: []SnapWorkstream{ws}, Agents: map[string]SnapAgent{ws.ManagerRole: {State: "working"}}}
+		r := Board(snap, 100).Workstreams[0]
+		if r.Kind != "stalled" || !strings.Contains(r.Why, "stopped run and current holder") {
+			t.Fatalf("stopped run disguised as recovery progress: %+v", r)
+		}
+	}
+}
+
+func TestPlanningAndRecoveryReceiptsExposeFailures(t *testing.T) {
+	for _, tc := range []struct {
+		ref     string
+		now     int64
+		failure bool
+	}{
+		{beads.ManagerPlanWait, 10, false}, {beads.ManagerPlanWait, 30, true},
+		{beads.ManagerRecoverWait, 10, true}, {beads.ManagerRecoverWait, 30, true},
+	} {
+		s := SnapStep{BeadID: "sample-flow.1", Status: "open", Waiting: tc.ref, WaitSince: 1, WaitUntil: 20, WaitUntilAs: tc.ref}
+		l, ok := resultHandoff([]SnapStep{s}, tc.now)
+		if !ok || (l.kind == "stalled") != tc.failure {
+			t.Fatalf("receipt %s at %d: %+v", tc.ref, tc.now, l)
+		}
+		s.Status = "closed"
+		if _, ok := resultHandoff([]SnapStep{s}, tc.now); ok {
+			t.Fatal("closed custody resurrected")
+		}
+	}
+}

@@ -59,3 +59,38 @@ func TestTaskHandoffWakeIsBoundedAndFresh(t *testing.T) {
 		t.Fatal("old handoff woke over replacement")
 	}
 }
+
+func TestHandoffWakeNeverActsOnMovedOrUnknownCustody(t *testing.T) {
+	ctx := context.Background()
+	wt := beads.Wait{Kind: beads.WaitUntil, Since: time.Unix(1, 0), Until: time.Unix(2, 0), Ref: beads.ManagerCloseWait}
+	old := beads.Bead{ID: "sample-flow.1", Status: "open", Labels: []string{wt.Label()}}
+	for _, tc := range []struct {
+		name, status string
+		labels       []string
+		absent       bool
+	}{
+		{name: "healthy replacement retains old wait", status: "in_progress", labels: []string{wt.Label(), "owner:operator-new"}},
+		{name: "closed report retains wait", status: "closed", labels: []string{wt.Label(), "review"}},
+		{name: "genuine user action", status: "open", labels: []string{wt.Label(), "needs-user"}},
+		{name: "parked", status: beads.StatusDeferred, labels: []string{wt.Label()}},
+		{name: "deleted", absent: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mock := &beads.MockClient{}
+			if !tc.absent {
+				mock.ShowResult = &beads.Bead{ID: old.ID, Status: tc.status, Labels: tc.labels}
+			}
+			var sent []sentMail
+			w := watcher(mock, nil, &sent, time.Unix(2000, 0))
+			w.wake(ctx, store.Project{Path: "/p"}, old, wt, "failure", "old handoff")
+			if len(sent) != 0 {
+				t.Fatalf("stale handoff acted on replacement: %v", sent)
+			}
+			for _, call := range mock.Calls {
+				if strings.HasPrefix(call, "SetLabel:") || strings.HasPrefix(call, "UpdateFields:") {
+					t.Fatalf("stale handoff mutated custody: %v", mock.Calls)
+				}
+			}
+		})
+	}
+}

@@ -1,6 +1,7 @@
 package livedata
 
 import (
+	"github.com/example-user/commander/internal/beads"
 	"strings"
 )
 
@@ -28,8 +29,12 @@ func recoveryLine(l line, ws SnapWorkstream) line {
 			if s.BeadID != "" {
 				target = s.BeadID
 			}
-			if recordsHandoff(s, "Manager to close") {
+			if recordsHandoff(s, beads.ManagerCloseWait) {
 				action = "review the existing report and close or return the existing task"
+			} else if recordsHandoff(s, beads.ManagerRecoverWait) {
+				action = "inspect the stopped run and current holder, then resume or replan through guarded dispatch"
+			} else if recordsHandoff(s, beads.ManagerPlanWait) {
+				action = "record the missing plan and its actual next holder"
 			} else if holdsHandoff(s) {
 				action = "dispatch the existing ready work through the guarded dispatch door"
 			} else if s.OwnerState == OwnerDied || s.OwnerState == OwnerFinished {

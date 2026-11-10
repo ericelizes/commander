@@ -17,3 +17,10 @@ func TestOrdinaryAccessActionIsNotApproval(t *testing.T) {
 		}
 	}
 }
+
+func TestAskDoorOrdinaryAccessActionOnApprovedWork(t *testing.T) {
+	askBoard(t)
+	// An approval already covers the work. Access still requires a person's
+	// action; a generic Continue choice is not another authorization gate.
+	asked(t, ask("ms-1.4", `{"question":"Connect the sample account", "options":[{"label":"Continue"}]}`))
+}

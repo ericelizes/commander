@@ -22,6 +22,8 @@ var handoffs = []struct{ ref, pending, overdue string }{
 	{beads.ManagerDispatchWait, approvalDispatchText, approvalDispatchOverdueText},
 	{beads.ManagerStartWait, startPendingText, startOverdueText},
 	{beads.ManagerCloseWait, resultReviewText, "Manager review overdue"},
+	{beads.ManagerPlanWait, managerPlanningText, "Manager planning deadline missed"},
+	{beads.ManagerRecoverWait, "Operator recovery required", "Operator recovery deadline missed"},
 }
 
 // handoffText: text is a line resultHandoff writes, or a wait line naming a receipt.
@@ -73,6 +75,9 @@ func resultHandoff(steps []SnapStep, now int64) (line, bool) {
 					continue
 				}
 				candidate := line{kind: "waiting", text: h.pending, since: s.WaitSince}
+				if h.ref == beads.ManagerRecoverWait {
+					candidate.kind = "stalled" // a stopped run is a failure, even during its repair window
+				}
 				if s.waitExpired(now, h.ref) {
 					candidate.kind = "stalled"
 					candidate.text = h.overdue
