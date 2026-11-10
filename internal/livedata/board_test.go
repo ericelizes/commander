@@ -270,7 +270,7 @@ func TestBoardBrokenStepBesideLiveOperatorStaysVisible(t *testing.T) {
 	}
 }
 
-// A broken row beside a live Operator keeps its age through the Manager's turns; with no Operator each text has its own.
+// Missing custody keeps its age through Manager turns, with or without a live Operator.
 func TestBoardBrokenRowBesideOperatorKeepsAgeThroughManagerTurns(t *testing.T) {
 	var tr sinceTracker
 	fill := func(state string, now int64) Display {
@@ -281,7 +281,10 @@ func TestBoardBrokenRowBesideOperatorKeepsAgeThroughManagerTurns(t *testing.T) {
 		return d
 	}
 	fill(store.AgentIdle, 1000)
-	fill(store.AgentWorking, 1100)
+	working := fill(store.AgentWorking, 1100)
+	if r := working.Workstreams[5]; r.Kind != "stalled" || r.Text != "State missing" || r.Since != 1000 {
+		t.Fatalf("Manager activity reset missing custody: %+v", r)
+	}
 	d := fill(store.AgentIdle, 1200)
 	if r := d.Workstreams[0]; r.Since != 1000 {
 		t.Errorf("beside an Operator: since %d, want 1000", r.Since)
@@ -289,8 +292,8 @@ func TestBoardBrokenRowBesideOperatorKeepsAgeThroughManagerTurns(t *testing.T) {
 	if tk := d.Workstreams[4].Tracks[1]; tk.Since != 1000 {
 		t.Errorf("broken track: since %d, want 1000", tk.Since)
 	}
-	if r := d.Workstreams[5]; r.Since != 1200 {
-		t.Errorf("no Operator: since %d, want 1200", r.Since)
+	if r := d.Workstreams[5]; r.Since != 1000 {
+		t.Errorf("no Operator: since %d, want 1000", r.Since)
 	}
 }
 
