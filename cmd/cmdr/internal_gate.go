@@ -423,6 +423,10 @@ func gateCheck(ctx context.Context, st *store.Store, projectName, beadID, only s
 		if only != "" && g.Name != only {
 			continue
 		}
+		if g.Status == store.GateWithdrawn {
+			results = append(results, gateCheckResult{Name: g.Name, Verifier: g.Verifier, Status: g.Status})
+			continue
+		}
 		if g.Verifier != store.VerifierAuto {
 			if g.Status != store.GatePassed && g.Verifier != store.VerifierOperator {
 				if err := ensureGateWait(ctx, bc, project.Path, beadID, g.Verifier, time.Now()); err != nil {

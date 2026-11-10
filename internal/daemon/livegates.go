@@ -128,7 +128,7 @@ func (w *gateWatcher) pollProject(ctx context.Context, p store.Project) {
 	checks := 0
 	for _, n := range nodes {
 		g := n.Gate
-		if g.Verifier != store.VerifierAuto || closed[g.BeadID] {
+		if g.Status == store.GateWithdrawn || g.Verifier != store.VerifierAuto || closed[g.BeadID] {
 			continue
 		}
 		if ctx.Err() != nil {

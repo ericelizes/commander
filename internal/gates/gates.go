@@ -92,7 +92,7 @@ func parse(b beads.Bead, projectID int64, comments []beads.Comment) Node {
 	}
 	switch {
 	case slices.Contains(b.Labels, beads.WithdrawnLabel):
-		g.Status = "withdrawn"
+		g.Status = store.GateWithdrawn
 	case b.Status == "closed":
 		g.Status = store.GatePassed
 	case slices.Contains(b.Labels, FailedLabel):

@@ -273,3 +273,34 @@ func TestGateWithdrawClosedWaiterAndMissingSnapshot(t *testing.T) {
 		t.Fatal("withdrawal unlinked history")
 	}
 }
+
+func TestGateWithdrawCheckNeverRunsOrAddsWait(t *testing.T) {
+	for _, verifier := range []string{"user", "auto"} {
+		t.Run(verifier, func(t *testing.T) {
+			m, st, r := withdrawalFixture(t)
+			ctx := context.Background()
+			if verifier == "auto" {
+				_ = m.SetLabel(ctx, "/d", r.Bead, "verifier:user", false)
+				_ = m.SetLabel(ctx, "/d", r.Bead, "verifier:auto", true)
+			}
+			r = withdrawalPreview(t, st, r)
+			if _, e := gateWithdraw(ctx, st, "manifest", r, false); e != nil {
+				t.Fatal(e)
+			}
+			ran := false
+			fakeGateRun(t, func(string) (string, error) { ran = true; return "", nil })
+			if _, e := gateCheck(ctx, st, "manifest", "sample-flow.2", ""); e != nil {
+				t.Fatal(e)
+			}
+			if ran {
+				t.Fatal("withdrawn check executed")
+			}
+			b, _ := m.Show(ctx, "/d", "sample-flow.2")
+			for _, l := range b.Labels {
+				if strings.HasPrefix(l, "waiting:") {
+					t.Fatal("withdrawn gate added wait")
+				}
+			}
+		})
+	}
+}
