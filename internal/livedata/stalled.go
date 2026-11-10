@@ -28,6 +28,9 @@ func (b board) stalledPlaces(ws SnapWorkstream, stalledTrack map[string]bool) []
 		// Unread mail grants the same generic inactivity grace as a live turn.
 		// Use a private map: Checkin must never mutate its caller's snapshot.
 		b.s.Agents = maps.Clone(b.s.Agents)
+		if b.s.Agents == nil {
+			b.s.Agents = map[string]SnapAgent{}
+		}
 		manager := b.s.Agents[ws.ManagerRole]
 		manager.State = store.AgentWorking
 		b.s.Agents[ws.ManagerRole] = manager

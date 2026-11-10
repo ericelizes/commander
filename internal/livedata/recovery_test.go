@@ -102,3 +102,20 @@ func TestRecoveryUsesSelectedHandoff(t *testing.T) {
 		}
 	}
 }
+
+func TestUnreadReactionPreservesFactsWithoutMutatingSnapshot(t *testing.T) {
+	for _, overdue := range []bool{false, true} {
+		ws := SnapWorkstream{BeadID: "sample-flow", ManagerRole: "manager-sample-flow", Steps: []SnapStep{{BeadID: "sample-flow.1", Status: "open", State: "not-started"}}}
+		if overdue {
+			ws.Steps[0].Waiting, ws.Steps[0].WaitUntil, ws.Steps[0].WaitUntilAs = beads.ManagerCloseWait, 2, beads.ManagerCloseWait
+		}
+		snap := Snapshot{Workstreams: []SnapWorkstream{ws}, Unread: map[string]int{ws.ManagerRole: 1}}
+		failures := StalledWork(snap, 100)
+		if (len(failures) > 0) != overdue {
+			t.Fatalf("unread grace versus fact: overdue=%v failures=%+v", overdue, failures)
+		}
+		if snap.Agents != nil {
+			t.Fatal("Checkin mutated snapshot")
+		}
+	}
+}
