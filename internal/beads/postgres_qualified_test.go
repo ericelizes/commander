@@ -465,3 +465,63 @@ func TestPostgresQualifiedRunRetirementSerializesWithAuthority(t *testing.T) {
 		t.Fatalf("retired source actor retained authority: %v", e)
 	}
 }
+
+func TestPostgresQualifiedPlaceCustody(t *testing.T) {
+	f := newQualifiedFixture(t)
+	ctx := context.Background()
+	role := "operator-fixture-remote"
+	if e := f.c.SetLabel(ctx, f.dir, f.source, "owner:"+role, true); e != nil {
+		t.Fatal(e)
+	}
+	if e := f.s.AddPlace(ctx, store.Place{Name: "mac:fixture", Kind: "mac", PublicKey: "fixture-key", PairedAt: 1, PairedBy: "user"}); e != nil {
+		t.Fatal(e)
+	}
+	run, e := f.s.InsertPlaceOffer(ctx, store.AgentRun{ProjectID: f.pid, TaskBeadID: f.source, AgentName: role, SpawnTime: time.Now().Unix()}, store.PlaceRun{Place: "mac:fixture", StepID: "fixture-step", ManagerRole: "manager-fixture", BriefSHA: "fixture", OfferedAt: time.Now().Unix()})
+	if e != nil {
+		t.Fatal(e)
+	}
+	actor := WithDoorEnv(ctx, []string{"COMMANDER_ROLE=" + role})
+	if e = QualifiedDependency(actor, f.dir, f.foreign, "add", f.source, f.target); e != nil {
+		t.Fatal(e)
+	}
+	check := func(state string, known bool) {
+		t.Helper()
+		e := f.s.WithTx(ctx, func(q store.Querier) error {
+			v, e := loadQualifiedView(ctx, q, f.pid, false)
+			if e != nil {
+				return e
+			}
+			live, e := qualifiedCustodyLive(ctx, q, v)
+			if e != nil {
+				return e
+			}
+			got, k := live(role)
+			if got != state || k != known {
+				t.Fatalf("remote custody=(%q,%v), want=(%q,%v)", got, k, state, known)
+			}
+			return nil
+		})
+		if e != nil {
+			t.Fatal(e)
+		}
+	}
+	check("", true) // offered is known, but has no live heartbeat
+	if _, e = f.s.AcceptPlaceRun(ctx, run, "fixture-token", time.Now().Unix()); e != nil {
+		t.Fatal(e)
+	}
+	if e = f.s.RecordRuntimePresence(ctx, map[int64]bool{run: false}, time.Now(), nil); e != nil {
+		t.Fatal(e)
+	}
+	check("present", true) // local absence cannot override remote heartbeat
+	if _, e = f.s.BeatPlaceRun(ctx, run, time.Now().Add(-3*time.Minute).Unix()); e != nil {
+		t.Fatal(e)
+	}
+	check("", false)
+	if _, e = f.s.EndPlaceRun(ctx, run, store.PlaceStopped, "fixture", time.Now().Unix()); e != nil {
+		t.Fatal(e)
+	}
+	check("", true)
+	if e = QualifiedDependency(actor, f.dir, f.foreign, "rm", f.source, f.target); !IsCrossProjectError(e) {
+		t.Fatalf("ended remote authority: %v", e)
+	}
+}

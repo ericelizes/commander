@@ -1,11 +1,17 @@
 # Qualified PostgreSQL dependency candidate
 
 This is a source candidate for independent review. Do not install it or open a
-configured live store to try it: `OpenPostgres` applies migrations. Migration 3
-is **PROVISIONAL**, starts from schema 1, and explicitly rejects schema 2. The
-unpublished places candidate also changes the schema; this candidate does not
-include that work or claim compatibility. The owning Manager must coordinate a
-unified migration/version and review it before any deployment.
+configured live store to try it: `OpenPostgres` applies migrations. Schema 2 is the exact reserved Mac places migration from
+`158f0064d08c0e5bfd815917c081ca22fa7b67ac`; schema 3 adds qualified dependencies.
+Fresh databases and schema 1 upgrade through places 2 before qualified 3 in one
+transaction under advisory migration lock `734031820`. Existing exact Mac 2
+upgrades to 3 with all places, runs, comments, indexes and event triggers retained.
+The store includes Mac claim/heartbeat/presence persistence, without enabling the
+Mac execution service or app. Shared host/remote claims take the qualified graph
+lock before task rows. Transactional custody honors remote heartbeat evidence
+rather than local process absence. Release remains subject to independent review
+and the [Mac release prerequisites](../releases/mac-schema-two-contract.md).
+Old schema-1/2-only binaries reject 3 and are not recovery binaries.
 
 The public `beads.Client` remains ID-only. Qualified `(project,id)` identities are
 private to PostgreSQL graph validation. Cross-project references require each
@@ -69,8 +75,10 @@ Native private `commander_trial` coverage:
   constraint, source authority, opposite-link race, wrappers and MVCC.
 - `internal/livedata`: `TestPostgresQualifiedDisplayRevisionAndAmbiguity` checks
   foreign open/completed blockers, revision invalidation and no stale reuse.
-- `internal/store`: `TestPostgresQualifiedUpgradeAndRejectUnpublishedV2` upgrades
-  populated schema 1 and proves rejection does not modify a schema-2 marker.
+- `internal/store`: `TestPostgresComposed*` verifies fresh/1/2 convergence, exact places SQL,
+  populated upgrades, migration lock serialization and failed-upgrade rollback.
+  `TestPostgresPlaceClaimAndPresence` and existing native claim/presence tests
+  retain the Mac lifecycle contracts.
 - `cmd/cmdr`: `TestPostgresQualifiedDependencyCommand` exercises actual add/remove
   command handlers with no retired `state.db` file.
 

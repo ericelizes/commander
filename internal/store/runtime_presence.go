@@ -37,6 +37,10 @@ func (s *Store) RecordRuntimePresence(ctx context.Context, alive map[int64]bool,
 				return e
 			}
 		}
+		// A nil slice also means no native roles; PostgreSQL requires a JSON array.
+		if native == nil {
+			native = []string{}
+		}
 		raw, e := json.Marshal(native)
 		if e != nil {
 			return e
@@ -51,7 +55,10 @@ func (s *Store) RecordRuntimePresence(ctx context.Context, alive map[int64]bool,
 
 // RuntimePresence reads only database facts. Stale process evidence is unknown.
 func (s *Store) RuntimePresence(ctx context.Context) ([]string, []RuntimePresence, bool, error) {
-	rows, e := s.db.QueryContext(ctx, `SELECT r.agent_name,COALESCE(o.alive,FALSE),COALESCE(o.checked_at,0) FROM agent_runs r LEFT JOIN run_observations o ON o.run_id=r.id WHERE r.status='running'`)
+	rows, e := s.db.QueryContext(ctx, `SELECT r.agent_name,
+ CASE WHEN p.run_id IS NULL THEN COALESCE(o.alive,FALSE) ELSE p.state='running' AND p.last_beat>=? END,
+ CASE WHEN p.run_id IS NULL THEN COALESCE(o.checked_at,0) WHEN p.state='offered' OR p.last_beat>=? THEN ? ELSE 0 END
+ FROM agent_runs r LEFT JOIN run_observations o ON o.run_id=r.id LEFT JOIN place_runs p ON p.run_id=r.id WHERE r.status='running'`, time.Now().Add(-2*time.Minute).Unix(), time.Now().Add(-2*time.Minute).Unix(), time.Now().Unix())
 	if e != nil {
 		return nil, nil, false, e
 	}

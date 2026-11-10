@@ -127,7 +127,9 @@ func qualifiedCustodyLive(ctx context.Context, q store.Querier, v *qualifiedView
 		return live, nil
 	}
 	in := strings.TrimSuffix(strings.Repeat("?,", len(args)), ",")
-	rows, e := q.QueryContext(ctx, `SELECT DISTINCT ON (r.agent_name) r.agent_name,r.status,COALESCE(o.alive,FALSE),COALESCE(o.checked_at,0),COALESCE(b.active_run_id=r.id,FALSE) FROM agent_runs r LEFT JOIN run_observations o ON o.run_id=r.id LEFT JOIN bead_tasks b ON b.project_id=r.project_id AND b.id=r.task_bead_id WHERE r.agent_name IN (`+in+`) ORDER BY r.agent_name,r.spawn_time DESC,r.id DESC`, args...)
+	rows, e := q.QueryContext(ctx, `SELECT DISTINCT ON (r.agent_name) r.agent_name,r.status,CASE WHEN p.run_id IS NULL THEN COALESCE(o.alive,FALSE) ELSE p.state='running' AND p.last_beat>=EXTRACT(EPOCH FROM CURRENT_TIMESTAMP)::bigint-120 END,
+ CASE WHEN p.run_id IS NULL THEN COALESCE(o.checked_at,0) WHEN p.state='offered' OR p.last_beat>=EXTRACT(EPOCH FROM CURRENT_TIMESTAMP)::bigint-120 THEN EXTRACT(EPOCH FROM CURRENT_TIMESTAMP)::bigint ELSE 0 END,
+ COALESCE(b.active_run_id=r.id,FALSE) FROM agent_runs r LEFT JOIN run_observations o ON o.run_id=r.id LEFT JOIN place_runs p ON p.run_id=r.id LEFT JOIN bead_tasks b ON b.project_id=r.project_id AND b.id=r.task_bead_id WHERE r.agent_name IN (`+in+`) ORDER BY r.agent_name,r.spawn_time DESC,r.id DESC`, args...)
 	if e != nil {
 		return nil, e
 	}

@@ -17,6 +17,21 @@ func (s *Store) insertClaimedRun(ctx context.Context, r AgentRun) (int64, error)
 		return 0, errors.New("native execution requires a startup claim and complete session/provider binding")
 	}
 	e := s.WithTx(ctx, func(q Querier) error {
+		var e error
+		id, e = claimRun(ctx, q, r)
+		return e
+	})
+	return id, e
+}
+
+// claimRun composes the canonical claim with other records in the same transaction.
+func claimRun(ctx context.Context, q Querier, r AgentRun) (int64, error) {
+	// Acquire graph custody before task row locks, including remote offers.
+	if _, err := q.ExecContext(ctx, `SELECT pg_advisory_xact_lock(734031823)`); err != nil {
+		return 0, err
+	}
+	var id int64
+	e := func() error {
 		if _, e := q.ExecContext(ctx, `SELECT pg_advisory_xact_lock(734031823)`); e != nil {
 			return e
 		}
@@ -125,7 +140,7 @@ func (s *Store) insertClaimedRun(ctx context.Context, r AgentRun) (int64, error)
 			_, e = q.ExecContext(ctx, `UPDATE execution_slots SET run_id=?,lease_until=0,plan_revision=(SELECT plan_revision FROM bead_tasks WHERE project_id=? AND id=?) WHERE agent_id=? AND claim_token=?`, id, r.ProjectID, r.TaskBeadID, claimAgent, r.ExecutionClaimToken)
 		}
 		return e
-	})
+	}()
 	return id, e
 }
 

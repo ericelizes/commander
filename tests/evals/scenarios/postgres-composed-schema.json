@@ -1,0 +1,4 @@
+{
+  "description": "Private commander_trial schema composition scenario run by internal/store TestPostgresComposedConvergence: fresh, populated core 1 and populated exact Mac places 2 converge to qualified 3; active claim, heartbeat and comment deduplication records survive. Rollback and lifecycle assertions run in native companion tests. No live store or Mac service.",
+  "versions": [0, 1, 2]
+}

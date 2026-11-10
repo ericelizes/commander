@@ -1,6 +1,5 @@
--- PROVISIONAL migration 3: unpublished coordinated candidate. The independent
--- places candidate calls itself v2; this candidate rejects v2. Unify/reassign before deployment;
--- this number DOES NOT imply compatibility with that candidate.
+-- Migration 3 follows the exact reserved Mac places migration 2.
+-- Both execute under the opener migration lock in one transaction.
 ALTER TABLE bead_dependencies ADD COLUMN target_project_id BIGINT;
 UPDATE bead_dependencies SET target_project_id=project_id;
 ALTER TABLE bead_dependencies DROP CONSTRAINT bead_dependencies_project_id_depends_on_id_fkey;
