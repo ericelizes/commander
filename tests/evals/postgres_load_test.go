@@ -86,7 +86,7 @@ func TestPostgresThousandAgentLoad(t *testing.T) {
 	var writes atomic.Int64
 	writeErrors := make(chan error, 1)
 	var wg sync.WaitGroup
-	runCtx, stop := context.WithTimeout(ctx, 5*time.Second)
+	runCtx, stop := context.WithTimeout(ctx, 20*time.Second)
 	defer stop()
 	wg.Add(1)
 	go func() {
@@ -115,7 +115,9 @@ func TestPostgresThousandAgentLoad(t *testing.T) {
 		start := time.Now()
 		snap := source.Snapshot(ctx)
 		elapsed := time.Since(start)
-		t.Logf("read=%s phases=%s", elapsed, snap.Phases.String())
+		if elapsed > 200*time.Millisecond {
+			t.Logf("slow read=%s phases=%s", elapsed, snap.Phases.String())
+		}
 		if snap.Degraded != nil {
 			t.Fatalf("load read degraded: %#v", snap.Degraded)
 		}
@@ -131,13 +133,13 @@ func TestPostgresThousandAgentLoad(t *testing.T) {
 		t.Fatal(e)
 	default:
 	}
-	if len(samples) < 10 {
+	if len(samples) < 50 {
 		t.Fatalf("insufficient reads: %d", len(samples))
 	}
 	sort.Slice(samples, func(i, j int) bool { return samples[i] < samples[j] })
 	p95 := samples[(len(samples)-1)*95/100]
-	t.Logf("1000 synthetic agents; committed runtime events=%d over 5s; reads=%d; p50=%s p95=%s max=%s", writes.Load(), len(samples), samples[len(samples)/2], p95, samples[len(samples)-1])
-	if writes.Load() < 450 {
+	t.Logf("1000 synthetic agents; committed runtime events=%d over 20s; reads=%d; p50=%s p95=%s max=%s", writes.Load(), len(samples), samples[len(samples)/2], p95, samples[len(samples)-1])
+	if writes.Load() < 1800 {
 		t.Fatalf("writer did not sustain target rate: %d events", writes.Load())
 	}
 	if p95 > 200*time.Millisecond {
