@@ -58,7 +58,39 @@ const UpdateAPIDenyReason = "Installing Commander is the user's decision: the ap
 // network tool aimed at cmdrd's port or api-url that mentions update is refused
 // too.
 func TouchesUpdateAPI(command string) bool {
-	flat := strings.ToLower(decodeANSIC(command))
+	return touchesUpdateAPI(command, 0)
+}
+
+func touchesUpdateAPI(command string, depth int) bool {
+	// Use the shared shell parser to keep heredoc source data out of the
+	// endpoint heuristic. Preserve executable substitutions and interpreter
+	// input, including text piped from a heredoc into an interpreter. Keep the
+	// conservative whole-command heuristic for all remaining words.
+	var executable strings.Builder
+	segs := parse(command)
+	interpreter := false
+	for _, seg := range segs {
+		words := unwrap(stripGroup(seg.words), false)
+		if len(words) > 0 && (tmuxSinks[baseName(words[0])] || networkTool.MatchString(baseName(words[0]))) {
+			interpreter = true
+		}
+	}
+	for _, seg := range segs {
+		executable.WriteString(strings.Join(seg.words, " "))
+		executable.WriteByte('\n')
+		for _, sub := range seg.subs {
+			if depth >= 4 {
+				executable.WriteString(sub) // conservative at the parser's depth bound
+			} else if touchesUpdateAPI(sub, depth+1) {
+				return true
+			}
+		}
+		if interpreter || seg.piped {
+			executable.WriteString(seg.inputText)
+			executable.WriteByte('\n')
+		}
+	}
+	flat := strings.ToLower(decodeANSIC(executable.String()))
 	squashed := strings.NewReplacer("'", "", `"`, "", "\\", "", " ", "", "\t", "", "\n", "", "`", "").Replace(flat)
 	if strings.Contains(squashed, "/api/up") || strings.Contains(squashed, "api/update") {
 		return true
