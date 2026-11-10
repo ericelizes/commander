@@ -60,8 +60,14 @@ func RuntimeFallbackFile(home, role string) string {
 // Codex has usage and hooks. Nothing left = ErrNoUsage. It writes nothing.
 func planManagerStart(home, role string, fresh bool, usage map[string]Usage, now time.Time, hooksReady func() bool) (managerPlan, error) {
 	codexOut := usage[UsageKey(RuntimeCodex, "")].Out(now)
-	codexOK := func() bool { return !codexOut && hooksReady() }
 	pin := ManagerPin(home, role)
+	codexOK := func() bool {
+		if codexOut {
+			return false
+		}
+		// A pinned Codex Manager is not moved by one failed hooks check: ask once more.
+		return hooksReady() || (pin == RuntimeCodex && hooksReady())
+	}
 	if fresh && !fileExists(RuntimeFile(home, role)) &&
 		CodexByShare(strings.TrimPrefix(role, "manager-"), agentrt.CodexManagerShare()) && codexOK() {
 		return managerPlan{runtime: RuntimeCodex}, nil
@@ -119,13 +125,21 @@ func writeManagerRuntime(home, role string, plan managerPlan) error {
 	if plan.pin == "" {
 		return WriteAutoRuntime(home, role, plan.runtime)
 	}
-	if err := WriteEffectiveRuntime(home, role, plan.runtime); err != nil {
-		return err
-	}
 	if plan.runtime == plan.pin {
+		if err := WriteEffectiveRuntime(home, role, plan.runtime); err != nil {
+			return err
+		}
 		return removeFallback(home, role)
 	}
-	return os.WriteFile(RuntimeFallbackFile(home, role), []byte(plan.pin+"\n"), 0o600)
+	// The fallback goes first: a crash between the two writes then still
+	// leaves the pin on record.
+	if err := os.MkdirAll(filepath.Join(home, "chat"), 0o700); err != nil {
+		return err
+	}
+	if err := os.WriteFile(RuntimeFallbackFile(home, role), []byte(plan.pin+"\n"), 0o600); err != nil {
+		return err
+	}
+	return WriteEffectiveRuntime(home, role, plan.runtime)
 }
 
 func removeFallback(home, role string) error {

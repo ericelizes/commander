@@ -195,3 +195,39 @@ func TestPlanManagerStartDrawnCodexStaysWhileClaudeIsOut(t *testing.T) {
 		t.Errorf("share 0, Claude out: %+v %v", p, err)
 	}
 }
+
+// One failed hooks check does not move a pinned Codex Manager.
+func TestPlanManagerStartRetriesATransientHooksCheck(t *testing.T) {
+	home := t.TempDir()
+	now := time.Now()
+	_ = WriteRuntime(home, "manager-pin", RuntimeCodex)
+	calls := 0
+	flaky := func() bool { calls++; return calls > 1 }
+	p, err := planManagerStart(home, "manager-pin", false, map[string]Usage{}, now, flaky)
+	if err != nil || p.runtime != RuntimeCodex || calls != 2 {
+		t.Errorf("pinned Codex, one failed check: %+v %v calls=%d", p, err, calls)
+	}
+}
+
+// The fallback marker is on disk before the runtime file changes, so a crash
+// between the writes keeps the Codex pin.
+func TestWriteManagerRuntimeWritesTheFallbackFirst(t *testing.T) {
+	home := t.TempDir()
+	_ = WriteRuntime(home, "manager-pin", RuntimeCodex)
+	// Block the runtime write: a directory where the runtime file goes.
+	rf := RuntimeFile(home, "manager-pin")
+	if err := os.Remove(rf); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(rf, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	plan := managerPlan{runtime: RuntimeClaude, account: "default", pin: RuntimeCodex}
+	if err := writeManagerRuntime(home, "manager-pin", plan); err == nil {
+		t.Fatal("runtime write should have failed")
+	}
+	b, err := os.ReadFile(RuntimeFallbackFile(home, "manager-pin"))
+	if err != nil || strings.TrimSpace(string(b)) != RuntimeCodex {
+		t.Errorf("fallback after a failed runtime write: %q %v", b, err)
+	}
+}
