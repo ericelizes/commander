@@ -106,9 +106,13 @@ func TestCompletionAuthorityScenario(t *testing.T) {
 	var sc struct {
 		Roles         []string
 		ChildStatuses []string
+		Legacy        bool
 	}
 	if err = json.Unmarshal(raw, &sc); err != nil {
 		t.Fatal(err)
+	}
+	if sc.Legacy {
+		t.Run("legacy", TestLegacyUserGatePassAuthority)
 	}
 	for _, role := range sc.Roles {
 		t.Run(role, func(t *testing.T) {
@@ -193,5 +197,62 @@ func TestCloseParentUnreadableRefuses(t *testing.T) {
 				t.Fatal(code, msg, m.Calls)
 			}
 		})
+	}
+}
+
+// Both discovery forms must refuse without migrating any legacy history.
+func TestLegacyUserGatePassAuthority(t *testing.T) {
+	for _, project := range []string{"manifest", ""} {
+		for _, role := range []string{"manager-sample", "operator-sample", "reviewer-sample", "", "commander"} {
+			t.Run(project+"/"+role, func(t *testing.T) {
+				m := setupGateProject(t)
+				t.Setenv("COMMANDER_ROLE", role)
+				t.Setenv("COMMANDER_MANAGER_ROLE", "")
+				st, cleanup, err := needsYouStoreFn()
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer cleanup()
+				ctx := context.Background()
+				p, err := st.GetProjectByName(ctx, "manifest")
+				if err != nil {
+					t.Fatal(err)
+				}
+				for _, g := range []store.Gate{
+					{ProjectID: p.ID, BeadID: "ms-1.2", Name: "approval", Verifier: "user", Check: "Approve sample change"},
+					{ProjectID: p.ID, BeadID: "ms-1.2", Name: "history", Verifier: "reviewer:sample", Check: "Review sample change"},
+				} {
+					if err := st.UpsertGate(ctx, g); err != nil {
+						t.Fatal(err)
+					}
+				}
+				if err := st.SetGateResult(ctx, p.ID, "ms-1.2", "history", store.GatePassed, "Retained review", "sample", time.Unix(70, 0)); err != nil {
+					t.Fatal(err)
+				}
+				beforeBeads, _ := json.Marshal(m)
+				rows, err := st.ListAllGates(ctx)
+				if err != nil {
+					t.Fatal(err)
+				}
+				beforeRows, _ := json.Marshal(rows)
+				code, _, msg := gateCmd(t, "pass", "--project", project, "--bead", "ms-1.2", "--name", "approval", "--evidence", "Approved sample change", "--by", "user")
+				rows, err = st.ListAllGates(ctx)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if role == "" || role == "commander" {
+					if code != 0 || len(rows) != 0 {
+						t.Fatal(code, msg, rows)
+					}
+					return
+				}
+				afterBeads, _ := json.Marshal(m)
+				afterRows, _ := json.Marshal(rows)
+				if code == 0 || !strings.Contains(msg, "only the user or Commander") || string(beforeBeads) != string(afterBeads) || string(beforeRows) != string(afterRows) {
+					t.Fatal("legacy refusal changed state", code, msg)
+				}
+				fmt.Printf("Legacy pass refused for %s (project=%q); beads and historical rows unchanged\n", role, project)
+			})
+		}
 	}
 }

@@ -491,11 +491,85 @@ func ensureGateWait(ctx context.Context, bc beads.Client, dir, beadID, verifier 
 	return bc.SetLabel(ctx, dir, beadID, w.Label(), true)
 }
 
+// gatePassProject authorizes the actual target before any legacy migration.
+// Existing gate beads take precedence over legacy rows, as in gates.Migrate.
+func gatePassProject(ctx context.Context, st *store.Store, projectName, beadID, name string) (store.Project, error) {
+	ps, err := st.ListProjects(ctx)
+	if err != nil {
+		return store.Project{}, err
+	}
+	if projectName != "" {
+		p, err := st.GetProjectByName(ctx, projectName)
+		if err != nil || p == nil {
+			return store.Project{}, fmt.Errorf("project %q not added", projectName)
+		}
+		ps = []store.Project{*p}
+	}
+	legacy, err := st.ListAllGates(ctx)
+	if err != nil {
+		return store.Project{}, err
+	}
+	bc := newBeadsClientFn()
+	for _, p := range ps {
+		ns, err := stageGates(ctx, bc, p, beadID)
+		if err != nil {
+			return store.Project{}, err
+		}
+		found := false
+		for _, n := range ns {
+			if n.Gate.Name != name {
+				continue
+			}
+			b, err := beads.FreshShow(ctx, bc, p.Path, n.ID)
+			if err != nil || b == nil {
+				return store.Project{}, fmt.Errorf("cannot verify gate %s authority: %v", n.ID, err)
+			}
+			if err := authorizeGatePass(n.Gate, b.Labels); err != nil {
+				return store.Project{}, err
+			}
+			found = true
+			break
+		}
+		if !found {
+			for _, g := range legacy {
+				if g.ProjectID == p.ID && g.BeadID == beadID && g.Name == name {
+					if err := authorizeGatePass(g, nil); err != nil {
+						return store.Project{}, err
+					}
+					found = true
+					break
+				}
+			}
+		}
+		if found {
+			if _, err := gates.Migrate(ctx, st, bc, p); err != nil {
+				return store.Project{}, err
+			}
+			return p, nil
+		}
+	}
+	return store.Project{}, fmt.Errorf("%s: no gate %q", beadID, name)
+}
+
+func authorizeGatePass(g store.Gate, labels []string) error {
+	userGate := ownercompat.Normalize(g.Verifier) == store.VerifierUser
+	for _, label := range labels {
+		if approver, ok := strings.CutPrefix(label, beads.ApproverLabelPrefix); ok && ownercompat.Normalize(approver) == "user" {
+			userGate = true
+		}
+	}
+	role := os.Getenv("COMMANDER_ROLE")
+	if userGate && (callerIsOperator(role) || (role != "" && role != "commander")) {
+		return fmt.Errorf("refused: only the user or Commander may pass user gate %q; --by is attribution, not approval authority", g.Name)
+	}
+	return nil
+}
+
 func gatePass(ctx context.Context, st *store.Store, projectName, beadID, name, evidence, by, noPR string) (any, error) {
 	if strings.TrimSpace(evidence) == "" {
 		return nil, fmt.Errorf("passing a gate needs --evidence: what shows it holds (text or url)")
 	}
-	p, err := gateProject(ctx, st, projectName, beadID)
+	p, err := gatePassProject(ctx, st, projectName, beadID, name)
 	if err != nil {
 		return nil, err
 	}
@@ -519,15 +593,8 @@ func gatePass(ctx context.Context, st *store.Store, projectName, beadID, name, e
 		if err != nil || gateBead == nil {
 			return nil, fmt.Errorf("cannot verify gate %s authority: %v", n.ID, err)
 		}
-		userGate := g.Verifier == store.VerifierUser
-		for _, label := range gateBead.Labels {
-			if approver, ok := strings.CutPrefix(label, beads.ApproverLabelPrefix); ok && ownercompat.Normalize(approver) == "user" {
-				userGate = true
-			}
-		}
-		role := os.Getenv("COMMANDER_ROLE")
-		if userGate && (callerIsOperator(role) || (role != "" && role != "commander")) {
-			return nil, fmt.Errorf("refused: only the user or Commander may pass user gate %q; --by is attribution, not approval authority", name)
+		if err := authorizeGatePass(g, gateBead.Labels); err != nil {
+			return nil, err
 		}
 		if g.Verifier == store.VerifierAuto {
 			return nil, fmt.Errorf("gate %q is auto: run `cmdr internal-gate check` instead of passing it by hand", name)
@@ -618,7 +685,7 @@ func requireGatesPassed(ctx context.Context, projectName, beadID string) error {
 	for _, g := range un {
 		parts = append(parts, fmt.Sprintf("%s (%s, %s)", g.Name, g.Verifier, g.Status))
 	}
-	return fmt.Errorf("%s has gates that have not passed: %s. Run `cmdr internal-gate check --project %s --bead %s` for auto gates; others are passed with `internal-gate pass --bead %s --name <gate> --evidence <text>`",
+	return fmt.Errorf("%s has gates that have not passed: %s. Run `cmdr internal-gate check --project %s --bead %s` for auto gates; reviewer gates are passed with `internal-gate pass --bead %s --name <gate> --evidence <text>`; user gates require an answered approval card or the actual user/Commander",
 		beadID, strings.Join(parts, ", "), projectName, beadID, beadID)
 }
 

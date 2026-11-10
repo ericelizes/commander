@@ -212,7 +212,11 @@ edge already gone counts as done, so after a failure run the same command again.
 5. **Verify the gates with evidence**: `cmdr internal-gate check --project <p> --bead <stage>`
    runs the automatic checks and records the evidence on the bead. Gates that
    wait on people (`reviewer:`, `user`) are tied to `--waiting` so cmdrd wakes
-   you; when one is met, `cmdr internal-gate pass ... --evidence "<link/text>"`.
+   you. When a reviewer gate is met, record its evidence with
+   `cmdr internal-gate pass ... --evidence "<link/text>"`. User gates require
+   the supported answered approval card flow or a pass by the actual user or
+   Commander; Managers and Operators cannot pass them. `--by user` only records
+   attribution and grants no approval authority.
    **One gate per stage, on the standard lifecycle.** For build work the
    stages ARE the gates: **spec** (the user approves the spec), **pr-ready** (CI
    green + threads resolved, auto), **reviewed** (a separate review Operator
