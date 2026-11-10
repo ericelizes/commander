@@ -269,7 +269,7 @@ func TestShipCatchesUpAfterTheQueueWaitBeforeVerifying(t *testing.T) {
 	var checks int
 	var out bytes.Buffer
 	opts := Options{Root: dir, Branch: "feat", Exclusive: exclusive, Run: buildCounter(nil, &checks)}
-	if err := Run(context.Background(), opts, &out); err != nil {
+	if err := runFakeShip(context.Background(), opts, &out); err != nil {
 		t.Fatalf("Run: %v\n%s", err, out.String())
 	}
 	if checks != 1 {
@@ -303,7 +303,7 @@ func TestShipHoldsTheLockThroughReplayAndMerge(t *testing.T) {
 		}
 	}, &checks)
 	var out bytes.Buffer
-	if err := Run(context.Background(), Options{Root: dir, Branch: "feat", Exclusive: exclusive, Run: run}, &out); err != nil {
+	if err := runFakeShip(context.Background(), Options{Root: dir, Branch: "feat", Exclusive: exclusive, Run: run}, &out); err != nil {
 		t.Fatalf("Run: %v\n%s", err, out.String())
 	}
 	if locks != 1 || checks != 2 {
@@ -318,7 +318,7 @@ func TestShipGivesUpWhenMainKeepsMoving(t *testing.T) {
 	dir := newRepo(t)
 	checks, n := 0, 0
 	run := buildCounter(func() { n++; commit(t, dir, "m"+string(rune('a'+n))) }, &checks)
-	err := Run(context.Background(), Options{Root: dir, Branch: "feat", Run: run}, io.Discard)
+	err := runFakeShip(context.Background(), Options{Root: dir, Branch: "feat", Run: run}, io.Discard)
 	if err == nil || !strings.Contains(err.Error(), "moved 4 times") {
 		t.Fatalf("err = %v", err)
 	}
@@ -336,7 +336,7 @@ func TestShipHoldSetDuringTheQueueWaitSkipsTheVerify(t *testing.T) {
 		return func() {}, nil
 	}
 	checks := 0
-	err := Run(context.Background(), Options{Root: dir, Branch: "feat", Exclusive: exclusive, Run: buildCounter(nil, &checks),
+	err := runFakeShip(context.Background(), Options{Root: dir, Branch: "feat", Exclusive: exclusive, Run: buildCounter(nil, &checks),
 		Hold: func(context.Context) error {
 			if onHold {
 				return errors.New("held by manager-x: stop")
@@ -365,7 +365,7 @@ func TestQueueWaitDoesNotCountAgainstTheBudget(t *testing.T) {
 		return "", nil
 	}
 	opts := Options{Root: dir, Branch: "feat", Exclusive: wait, VerifyBudget: budget, Run: run}
-	if err := Run(context.Background(), opts, io.Discard); err != nil {
+	if err := runFakeShip(context.Background(), opts, io.Discard); err != nil {
 		t.Fatal(err)
 	}
 	if verifyErr != nil {
@@ -379,7 +379,7 @@ func TestVerifyOverBudgetSaysSoAndIsNotCalledRed(t *testing.T) {
 		<-ctx.Done()
 		return "", errors.New("signal: killed")
 	}
-	err := Run(context.Background(), Options{Root: dir, Branch: "feat", VerifyBudget: 20 * time.Millisecond, Run: run}, io.Discard)
+	err := runFakeShip(context.Background(), Options{Root: dir, Branch: "feat", VerifyBudget: 20 * time.Millisecond, Run: run}, io.Discard)
 	if err == nil || !strings.Contains(err.Error(), "verify budget ran out") {
 		t.Fatalf("err = %v", err)
 	}
@@ -412,7 +412,7 @@ func TestQueueWaitHasItsOwnBound(t *testing.T) {
 		"forever":  forever,
 		"via slot": viaSlot,
 	} {
-		err := Run(context.Background(), Options{Root: dir, Branch: "feat", Exclusive: exclusive, Run: okRun}, io.Discard)
+		err := runFakeShip(context.Background(), Options{Root: dir, Branch: "feat", Exclusive: exclusive, Run: okRun}, io.Discard)
 		if err == nil || !strings.Contains(err.Error(), "ship lock") || !errors.Is(err, context.DeadlineExceeded) {
 			t.Errorf("%s: err = %v", name, err)
 		}
