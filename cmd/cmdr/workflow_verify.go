@@ -201,7 +201,7 @@ func checkWorkflowClose(ctx context.Context, bc beads.Client, dir, project, id s
 func checkWorkflowCloseWaiving(ctx context.Context, bc beads.Client, dir, project, id string, w *noPRWaiver) error {
 	bc = freshReader(bc)
 	var seen settleSeen
-	err := checkWorkflowCloseOnce(ctx, bc, dir, project, id, &seen)
+	err := checkWorkflowCloseOnce(ctx, bc, dir, project, id, &seen, w)
 	if err == nil || seen.pr == "" {
 		return err
 	}
@@ -222,7 +222,7 @@ func settleHint(ctx context.Context, project string, seen settleSeen, refused er
 	return fmt.Errorf("%w. %s merged outside the review: if it will not be reviewed, the owning Manager settles the block (closes its open steps as settled, not reviewed, keeping earlier checks): cmdr workflow settle-block --project %s --block %s --reason '<why the review was not completed>'", refused, seen.pr, project, seen.block)
 }
 
-func checkWorkflowCloseOnce(ctx context.Context, bc beads.Client, dir, project, id string, seen *settleSeen) error {
+func checkWorkflowCloseOnce(ctx context.Context, bc beads.Client, dir, project, id string, seen *settleSeen, w *noPRWaiver) error {
 	b, err := bc.Show(ctx, dir, id)
 	if err != nil {
 		return err
@@ -498,7 +498,7 @@ func checkWorkflowCloseOnce(ctx context.Context, bc beads.Client, dir, project, 
 	findings := workflowtemplate.MergeRule(project, repo, nodes, scope)
 	if len(findings) > 0 {
 		if w != nil && !managed && onlyNoPR(findings, id) {
-			if namesPR(n.Bead) {
+			if namesPR(*b) {
 				return fmt.Errorf("%s (--no-pr refused: the gate's own check names a PR; label it pr:<n> and plug its review, or redefine the check)", findings[0].Text)
 			}
 			return bc.AddComment(ctx, dir, id, w.comment())
