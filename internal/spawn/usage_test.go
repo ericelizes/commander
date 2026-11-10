@@ -74,8 +74,9 @@ func TestSteerByUsage(t *testing.T) {
 			rt: chat.RuntimeClaude, acct: "default", askedRt: chat.RuntimeClaude, wantRt: chat.RuntimeClaude, wantAcct: "work", moved: true},
 		{name: "claude account out, asked: refused naming the next", usage: map[string]chat.Usage{"claude:work": out},
 			rt: chat.RuntimeClaude, acct: "work", askedAcct: "work", err: []string{"Claude account work is out of usage", "--account default"}},
-		{name: "every claude account out: refused naming codex", usage: map[string]chat.Usage{"claude:default": out, "claude:work": out},
-			rt: chat.RuntimeClaude, acct: "default", err: []string{"no other logged-in Claude account has usage left", "--runtime codex"}},
+		{name: "every claude account out: automatically runs codex", usage: map[string]chat.Usage{"claude:default": out, "claude:work": out},
+			rt: chat.RuntimeClaude, acct: "default", wantRt: chat.RuntimeCodex, wantAcct: "default", moved: true},
+		{name: "explicit claude cannot cross runtimes", usage: map[string]chat.Usage{"claude:default": out, "claude:work": out}, rt: chat.RuntimeClaude, acct: "default", askedRt: chat.RuntimeClaude, err: []string{"nothing was started"}},
 		{name: "everything out: refused", usage: map[string]chat.Usage{"codex": out, "claude:default": out, "claude:work": out},
 			rt: chat.RuntimeCodex, acct: "default", err: []string{"no other logged-in Claude account has usage left", "nothing was started"}},
 		{name: "a reset passed counts as usage", usage: map[string]chat.Usage{"codex": reset},
@@ -121,7 +122,7 @@ func TestSteerByUsageSkipsTheSameLogin(t *testing.T) {
 		}
 	}
 	now := time.Now()
-	_, err := steerByUsage(home, map[string]chat.Usage{"claude:default": {Status: chat.UsageOut}}, now, chat.RuntimeClaude, "default", "", "")
+	_, err := steerByUsage(home, map[string]chat.Usage{"claude:default": {Status: chat.UsageOut}}, now, chat.RuntimeClaude, "default", chat.RuntimeClaude, "")
 	if err == nil || !strings.Contains(err.Error(), "no other logged-in Claude account") {
 		t.Fatalf("moved to the same login: %v", err)
 	}
@@ -275,7 +276,11 @@ func TestCheckUsage(t *testing.T) {
 		{TaskText: "fix it"},
 	} {
 		err := CheckUsage(req, "operator-d", "manager-sample-1")
-		if err == nil || !strings.Contains(err.Error(), "Claude account work is out of usage") {
+		if req.Runtime == "" {
+			if err != nil {
+				t.Errorf("automatic fallback: %v", err)
+			}
+		} else if err == nil || !strings.Contains(err.Error(), "Claude account work is out of usage") {
 			t.Errorf("%+v: %v", req, err)
 		}
 	}
@@ -555,5 +560,44 @@ func TestSavedAccountOrderCannotUseAnUnlistedProvider(t *testing.T) {
 	req, err := sp.resolveProvider(context.Background(), SpawnRequest{AgentAccounts: []string{chat.RuntimeCodex, chat.RuntimeClaude}, TaskText: "bounded parser fix"}, "worker")
 	if err != nil || req.Runtime != chat.RuntimeClaude {
 		t.Fatalf("authorized fallback failed: %+v %v", req, err)
+	}
+}
+
+func TestResolveProviderClaudeOutRespectsIntent(t *testing.T) {
+	home := usageHome(t)
+	old := codexHooksReady
+	codexHooksReady = func() bool { return true }
+	t.Cleanup(func() { codexHooksReady = old })
+	markOut(t, home, chat.RuntimeClaude, "default")
+	for _, tc := range []struct {
+		name    string
+		req     SpawnRequest
+		pin     string
+		refused bool
+	}{
+		{name: "automatic", req: SpawnRequest{TaskBeadID: "sample-1"}},
+		{name: "explicit claude", req: SpawnRequest{Runtime: chat.RuntimeClaude}, refused: true},
+		{name: "saved claude pin", req: SpawnRequest{Resume: true}, pin: chat.RuntimeClaude, refused: true},
+		{name: "local service", req: SpawnRequest{TaskText: "Run docker compose"}, refused: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			role := "operator-" + strings.ReplaceAll(tc.name, " ", "-")
+			if tc.pin != "" {
+				if err := chat.WriteRuntime(home, role, tc.pin); err != nil {
+					t.Fatal(err)
+				}
+			}
+			s := &Spawner{beads: &beads.MockClient{}}
+			got, err := s.resolveProvider(context.Background(), tc.req, role)
+			if (err != nil) != tc.refused {
+				t.Fatalf("got %+v, %v", got, err)
+			}
+			if !tc.refused && (got.Runtime != chat.RuntimeCodex || got.runtimeReason != ReasonCodexClaudeOut || got.moved == "") {
+				t.Fatalf("got %+v", got)
+			}
+			if (CheckUsage(tc.req, role, "") != nil) != tc.refused {
+				t.Fatal("preflight differs from resolver")
+			}
+		})
 	}
 }

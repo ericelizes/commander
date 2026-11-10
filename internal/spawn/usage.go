@@ -16,6 +16,7 @@ import (
 // ReasonClaudeCodexOut records a run that would have gone to Codex (a pin or a
 // share draw) and runs on Claude because Codex reports no usage left.
 const ReasonClaudeCodexOut = chat.RuntimeClaude + "-codex-out"
+const ReasonCodexClaudeOut = chat.RuntimeCodex + "-claude-out"
 
 // readUsage and usageNow are what a spawn knows of plan usage: the file cmdrd
 // keeps from the rate-limit reports its chats and bridges see (the same one
@@ -40,7 +41,7 @@ type providerPick struct {
 // (pickOperatorRuntime), the Claude account (pickOperatorAccount), then
 // steerByUsage, so no Operator starts on a runtime or account that reports no
 // usage left. A request that named the runtime or account itself is refused
-// with the way out; anything else moves to a Claude account with usage. It
+// with the way out; automatic choices move to a guarded provider with usage. It
 // writes nothing: applyProvider records the choice and any move once the
 // spawn's own refusals (lock, branch, stop) are behind it, so a refused spawn
 // leaves the role's runtime, account and intent as they were.
@@ -67,7 +68,7 @@ func (s *Spawner) resolveProvider(ctx context.Context, req SpawnRequest, agentNa
 	req.Account = acct
 	req.pick = pick
 	home := agentrt.CommanderHome()
-	mv, err := steerByUsage(home, readUsage(home), usageNow(), req.Runtime, req.Account, asked.Runtime, asked.Account)
+	mv, err := steerByUsage(home, readUsage(home), usageNow(), req.Runtime, req.Account, usageRuntimeIntent(asked, agentName, pick.reason), asked.Account)
 	if err != nil {
 		return req, fmt.Errorf("spawn: %s: %w", agentName, err)
 	}
@@ -77,6 +78,9 @@ func (s *Spawner) resolveProvider(ctx context.Context, req SpawnRequest, agentNa
 	mv.fromRuntime, mv.fromAccount = req.Runtime, req.Account
 	if mv.runtime != req.Runtime {
 		req.Runtime, req.runtimeReason = mv.runtime, ReasonClaudeCodexOut
+		if mv.runtime == chat.RuntimeCodex {
+			req.runtimeReason = ReasonCodexClaudeOut
+		}
 	}
 	req.Account = mv.account
 	req.moved = mv.note
@@ -142,7 +146,7 @@ func CheckUsage(req SpawnRequest, agentName, managerRole string) error {
 	req.managerRole = managerRole
 	home := agentrt.CommanderHome()
 	usage, now := readUsage(home), usageNow()
-	rt, _, _ := pickOperatorRuntime(req, agentName)
+	rt, reason, _ := pickOperatorRuntime(req, agentName)
 	runtimes := []string{rt}
 	if rt == chat.RuntimeClaude && req.Runtime == "" && req.Account == "" && !req.Resume && slices.Contains(agentOrder(req), chat.RuntimeCodex) && codexHooksReady() {
 		runtimes = append(runtimes, chat.RuntimeCodex)
@@ -156,7 +160,7 @@ func CheckUsage(req SpawnRequest, agentName, managerRole string) error {
 			err = aerr
 			continue
 		}
-		if _, err = steerByUsage(home, usage, now, rt, acct, req.Runtime, req.Account); err == nil {
+		if _, err = steerByUsage(home, usage, now, rt, acct, usageRuntimeIntent(req, agentName, reason), req.Account); err == nil {
 			return nil
 		}
 	}
@@ -176,8 +180,9 @@ type usageMove struct {
 // named Codex, else moved to Claude. A Claude account out (or not logged in
 // after such a move): refused when the request named it, else moved to the
 // next logged-in account with usage, by chat.NextAccountWith's rules (never
-// one sharing a login with an account that is out). No such account: refused,
-// naming Codex when it has usage. An account with no report counts as having
+// one sharing a login with an account that is out). With none left, an automatic
+// runtime moves to guarded Codex when available; otherwise it refuses.
+// An account with no report counts as having
 // usage: nothing polls the providers.
 func steerByUsage(home string, usage map[string]chat.Usage, now time.Time, rt, acct, askedRuntime, askedAccount string) (usageMove, error) {
 	mv := usageMove{runtime: rt, account: acct}
@@ -214,6 +219,11 @@ func steerByUsage(home string, usage map[string]chat.Usage, now time.Time, rt, a
 	}
 	next := nextWithUsage(home, usage, now, acct)
 	if next == "" {
+		if askedRuntime == "" && !codex.Out(now) && codexHooksReady() {
+			mv.runtime = chat.RuntimeCodex
+			mv.note = fmt.Sprintf("was headed for Claude account %s; no logged-in Claude account has usage left, so it runs on Codex instead.", acct)
+			return mv, nil
+		}
 		return mv, fmt.Errorf("Claude account %s %s and no other logged-in Claude account has usage left (cmdr account list)%s; nothing was started",
 			acct, state, codexWayOut(codex, now, askedRuntime))
 	}
@@ -313,4 +323,18 @@ func nextWithUsage(home string, usage map[string]chat.Usage, now time.Time, from
 		}
 	}
 	return claudeacct.Default
+}
+
+// Explicit Claude intent and local background services cannot run on Codex.
+func usageRuntimeIntent(req SpawnRequest, role, reason string) string {
+	if req.Runtime != "" {
+		return req.Runtime
+	}
+	if reason == ReasonClaudeServiceKeyword || needsBackgroundService(req.TaskText) {
+		return chat.RuntimeClaude
+	}
+	if req.Resume && chat.ReadRuntimePin(agentrt.CommanderHome(), role) == chat.RuntimeClaude {
+		return chat.RuntimeClaude
+	}
+	return ""
 }

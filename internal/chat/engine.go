@@ -104,7 +104,8 @@ type Engine struct {
 	// first start attempt; nil before ResumeRunning (nothing to wait for).
 	resumed chan struct{}
 
-	crashes map[string][]time.Time // role -> recent crash restarts, guarded by mu
+	capacity map[string]string      // last refused Manager usage start, guarded by mu
+	crashes  map[string][]time.Time // role -> recent crash restarts, guarded by mu
 }
 
 // WaitResumed blocks until the chats running before a restart have been picked

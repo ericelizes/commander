@@ -133,13 +133,17 @@ func runInternalMail(args []string, stdout, stderr *os.File) int {
 		return 0
 	}
 
-	toRoles, err = canonicalRecipients(ctx, st, amProjectKey, toRoles, stderr)
+	toRoles = rerouteOperatorMail(ctx, st, *from, toRoles, *importance, stderr)
+	toRoles, ccRole, movedTo, rerouteRun := rerouteStaleManager(ctx, st, *from, toRoles, stderr)
+	var routeNotes strings.Builder
+	toRoles, err = ownedDeliveryRecipients(ctx, st, amProjectKey, toRoles, io.MultiWriter(stderr, &routeNotes))
 	if err != nil {
 		emitErr(stderr, err.Error())
 		return 1
 	}
-	toRoles = rerouteOperatorMail(ctx, st, *from, toRoles, *importance, stderr)
-	toRoles, ccRole, movedTo, rerouteRun := rerouteStaleManager(ctx, st, *from, toRoles, stderr)
+	if routeNotes.Len() > 0 {
+		*body += "\n\n" + routeNotes.String()
+	}
 	startMissingManagers(ctx, st, amProjectKey, toRoles, stderr)
 
 	if err := sendRoleMail(ctx, st, client, amProjectKey, *from, toRoles, *subject, *body, agentmail.SendOptions{
@@ -149,7 +153,7 @@ func runInternalMail(args []string, stdout, stderr *os.File) int {
 		emitErr(stderr, err.Error())
 		return 1
 	}
-	if ccRole != "" {
+	if ccRole != "" && slices.Contains(routeManagerRecipients(ctx, st, []string{ccRole}, stderr), ccRole) {
 		// The Manager the Operator still names hears once per run that its reports
 		// now go elsewhere, after the owner has them; a failed copy is tried again
 		// with the run's next mail.
@@ -619,4 +623,48 @@ func briefLine(m agentmail.Mail) string {
 		line += " — " + first
 	}
 	return line
+}
+
+// CLI mail uses the same fresh ownership route as watcher mail. Unknown roles
+// and failed reads keep the address; no routing read starts a Manager.
+var managerMailOwner = func(ctx context.Context, st amAgentStore, role string) (string, string, error) {
+	real, ok := st.(*store.Store)
+	if !ok {
+		return role, "", nil
+	}
+	m := &wsmgr.Manager{Store: real, Beads: newBeadsClientFn()}
+	return m.OwnerOfRole(ctx, role)
+}
+
+func routeManagerRecipients(ctx context.Context, st amAgentStore, roles []string, stderr io.Writer) []string {
+	// Reserve half the remaining command budget for delivery, across all recipients.
+	readCtx := ctx
+	if deadline, ok := ctx.Deadline(); ok {
+		var cancel context.CancelFunc
+		readCtx, cancel = context.WithTimeout(ctx, time.Until(deadline)/2)
+		defer cancel()
+	}
+	out := []string{}
+	for _, role := range roles {
+		if strings.HasPrefix(role, "manager-") {
+			owner, why, err := managerMailOwner(readCtx, st, role)
+			if err == nil && owner != role {
+				if owner == "" {
+					owner = "commander"
+				}
+				fmt.Fprintf(stderr, "note: mail to %s routed to %s by current ownership (%s)\n", role, owner, why)
+				role = owner
+			}
+		}
+		if !slices.Contains(out, role) {
+			out = append(out, role)
+		}
+	}
+	return out
+}
+
+// ownedDeliveryRecipients keeps ownership identity separate from the AM address.
+func ownedDeliveryRecipients(ctx context.Context, st amAgentStore, project string, roles []string, stderr io.Writer) ([]string, error) {
+	owners := routeManagerRecipients(ctx, st, roles, stderr)
+	return canonicalRecipients(ctx, st, project, owners, stderr)
 }

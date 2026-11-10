@@ -160,6 +160,7 @@ func (e *Engine) steerManager(role string, fresh bool) (moved string, changed bo
 		return "", false, err
 	}
 	plan, err := planChatStart(home, role, fresh, e.opts.Usage.All(now), now, e.hooksReady(), order)
+	e.recordCapacity(role, err)
 	if err != nil {
 		return "", false, err
 	}
@@ -253,6 +254,7 @@ func (e *Engine) moveManager(c *chatRole) {
 		return
 	}
 	plan, err := planChatStart(e.opts.Home, c.role, false, e.opts.Usage.All(now), now, e.hooksReady(), order)
+	e.recordCapacity(c.role, err)
 	if err != nil {
 		notice("Not moved: " + err.Error())
 		return
@@ -274,5 +276,30 @@ func (e *Engine) startMoved(c *chatRole, moved string) {
 	c.publish(Event{Kind: KindNotice, Source: SourceEngine, Subtype: "usage_limit_switch", Text: "Usage: " + moved + "."})
 	if f := e.opts.OnUsageMove; f != nil {
 		go f(c.role, c.role+" "+moved+".")
+	}
+}
+
+// CapacityFailures reports actual refused Manager starts, without probing or
+// launching providers. A successful plan or live successful turn clears the failure.
+func (e *Engine) CapacityFailures() map[string]string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	out := make(map[string]string, len(e.capacity))
+	for role, detail := range e.capacity {
+		out[role] = detail
+	}
+	return out
+}
+
+func (e *Engine) recordCapacity(role string, err error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if errors.Is(err, ErrNoUsage) {
+		if e.capacity == nil {
+			e.capacity = map[string]string{}
+		}
+		e.capacity[role] = err.Error()
+	} else if err == nil {
+		delete(e.capacity, role)
 	}
 }

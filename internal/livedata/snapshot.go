@@ -60,7 +60,8 @@ type Snapshot struct {
 	Degraded *SnapDegraded `json:"degraded,omitempty"`
 	// Health lists what keeps failing in cmdrd right now (mail that cannot reach
 	// an agent, a Manager that cannot start): each a problem until it clears.
-	Health []SnapHealth `json:"health,omitempty"`
+	Health          []SnapHealth      `json:"health,omitempty"`
+	ManagerCapacity map[string]string `json:"manager_capacity,omitempty"`
 	// Live is what cmdrd saw running when it built the snapshot; the board
 	// checks every claim against it (nil: not known, claims are taken as recorded).
 	Live *SnapLive `json:"live,omitempty"`
@@ -673,7 +674,8 @@ type Source struct {
 	// "project:bead" (nil: none).
 	PitchAsked func() map[string]int64
 	// Health is cmdrd's current problems (nil: none tracked).
-	Health func() []SnapHealth
+	Health          func() []SnapHealth
+	ManagerCapacity func() map[string]string
 	// OnSnapshot sees every snapshot built (cmdrd checks each plan against the rules).
 	OnSnapshot func(snap *Snapshot)
 	// Describe writes each active-mode row's one-liner from its state (nil: none).
@@ -894,6 +896,9 @@ func (s *Source) build(ctx context.Context, data Data) Snapshot {
 	snap.Live = live
 	if s.Deps.Store != nil && s.Deps.Store.IsPostgres() && liveRead != nil && live == nil {
 		snap.Degraded = &SnapDegraded{Reason: "Operator process activity could not be verified"}
+	}
+	if s.ManagerCapacity != nil {
+		snap.ManagerCapacity = s.ManagerCapacity()
 	}
 	if s.Health != nil {
 		snap.Health = s.Health()

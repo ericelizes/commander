@@ -302,6 +302,9 @@ func (b board) row(ws SnapWorkstream) BoardRow {
 	}
 	asks := b.asks[ws.Project+"\x00"+ws.Title]
 	manager, hasManager := b.s.Agents[ws.ManagerRole]
+	if b.s.ManagerCapacity[ws.ManagerRole] != "" {
+		manager.State, manager.Wait = store.AgentIdle, ""
+	}
 	reacting := managerReacting(b.s, ws.ManagerRole)
 	pickingUp := func(l line) line {
 		if b.s.OrchestrationMode != "active" && l.kind == "stalled" && reacting {
@@ -317,7 +320,7 @@ func (b board) row(ws SnapWorkstream) BoardRow {
 			l = line{kind: "working", text: "Operator working", why: "Its step was closed while it still runs (" + hidden + ")"}
 		}
 	}
-	l = rollUp(l, level, ownOpen(ws.Steps))
+	l = b.capacityLine(ws.ManagerRole, rollUp(l, level, ownOpen(ws.Steps)))
 	// One open nested workstream with nothing beside it stands in for the row.
 	title := titleOf(ws.Title, ws.BeadID)
 	scope, scopeRole := "", ""
@@ -365,18 +368,36 @@ func (b board) trackLevel(ws SnapWorkstream, steps []SnapStep, prefix string, ma
 			number = prefix
 		}
 		var chain []string
+		inheritedRole := ""
 		for {
 			c, only := soleChild(t.Children)
 			if !only {
 				break
 			}
 			chain = append(chain, t.BeadID)
+			if t.ManagerRole != "" {
+				inheritedRole = t.ManagerRole
+			}
 			t = c
+		}
+		if t.ManagerRole == "" && inheritedRole != "" {
+			t.ManagerRole = inheritedRole
 		}
 		tws := trackWorkstream(ws, t)
 		own := b.trackLine(ws, t, manager, hasManager, b.asksIn(ws.Project, t))
-		kids := b.trackLevel(ws, t.Children, number, manager, hasManager, pickingUp, byTrack)
-		l := rollUp(pickingUp(own), kids, ownOpen(t.Children))
+		// Recursion changes the owning role, so carry its matching agent state.
+		childManager, hasChildManager := manager, hasManager
+		if tws.ManagerRole != ws.ManagerRole {
+			childManager, hasChildManager = b.s.Agents[tws.ManagerRole]
+		}
+		kids := b.trackLevel(tws, t.Children, number, childManager, hasChildManager, pickingUp, byTrack)
+		local := own
+		if local.kind == "stalled" && managerReacting(b.s, tws.ManagerRole) {
+			local = line{kind: "working", text: "Manager picking it up", why: local.why, ageAs: local.ageAs}
+		}
+		local = humanWait(local, b.tasks)
+		l := rollUp(local, kids, ownOpen(t.Children))
+		l = b.capacityLine(tws.ManagerRole, l)
 		for _, id := range append(chain, t.BeadID) {
 			byTrack[id] = l
 		}
@@ -426,7 +447,7 @@ func (b board) asksIn(project string, t SnapStep) int {
 // managerReacting: the Manager is in a turn or has mail coming, so a stalled line reads "Manager picking it up".
 func managerReacting(s Snapshot, role string) bool {
 	manager, ok := s.Agents[role]
-	return s.Unread[role] > 0 || agentBusy(manager, ok)
+	return s.ManagerCapacity[role] == "" && (s.Unread[role] > 0 || agentBusy(manager, ok))
 }
 
 // trackLine is a track's line; the Manager counts as working on it only while its current step is inside.
@@ -440,6 +461,12 @@ func (b board) trackLine(ws SnapWorkstream, t SnapStep, manager SnapAgent, hasMa
 	tws.NowStep = ""
 	if here {
 		tws.NowStep = ws.NowStep
+	}
+	if tws.ManagerRole != ws.ManagerRole {
+		agent, hasManager = b.s.Agents[tws.ManagerRole]
+	}
+	if b.s.ManagerCapacity[tws.ManagerRole] != "" {
+		agent.State, agent.Wait = store.AgentIdle, ""
 	}
 	return b.workstreamLine(tws, agent, hasManager, asks)
 }
@@ -1385,6 +1412,9 @@ func trackWorkstream(ws SnapWorkstream, t SnapStep) SnapWorkstream {
 	ws.ExecutionMode = t.ExecutionMode
 	ws.ExecutionReady, ws.ExecutionEligible, ws.ExecutionReserved, ws.ExecutionCapable, ws.ExecutionAttempts, ws.ExecutionError = t.ExecutionReady, t.ExecutionEligible, t.ExecutionReserved, t.ExecutionCapable, t.ExecutionAttempts, t.ExecutionError
 	ws.BeadID, ws.Title, ws.State, ws.Status, ws.Steps = t.BeadID, t.Title, t.State, t.Status, t.Children
+	if t.ManagerRole != "" {
+		ws.ManagerRole = t.ManagerRole
+	}
 	ws.GateNodes, ws.NoGates, ws.Total, ws.Done = nil, t.NoGates, 0, 0
 	ws.Waiting, ws.WaitSince, ws.WaitUntil, ws.WaitUntilAs, ws.WaitUntils = t.Waiting, t.WaitSince, t.WaitUntil, t.WaitUntilAs, t.WaitUntils
 	ws.Hold, ws.HoldReason, ws.Withdrawn, ws.ProgressAt, ws.TypedWaits = t.Hold, t.HoldReason, t.Withdrawn, t.ProgressAt, t.TypedWaits
@@ -2069,4 +2099,20 @@ func (b board) trackActor(project, bead string) *nextactor.Row {
 		return &a
 	}
 	return nil
+}
+
+// capacityLine attaches a real failed start to every affected scope. External
+// waits, user decisions and live Operators retain their more specific line.
+func (b board) capacityLine(role string, l line) line {
+	detail := b.s.ManagerCapacity[role]
+	if detail == "" {
+		return l
+	}
+	if !strings.Contains(l.why, detail) {
+		l.why = strings.Trim(strings.TrimSpace(l.why+"; "+detail), "; ")
+	}
+	if l.kind == "stalled" || l.kind == "idle" || l.kind == "quiet" || l.kind == "none" || l.text == "Manager picking it up" || startText(l.text) {
+		l.kind, l.text, l.since, l.ageAs = "stalled", "Manager out of usage", 0, ""
+	}
+	return l
 }

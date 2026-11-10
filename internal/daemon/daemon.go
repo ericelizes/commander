@@ -309,7 +309,13 @@ func New() (*Daemon, error) {
 	// One snapshot source for the API and the watch (which judges workstreams by it).
 	health := newHealthBoard(time.Now)
 	live := &livedata.Source{
-		Health:      health.list,
+		Health: health.list,
+		ManagerCapacity: func() map[string]string {
+			if chatEngine == nil {
+				return nil
+			}
+			return chatEngine.CapacityFailures()
+		},
 		OnSnapshot:  func(snap *livedata.Snapshot) { checkPlans(health, snap); checkStuck(health, snap, time.Now()) },
 		Deps:        livedata.Deps{Store: st, Beads: reads, Scrape: livedata.ScrapeAgentStates},
 		UnreadEvery: 5 * time.Second, // Unread is set below from the waker's inbox reads

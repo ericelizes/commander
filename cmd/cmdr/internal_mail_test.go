@@ -889,3 +889,91 @@ func TestManagerRoleMail_BothSpellingsFindTheNestedRegistration(t *testing.T) {
 		t.Fatalf("got %v, %v", got, err)
 	}
 }
+
+func TestRouteManagerRecipientsUsesFreshOwnership(t *testing.T) {
+	old := managerMailOwner
+	t.Cleanup(func() { managerMailOwner = old })
+	managerMailOwner = func(_ context.Context, _ amAgentStore, role string) (string, string, error) {
+		switch role {
+		case "manager-demo-closed":
+			return "manager-demo-root", "closed nested owner", nil
+		case "manager-demo-orphan":
+			return "", "no open owner", nil
+		default:
+			return role, "", nil
+		}
+	}
+	got := routeManagerRecipients(context.Background(), newFakeAmStore(), []string{"manager-demo-closed", "manager-demo-root", "manager-demo-orphan"}, io.Discard)
+	if !slices.Equal(got, []string{"manager-demo-root", "commander"}) {
+		t.Fatalf("routes %v", got)
+	}
+}
+
+func TestRouteManagerRecipientsClosedNestedManagerWithRealStore(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	dir := t.TempDir()
+	if err := beads.SetNestedManagers(dir, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.InsertProject(context.Background(), store.Project{Name: "demo", Path: dir, Type: "code", Status: "active"}); err != nil {
+		t.Fatal(err)
+	}
+	bc := &beads.MemClient{EdgeParentsOnly: true}
+	bc.Seed(beads.Bead{ID: "demo-r", Status: "open", Labels: []string{"kind:objective"}})
+	bc.Seed(beads.Bead{ID: "demo-r.1", Status: "closed", Labels: []string{"kind:objective", beads.WorkstreamLabel}})
+	bc.Edges = []beads.Dep{{IssueID: "demo-r.1", DependsOnID: "demo-r", Type: "parent-child"}}
+	old := newBeadsClientFn
+	newBeadsClientFn = func() beads.Client { return bc }
+	t.Cleanup(func() { newBeadsClientFn = old })
+	// The obsolete nested role is registered only under its dashed delivery alias.
+	if err := st.UpsertAmAgent(context.Background(), amKey, "manager-demo-r-1", "BlueOwl"); err != nil {
+		t.Fatal(err)
+	}
+	got, err := ownedDeliveryRecipients(context.Background(), st, amKey, []string{"manager-demo-r.1"}, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(got, []string{"manager-demo-r"}) {
+		t.Fatalf("closed nested: %v", got)
+	}
+	// A genuine current owner still delivers to its supported registered alias.
+	if err := bc.SetStatus(context.Background(), dir, "demo-r.1", "open"); err != nil {
+		t.Fatal(err)
+	}
+	got, err = ownedDeliveryRecipients(context.Background(), st, amKey, []string{"manager-demo-r.1"}, io.Discard)
+	if err != nil || !slices.Equal(got, []string{"manager-demo-r-1"}) {
+		t.Fatalf("open owner's delivery alias: %v, %v", got, err)
+	}
+	if err := bc.SetStatus(context.Background(), dir, "demo-r.1", "closed"); err != nil {
+		t.Fatal(err)
+	}
+	if err := bc.SetStatus(context.Background(), dir, "demo-r", "closed"); err != nil {
+		t.Fatal(err)
+	}
+	got, err = ownedDeliveryRecipients(context.Background(), st, amKey, []string{"manager-demo-r.1"}, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(got, []string{"commander"}) {
+		t.Fatalf("no owner: %v", got)
+	}
+}
+
+func TestRouteManagerRecipientsReservesDeliveryBudget(t *testing.T) {
+	old := managerMailOwner
+	t.Cleanup(func() { managerMailOwner = old })
+	managerMailOwner = func(ctx context.Context, _ amAgentStore, _ string) (string, string, error) {
+		<-ctx.Done()
+		return "", "", ctx.Err()
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	got := routeManagerRecipients(ctx, newFakeAmStore(), []string{"manager-demo-unread"}, io.Discard)
+	if ctx.Err() != nil || !slices.Equal(got, []string{"manager-demo-unread"}) {
+		t.Fatalf("lost delivery budget/address: %v %v", got, ctx.Err())
+	}
+}
