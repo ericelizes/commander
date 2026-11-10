@@ -22,6 +22,10 @@ type withdrawalRequest struct {
 type withdrawalIntent struct {
 	Request withdrawalRequest
 	Card    *store.NeedsYou
+	// Mode and Marker retain the original presence, never a synthesized live ask.
+	Mode   string
+	Marker bool
+	Pitch  *store.Pitch
 }
 
 // gateWithdraw shares the answer lock with resolution. Backend writes are still
@@ -179,17 +183,33 @@ func gateWithdraw(ctx context.Context, st *store.Store, project string, r withdr
 		if e != nil {
 			return nil, "", false, e
 		}
+		marker := slices.Contains(b.Labels, beads.NeedsUserLabel)
+		mode := "active"
 		if card == nil {
-			if saved == nil || !withdrawn || b.Status != beads.StatusDeferred {
-				return bad("missing retained active card")
+			mode = "retained"
+		}
+		originalMarker := marker
+		if saved != nil {
+			mode, originalMarker = saved.Mode, saved.Marker
+			if mode != "active" && mode != "retained" {
+				return bad("invalid retained withdrawal mode")
 			}
-			card = saved.Card
-		}
-		if card == nil || card.Decision == "" || card.Ask == "" {
-			return bad("missing retained decision")
-		}
-		if _, e = store.ParseDecision(card.Decision); e != nil {
-			return bad("invalid retained decision")
+			if mode == "retained" && (card != nil || marker) {
+				return bad("inactive card presence/marker changed")
+			}
+			if mode == "active" {
+				if !marker && !(withdrawn && b.Status == beads.StatusDeferred) {
+					return bad("active marker changed")
+				}
+				if card == nil {
+					if !withdrawn || b.Status != beads.StatusDeferred {
+						return bad("active card presence changed")
+					}
+					card = saved.Card
+				}
+			}
+		} else if (mode == "active") != marker {
+			return bad("ambiguous card presence/needs-user marker")
 		}
 		pitches, e := st.ListPitches(ctx, p.ID, r.Bead)
 		if e != nil {
@@ -207,9 +227,27 @@ func gateWithdraw(ctx context.Context, st *store.Store, project string, r withdr
 		if len(exact) == 0 {
 			return bad("missing generation")
 		}
+		// ListPitches orders by time first; select the generation explicitly.
+		slices.SortFunc(exact, func(a, b store.Pitch) int { return a.Version - b.Version })
+		for i, pitch := range exact {
+			if pitch.ProjectID != p.ID || pitch.Version != i+1 {
+				return bad("ambiguous pitch generations")
+			}
+		}
 		latest := exact[len(exact)-1]
-		if latest.Version != r.Generation || latest.Decision != card.Decision || latest.Title != card.Ask {
-			return bad("expected generation/card changed")
+		if latest.Version != r.Generation || strings.TrimSpace(latest.Title) == "" {
+			return bad("expected generation/title changed")
+		}
+		if _, e = store.ParseDecision(latest.Decision); e != nil {
+			return bad("invalid retained decision")
+		}
+		var retained *store.Pitch
+		if mode == "active" {
+			if card == nil || card.Decision != latest.Decision || card.Ask != latest.Title {
+				return bad("expected generation/card changed")
+			}
+		} else {
+			retained = &latest
 		}
 		resolutions, e := st.ListNeedsResolutions(ctx, p.ID, r.Bead)
 		if e != nil {
@@ -225,7 +263,7 @@ func gateWithdraw(ctx context.Context, st *store.Store, project string, r withdr
 		normalized.Labels = slices.DeleteFunc(slices.Clone(b.Labels), func(l string) bool { return l == beads.WithdrawnLabel || l == beads.NeedsUserLabel })
 		slices.Sort(normalized.Labels)
 		d.Comments = nil
-		payload, e := json.Marshal([]any{normalized, d, card, exact, resolutions})
+		payload, e := json.Marshal([]any{normalized, d, mode, originalMarker, card, retained, exact, resolutions})
 		if e != nil {
 			return nil, "", false, e
 		}
@@ -235,7 +273,7 @@ func gateWithdraw(ctx context.Context, st *store.Store, project string, r withdr
 		}
 		req := r
 		req.Snapshot = digest
-		raw, _ := json.Marshal(withdrawalIntent{req, card})
+		raw, _ := json.Marshal(withdrawalIntent{Request: req, Card: card, Mode: mode, Marker: originalMarker, Pitch: retained})
 		note := withdrawalPrefix + string(raw)
 		if saved != nil {
 			old, _ := json.Marshal(saved)
@@ -243,8 +281,8 @@ func gateWithdraw(ctx context.Context, st *store.Store, project string, r withdr
 				return bad("retained intent no longer matches snapshot")
 			}
 		}
-		if saved == nil && (!slices.Contains(b.Labels, beads.NeedsUserLabel) || withdrawn) {
-			return bad("gate has no active needs-user marker")
+		if saved == nil && withdrawn {
+			return bad("gate already withdrawn without intent")
 		}
 		return b, note, saved != nil, nil
 	}

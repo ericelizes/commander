@@ -17,11 +17,17 @@ cmdr internal-gate withdraw --project example --bead sample-flow.3 \
 
 Repeat the same arguments without `--dry-run`, adding
 `--expected-snapshot <expected_snapshot from preview>`. The hash binds the gate's
-identity, scope, labels, dependencies, original card, pitch history and answer
+identity, scope, labels, dependencies, original card presence, needs-user marker, active-card or retained-pitch mode,
+exact retained pitch, pitch history and answer
 journal. A changed snapshot refuses. Retain the exact command for retries.
 
 Only an explicit `kind:gate`, or legacy `gate` plus `approver:user`, qualifies.
 The gate must be open with a retained, unanswered decision and expected generation.
+An inactive card is also supported when both the card and needs-user marker are
+absent and the exact latest unanswered generation retains a valid decision and
+nonempty title. Its original pitch backs the audit directly; no live ask is
+synthesized or restored. Presence/marker mismatches refuse, and retries retain
+the original mode and card or pitch evidence.
 Any answer history, approval evidence, hold, proposal, execution assignee, execution
 wait/owner or running/exited run refuses. Every nonclosed incoming waiter or child
 refuses, including parked and superseded beads; the error names the actual bead.

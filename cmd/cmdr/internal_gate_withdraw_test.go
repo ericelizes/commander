@@ -204,8 +204,14 @@ func TestGateWithdrawInterruptedRetry(t *testing.T) {
 	}
 }
 
-func TestGateWithdrawalScenario(t *testing.T) {
-	data, e := os.ReadFile("../../tests/evals/scenarios/gate-withdrawal.json")
+func runGateWithdrawalScenario(t *testing.T, inactive bool) {
+	t.Helper()
+	data, e := os.ReadFile(func() string {
+		if inactive {
+			return "../../tests/evals/scenarios/gate-withdrawal-inactive.json"
+		}
+		return "../../tests/evals/scenarios/gate-withdrawal.json"
+	}())
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -213,7 +219,12 @@ func TestGateWithdrawalScenario(t *testing.T) {
 	if e = json.Unmarshal(data, &r); e != nil {
 		t.Fatal(e)
 	}
-	m, _, _ := withdrawalFixture(t)
+	var m *beads.MemClient
+	if inactive {
+		m, _, _ = inactiveWithdrawalFixture(t)
+	} else {
+		m, _, _ = withdrawalFixture(t)
+	}
 	args := []string{"withdraw", "--project", "manifest", "--bead", r.Bead, "--expected-state", r.State, "--generation", "1", "--reason", r.Reason, "--instruction", r.Instruction, "--dry-run"}
 	code, out, msg := gateCmd(t, args...)
 	if code != 0 {
@@ -237,6 +248,9 @@ func TestGateWithdrawalScenario(t *testing.T) {
 	}
 	t.Log("withdrawn; active card removed; unanswered pitch and scope retained; never approved")
 }
+
+func TestGateWithdrawalScenario(t *testing.T)         { runGateWithdrawalScenario(t, false) }
+func TestGateWithdrawalInactiveScenario(t *testing.T) { runGateWithdrawalScenario(t, true) }
 
 func TestGateWithdrawalReservedAuditAndLabel(t *testing.T) {
 	withdrawalFixture(t)
@@ -299,6 +313,171 @@ func TestGateWithdrawCheckNeverRunsOrAddsWait(t *testing.T) {
 			for _, l := range b.Labels {
 				if strings.HasPrefix(l, "waiting:") {
 					t.Fatal("withdrawn gate added wait")
+				}
+			}
+		})
+	}
+}
+
+// The card was removed by a normal state change, not answered. The legacy
+// approval gate and its exact retained pitch must still support cancellation.
+func inactiveWithdrawalFixture(t *testing.T) (*beads.MemClient, *store.Store, withdrawalRequest) {
+	t.Helper()
+	m, st, r := withdrawalFixture(t)
+	ctx := context.Background()
+	p, _ := st.GetProjectByName(ctx, "manifest")
+	if e := st.DeleteNeedsYou(ctx, p.ID, r.Bead); e != nil {
+		t.Fatal(e)
+	}
+	_ = m.SetLabel(ctx, "/d", r.Bead, beads.NeedsUserLabel, false)
+	_ = m.SetLabel(ctx, "/d", r.Bead, "kind:gate", false)
+	_ = m.SetLabel(ctx, "/d", r.Bead, "gate", true)
+	_ = m.DependOn(ctx, "/d", "sample-flow.2", r.Bead)
+	_ = m.SetStatus(ctx, "/d", "sample-flow.2", "closed")
+	return m, st, r
+}
+
+func TestGateWithdrawInactiveRetainedPitch(t *testing.T) {
+	m, st, r := inactiveWithdrawalFixture(t)
+	ctx := context.Background()
+	p, _ := st.GetProjectByName(ctx, "manifest")
+	pitches, _ := st.ListPitches(ctx, p.ID, r.Bead)
+	before := retirementSnapshot(t, m, st)
+	r = withdrawalPreview(t, st, r)
+	if before != retirementSnapshot(t, m, st) {
+		t.Fatal("preview wrote")
+	}
+	for i := 0; i < 2; i++ {
+		if _, e := gateWithdraw(ctx, st, "manifest", r, false); e != nil {
+			t.Fatal(e)
+		}
+	}
+	after, _ := st.ListPitches(ctx, p.ID, r.Bead)
+	if !reflect.DeepEqual(pitches, after) {
+		t.Fatal("retained pitch changed")
+	}
+	card, e := st.GetNeedsYou(ctx, p.ID, r.Bead)
+	if e != nil || card != nil {
+		t.Fatal("created active card", card, e)
+	}
+	b, _ := m.Show(ctx, "/d", r.Bead)
+	if b.Status != beads.StatusDeferred || !slices.Contains(b.Labels, beads.WithdrawnLabel) || slices.Contains(b.Labels, beads.NeedsUserLabel) {
+		t.Fatal(b)
+	}
+	ds, _ := m.Details(ctx, "/d", []string{r.Bead})
+	if len(ds[r.Bead].Comments) != 2 {
+		t.Fatal("duplicated audit")
+	}
+	t.Log("inactive legacy gate withdrawn; exact unanswered pitch retained; no card or approval created")
+}
+
+func TestGateWithdrawInactiveRefusals(t *testing.T) {
+	for _, name := range []string{"card-added", "marker-added", "generation", "scope", "answered", "journal", "ordinary", "no-pitch", "invalid-pitch", "active-card-removed", "active-marker-removed"} {
+		t.Run(name, func(t *testing.T) {
+			m, st, r := inactiveWithdrawalFixture(t)
+			ctx := context.Background()
+			p, _ := st.GetProjectByName(ctx, "manifest")
+			ps, _ := st.ListPitches(ctx, p.ID, r.Bead)
+			if strings.HasPrefix(name, "active-") {
+				_ = st.UpsertNeedsYou(ctx, store.NeedsYou{ProjectID: p.ID, BeadID: r.Bead, Ask: ps[0].Title, Decision: ps[0].Decision})
+				_ = m.SetLabel(ctx, "/d", r.Bead, beads.NeedsUserLabel, true)
+			}
+			r = withdrawalPreview(t, st, r)
+			switch name {
+			case "card-added":
+				_ = st.UpsertNeedsYou(ctx, store.NeedsYou{ProjectID: p.ID, BeadID: r.Bead, Ask: ps[0].Title, Decision: ps[0].Decision})
+			case "marker-added":
+				_ = m.SetLabel(ctx, "/d", r.Bead, beads.NeedsUserLabel, true)
+			case "generation":
+				_ = st.RecordPitch(ctx, p.ID, r.Bead, "Changed question", `{"question":"Changed?","input":true}`, nil)
+			case "scope":
+				v := "Changed scope"
+				_ = m.UpdateFields(ctx, "/d", r.Bead, beads.Fields{Description: &v})
+			case "answered":
+				_ = st.AnswerPitch(ctx, p.ID, r.Bead, "Wait")
+			case "journal":
+				if e := st.SaveNeedsResolution(ctx, store.NeedsResolution{ProjectID: p.ID, BeadID: r.Bead, Generation: "1", AnswerID: "fixture-answer", Action: "approve"}, "Approve"); e != nil {
+					t.Fatal(e)
+				}
+			case "ordinary":
+				_ = m.SetLabel(ctx, "/d", r.Bead, "gate", false)
+			case "no-pitch":
+				r.Bead = "sample-flow.2"
+				_ = m.SetStatus(ctx, "/d", r.Bead, "open")
+			case "invalid-pitch":
+				_ = st.RecordPitch(ctx, p.ID, r.Bead, "Invalid", "{}", nil)
+				r.Generation++
+			case "active-card-removed":
+				_ = st.DeleteNeedsYou(ctx, p.ID, r.Bead)
+			case "active-marker-removed":
+				_ = m.SetLabel(ctx, "/d", r.Bead, beads.NeedsUserLabel, false)
+			}
+			before := retirementSnapshot(t, m, st)
+			if _, e := gateWithdraw(ctx, st, "manifest", r, false); e == nil {
+				t.Fatal("unsafe request accepted")
+			}
+			if before != retirementSnapshot(t, m, st) {
+				t.Fatal("refusal wrote")
+			}
+		})
+	}
+}
+
+func TestGateWithdrawInactiveInterruptedRetry(t *testing.T) {
+	for _, point := range []string{"intent", "label", "completion", "card-added", "marker-added", "generation", "journal"} {
+		t.Run(point, func(t *testing.T) {
+			m, st, r := inactiveWithdrawalFixture(t)
+			ctx := context.Background()
+			p, _ := st.GetProjectByName(ctx, "manifest")
+			r = withdrawalPreview(t, st, r)
+			c := &retirementClient{Client: m}
+			switch point {
+			case "intent":
+				c.lostAudit = "intent"
+			case "label":
+				c.failLabel = beads.WithdrawnLabel
+				c.lost = true
+			case "completion":
+				c.lostAudit = "completion"
+			default:
+				c.lostAudit = "intent"
+			}
+			old := newBeadsClientFn
+			newBeadsClientFn = func() beads.Client { return c }
+			t.Cleanup(func() { newBeadsClientFn = old })
+			if _, e := gateWithdraw(ctx, st, "manifest", r, false); e == nil {
+				t.Fatal("expected interruption")
+			}
+			switch point {
+			case "card-added":
+				ps, _ := st.ListPitches(ctx, p.ID, r.Bead)
+				_ = st.UpsertNeedsYou(ctx, store.NeedsYou{ProjectID: p.ID, BeadID: r.Bead, Ask: ps[0].Title, Decision: ps[0].Decision})
+			case "marker-added":
+				_ = m.SetLabel(ctx, "/d", r.Bead, beads.NeedsUserLabel, true)
+			case "generation":
+				_ = st.RecordPitch(ctx, p.ID, r.Bead, "New", `{"question":"New?","input":true}`, nil)
+			case "journal":
+				if e := st.SaveNeedsResolution(ctx, store.NeedsResolution{ProjectID: p.ID, BeadID: r.Bead, Generation: "1", AnswerID: "retry-answer", Action: "approve"}, "Approve"); e != nil {
+					t.Fatal(e)
+				}
+			}
+			before := retirementSnapshot(t, m, st)
+			_, e := gateWithdraw(ctx, st, "manifest", r, false)
+			if point == "intent" || point == "label" || point == "completion" {
+				if e != nil {
+					t.Fatal(e)
+				}
+				changed := r
+				changed.Instruction = "Different instruction"
+				if _, e = gateWithdraw(ctx, st, "manifest", changed, false); e == nil {
+					t.Fatal("changed retry accepted")
+				}
+			} else {
+				if e == nil {
+					t.Fatal("changed evidence accepted")
+				}
+				if before != retirementSnapshot(t, m, st) {
+					t.Fatal("refusal wrote")
 				}
 			}
 		})

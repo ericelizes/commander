@@ -1,0 +1,7 @@
+{
+  "Bead": "sample-flow.3",
+  "State": "open",
+  "Generation": 1,
+  "Reason": "The previously withdrawn experiment is cancelled",
+  "Instruction": "planning-note:sample-17 cancellation by owning Manager"
+}
