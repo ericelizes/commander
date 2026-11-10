@@ -399,7 +399,7 @@ func pgWrite(ctx context.Context, q store.Querier, pid int64, args []string) ([]
 			return pgQualifiedDep(ctx, q, pid, from, to, sub, kind, f)
 		}
 		var foreign bool
-		if e = q.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM bead_dependencies WHERE project_id=? AND issue_id=? AND target_project_id<>project_id)`, pid, from).Scan(&foreign); e != nil {
+		if e = q.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM bead_dependencies WHERE project_id=? AND issue_id=? AND depends_on_id=? AND target_project_id<>project_id)`, pid, from, to).Scan(&foreign); e != nil {
 			return nil, e
 		}
 		if foreign {

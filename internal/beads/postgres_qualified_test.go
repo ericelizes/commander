@@ -358,3 +358,29 @@ func TestPostgresQualifiedBoundAndLocalParent(t *testing.T) {
 		t.Fatalf("oversized graph accepted: %v", e)
 	}
 }
+
+func TestPostgresQualifiedLocalEditsKeepTheirSemantics(t *testing.T) {
+	f := newQualifiedFixture(t)
+	ctx := context.Background()
+	extra, e := f.c.Create(ctx, f.dir, "Synthetic local peer", CreateOptions{Silent: true})
+	if e != nil {
+		t.Fatal(e)
+	}
+	if e = f.link(ctx); e != nil {
+		t.Fatal(e)
+	}
+	// A source having another foreign edge still accepts ordinary local edges.
+	if e = f.c.DependOn(ctx, f.dir, f.source, extra); e != nil {
+		t.Fatal(e)
+	}
+	if e = f.c.RemoveDep(ctx, f.dir, f.source, extra); e != nil {
+		t.Fatal(e)
+	}
+	if e = QualifiedDependency(ctx, f.foreign, f.dir, "add", f.target, extra); e != nil {
+		t.Fatal(e)
+	}
+	// This local edge would complete a cycle through both projects.
+	if e = f.c.DependOn(ctx, f.dir, extra, f.source); !IsCrossProjectError(e) {
+		t.Fatalf("local global-cycle completion accepted: %v", e)
+	}
+}
