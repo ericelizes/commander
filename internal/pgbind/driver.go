@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/stdlib"
 )
 
@@ -25,6 +26,27 @@ func (*postgresDriver) Open(dsn string) (driver.Conn, error) {
 	}
 	return &conn{Conn: c}, nil
 }
+
+// NewConnector preserves caller cancellation during connection establishment,
+// including the PostgreSQL startup handshake, while retaining parameter binding.
+func NewConnector(dsn string) (driver.Connector, error) {
+	config, err := pgx.ParseConfig(dsn)
+	if err != nil {
+		return nil, err
+	}
+	return &connector{Connector: stdlib.GetConnector(*config)}, nil
+}
+
+type connector struct{ driver.Connector }
+
+func (c *connector) Connect(ctx context.Context) (driver.Conn, error) {
+	raw, err := c.Connector.Connect(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &conn{Conn: raw}, nil
+}
+func (c *connector) Driver() driver.Driver { return &postgresDriver{} }
 
 type conn struct{ driver.Conn }
 

@@ -4,9 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
+	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 )
 
 func TestOwnRunClaimFences(t *testing.T) {
@@ -83,6 +87,65 @@ func TestOwnRunNoLegacyFallback(t *testing.T) {
 	}
 }
 
+// The peer accepts TCP but never answers the PostgreSQL startup packet.
+// No database or configured installation is consulted.
+func TestOwnRunStalledHandshake(t *testing.T) {
+	for _, mode := range []string{"deadline", "cancel"} {
+		t.Run(mode, func(t *testing.T) {
+			listener, err := net.Listen("tcp", "127.0.0.1:0")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer listener.Close()
+			accepted := make(chan net.Conn, 1)
+			go func() {
+				c, e := listener.Accept()
+				if e == nil {
+					accepted <- c
+				}
+			}()
+			root := t.TempDir()
+			dsn := fmt.Sprintf("postgres://trial:private-test-password@%s/trial?sslmode=disable", listener.Addr())
+			if err := os.WriteFile(filepath.Join(root, "state.postgres"), []byte(dsn), 0600); err != nil {
+				t.Fatal(err)
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+			defer cancel()
+			done := make(chan error, 1)
+			go func() {
+				s, e := OpenOwnRunReader(ctx, filepath.Join(root, "state.db"))
+				if s != nil {
+					s.Close()
+				}
+				done <- e
+			}()
+			select {
+			case c := <-accepted:
+				defer c.Close()
+			case <-time.After(2 * time.Second):
+				t.Fatal("connection was not attempted")
+			}
+			if mode == "cancel" {
+				cancel()
+			}
+			select {
+			case err := <-done:
+				if err == nil || strings.Contains(err.Error(), "private-test-password") || strings.Contains(err.Error(), listener.Addr().String()) {
+					t.Fatalf("expected redacted failure, got %v", err)
+				}
+				if ctx.Err() == nil {
+					t.Fatal("returned before context ended")
+				}
+			case <-time.After(2 * time.Second):
+				t.Fatal("startup handshake ignored caller context")
+			}
+			if _, err := os.Stat(filepath.Join(root, "state.db")); !os.IsNotExist(err) {
+				t.Fatal("created legacy state")
+			}
+		})
+	}
+}
+
 func TestOwnRunPostgresReadOnly(t *testing.T) {
 	s := postgresTestStore(t)
 	ctx := context.Background()
@@ -124,11 +187,13 @@ func TestOwnRunBootstrapScenario(t *testing.T) {
 	if e = json.Unmarshal(b, &scenario); e != nil {
 		t.Fatal(e)
 	}
-	if len(scenario.Cases) != 3 {
+	if len(scenario.Cases) != 4 {
 		t.Fatal("missing cases")
 	}
 	for _, c := range scenario.Cases {
 		switch c {
+		case "stalled-handshake":
+			t.Run(c, TestOwnRunStalledHandshake)
 		case "claim-fences":
 			t.Run(c, TestOwnRunClaimFences)
 		case "no-legacy":

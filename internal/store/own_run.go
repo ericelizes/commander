@@ -28,10 +28,11 @@ func OpenOwnRunReader(ctx context.Context, statePath string) (*Store, error) {
 	q.Set("default_transaction_read_only", "on")
 	q.Set("statement_timeout", "5000")
 	u.RawQuery = q.Encode()
-	db, err := sql.Open(pgbind.Driver, u.String())
+	connector, err := pgbind.NewConnector(u.String())
 	if err != nil {
 		return nil, errors.New("own-run PostgreSQL connection unavailable")
 	}
+	db := sql.OpenDB(connector)
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
 	db.SetConnMaxLifetime(time.Minute)
