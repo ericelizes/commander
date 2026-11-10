@@ -17,6 +17,8 @@ import (
 //go:embed postgres_schema.sql
 var postgresSchema string
 
+const PostgresSchemaVersion = 1
+
 // PostgresDSN selects the database explicitly beside state.db. A configured but
 // invalid/unreachable Postgres never falls back to the old SQLite database.
 func PostgresDSN(statePath string) (string, error) {
@@ -51,12 +53,19 @@ func PostgresDSN(statePath string) (string, error) {
 // OpenPostgres opens the canonical database, applying its schema transactionally.
 // Callers must not log dsn: it may contain credentials.
 func OpenPostgres(dsn string) (*Store, error) {
+	if underTest() {
+		if home, e := os.UserHomeDir(); e == nil {
+			if raw, e := os.ReadFile(filepath.Join(home, ".commander", "state.postgres")); e == nil && strings.TrimSpace(string(raw)) == dsn {
+				return nil, errors.New("tests must not open the live Postgres database")
+			}
+		}
+	}
 	db, err := sql.Open(pgbind.Driver, dsn)
 	if err != nil {
 		return nil, errors.New("store: invalid Postgres connection configuration")
 	}
 	db.SetMaxOpenConns(8)
-	db.SetMaxIdleConns(1)
+	db.SetMaxIdleConns(4)
 	db.SetConnMaxIdleTime(time.Minute)
 	db.SetConnMaxLifetime(10 * time.Minute)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -76,6 +85,13 @@ func OpenPostgres(dsn string) (*Store, error) {
 func (s *Store) IsPostgres() bool { return s.postgres }
 
 func (s *Store) migratePostgres(ctx context.Context) error {
+	var ready int
+	if err := s.db.QueryRowContext(ctx, `SELECT version FROM commander_schema WHERE id=1`).Scan(&ready); err == nil {
+		if ready == PostgresSchemaVersion {
+			return nil
+		}
+		return fmt.Errorf("store: unsupported Postgres schema %d", ready)
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -93,8 +109,8 @@ func (s *Store) migratePostgres(ctx context.Context) error {
 		if _, err = tx.ExecContext(ctx, postgresSchema); err != nil {
 			return fmt.Errorf("store: initialize Postgres schema: %w", err)
 		}
-		_, err = tx.ExecContext(ctx, `INSERT INTO commander_schema(id,version) VALUES(1,22)`)
-	} else if err == nil && version != 22 {
+		_, err = tx.ExecContext(ctx, `INSERT INTO commander_schema(id,version) VALUES(1,1)`)
+	} else if err == nil && version != PostgresSchemaVersion {
 		return fmt.Errorf("store: unsupported Postgres schema %d", version)
 	}
 	if err != nil {

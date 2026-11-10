@@ -91,7 +91,7 @@ func (*postgresClient) List(ctx context.Context, dir string, o ListOptions) ([]B
 	if err != nil {
 		return nil, err
 	}
-	pid, err := projectID(ctx, s.DB(), dir)
+	pid, err := projectID(ctx, postgresQuery(ctx, s), dir)
 	if err != nil {
 		return nil, err
 	}
@@ -131,7 +131,7 @@ func (*postgresClient) List(ctx context.Context, dir string, o ListOptions) ([]B
 		q += ` LIMIT ?`
 		args = append(args, o.Limit)
 	}
-	rows, err := s.DB().QueryContext(ctx, q, args...)
+	rows, err := postgresQuery(ctx, s).QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -152,11 +152,11 @@ func (*postgresClient) Show(ctx context.Context, dir, id string) (*Bead, error) 
 	if e != nil {
 		return nil, e
 	}
-	pid, e := projectID(ctx, s.DB(), dir)
+	pid, e := projectID(ctx, postgresQuery(ctx, s), dir)
 	if e != nil {
 		return nil, e
 	}
-	b, e := scanPGBead(s.DB().QueryRowContext(ctx, `SELECT `+pgBeadColumns+` FROM bead_tasks b WHERE b.project_id=? AND b.id=? AND b.deleted_at IS NULL`, pid, id))
+	b, e := scanPGBead(postgresQuery(ctx, s).QueryRowContext(ctx, `SELECT `+pgBeadColumns+` FROM bead_tasks b WHERE b.project_id=? AND b.id=? AND b.deleted_at IS NULL`, pid, id))
 	if errors.Is(e, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -180,7 +180,7 @@ func pgDeps(ctx context.Context, dir, id string, reverse bool) ([]Dep, error) {
 	if e != nil {
 		return nil, e
 	}
-	pid, e := projectID(ctx, s.DB(), dir)
+	pid, e := projectID(ctx, postgresQuery(ctx, s), dir)
 	if e != nil {
 		return nil, e
 	}
@@ -188,7 +188,7 @@ func pgDeps(ctx context.Context, dir, id string, reverse bool) ([]Dep, error) {
 	if reverse {
 		col = "depends_on_id"
 	}
-	rows, e := s.DB().QueryContext(ctx, `SELECT issue_id,depends_on_id,type FROM bead_dependencies WHERE project_id=? AND `+col+`=? ORDER BY issue_id,depends_on_id,type`, pid, id)
+	rows, e := postgresQuery(ctx, s).QueryContext(ctx, `SELECT issue_id,depends_on_id,type FROM bead_dependencies WHERE project_id=? AND `+col+`=? ORDER BY issue_id,depends_on_id,type`, pid, id)
 	if e != nil {
 		return nil, e
 	}
@@ -208,11 +208,11 @@ func (*postgresClient) Comments(ctx context.Context, dir, id string) ([]Comment,
 	if e != nil {
 		return nil, e
 	}
-	pid, e := projectID(ctx, s.DB(), dir)
+	pid, e := projectID(ctx, postgresQuery(ctx, s), dir)
 	if e != nil {
 		return nil, e
 	}
-	rows, e := s.DB().QueryContext(ctx, `SELECT id,author,text,created_at FROM bead_comments WHERE project_id=? AND bead_id=? ORDER BY created_at,id`, pid, id)
+	rows, e := postgresQuery(ctx, s).QueryContext(ctx, `SELECT id,author,text,created_at FROM bead_comments WHERE project_id=? AND bead_id=? ORDER BY created_at,id`, pid, id)
 	if e != nil {
 		return nil, e
 	}
@@ -239,7 +239,7 @@ func (*postgresClient) Details(ctx context.Context, dir string, ids []string) (m
 	if e != nil {
 		return nil, e
 	}
-	pid, e := projectID(ctx, s.DB(), dir)
+	pid, e := projectID(ctx, postgresQuery(ctx, s), dir)
 	if e != nil {
 		return nil, e
 	}
@@ -248,11 +248,17 @@ func (*postgresClient) Details(ctx context.Context, dir string, ids []string) (m
 		args = append(args, id)
 	}
 	in := strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")
-	tx, e := s.DB().BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
-	if e != nil {
-		return nil, e
+	tx := postgresQuery(ctx, s)
+	commit := func() error { return nil }
+	if _, ok := ctx.Value(postgresReaderKey{}).(store.Querier); !ok {
+		own, err := s.DB().BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
+		if err != nil {
+			return nil, err
+		}
+		defer own.Rollback()
+		tx = own
+		commit = own.Commit
 	}
-	defer tx.Rollback()
 	rows, e := tx.QueryContext(ctx, `SELECT id,COALESCE(parent_id,'') FROM bead_tasks WHERE project_id=? AND id IN (`+in+`) AND deleted_at IS NULL`, args...)
 	if e != nil {
 		return nil, e
@@ -311,7 +317,7 @@ func (*postgresClient) Details(ctx context.Context, dir string, ids []string) (m
 	if e != nil {
 		return nil, e
 	}
-	return out, tx.Commit()
+	return out, commit()
 }
 func (c *postgresClient) freshDetails(ctx context.Context, dir string, ids []string) (map[string]Detail, error) {
 	return c.Details(ctx, dir, ids)

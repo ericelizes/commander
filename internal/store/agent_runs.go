@@ -35,6 +35,9 @@ func (s *Store) InsertAgentRun(ctx context.Context, r AgentRun) (int64, error) {
 	if r.Status == "" {
 		r.Status = "running"
 	}
+	if s.postgres {
+		return s.insertClaimedRun(ctx, r)
+	}
 	var id int64
 	err := s.db.QueryRowContext(ctx, `
 		INSERT INTO agent_runs(

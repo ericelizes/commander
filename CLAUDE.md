@@ -1743,3 +1743,16 @@ Only `claudeAiOauth.accessToken` counts as a Claude file login: `.credentials.js
 Verification: `TestCommanderFallsBackAcrossProviders`, `TestCommanderPlanSkipsDisconnectedAndExhaustedAccounts`, `TestCodexIsSelectableAsAnAccount`, `TestMCPOnlyCredentialsAreNotAConnectedClaudeAccount`; eval `TestUnifiedAccountsScenario` / `scenarios/unified-accounts.json`; app `top-bar.test.tsx`, `settings-accounts.test.tsx`, `providers.test.ts`, `ChatPane.test.tsx`; isolated cockpit and headless renderer smoke.
 
 **Secret scan:** `.github/workflows/gitleaks.yml` and `internal-ship` scan historical changes plus a synthetic cumulative base..tip commit. Rules are vendored in `internal/ship/gitleaks.toml` (v8.21.2 defaults, no global/path allowlists), embedded in cmdr; the Action reads this tool asset from trusted main or BEFORE on a main push and fails closed if absent. Repository config/ignores and inline allows cannot suppress findings. Both scan a private source, use --text/--no-renames/--no-textconv/--no-ext-diff/--diff-merges=first-parent and reject incomplete/error scans. Missing local gitleaks still warns/skips. See `docs/secret-scanning.md` for bootstrap and limits. Tests: `internal/ship/gitleaks_test.go`, real detector via COMMANDER_TEST_GITLEAKS, eval `TestShipDryRunScenario`.
+
+## PostgreSQL-selected live state
+
+See [docs/architecture/postgres-live-state.md](docs/architecture/postgres-live-state.md)
+for the canonical bead/runtime schema, guarded interfaces, event stream,
+subscription-backed classifier, migration verification and cutover/rollback
+contract. A private `COMMANDER_HOME/state.postgres` selects that backend and
+never falls back to SQLite/Dolt on failure. Use `cmdr bead --project-dir PATH`
+for compatible reads/comments and the existing guarded cmdr doors for mutations.
+Never test against the configured live database; integration fixtures use
+`commander_trial` with isolated schemas. New Postgres Operators use the host
+runtime and immutable run-aware state hooks. Old SQLite/Dolt remain legacy mode
+only when the explicit Postgres selector is absent.

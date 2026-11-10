@@ -38,6 +38,9 @@ const pingInterval = 20 * time.Second
 
 // Options configures a Server.
 type Options struct {
+	Changes    <-chan struct{} // committed database notifications; nil retains legacy polling
+	StateStore *store.Store    // canonical Postgres state and replay endpoint
+
 	OverviewGenerate overview.Generate  // optional read-only recap reader; nil uses the Commander Claude account
 	Linear           *linearsync.Client // optional injected sprint reader
 	Token            string
@@ -130,9 +133,12 @@ func (s *Server) Refresh(ctx context.Context) bool {
 func (s *Server) refreshLocked(ctx context.Context) bool {
 	s.loadStarted = time.Now()
 	snap := s.opts.Source(ctx)
+	if s.opts.StateStore != nil && (ctx.Err() != nil || snap.Degraded != nil || snap.KeptLastGood || snap.PreserveVersion) {
+		snap = unavailablePostgresSnapshot()
+	}
 	// Its own context ended (a settle's budget, a shutdown): what it read is not
 	// the board. Keep the one we have; a settle answers settled:false.
-	if err := ctx.Err(); err != nil {
+	if err := ctx.Err(); err != nil && s.opts.StateStore == nil {
 		s.loadKept.Store(true)
 		log.Printf("api: snapshot load ended after %s (%v), kept the last board (%s)", time.Since(s.loadStarted).Round(time.Millisecond), err, snap.LoadTimes())
 		return false
@@ -151,6 +157,9 @@ func (s *Server) refreshLocked(ctx context.Context) bool {
 		if !kept && p.at.Before(s.loadStarted) || time.Since(p.at) > pendingPatchTTL {
 			delete(s.pending, id)
 		}
+	}
+	if s.opts.StateStore != nil && snap.Degraded != nil {
+		s.pending = map[string]pendingPatch{}
 	}
 	snap = livedata.Patched(snap, s.pendingPatches(), time.Now().Unix())
 	h := contentHash(snap)
@@ -236,14 +245,45 @@ func contentHash(s livedata.Snapshot) [32]byte {
 
 // Poll refreshes every interval until ctx is done.
 func (s *Server) Poll(ctx context.Context) {
+	changes := s.opts.Changes
 	t := time.NewTicker(s.opts.Interval)
 	defer t.Stop()
 	for {
-		s.Refresh(ctx)
+		readCtx := ctx
+		cancel := func() {}
+		if s.opts.StateStore != nil {
+			readCtx, cancel = context.WithTimeout(ctx, 3*time.Second)
+		}
+		s.Refresh(readCtx)
+		cancel()
 		select {
 		case <-ctx.Done():
 			return
 		case <-t.C:
+		case _, ok := <-changes:
+			if !ok {
+				changes = nil
+			} else {
+				timer := time.NewTimer(100 * time.Millisecond)
+				select {
+				case <-timer.C:
+				case <-ctx.Done():
+					timer.Stop()
+					return
+				}
+			drain:
+				for {
+					select {
+					case _, ok := <-changes:
+						if !ok {
+							changes = nil
+							break drain
+						}
+					default:
+						break drain
+					}
+				}
+			}
 		}
 	}
 }
@@ -284,6 +324,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/overview", s.auth(http.HandlerFunc(s.serveOverview)))
 	mux.Handle("GET /api/snapshot", s.auth(http.HandlerFunc(s.serveSnapshot)))
 	mux.Handle("GET /api/events", s.auth(http.HandlerFunc(s.serveEvents)))
+	mux.Handle("GET /api/state/events", s.auth(http.HandlerFunc(s.serveStateEvents)))
 	mux.Handle("GET /api/livedata", s.auth(http.HandlerFunc(s.serveLiveData)))
 	mux.Handle("POST "+beads.DoorPath, s.auth(http.HandlerFunc(s.serveWrite)))
 	mux.Handle("POST /api/cmd", s.auth(http.HandlerFunc(s.serveCmd)))
@@ -360,7 +401,12 @@ func (s *Server) auth(next http.Handler) http.Handler {
 }
 
 func (s *Server) serveSnapshot(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, s.current(r.Context()))
+	snap := s.current(r.Context())
+	status := http.StatusOK
+	if s.opts.StateStore != nil && snap.Degraded != nil {
+		status = http.StatusServiceUnavailable
+	}
+	writeJSON(w, status, snap)
 }
 
 // Event is one WebSocket message. Type is "snapshot" for now; more kinds
@@ -487,6 +533,10 @@ func (s *Server) serveLiveData(w http.ResponseWriter, r *http.Request) {
 	d, ok := s.opts.LiveData()
 	if !ok {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"ok": false, "error": "no data loaded yet"})
+		return
+	}
+	if d.Postgres && d.LoadErr != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"ok": false, "error": "current database state unavailable"})
 		return
 	}
 	writeJSON(w, http.StatusOK, livedata.ToWire(d))

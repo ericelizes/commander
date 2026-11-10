@@ -3,7 +3,11 @@ import type { WebviewBridge } from '../features/inspector/types'
 // The JSON cmdrd serves at /api/snapshot and pushes over /api/events.
 // Mirrors internal/livedata/snapshot.go; keep the two in sync.
 
+export interface SnapExecution { role: string; state: string; project_id: number; bead_id: string; run_id?: number; session_id?: string }
+
 export interface Snapshot {
+  storage?: string
+  executions?: SnapExecution[] | null
   pr_states?: Record<string, string>
   answers?: Record<string, number>
   version: number

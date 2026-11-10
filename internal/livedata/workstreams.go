@@ -144,6 +144,9 @@ func ObjectivesOf(data Data, projectID int64) []ObjectiveRow {
 
 // Workstreams is WorkstreamsInOrder over a loaded Data.
 func Workstreams(data Data) []Workstream {
+	if data.workstreams != nil {
+		return data.workstreams
+	}
 	return WorkstreamsInOrder(data.Projects, func(id int64) []ObjectiveRow { return ObjectivesOf(data, id) }, data.Ranks)
 }
 

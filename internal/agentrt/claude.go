@@ -64,9 +64,10 @@ func ClaudeHostOperatorSettings(agent string) string {
 		}}}}
 	}
 	return marshalSettings(map[string]any{
-		"PreToolUse":  operatorGuardHooks(agent),
-		"PostToolUse": append(postToolUseHooks(agent, signedOutMatcher), mail("PostToolUse")...),
-		"Stop":        mail("Stop"),
+		"PreToolUse":       append(operatorGuardHooks(agent), operatorStateHook(agent, "PreToolUse")...),
+		"UserPromptSubmit": operatorStateHook(agent, "UserPromptSubmit"),
+		"PostToolUse":      append(postToolUseHooks(agent, signedOutMatcher), mail("PostToolUse")...),
+		"Stop":             mail("Stop"),
 	})
 }
 
@@ -191,7 +192,11 @@ func agentHooks(agent string, mail bool, managerMatcher string) map[string]any {
 		}}}}
 	}
 	if IsOperatorAgent(agent) {
-		hooks["PreToolUse"] = operatorGuardHooks(agent)
+		hooks["PreToolUse"] = append(operatorGuardHooks(agent), operatorStateHook(agent, "PreToolUse")...)
+		hooks["UserPromptSubmit"] = operatorStateHook(agent, "UserPromptSubmit")
+		if !mail {
+			hooks["Stop"] = operatorStateHook(agent, "Stop")
+		}
 	}
 	return hooks
 }
@@ -424,4 +429,8 @@ func EventSessionID(line []byte) string {
 
 func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+func operatorStateHook(agent, event string) []map[string]any {
+	return []map[string]any{{"hooks": []map[string]any{{"type": "command", "command": "cmdr internal-state-hook --role " + agent + " --event " + event + " 2>/dev/null || true"}}}}
 }

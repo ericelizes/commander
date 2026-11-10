@@ -1,0 +1,12 @@
+{
+  "name": "One Postgres task and execution state",
+  "workstream": "Native state",
+  "nested": "Nested work",
+  "steps": [
+    "Read the real bead hierarchy from Postgres",
+    "Count an active nested Manager while its parent is idle",
+    "Stream a committed runtime update without a polling tick",
+    "Replay durable events from a saved cursor",
+    "Clear old rows on an unavailable read"
+  ]
+}

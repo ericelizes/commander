@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -76,6 +77,9 @@ func runInternalMailHook(args []string, stdin io.Reader, stdout io.Writer) int {
 		ev = in.event()
 	}
 	if *mailOnly {
+		if ev == hookStop || ev == hookPostToolUse || ev == hookPreToolUse || ev == hookUserPromptSubmit {
+			recordAgentState(*role, ev, in)
+		}
 		hostOperatorMail(*role, ev, stdout)
 		return 0
 	}
@@ -250,6 +254,7 @@ func hookMail(role, ev string) (string, func() error) {
 // Codex send the same fields; tool names and inputs differ (shellCommand,
 // isEditTool).
 type hookInput struct {
+	SessionID string         `json:"session_id"`
 	Event     string         `json:"hook_event_name"`
 	ToolName  string         `json:"tool_name"`
 	ToolInput map[string]any `json:"tool_input"`
@@ -491,7 +496,29 @@ func recordAgentState(role, event string, in hookInput) {
 	defer st.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), hookTimeout)
 	defer cancel()
-	_ = st.SetAgentState(ctx, role, state, detail)
+	session := os.Getenv("COMMANDER_RUN_SESSION")
+	if session == "" {
+		session = in.SessionID
+	}
+	runID, _ := strconv.ParseInt(os.Getenv("COMMANDER_RUN_ID"), 10, 64)
+	if st.IsPostgres() && strings.HasPrefix(role, "operator-") && runID == 0 {
+		// A surviving pre-cutover bridge has no run env yet. Its current thread
+		// file can identify the imported run without accepting an old thread.
+		if run, e := st.GetAgentRunByAgentName(ctx, role); e == nil && run != nil {
+			if session == run.OpencodeSessionID {
+				runID = run.ID
+			} else if thread, e := os.ReadFile(chat.CodexThreadFile(filepath.Dir(statePath), role)); e == nil && strings.TrimSpace(string(thread)) == in.SessionID {
+				session = run.OpencodeSessionID
+				runID = run.ID
+			}
+		}
+	}
+	if err := st.SetAgentStateForRun(ctx, role, runID, session, state, detail); err != nil {
+		return
+	}
+	if st.IsPostgres() && strings.HasPrefix(role, "operator-") && event == hookStop {
+		_ = st.ObserveClassification(ctx, role, session, time.Now().UnixNano(), in.lastReply(), true)
+	}
 }
 
 // hookOutput wraps text in the JSON shape Claude Code expects for event.
@@ -580,4 +607,22 @@ func senderRoles(ctx context.Context, st amAgentStore, amProjectKey string) map[
 // runInternalMailHookMain adapts the hook to main's *os.File plumbing.
 func runInternalMailHookMain(args []string, stdout *os.File) int {
 	return runInternalMailHook(args, os.Stdin, stdout)
+}
+
+// Activity-only hooks never inject mail or block a tool/turn.
+func runInternalStateHook(args []string, stdin io.Reader) int {
+	fs := flag.NewFlagSet("internal-state-hook", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	role := fs.String("role", "", "")
+	event := fs.String("event", "", "")
+	if fs.Parse(args) != nil || *role == "" {
+		return 0
+	}
+	in := readHookInput(stdin)
+	ev := *event
+	if ev == "" {
+		ev = in.event()
+	}
+	recordAgentState(*role, ev, in)
+	return 0
 }

@@ -21,6 +21,7 @@ const liveEvery = 10 * time.Second
 // is alive (a running run whose session is neither gone nor back at a shell),
 // looked up at most every liveEvery.
 type liveOperators struct {
+	every   time.Duration                                       // zero retains the legacy interval
 	list    func(ctx context.Context) ([]store.AgentRun, error) // spawn.LiveRuns over the store and tmux
 	now     func() time.Time
 	mu      sync.Mutex
@@ -47,7 +48,11 @@ type liveOperators struct {
 func (l *liveOperators) get() ([]string, time.Time, bool) {
 	l.mu.Lock()
 	now := l.now()
-	if l.ok && (now.Sub(l.at) < liveEvery || l.looking != nil) {
+	every := l.every
+	if every <= 0 {
+		every = liveEvery
+	}
+	if l.ok && (now.Sub(l.at) < every || l.looking != nil) {
 		defer l.mu.Unlock()
 		return l.names, l.at, true
 	}

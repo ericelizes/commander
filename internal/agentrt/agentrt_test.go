@@ -297,7 +297,7 @@ func TestCodexHookArgsMirrorClaudeHooks(t *testing.T) {
 		t.Error("manager has no UserPromptSubmit mail hook")
 	}
 	op := parse(CodexHookArgs("operator-op-x", false))
-	if len(op) != 1 || op["PreToolUse"][0].Matcher != "Bash" || !strings.Contains(op["PreToolUse"][0].Hooks[0].Command, "internal-operator-guard --role operator-op-x") {
+	if len(op) != 3 || op["Stop"] == nil || op["UserPromptSubmit"] == nil || op["PreToolUse"][0].Matcher != "Bash" || !strings.Contains(op["PreToolUse"][0].Hooks[0].Command, "internal-operator-guard --role operator-op-x") {
 		t.Errorf("one-shot operator: %+v", op)
 	}
 	if cmdr := parse(CodexHookArgs("commander", true)); len(cmdr) != 3 || cmdr["PreToolUse"] != nil || cmdr["SessionStart"] == nil {
@@ -359,7 +359,7 @@ func TestHostOperatorSettingsCarryTheMailHook(t *testing.T) {
 			t.Errorf("%s has no mail hook: %+v", event, parsed.Hooks[event])
 		}
 	}
-	if pre := parsed.Hooks["PreToolUse"]; len(pre) != 1 || pre[0].Matcher != "Bash" || !strings.Contains(pre[0].Hooks[0].Command, "cmdr internal-operator-guard --role "+agent) {
+	if pre := parsed.Hooks["PreToolUse"]; len(pre) != 2 || pre[0].Matcher != "Bash" || !strings.Contains(pre[0].Hooks[0].Command, "cmdr internal-operator-guard --role "+agent) {
 		t.Errorf("guard changed: %+v", pre)
 	}
 	if !strings.Contains(fmt.Sprint(parsed.Hooks["PostToolUse"]), signedOutMatcher) {

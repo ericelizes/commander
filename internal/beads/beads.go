@@ -150,7 +150,9 @@ type cmdClient struct {
 
 // New returns a Client that shells out to the configured beads CLI.
 func New() Client {
-	if PostgresConfigured() { return &postgresClient{cmdClient: &cmdClient{run: defaultRunInDir}} }
+	if PostgresConfigured() {
+		return &postgresClient{cmdClient: &cmdClient{run: defaultRunInDir}}
+	}
 	return &cmdClient{run: defaultRunInDir}
 }
 
@@ -192,7 +194,9 @@ func runBr(ctx context.Context, dir, name string, args ...string) ([]byte, []byt
 
 // runBrIn is runBr with stdin (bd batch reads its operations there).
 func runBrIn(ctx context.Context, dir, name string, stdin []byte, args ...string) ([]byte, []byte, error) {
-	if PostgresConfigured() { return postgresRun(ctx, dir, args) }
+	if PostgresConfigured() {
+		return postgresRun(ctx, dir, args)
+	}
 	var stdout, stderr []byte
 	err := limitedRun(ctx, dir, args, func() error {
 		// The timeout starts here, once the call is out of the queue.

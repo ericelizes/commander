@@ -1788,6 +1788,18 @@ func (s *Subscription) Close() {
 // in-memory ring, which also has the live-only deltas) and a feed of the
 // events that follow, with no gap or overlap between the two.
 func (e *Engine) Subscribe(role string, since uint64) ([]Event, *Subscription, error) {
+	return e.SubscribeBuffered(role, since, 4096)
+}
+
+// SubscribeBuffered lets internal observers bound their per-role memory. Slow
+// observers reconnect from their durable cursor just like UI subscribers.
+func (e *Engine) SubscribeBuffered(role string, since uint64, buffer int) ([]Event, *Subscription, error) {
+	if buffer < 16 {
+		buffer = 16
+	}
+	if buffer > 4096 {
+		buffer = 4096
+	}
 	c, err := e.chat(role)
 	if err != nil {
 		return nil, nil, err
@@ -1811,7 +1823,7 @@ func (e *Engine) Subscribe(role string, since uint64) ([]Event, *Subscription, e
 			replay = append(replay, ev)
 		}
 	}
-	ch := make(chan Event, 4096)
+	ch := make(chan Event, buffer)
 	s := &Subscription{C: ch, ch: ch, c: c}
 	c.subs[s] = struct{}{}
 	return replay, s, nil

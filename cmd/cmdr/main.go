@@ -163,6 +163,10 @@ func run(args []string, stdout, stderr *os.File) int {
 	case "__column":
 		// Internal: each tmux pane runs one of these to render its chrome.
 		return runColumn(args[1:], stderr)
+	case "bead", "beads-compat":
+		return runBeadsCompat(args[1:], stdout, stderr)
+	case "storage":
+		return runStoragePostgres(args[1:], stdout, stderr)
 	case "board":
 		// The board as the user's sidebar shows it, for the agents.
 		return runBoard(args[1:], stdout, stderr)
@@ -293,6 +297,8 @@ func run(args []string, stdout, stderr *os.File) int {
 	case "internal-inbox":
 		// Role-aware inbox read (resolves role -> am name, fetches via server).
 		return runInternalInbox(args[1:], stdout, stderr)
+	case "internal-state-hook":
+		return runInternalStateHook(args[1:], os.Stdin)
 	case "internal-mail-hook":
 		// Claude Code UserPromptSubmit/Stop hook: injects unread mail. Never fails.
 		return runInternalMailHookMain(args[1:], stdout)

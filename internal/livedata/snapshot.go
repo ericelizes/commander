@@ -19,8 +19,10 @@ import (
 // Snapshot is the JSON view of the cockpit served by cmdrd's /api/snapshot
 // and /api/events: what the TUI sidebar and title bar show, as data.
 type Snapshot struct {
-	PRStates map[string]string `json:"pr_states,omitempty"`
-	Answers  map[string]int    `json:"answers,omitempty"`
+	Storage    string            `json:"storage,omitempty"`
+	Executions []SnapExecution   `json:"executions"`
+	PRStates   map[string]string `json:"pr_states,omitempty"`
+	Answers    map[string]int    `json:"answers,omitempty"`
 	// PreserveVersion marks a failed project read served from last-good rows.
 	PreserveVersion bool `json:"-"`
 	// KeptLastGood marks a read that overlapped writes, served quietly from last-good
@@ -208,6 +210,7 @@ type SnapGate struct {
 
 // SnapStep is one step; phases carry their children and a one-line note.
 type SnapStep struct {
+	Activity      *StatusEvidence         `json:"activity,omitempty"`
 	WorkflowCheck *workflowtemplate.Node  `json:"workflow_check,omitempty"`
 	GateChecks    []workflowtemplate.Node `json:"gate_checks,omitempty"`
 	BeadID        string                  `json:"bead_id"`
@@ -308,6 +311,10 @@ type SnapRoleCost struct {
 
 // BuildSnapshot turns loaded Data plus unread counts into a Snapshot.
 func BuildSnapshot(data Data, unread map[string]int) Snapshot {
+	data.workstreams = Workstreams(data)
+	if data.workstreams == nil {
+		data.workstreams = []Workstream{}
+	}
 	asks, noPitch := askLists(data)
 	s := Snapshot{
 		GeneratedAt: data.LoadedAt,
@@ -341,13 +348,20 @@ func BuildSnapshot(data Data, unread map[string]int) Snapshot {
 		if !ok {
 			return ""
 		}
+		if data.Postgres {
+			return a.State
+		}
 		return EffectiveState(a, data.LoadedAt)
 	}
 	for i, ws := range Workstreams(data) {
 		s.Workstreams = append(s.Workstreams, snapWorkstream(i+1, ws, live))
 	}
 	for role, a := range data.Agents {
-		s.Agents[role] = SnapAgent{State: EffectiveState(a, data.LoadedAt), Detail: a.Detail, Since: a.Since}
+		state := EffectiveState(a, data.LoadedAt)
+		if data.Postgres {
+			state = a.State
+		}
+		s.Agents[role] = SnapAgent{State: state, Detail: a.Detail, Since: a.Since}
 	}
 	foldWaits(&s, Workstreams(data))
 	s.Broken = OpenBeadInvariantAt(data.Objectives, live, data.LoadedAt)
@@ -527,9 +541,9 @@ func snapSteps(nodes []*StepNode, now string, live LiveAgent, stage bool) []Snap
 		if o.Owns {
 			st.ManagerRole = store.WorkstreamManagerRole(o.BeadID)
 		}
-		st.GateChecks = slices.Clone(o.GateChecks)
+		st.GateChecks = copyWorkflowNodes(o.GateChecks)
 		if o.WorkflowCheck != nil {
-			copy := *o.WorkflowCheck
+			copy := copyWorkflowNode(*o.WorkflowCheck)
 			st.WorkflowCheck = &copy
 		}
 		stepWaits(&st, o.Waits)
@@ -672,6 +686,12 @@ func (s *Source) build(ctx context.Context, data Data) Snapshot {
 	if ctx.Err() != nil {
 		return Snapshot{ProjectTimes: data.ProjectTimes, Phases: data.Phases, KeptLastGood: true}
 	}
+	if s.Deps.Store != nil && s.Deps.Store.IsPostgres() && data.LoadErr != nil {
+		snap := BuildSnapshot(Data{LoadedAt: time.Now(), LoadErr: data.LoadErr}, nil)
+		snap.Storage = "postgres"
+		snap.Executions = []SnapExecution{}
+		return snap
+	}
 	s.freshRanks(&data) // moves written while the load ran
 	if data.LoadErr == nil || len(data.Projects) > 0 {
 		s.last.set(data) // never replace good data with a failed read
@@ -695,8 +715,21 @@ func (s *Source) build(ctx context.Context, data Data) Snapshot {
 		s.unread, s.unreadAt = counts, time.Now()
 	}
 	var live *SnapLive
-	if s.Live != nil {
-		if alive, at, ok := s.Live(); ok {
+	liveRead := s.Live
+	var databaseChats map[string]ChatState
+	if s.Deps.Store != nil && s.Deps.Store.IsPostgres() {
+		databaseChats = map[string]ChatState{}
+		alive, native, known, e := s.Deps.Store.RuntimePresence(ctx)
+		if e != nil {
+			return Snapshot{Storage: "postgres", Executions: []SnapExecution{}, Degraded: &SnapDegraded{Reason: "Current runtime state is unavailable"}}
+		}
+		for _, p := range native {
+			databaseChats[p.Role] = ChatState{State: p.State, Detail: p.Detail}
+		}
+		liveRead = func() ([]string, time.Time, bool) { return alive, time.Now(), known }
+	}
+	if liveRead != nil {
+		if alive, at, ok := liveRead(); ok {
 			live = NewSnapLive(alive, at.Unix(), data.Operators)
 			data.Objectives = MarkLiveOwners(data.Objectives, live.operators())
 			if s.Reported != nil {
@@ -732,6 +765,9 @@ func (s *Source) build(ctx context.Context, data Data) Snapshot {
 		}
 	}
 	snap.Live = live
+	if s.Deps.Store != nil && s.Deps.Store.IsPostgres() && liveRead != nil && live == nil {
+		snap.Degraded = &SnapDegraded{Reason: "Operator process activity could not be verified"}
+	}
 	if s.Health != nil {
 		snap.Health = s.Health()
 	}
@@ -761,16 +797,41 @@ func (s *Source) build(ctx context.Context, data Data) Snapshot {
 		}
 	}
 	now := time.Now().Unix()
-	if s.Chats != nil {
+	currentChats := map[string]ChatState{}
+	if s.Chats != nil || databaseChats != nil {
 		if s.chatSince == nil {
 			s.chatSince = map[string]SnapAgent{}
 		}
-		overlayChats(&snap, s.Chats(), s.chatSince, now)
+		if databaseChats != nil {
+			currentChats = databaseChats
+		} else {
+			currentChats = s.Chats()
+		}
+		if s.Deps.Store != nil && s.Deps.Store.IsPostgres() {
+			for role, a := range snap.Agents {
+				if role == "commander" || strings.HasPrefix(role, "manager-") {
+					if _, ok := currentChats[role]; !ok {
+						a.State = store.AgentIdle
+						a.Detail = "Process is not running"
+						snap.Agents[role] = a
+					}
+				}
+			}
+		}
+		overlayChats(&snap, currentChats, s.chatSince, now)
 		// The predicate reads the agent state the board shows: a Manager the overlay has mid-turn
 		// holds what it owns, as on the board's line and in StalledWork.
 		markOverlaid(&snap, data.Objectives, data.LoadedAt)
 	}
+	if s.Deps.Store != nil && s.Deps.Store.IsPostgres() {
+		snap.Storage = "postgres"
+		snap.Executions = executionOf(snap, data, currentChats)
+	}
 	d := Board(snap, now)
+	applyExecutionCounts(&snap, &d)
+	if err := applyClassifications(ctx, s.Deps.Store, &snap, &d); err != nil {
+		log.Printf("status classifier: evidence read unavailable")
+	}
 	if err := s.since.fill(ctx, s.Deps.Store, &d, now, data.LoadErr != nil); err != nil {
 		log.Printf("livedata: %v", err)
 	}

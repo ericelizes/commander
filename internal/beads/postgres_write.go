@@ -65,6 +65,38 @@ func postgresRun(ctx context.Context, dir string, args []string) ([]byte, []byte
 	if len(args) == 2 && args[0] == "create" && args[1] == "--help" {
 		return []byte("--no-inherit-labels"), nil, nil
 	}
+	if args[0] == "show" {
+		pos, _, e := parsePGFlags(args[1:], "--json")
+		if e != nil {
+			return nil, nil, e
+		}
+		records := []map[string]any{}
+		c := &postgresClient{}
+		for _, id := range pos {
+			b, e := c.Show(ctx, dir, id)
+			if e != nil {
+				return nil, nil, e
+			}
+			details, e := c.Details(ctx, dir, []string{id})
+			if e != nil {
+				return nil, nil, e
+			}
+			raw, _ := json.Marshal(b)
+			record := map[string]any{}
+			if e = json.Unmarshal(raw, &record); e != nil {
+				return nil, nil, e
+			}
+			record["description"] = b.Description
+			record["parent"] = b.ParentID
+			record["issue_type"] = b.Type
+			record["assignee"] = b.AssignedAgent
+			record["dependencies"] = details[id].Deps
+			record["comments"] = details[id].Comments
+			records = append(records, record)
+		}
+		out, e := json.Marshal(records)
+		return out, nil, e
+	}
 	s, e := postgresStore()
 	if e != nil {
 		return nil, nil, e
@@ -92,6 +124,31 @@ func pgWrite(ctx context.Context, q store.Querier, pid int64, args []string) ([]
 	if len(args) < 2 {
 		return nil, errors.New("missing bead arguments")
 	}
+	if args[0] == "comments" {
+		if len(args) != 4 || args[1] != "add" {
+			return nil, errors.New("comments requires add, bead and text")
+		}
+		var entropy [8]byte
+		if _, e := rand.Read(entropy[:]); e != nil {
+			return nil, e
+		}
+		author := os.Getenv("COMMANDER_ROLE")
+		if env, ok := ctx.Value(doorEnvKey{}).([]string); ok {
+			for _, kv := range env {
+				if v, yes := strings.CutPrefix(kv, "COMMANDER_ROLE="); yes {
+					author = v
+				}
+			}
+		}
+		if strings.TrimSpace(args[3]) == "" {
+			return nil, errors.New("comment text cannot be empty")
+		}
+		if author == "" {
+			author = "user"
+		}
+		_, e := q.ExecContext(ctx, `INSERT INTO bead_comments(project_id,bead_id,id,author,text,created_at) VALUES(?,?,?,?,?,?)`, pid, args[2], hex.EncodeToString(entropy[:]), author, args[3], time.Now().UTC().Format(time.RFC3339Nano))
+		return nil, e
+	}
 	verb := args[0]
 	pos, f, e := parsePGFlags(args[1:], "--title --description --acceptance --notes --status --priority --type --labels --add-label --remove-label --parent --assignee --reason --force --silent --no-inherit-labels --claim")
 	if e != nil {
@@ -99,6 +156,9 @@ func pgWrite(ctx context.Context, q store.Querier, pid int64, args []string) ([]
 	}
 	if len(pos) == 0 {
 		return nil, errors.New("missing bead identity")
+	}
+	if f.has("--claim") {
+		return nil, errors.New("claims are created by Commander dispatch with a run identity")
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	if verb == "create" {
@@ -186,6 +246,9 @@ func pgWrite(ctx context.Context, q store.Querier, pid int64, args []string) ([]
 		if sub != "add" {
 			return nil, errors.New("unsupported dependency operation")
 		}
+		if kind == "parent-child" {
+			return nil, errors.New("parent links must use the guarded parent operation")
+		}
 		if from == to {
 			return nil, errors.New("a bead cannot depend on itself")
 		}
@@ -205,27 +268,10 @@ func pgWrite(ctx context.Context, q store.Querier, pid int64, args []string) ([]
 		_, e = q.ExecContext(ctx, `INSERT INTO bead_dependencies(project_id,issue_id,depends_on_id,type) VALUES(?,?,?,?) ON CONFLICT DO NOTHING`, pid, from, to, kind)
 		return nil, e
 	}
-	if verb == "comments" {
-		if len(pos) != 3 || pos[0] != "add" || strings.TrimSpace(pos[2]) == "" {
-			return nil, errors.New("comments add requires a bead and text")
-		}
-		var entropy [12]byte
-		if _, e = rand.Read(entropy[:]); e != nil {
+	if verb == "update" && f.has("--parent") {
+		if _, e = q.ExecContext(ctx, `SELECT pg_advisory_xact_lock(?)`, pid); e != nil {
 			return nil, e
 		}
-		author := os.Getenv("COMMANDER_ROLE")
-		if env, _ := ctx.Value(doorEnvKey{}).([]string); len(env) > 0 {
-			for _, kv := range env {
-				if strings.HasPrefix(kv, "COMMANDER_ROLE=") {
-					author = strings.TrimPrefix(kv, "COMMANDER_ROLE=")
-				}
-			}
-		}
-		if author == "" {
-			author = "user"
-		}
-		_, e = q.ExecContext(ctx, `INSERT INTO bead_comments(project_id,bead_id,id,author,text,created_at) VALUES(?,?,?,?,?,?)`, pid, pos[1], hex.EncodeToString(entropy[:]), author, pos[2], now)
-		return nil, e
 	}
 	id := pos[0]
 	var labelsRaw []byte

@@ -55,6 +55,9 @@ func TestPostgresStoreLifecycleAndAtomicEvents(t *testing.T) {
 	if e != nil || p == nil || p.Name != "trial" {
 		t.Fatalf("project lookup: %#v %v", p, e)
 	}
+	if _, e = s.DB().Exec(`INSERT INTO bead_tasks(project_id,id,title,created_at,updated_at) VALUES(?,'trial-1','Task','now','now')`, id); e != nil {
+		t.Fatal(e)
+	}
 	run, e := s.InsertAgentRun(ctx, AgentRun{ProjectID: id, TaskBeadID: "trial-1", AgentName: "operator-trial", SpawnTime: time.Now().Unix()})
 	if e != nil {
 		t.Fatal(e)

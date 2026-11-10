@@ -37,6 +37,9 @@ function initials(name: string) {
 }
 
 export function Rail() {
+  const snapshot = useStore((s) => s.snapshot)
+  const conn = useStore((s) => s.conn)
+  const unknown = !!snapshot?.degraded || (snapshot?.storage === 'postgres' && conn !== 'live')
   const config = useStore((s) => s.config)
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
@@ -63,9 +66,9 @@ export function Rail() {
         {progress ? <ProgressFilled /> : <ChartNoAxesColumn size={18} />}
       </button>
       <div className="rail-divider" />
-      <span className={`rail-metric${working > 0 ? ' is-live' : ''}`} title={`${working} agent${working === 1 ? '' : 's'} working now`}>
+      <span className={`rail-metric${!unknown && working > 0 ? ' is-live' : ''}`} title={unknown ? 'Live agent state unavailable' : `${working} agent${working === 1 ? '' : 's'} working now`}>
         <Bot size={18} />
-        {working}
+        {unknown ? '?' : working}
       </span>
       <div className="rail-foot">
         <HealthBadge />

@@ -1,0 +1,33 @@
+name: postgres-state
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  postgres-integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: commander_trial
+          POSTGRES_PASSWORD: disposable-test-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Native Postgres interactions in a bounded test container
+        run: |
+          docker run --rm --pids-limit 256 --network host \
+            -e COMMANDER_POSTGRES_TEST_DSN='postgres://postgres:disposable-test-password@127.0.0.1:5432/commander_trial?sslmode=disable' \
+            -e GOMAXPROCS=2 -e GOFLAGS='-p=2' \
+            -v "$PWD:/src:ro" -w /src golang:1.25 \
+            go test -count=1 -run Postgres ./internal/store ./internal/beads ./internal/api ./internal/livedata ./tests/evals

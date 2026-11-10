@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"time"
@@ -14,6 +15,7 @@ type StateEvent struct {
 	Entity     string          `json:"entity"`
 	Operation  string          `json:"operation"`
 	Identity   json.RawMessage `json:"identity"`
+	Payload    json.RawMessage `json:"payload"`
 	OccurredAt time.Time       `json:"occurred_at"`
 }
 
@@ -35,36 +37,13 @@ func (s *Store) PublishStateEvents(ctx context.Context, limit int) (int64, error
 	if _, e = tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(734031821)`); e != nil {
 		return 0, e
 	}
-	rows, e := tx.QueryContext(ctx, `SELECT e.seq FROM state_events e WHERE NOT e.delivered ORDER BY e.seq LIMIT ? FOR UPDATE OF e SKIP LOCKED`, limit)
-	if e != nil {
-		return 0, e
-	}
-	ids := []int64{}
-	for rows.Next() {
-		var id int64
-		if e = rows.Scan(&id); e != nil {
-			rows.Close()
-			return 0, e
-		}
-		ids = append(ids, id)
-	}
-	e = rows.Err()
-	rows.Close()
-	if e != nil {
-		return 0, e
-	}
-	for _, id := range ids {
-		if _, e = tx.ExecContext(ctx, `INSERT INTO event_deliveries(event_id) VALUES(?) ON CONFLICT DO NOTHING`, id); e != nil {
-			return 0, e
-		}
-		if _, e = tx.ExecContext(ctx, `UPDATE state_events SET delivered=TRUE WHERE seq=?`, id); e != nil {
-			return 0, e
-		}
-	}
+
 	var seq int64
-	if e = tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(seq),0) FROM event_deliveries`).Scan(&seq); e != nil {
+	e = tx.QueryRowContext(ctx, `WITH pending AS MATERIALIZED (SELECT seq FROM state_events WHERE NOT delivered ORDER BY seq LIMIT ? FOR UPDATE SKIP LOCKED),published AS (INSERT INTO event_deliveries(event_id) SELECT seq FROM pending ORDER BY seq ON CONFLICT DO NOTHING RETURNING seq),marked AS (UPDATE state_events e SET delivered=TRUE FROM pending p WHERE e.seq=p.seq RETURNING e.seq) SELECT GREATEST(COALESCE((SELECT MAX(seq) FROM published),0),COALESCE((SELECT MAX(seq) FROM event_deliveries),0))`, limit).Scan(&seq)
+	if e != nil {
 		return 0, e
 	}
+
 	return seq, tx.Commit()
 }
 
@@ -75,7 +54,19 @@ func (s *Store) StateEventsSince(ctx context.Context, cursor int64, limit int) (
 	if _, e := s.PublishStateEvents(ctx, 1000); e != nil {
 		return nil, e
 	}
-	rows, e := s.db.QueryContext(ctx, `SELECT d.seq,e.entity,e.operation,e.identity,e.occurred_at FROM event_deliveries d JOIN state_events e ON e.seq=d.event_id WHERE d.seq>? ORDER BY d.seq LIMIT ?`, cursor, limit)
+	tx, e := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
+	if e != nil {
+		return nil, e
+	}
+	defer tx.Rollback()
+	var floor int64
+	if e = tx.QueryRowContext(ctx, `SELECT replay_floor FROM state_identity WHERE id=1`).Scan(&floor); e != nil {
+		return nil, e
+	}
+	if cursor > 0 && cursor < floor {
+		return nil, ErrReplayExpired
+	}
+	rows, e := tx.QueryContext(ctx, `SELECT d.seq,e.entity,e.operation,e.identity,e.payload,e.occurred_at FROM event_deliveries d JOIN state_events e ON e.seq=d.event_id WHERE d.seq>? ORDER BY d.seq LIMIT ?`, cursor, limit)
 	if e != nil {
 		return nil, e
 	}
@@ -83,7 +74,7 @@ func (s *Store) StateEventsSince(ctx context.Context, cursor int64, limit int) (
 	out := []StateEvent{}
 	for rows.Next() {
 		var ev StateEvent
-		if e = rows.Scan(&ev.Seq, &ev.Entity, &ev.Operation, &ev.Identity, &ev.OccurredAt); e != nil {
+		if e = rows.Scan(&ev.Seq, &ev.Entity, &ev.Operation, &ev.Identity, &ev.Payload, &ev.OccurredAt); e != nil {
 			return nil, e
 		}
 		out = append(out, ev)

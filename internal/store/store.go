@@ -23,8 +23,8 @@ import (
 
 // Store wraps a *sql.DB. Entity CRUD methods hang off this type.
 type Store struct {
-	db *sql.DB
-	postgres bool
+	db          *sql.DB
+	postgres    bool
 	postgresDSN string
 }
 
@@ -37,8 +37,12 @@ type Store struct {
 // that responsibility.
 func Open(path string) (*Store, error) {
 	dsn, err := PostgresDSN(path)
-	if err != nil { return nil, err }
-	if dsn != "" { return OpenPostgres(dsn) }
+	if err != nil {
+		return nil, err
+	}
+	if dsn != "" {
+		return OpenPostgres(dsn)
+	}
 	// modernc.org/sqlite uses driver name "sqlite" (not "sqlite3").
 	// Per-connection pragmas go in the DSN so every pooled connection gets them
 	// (db.Exec reaches one). Without busy_timeout a write that meets another

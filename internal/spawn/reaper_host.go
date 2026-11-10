@@ -213,7 +213,17 @@ func listTmuxSessions(ctx context.Context) ([]TmuxSession, error) {
 	if err != nil {
 		return nil, err
 	}
-	return parseTmuxPanes(out), nil
+	parents, err := exec.CommandContext(ctx, "ps", "-axo", "ppid=").Output()
+	if err != nil {
+		return nil, fmt.Errorf("read process parents: %w", err)
+	}
+	children := map[int]bool{}
+	for _, v := range strings.Fields(string(parents)) {
+		if n, e := strconv.Atoi(v); e == nil {
+			children[n] = true
+		}
+	}
+	return parseTmuxPanesWithChildren(out, func(pid int) bool { return children[pid] }), nil
 }
 
 var bareShells = map[string]bool{"zsh": true, "bash": true, "sh": true, "fish": true, "dash": true}
@@ -243,7 +253,9 @@ var pidHasChildren = func(pid int) bool {
 // TmuxSession each; malformed lines are skipped. A session is Idle when none
 // of its panes runs a live non-shell command, or a shell that has children (an
 // Operator mid tool call), whose pane pid exists.
-func parseTmuxPanes(out string) []TmuxSession {
+func parseTmuxPanes(out string) []TmuxSession { return parseTmuxPanesWithChildren(out, pidHasChildren) }
+
+func parseTmuxPanesWithChildren(out string, hasChildren func(int) bool) []TmuxSession {
 	var sessions []TmuxSession
 	index := map[string]int{}
 	for _, line := range strings.Split(out, "\n") {
@@ -256,7 +268,7 @@ func parseTmuxPanes(out string) []TmuxSession {
 			continue
 		}
 		pid, _ := strconv.Atoi(f[4])
-		busy := f[2] != "1" && pidAlive(pid) && (!bareShells[f[3]] || pidHasChildren(pid))
+		busy := f[2] != "1" && pidAlive(pid) && (!bareShells[f[3]] || hasChildren(pid))
 		i, ok := index[f[0]]
 		if !ok {
 			index[f[0]] = len(sessions)
@@ -282,13 +294,19 @@ func ReapHostRuns(ctx context.Context, st *store.Store) (HostReapResult, error) 
 // dead (session gone, or only a shell left), without closing anything: cmdrd's
 // reaper closes and settles those. For callers that only count, like the cap.
 func (r *Reaper) LiveRunningRuns(ctx context.Context) ([]store.AgentRun, error) {
+	return r.liveRunningRuns(ctx, false)
+}
+func (r *Reaper) liveRunningRuns(ctx context.Context, strict bool) ([]store.AgentRun, error) {
 	runs, err := r.runs.ListRunningRuns(ctx)
 	if err != nil {
 		return nil, err
 	}
 	sessions, err := r.listSessions(ctx)
 	if err != nil {
-		return runs, nil // cannot tell: count them all, as before
+		if strict {
+			return nil, err
+		}
+		return runs, nil // legacy readers keep their previous policy
 	}
 	live := make(map[string]TmuxSession, len(sessions))
 	for _, s := range sessions {
@@ -345,16 +363,19 @@ func (r *Reaper) FinishedRunningRuns(ctx context.Context) ([]store.AgentRun, err
 }
 
 // LiveRuns adapts LiveRunningRuns to RunLister.
-type LiveRuns struct{ Reaper *Reaper }
+type LiveRuns struct {
+	Reaper *Reaper
+	Strict bool
+}
 
 // ListRunningRuns implements RunLister.
 func (l LiveRuns) ListRunningRuns(ctx context.Context) ([]store.AgentRun, error) {
-	return l.Reaper.LiveRunningRuns(ctx)
+	return l.Reaper.liveRunningRuns(ctx, l.Strict)
 }
 
 // NewLiveRuns is LiveRuns over the real store and tmux.
 func NewLiveRuns(st *store.Store) LiveRuns {
-	return LiveRuns{Reaper: NewReaper(st, docker.New()).WithHost(tmuxctl.New(), st)}
+	return LiveRuns{Reaper: NewReaper(st, docker.New()).WithHost(tmuxctl.New(), st), Strict: st.IsPostgres()}
 }
 
 // EndFinishedSession ends a host Operator's session whose work is over (its final report written)

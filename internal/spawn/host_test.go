@@ -144,7 +144,7 @@ func TestSpawnCodeHost_HappyPath(t *testing.T) {
 	}
 	cmd := launcherCmd(t, dir)
 	runTmp := diskguard.RunTmpDir(agentrt.CommanderHome(), "cmdr-myproj-feat-auth")
-	if !strings.HasPrefix(cmd, "#!/bin/sh\nunset TMUX TMUX_PANE\nTMPDIR='"+runTmp+"'\nexport TMPDIR\nmkdir -p \"$TMPDIR\"\nenv -u TMUX -u TMUX_PANE -u ANTHROPIC_API_KEY -u CLAUDE_CONFIG_DIR GOFLAGS='-trimpath -p=2' COMMANDER_ROLE='operator-feat-auth' 'GIT_COMMITTER_NAME=operator-feat-auth' 'GIT_COMMITTER_EMAIL=operator-feat-auth@operator.commander.invalid' COMMANDER_MANAGER_ROLE='manager-bd-100' 'claude' '-p'") ||
+	if !strings.HasPrefix(cmd, "#!/bin/sh\nexport COMMANDER_RUN_ID=1\nunset TMUX TMUX_PANE\nTMPDIR='"+runTmp+"'\nexport TMPDIR\nmkdir -p \"$TMPDIR\"\nenv -u TMUX -u TMUX_PANE -u ANTHROPIC_API_KEY -u CLAUDE_CONFIG_DIR GOFLAGS='-trimpath -p=2' COMMANDER_ROLE='operator-feat-auth' COMMANDER_RUN_SESSION='"+res.SessionID+"' 'GIT_COMMITTER_NAME=operator-feat-auth' 'GIT_COMMITTER_EMAIL=operator-feat-auth@operator.commander.invalid' COMMANDER_MANAGER_ROLE='manager-bd-100' 'claude' '-p'") ||
 		!strings.Contains(cmd, "'--session-id' '"+res.SessionID+"'") { // minted up front, not captured
 		t.Fatalf("launcher: %s", cmd)
 	}
@@ -238,9 +238,10 @@ func TestSpawnCodeHost_RollbackKillsSessionAndRemovesWorktree(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, ".commander", "operators", "feat-auth.fifo")); err == nil {
 		t.Error("fifo should be removed")
 	}
-	// The only bead call before launch is the read that names the Manager.
-	if len(fs.runs) != 0 || len(bd.Calls) != 1 || !strings.HasPrefix(bd.Calls[0], "Details:") || len(am.Calls) != 0 {
-		t.Errorf("no bookkeeping before launch: %v %v %v", fs.runs, bd.Calls, am.Calls)
+	// Dispatch records its claim before launch; a failed launch closes that claim.
+	// No task mutation or mail registration occurs before launch.
+	if len(fs.runs) != 1 || fs.closed[fs.runs[0].ID] != "spawn-failed" || len(bd.Calls) != 1 || !strings.HasPrefix(bd.Calls[0], "Details:") || len(am.Calls) != 0 {
+		t.Errorf("pre-launch claim must be closed on failed launch: %v %v %v", fs.runs, bd.Calls, am.Calls)
 	}
 }
 

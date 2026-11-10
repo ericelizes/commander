@@ -231,12 +231,12 @@ func (s *Spawner) Spawn(ctx context.Context, req SpawnRequest) (result *SpawnRes
 	}
 	switch req.ProjectType {
 	case "code":
-		if s.useHost != nil && s.useHost() {
+		if beads.PostgresConfigured() || (s.useHost != nil && s.useHost()) {
 			return s.spawnCodeHost(ctx, req)
 		}
 		return s.spawnCode(ctx, req)
 	case "knowledge":
-		if s.useHost != nil && s.useHost() {
+		if beads.PostgresConfigured() || (s.useHost != nil && s.useHost()) {
 			return s.spawnKnowledgeHost(ctx, req)
 		}
 		return s.spawnKnowledge(ctx, req)

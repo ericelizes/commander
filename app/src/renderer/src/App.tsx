@@ -48,6 +48,8 @@ export function App() {
   const [sizes, setSizes] = useState(loadSizes)
   const [winW, setWinW] = useState(window.innerWidth)
   const conn = useStore((s) => s.conn)
+  const snapshot = useStore((s) => s.snapshot)
+  const stateUnavailable = !!snapshot?.degraded || (snapshot?.storage === 'postgres' && conn !== 'live')
   const platform = isMac() ? 'mac' : 'other'
   useShell()
   useLinearSprint()
@@ -158,14 +160,14 @@ export function App() {
             focus, the chat alone. Only hidden under a page, so the chat keeps its
             draft and its scroll. */}
         <main className="col col-main">
-          {page && <ProgressView />}
+          {page && (stateUnavailable ? <p role="status">Live state unavailable.</p> : <ProgressView />)}
           <div
             className={`main-row${tabbed ? (chatTab ? ' tabbed show-chat' : ' tabbed') : ''}${page ? ' under-page' : ''}`}
             style={{ gridTemplateColumns: focused && !narrow ? `minmax(${PANEL_MIN}px, 1fr) 1px ${chat}px` : 'minmax(0, 1fr)' }}
           >
             {focused && (
               <section className="col col-inspector">
-                <InspectorColumn />
+                {stateUnavailable ? <p role="status">Live state unavailable.</p> : <InspectorColumn />}
               </section>
             )}
             {focused && !narrow && <Splitter side="right" onDrag={dragChat} onDone={save} />}

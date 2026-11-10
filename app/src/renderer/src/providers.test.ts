@@ -75,3 +75,20 @@ describe('agent rows', () => {
     expect(groupRows(rows, 'workstream').map((g) => [g.label, g.rows.length])).toEqual([['Commander', 1], ['A', 2], ['B', 1]])
   })
 })
+
+it('uses the canonical execution set including nested Managers, independent of chat poll timing', () => {
+  const input = {
+    executions: [
+      { role: 'manager-root', state: 'idle', project_id: 1, bead_id: 'root' },
+      { role: 'manager-root.1', state: 'working', project_id: 1, bead_id: 'root.1' },
+      { role: 'operator-task-1', state: 'working', project_id: 1, bead_id: 'root.1' },
+    ],
+    agents: {}, workstreams: [{ title: 'Work', manager_role: 'manager-root', project: 'project', project_id: 1, bead_id: 'root', steps: [] }],
+    operators: [], watched: [], providers: {},
+    chats: { phantom: { running: true, state: 'working' } },
+  }
+  const rows = agentRows(input)
+  expect(rows.map((r) => r.role)).toEqual(['manager-root', 'manager-root.1', 'operator-task-1'])
+  expect(rows.filter((r) => r.state === 'working')).toHaveLength(2)
+  expect(agentRows({ ...input, executions: [] })).toEqual([])
+})

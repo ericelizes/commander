@@ -65,48 +65,50 @@ type BoardGate struct {
 // waiting yellow, working green, the rest grey); Text never carries an age:
 // Since is when the state began (0 when unknown), and readers format the age.
 type BoardRow struct {
-	Key         string       `json:"key"`
-	N           int          `json:"n"`
-	Title       string       `json:"title"`
-	Project     string       `json:"project"`
-	BeadID      string       `json:"bead_id"`
-	ManagerRole string       `json:"manager_role"`
-	Starred     bool         `json:"starred"`
-	Kind        string       `json:"kind"`
-	Text        string       `json:"text"`
-	Since       int64        `json:"since"`
-	Progress    Progress     `json:"progress"`
-	Milestones  Progress     `json:"milestones"`
-	Working     int          `json:"working"` // its Manager in a turn and its live Operators
-	Flag        int          `json:"flag"`    // NEEDS YOU items under it
-	Unread      int          `json:"unread"`
-	Gate        *BoardGate   `json:"gate"`
-	Tracks      []BoardTrack `json:"tracks"`               // its open nested workstreams; empty unless it has two or more
-	Scope       string       `json:"scope,omitempty"`      // the one open nested workstream standing in for this row: its title, and where a click lands
-	ScopeRole   string       `json:"scope_role,omitempty"` // that stand-in's own Manager, when it has one (nested Managers on)
-	Why         string       `json:"why,omitempty"`        // when the row is not what the beads last said: what cmdrd saw instead
-	AgeAs       string       `json:"age_as,omitempty"`     // the state its age runs under when that is not Kind|Text
-	Workflow    *Workflow    `json:"workflow,omitempty"`
-	Diagram     *Diagram     `json:"diagram,omitempty"`
+	Evidence    *StatusEvidence `json:"evidence,omitempty"`
+	Key         string          `json:"key"`
+	N           int             `json:"n"`
+	Title       string          `json:"title"`
+	Project     string          `json:"project"`
+	BeadID      string          `json:"bead_id"`
+	ManagerRole string          `json:"manager_role"`
+	Starred     bool            `json:"starred"`
+	Kind        string          `json:"kind"`
+	Text        string          `json:"text"`
+	Since       int64           `json:"since"`
+	Progress    Progress        `json:"progress"`
+	Milestones  Progress        `json:"milestones"`
+	Working     int             `json:"working"` // its Manager in a turn and its live Operators
+	Flag        int             `json:"flag"`    // NEEDS YOU items under it
+	Unread      int             `json:"unread"`
+	Gate        *BoardGate      `json:"gate"`
+	Tracks      []BoardTrack    `json:"tracks"`               // its open nested workstreams; empty unless it has two or more
+	Scope       string          `json:"scope,omitempty"`      // the one open nested workstream standing in for this row: its title, and where a click lands
+	ScopeRole   string          `json:"scope_role,omitempty"` // that stand-in's own Manager, when it has one (nested Managers on)
+	Why         string          `json:"why,omitempty"`        // when the row is not what the beads last said: what cmdrd saw instead
+	AgeAs       string          `json:"age_as,omitempty"`     // the state its age runs under when that is not Kind|Text
+	Workflow    *Workflow       `json:"workflow,omitempty"`
+	Diagram     *Diagram        `json:"diagram,omitempty"`
 }
 
 // BoardTrack is a nested workstream's sub-row. Letter is its number after the
 // row's ("#3" + ".1.2"). Like the row, one with a single open child shows that
 // child: its bead, title and children.
 type BoardTrack struct {
-	Key        string       `json:"key"`
-	BeadID     string       `json:"bead_id"`
-	Letter     string       `json:"letter"`
-	Children   []BoardTrack `json:"children,omitempty"`
-	Title      string       `json:"title"`
-	Kind       string       `json:"kind"`
-	Text       string       `json:"text"`
-	Since      int64        `json:"since"`
-	Progress   Progress     `json:"progress"`
-	Milestones Progress     `json:"milestones"`
-	Working    int          `json:"working"` // its live Operators
-	Why        string       `json:"why,omitempty"`
-	AgeAs      string       `json:"age_as,omitempty"`
+	Evidence   *StatusEvidence `json:"evidence,omitempty"`
+	Key        string          `json:"key"`
+	BeadID     string          `json:"bead_id"`
+	Letter     string          `json:"letter"`
+	Children   []BoardTrack    `json:"children,omitempty"`
+	Title      string          `json:"title"`
+	Kind       string          `json:"kind"`
+	Text       string          `json:"text"`
+	Since      int64           `json:"since"`
+	Progress   Progress        `json:"progress"`
+	Milestones Progress        `json:"milestones"`
+	Working    int             `json:"working"` // its live Operators
+	Why        string          `json:"why,omitempty"`
+	AgeAs      string          `json:"age_as,omitempty"`
 	// ManagerRole is set when the nested workstream has a Manager of its own.
 	ManagerRole string `json:"manager_role,omitempty"`
 }
@@ -272,7 +274,7 @@ func (b board) trackLetterOf(a NeedsYou) string {
 
 func (b board) row(ws SnapWorkstream) BoardRow {
 	b.steps = map[string]SnapStep{}
-	for _, s := range flattenSteps(ws.Steps) {
+	for s := range stepValues(ws.Steps) {
 		b.steps[s.BeadID] = s
 	}
 	asks := b.asks[ws.Project+"\x00"+ws.Title]
@@ -426,7 +428,7 @@ func holds(s SnapStep, id string) bool {
 func (b board) workstreamLine(ws SnapWorkstream, agent SnapAgent, hasAgent bool, asks int) line {
 	l := b.workstreamBaseLine(ws, agent, hasAgent, asks)
 	if l.kind != "needs" {
-		for _, s := range flattenSteps(ws.Steps) {
+		for s := range stepValues(ws.Steps) {
 			if !stepClosed(s) && !s.Superseded && ((s.Waiting != "" && s.Waiting != heldElsewhere) || parked(s)) {
 				if why := pushWhy(s.PushCount, s.PushFirst); why != "" {
 					l.text = withCardWarning(l.text, why)
@@ -510,7 +512,7 @@ func hasBroken(steps []SnapStep) bool {
 
 func brokenSteps(steps []SnapStep) []SnapStep {
 	var out []SnapStep
-	for _, s := range flattenSteps(steps) {
+	for s := range stepValues(steps) {
 		if s.Broken {
 			out = append(out, s)
 		}
@@ -825,7 +827,7 @@ func (b board) outsideBlockers(ws SnapWorkstream, open []SnapStep) []SnapStep {
 	// Outside = not under this row (a track row's subtree, so a sibling track
 	// is outside it).
 	inside := map[string]bool{}
-	for _, s := range flattenSteps(ws.Steps) {
+	for s := range stepValues(ws.Steps) {
 		inside[s.BeadID] = true
 	}
 	var queue []SnapStep
@@ -904,7 +906,7 @@ const pitchDeadline = 30 * 60
 // proposed ask is Commander's move (accept or overrule) on the same clock.
 func (b board) pitchLine(ws SnapWorkstream, busy bool) (line, bool) {
 	ids := []string{ws.BeadID}
-	for _, s := range flattenSteps(ws.Steps) {
+	for s := range stepValues(ws.Steps) {
 		if !stepClosed(s) && !parked(s) {
 			ids = append(ids, s.BeadID)
 		}
@@ -1206,7 +1208,7 @@ func humanWait(l line, tasks map[string]string) line {
 func operatorTaskTitles(s Snapshot) map[string]string {
 	out := map[string]string{}
 	for _, ws := range s.Workstreams {
-		for _, st := range flattenSteps(ws.Steps) {
+		for st := range stepValues(ws.Steps) {
 			if strings.HasPrefix(st.Owner, "operator-") && st.Status != "closed" {
 				out[st.Owner] = plainTitle(st.Title)
 			}
@@ -1426,7 +1428,7 @@ func (n *NeedsYou) decisionQuestion() string {
 // rest; a blocked user gate is not ready. The text is empty when none is.
 func boardNeedsYou(ws SnapWorkstream, decisions []SnapStep, needs []NeedsYou) (string, []SnapStep) {
 	byID := map[string]SnapStep{}
-	for _, s := range flattenSteps(ws.Steps) {
+	for s := range stepValues(ws.Steps) {
 		byID[s.BeadID] = s
 	}
 	order := map[string]int{}

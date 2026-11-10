@@ -57,6 +57,23 @@ var beadsFiles = []string{"beads.db", "beads.db-wal", "last-touched", "issues.js
 // counting it made a busy project's own flush look like a write: the cache
 // dropped and ReadConsistent re-read the whole project, up to 3 times a load.
 func fingerprint(projectDir string) string {
+	if PostgresConfigured() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		s, e := postgresStore()
+		if e != nil {
+			return ""
+		}
+		pid, e := projectID(ctx, s.DB(), projectDir)
+		if e != nil {
+			return ""
+		}
+		var revision int64
+		if e = s.DB().QueryRowContext(ctx, `SELECT state_revision FROM projects WHERE id=?`, pid).Scan(&revision); e != nil {
+			return ""
+		}
+		return fmt.Sprint(revision)
+	}
 	journals, err := filepath.Glob(filepath.Join(projectDir, ".beads", "dolt", "*", ".dolt", "noms", "vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv"))
 	if err != nil {
 		return ""

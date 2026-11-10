@@ -266,13 +266,17 @@ func viaDoor(ctx context.Context, dir string, req DoorRequest) (DoorResponse, er
 // runWrite is how a br write leaves a client: through the door when it is on and
 // cmdrd answers, else directly (logged).
 func runWrite(ctx context.Context, dir, name string, args ...string) ([]byte, []byte, error) {
-	if PostgresConfigured() && !inDoorServer && !DoorEnabled() { return nil,nil,fmt.Errorf("Postgres write door cannot be disabled") }
+	if PostgresConfigured() && !inDoorServer && !DoorEnabled() {
+		return nil, nil, fmt.Errorf("Postgres write door cannot be disabled")
+	}
 	if dir != "" && !inDoorServer && DoorEnabled() && DoorWritable(args) {
 		out, err := viaDoor(ctx, dir, DoorRequest{Args: args, NoWait: true, Intent: intentOf(ctx)})
 		if !errors.Is(err, errDoorDown) {
 			return []byte(out.Stdout), []byte(out.Stderr), err
 		}
-		if PostgresConfigured() { return nil, nil, fmt.Errorf("Postgres writes require the Commander service: %w", err) }
+		if PostgresConfigured() {
+			return nil, nil, fmt.Errorf("Postgres writes require the Commander service: %w", err)
+		}
 		logDoorFallback(dir, args, err)
 	}
 	stdout, stderr, err := RunWrite(ctx, dir, name, args...)

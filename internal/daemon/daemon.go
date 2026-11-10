@@ -51,6 +51,7 @@ import (
 	"github.com/example-user/commander/internal/rolemail"
 	"github.com/example-user/commander/internal/scheduler"
 	"github.com/example-user/commander/internal/spawn"
+	"github.com/example-user/commander/internal/statusclassify"
 	"github.com/example-user/commander/internal/store"
 	"github.com/example-user/commander/internal/tmuxctl"
 	"github.com/example-user/commander/internal/tui"
@@ -341,6 +342,11 @@ func New() (*Daemon, error) {
 			return out
 		},
 	}
+	if st.IsPostgres() {
+		live.Deps.Scrape = nil
+		liveOps.every = time.Second
+	}
+
 	watch := opWatch{store: st, issues: st, activeAt: transcriptActiveAt, now: time.Now, latest: func() (livedata.Snapshot, bool) {
 		data, ok := live.Last()
 		if !ok {
@@ -494,6 +500,11 @@ func (d *Daemon) Run(ctx context.Context) error {
 			go d.ensureManagers(ctx)
 		}
 		go d.chat.Heartbeat(ctx, time.Minute)
+		if d.store.IsPostgres() {
+			go d.store.MaintainEventHistory(ctx)
+			worker := &statusclassify.Worker{Store: d.store, Engine: d.chat, Home: d.home}
+			go worker.Run(ctx)
+		}
 		go chat.RunCaptureSweep(ctx, d.home, time.Hour)
 	}
 	if !d.skipSocket {
@@ -507,6 +518,10 @@ func (d *Daemon) Run(ctx context.Context) error {
 	d.inbox.Start(ctx)
 	if d.store != nil && !d.skipSocket {
 		go d.reapHostRuns(ctx)
+		if d.store.IsPostgres() && d.live != nil && d.live.Live != nil {
+			go d.reconcilePostgresPresence(ctx)
+			go d.observeLegacyPostgresOperators(ctx)
+		}
 		sweepReads := d.reads
 		if sweepReads == nil {
 			sweepReads = d.beads
@@ -857,6 +872,11 @@ func (d *Daemon) startAPI(ctx context.Context) {
 		return
 	}
 	opts := d.apiOptions(token)
+	if d.store.IsPostgres() {
+		opts.StateStore = d.store
+		opts.Changes = d.store.WatchState(ctx)
+		opts.Interval = 30 * time.Second
+	}
 	srv := api.New(opts)
 	port := 0
 	if d.cfg != nil {

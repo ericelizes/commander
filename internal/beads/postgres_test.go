@@ -78,7 +78,7 @@ func TestPostgresBeadLifecycleAndAtomicRollback(t *testing.T) {
 	if e = c.SetState(ctx, dir, child, "phase", "review", ""); e != nil {
 		t.Fatal(e)
 	}
-	if e = c.AddComment(ctx, dir, child, "Evidence"); e != nil {
+	if e = c.AddComment(ctx, dir, child, "---\nEvidence"); e != nil {
 		t.Fatal(e)
 	}
 	details, e := c.Details(ctx, dir, []string{root, child})

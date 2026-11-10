@@ -30,7 +30,7 @@ func TestSpawnCodeHost_CodexRuntimeRunsTheBridge(t *testing.T) {
 	cmd := launcherCmd(t, dir)
 	// Same env, brief and session as a Claude Operator; Codex via the bridge.
 	for _, want := range []string{
-		"env -u TMUX -u TMUX_PANE -u ANTHROPIC_API_KEY -u CLAUDE_CONFIG_DIR GOFLAGS='-trimpath -p=2' COMMANDER_ROLE='operator-feat-auth' 'GIT_COMMITTER_NAME=operator-feat-auth' 'GIT_COMMITTER_EMAIL=operator-feat-auth@operator.commander.invalid' COMMANDER_MANAGER_ROLE='manager-bd-100' 'cmdr' '__codex-bridge'",
+		"env -u TMUX -u TMUX_PANE -u ANTHROPIC_API_KEY -u CLAUDE_CONFIG_DIR GOFLAGS='-trimpath -p=2' COMMANDER_ROLE='operator-feat-auth' COMMANDER_RUN_SESSION='" + res.SessionID + "' 'GIT_COMMITTER_NAME=operator-feat-auth' 'GIT_COMMITTER_EMAIL=operator-feat-auth@operator.commander.invalid' COMMANDER_MANAGER_ROLE='manager-bd-100' 'cmdr' '__codex-bridge'",
 		"'--session-id' '" + res.SessionID + "'",
 		"'--thread-file' '" + chat.CodexThreadFile(home, "operator-feat-auth") + "'",
 		"'--skip-permissions'",

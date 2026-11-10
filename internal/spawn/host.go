@@ -213,6 +213,30 @@ func (s *Spawner) spawnCodeHost(ctx context.Context, req SpawnRequest) (*SpawnRe
 	if err := os.WriteFile(launcher, []byte(script), 0o700); err != nil {
 		return bail(fmt.Errorf("spawn: write launcher %s: %w", launcher, err))
 	}
+	spawnTime := s.now()
+	runID, err := s.store.InsertAgentRun(ctx, store.AgentRun{
+		ProjectID:         req.ProjectID,
+		TaskBeadID:        req.TaskBeadID,
+		AgentName:         agentName,
+		OpencodeSessionID: sessionID,
+		TmuxPaneID:        sql.NullString{String: sessionName, Valid: true},
+		SpawnTime:         spawnTime.Unix(),
+		Status:            "running",
+		WorktreePath:      sql.NullString{String: worktreePath, Valid: true},
+	})
+	if err != nil {
+		return bail(fmt.Errorf("spawn: insert agent_runs: %w", err))
+	}
+	cleanups.push(func() error {
+		c, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		return s.store.MarkClosed(c, runID, "spawn-failed")
+	})
+	script = strings.Replace(script, "#!/bin/sh\n", "#!/bin/sh\nexport COMMANDER_RUN_ID="+fmt.Sprint(runID)+"\n", 1)
+	if err := os.WriteFile(launcher, []byte(script), 0700); err != nil {
+		return bail(err)
+	}
+
 	if !req.Resume {
 		s.markRunStart(agentName)
 	}
@@ -236,20 +260,6 @@ func (s *Spawner) spawnCodeHost(ctx context.Context, req SpawnRequest) (*SpawnRe
 
 	// TmuxPaneID carries the session name; ContainerID stays NULL. That is how
 	// the watchdog and the reaper tell a host Operator from a Docker one.
-	spawnTime := s.now()
-	runID, err := s.store.InsertAgentRun(ctx, store.AgentRun{
-		ProjectID:         req.ProjectID,
-		TaskBeadID:        req.TaskBeadID,
-		AgentName:         agentName,
-		OpencodeSessionID: sessionID,
-		TmuxPaneID:        sql.NullString{String: sessionName, Valid: true},
-		SpawnTime:         spawnTime.Unix(),
-		Status:            "running",
-		WorktreePath:      sql.NullString{String: worktreePath, Valid: true},
-	})
-	if err != nil {
-		return bail(fmt.Errorf("spawn: insert agent_runs: %w", err))
-	}
 	s.recordRuntime(ctx, req, agentName, spawnTime.Unix())
 
 	return &SpawnResult{
@@ -336,6 +346,29 @@ func (s *Spawner) spawnKnowledgeHost(ctx context.Context, req SpawnRequest) (*Sp
 	if err := os.WriteFile(launcher, []byte(script), 0o700); err != nil {
 		return bail(fmt.Errorf("spawn: write launcher %s: %w", launcher, err))
 	}
+	spawnTime := s.now()
+	runID, err := s.store.InsertAgentRun(ctx, store.AgentRun{
+		ProjectID:         req.ProjectID,
+		TaskBeadID:        req.TaskBeadID,
+		AgentName:         agentName,
+		OpencodeSessionID: sessionID,
+		TmuxPaneID:        sql.NullString{String: sessionName, Valid: true},
+		SpawnTime:         spawnTime.Unix(),
+		Status:            "running",
+	})
+	if err != nil {
+		return bail(fmt.Errorf("spawn: insert agent_runs: %w", err))
+	}
+	cleanups.push(func() error {
+		c, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		return s.store.MarkClosed(c, runID, "spawn-failed")
+	})
+	script = strings.Replace(script, "#!/bin/sh\n", "#!/bin/sh\nexport COMMANDER_RUN_ID="+fmt.Sprint(runID)+"\n", 1)
+	if err := os.WriteFile(launcher, []byte(script), 0700); err != nil {
+		return bail(err)
+	}
+
 	if !req.Resume {
 		s.markRunStart(agentName)
 	}
@@ -357,19 +390,6 @@ func (s *Spawner) spawnKnowledgeHost(ctx context.Context, req SpawnRequest) (*Sp
 		return bail(fmt.Errorf("spawn: bd set-state %s: %w", req.TaskBeadID, err))
 	}
 
-	spawnTime := s.now()
-	runID, err := s.store.InsertAgentRun(ctx, store.AgentRun{
-		ProjectID:         req.ProjectID,
-		TaskBeadID:        req.TaskBeadID,
-		AgentName:         agentName,
-		OpencodeSessionID: sessionID,
-		TmuxPaneID:        sql.NullString{String: sessionName, Valid: true},
-		SpawnTime:         spawnTime.Unix(),
-		Status:            "running",
-	})
-	if err != nil {
-		return bail(fmt.Errorf("spawn: insert agent_runs: %w", err))
-	}
 	s.recordRuntime(ctx, req, agentName, spawnTime.Unix())
 
 	// WorktreePath stays empty: the Operator works in the project path.
@@ -440,7 +460,7 @@ func hostOperatorCommand(req SpawnRequest, agentName, sessionID string, resuming
 	// slot. -trimpath: Go keys its build and test caches on source paths, so
 	// without it every new worktree recompiled and re-ran everything (measured:
 	// 0 of 34 packages cached in a second fresh worktree, 31 of 34 with it).
-	parts := []string{"env", "-u", "TMUX", "-u", "TMUX_PANE", "-u", "ANTHROPIC_API_KEY", "-u", "CLAUDE_CONFIG_DIR", "GOFLAGS='-trimpath -p=2'", "COMMANDER_ROLE=" + shellQuote(agentName)}
+	parts := []string{"env", "-u", "TMUX", "-u", "TMUX_PANE", "-u", "ANTHROPIC_API_KEY", "-u", "CLAUDE_CONFIG_DIR", "GOFLAGS='-trimpath -p=2'", "COMMANDER_ROLE=" + shellQuote(agentName), "COMMANDER_RUN_SESSION=" + shellQuote(sessionID)}
 	for _, kv := range OperatorGitEnv(agentName) {
 		parts = append(parts, shellQuote(kv))
 	}
@@ -487,6 +507,9 @@ func readSessionFile(path string) string {
 // a worktree's .beads is a stale copy, so point --db at
 // the project root's database.
 func BrCommand(projectRoot string) string {
+	if beads.PostgresConfigured() {
+		return "cmdr bead --project-dir " + shellQuote(projectRoot)
+	}
 	return "bd --db " + shellQuote(filepath.Join(projectRoot, ".beads", "beads.db"))
 }
 
