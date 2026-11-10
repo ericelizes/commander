@@ -66,3 +66,25 @@ The full Go suite was also run through a slot; its final status and any
 out-of-scope environment/cutover failures are recorded on the task bead.
 No install, restart, ship, merge or production change is part of this proof.
 Independent review remains a separate prerequisite for source delivery.
+
+## Confirmed review corrections (writer17 final candidate)
+
+`TestHiddenHandoffRetainsFailureAcrossManagerReaction` adds a genuine sibling
+user action and moves the Manager through idle, working, unread mail and idle.
+The card remains visible while Checkin retains the hidden overdue handoff; the
+persisted issue key, Since and Told survive every transition and watcher
+replacement, with exactly one escalation. Before the correction this failed
+at the working transition with `reaction 1 lost failure: []`.
+
+Handoff projection now carries its selected bead and receipt into recovery
+guidance. `TestRecoveryUsesSelectedHandoff` mixes a pending start receipt with
+two overdue close receipts in both orders, checking the oldest overdue cause,
+report-review action and exact target agree. The interaction eval also covers
+the mixed user action through Manager reactions.
+
+The final writer17 candidate already contains
+`TestHandoffWakeNeverActsOnMovedOrUnknownCustody`: retained wait, no notification
+stamp, live replacement owner, closed/user-held/parked/deleted cases, with no
+mail and no mutation. This supersedes the older inadequate replacement test
+for review finding R3. These corrections do not complete the original review's
+missing renderer/config coverage; separate independent assessment remains due.
