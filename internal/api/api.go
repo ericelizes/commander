@@ -124,7 +124,7 @@ func New(opts Options) *Server {
 func (s *Server) Refresh(ctx context.Context) bool {
 	s.refreshMu.Lock()
 	defer s.refreshMu.Unlock()
-	return s.refreshLocked(ctx)
+	return s.refreshLocked(beads.WithReadCaller(ctx, "api-refresh"))
 }
 
 func (s *Server) refreshLocked(ctx context.Context) bool {

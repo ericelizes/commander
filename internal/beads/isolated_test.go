@@ -1,12 +1,15 @@
 package beads
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -17,6 +20,10 @@ import (
 // second outlives the invariant budget. Concurrent display misses must coalesce
 // independently, and the next invariant pass must resume after the first batch.
 func TestIsolatedIncrementalRetainsProgressWithoutBlockingDisplay(t *testing.T) {
+	var logs bytes.Buffer
+	previous := log.Writer()
+	log.SetOutput(&logs)
+	defer log.SetOutput(previous)
 	dir := t.TempDir()
 	if err := os.Mkdir(filepath.Join(dir, ".beads"), 0700); err != nil {
 		t.Fatal(err)
@@ -94,6 +101,11 @@ func TestIsolatedIncrementalRetainsProgressWithoutBlockingDisplay(t *testing.T) 
 	cancel()
 	if err := <-done; !errors.Is(err, context.Canceled) {
 		t.Fatalf("invariant err=%v", err)
+	}
+	for _, want := range []string{"caller=invariant-test", "requested=6219", "stale=6219", "show_batches=2", "reason=cold", "noExport=true", "wait=", "hold=", "context canceled"} {
+		if !strings.Contains(logs.String(), want) {
+			t.Errorf("diagnostics lack %q: %s", want, logs.String())
+		}
 	}
 	if batches.Load() != 2 {
 		t.Fatalf("cancel launched more batches: %d", batches.Load())

@@ -165,7 +165,7 @@ func (s *Server) refreshAfter(after time.Time) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), s.refreshBudget)
 	defer cancel()
-	s.refreshLocked(ctx)
+	s.refreshLocked(beads.WithReadCaller(ctx, "api-settle"))
 }
 
 // lastLoadClean is false when the latest load was degraded, kept last-good rows

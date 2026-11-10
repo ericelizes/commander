@@ -2,10 +2,15 @@ package daemon
 
 import (
 	"context"
+	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/example-user/commander/internal/beads"
 	"github.com/example-user/commander/internal/livedata"
+	"github.com/example-user/commander/internal/store"
 )
 
 func TestInvariantMailsManagerOncePerViolation(t *testing.T) {
@@ -85,4 +90,56 @@ func TestInvariantFreshReadOverridesDisplayBeforeMail(t *testing.T) {
 	if sent != 1 {
 		t.Fatalf("fresh violation was not mailed: sent=%d", sent)
 	}
+}
+
+// Budget exhaustion never turns partial validation into mail or clears existing
+// alert state; the next successful fresh read still controls that state.
+func TestInvariantBudgetSkipsMailAndRetainsEvidence(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	if _, err := st.InsertProject(context.Background(), store.Project{Name: "example", Type: "code", Path: t.TempDir(), Status: "active"}); err != nil {
+		t.Fatal(err)
+	}
+	bd := &budgetInvariantClient{MemClient: &beads.MemClient{}, t: t}
+	sent := 0
+	w := newInvariantWatcher(func() (livedata.Snapshot, bool) { return livedata.Snapshot{}, true }, func(context.Context, string, string, string) error { sent++; return nil })
+	w.seen["demo-1"] = 1
+	w.told["demo-2"] = true
+	w.fresh = func(ctx context.Context) (livedata.Snapshot, bool) {
+		ctx, cancel := context.WithTimeout(ctx, 20*time.Millisecond)
+		defer cancel()
+		data, ok := loadInvariant(ctx, livedata.Deps{Store: st, Beads: bd})
+		return livedata.BuildSnapshot(data, nil), ok
+	}
+	w.pass(context.Background())
+	if sent != 0 || w.seen["demo-1"] != 1 || !w.told["demo-2"] || !bd.called {
+		t.Fatalf("spent read changed alerts: sent=%d seen=%v told=%v read=%v", sent, w.seen, w.told, bd.called)
+	}
+	// The production bound is present even when the caller has no deadline.
+	bd.checkOnly = true
+	if _, ok := loadInvariant(context.Background(), livedata.Deps{Store: st, Beads: bd}); ok {
+		t.Fatal("failed load accepted")
+	}
+}
+
+type budgetInvariantClient struct {
+	*beads.MemClient
+	t                 *testing.T
+	called, checkOnly bool
+}
+
+func (c *budgetInvariantClient) List(ctx context.Context, _ string, _ beads.ListOptions) ([]beads.Bead, error) {
+	c.called = true
+	deadline, ok := ctx.Deadline()
+	if !ok || time.Until(deadline) > invariantReadBudget {
+		c.t.Error("invariant load has no bounded deadline")
+	}
+	if !c.checkOnly {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+	return nil, errors.New("unreadable")
 }

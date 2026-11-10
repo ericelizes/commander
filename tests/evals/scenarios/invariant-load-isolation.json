@@ -1,0 +1,7 @@
+{
+  "name": "invariant-load-isolation",
+  "description": "Synthetic 6219-row project with slow DB-only invariant hydration concurrent with display polls and a close through the authenticated API write door. The close must settle within the bounded refresh time, advance version and generated_at, reconcile the closed step, preserve unauthorized-write refusal and avoid duplicate hydrations. Runs in internal/api:TestInvariantLoadIsolationScenario; actual 20-id batching, cancellation, progress reuse and fresh-action bypass run in internal/beads:TestIsolatedIncrementalRetainsProgressWithoutBlockingDisplay.",
+  "rows": 6219,
+  "display_polls": 4,
+  "max_refresh_ms": 5000
+}
