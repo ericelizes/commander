@@ -6,12 +6,14 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	_ "embed"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"syscall"
@@ -55,6 +57,10 @@ type Options struct {
 	// DryRun does everything a ship does (refusals, queue, slot, lock, hold
 	// checks, replays, checks) except the merge, and reports what would land.
 	DryRun bool
+	// LookPath finds the gitleaks binary for the secret scan; nil uses
+	// exec.LookPath (the package's tests pin that default to "not found").
+	// Not found = the scan is skipped with a warning.
+	LookPath func(string) (string, error)
 }
 
 // Run merges opts.Branch into the base branch of opts.Root, fast-forward only,
@@ -386,6 +392,9 @@ func verifyTree(ctx context.Context, opts Options, base, branchSHA string, step 
 				argv []string
 			}{appDir, []string{"npm", "test"}})
 	}
+	if err := scanSecrets(ctx, opts, run, base, branchSHA, out); err != nil {
+		return err
+	}
 	for _, check := range checks {
 		fmt.Fprintf(out, "ship check: %s\n", strings.Join(check.argv, " "))
 		o, err := run(ctx, check.dir, check.argv[0], check.argv[1:]...)
@@ -398,6 +407,148 @@ func verifyTree(ctx context.Context, opts Options, base, branchSHA string, step 
 		if err != nil {
 			return errors.New(describeRed(branchSHA, check.argv, err, o))
 		}
+	}
+	return nil
+}
+
+// lookPath finds gitleaks when Options.LookPath is nil (a variable so the
+// package's tests can pin it: a gitleaks on the tester's PATH must not change
+// what a ship test sees).
+var lookPath = exec.LookPath
+
+// defaultGitleaksConfig is tool-owned: upstream v8.21.2 rules with no
+// global allowlist or path allowlists. Never inherit a repository's policy.
+//
+//go:embed gitleaks.toml
+var defaultGitleaksConfig string
+
+// Include historical changes and one synthetic commit representing the entire
+// base..tip change. No rename or binary heuristics may hide added content.
+func gitleaksLogOpts(revs string) string {
+	return "--text --no-textconv --no-ext-diff --no-renames --diff-merges=first-parent " + revs
+}
+
+// gitleaksLevel matches one of gitleaks' own log lines ("12:57AM ERR ...",
+// colours stripped), never a line of scanned content.
+var (
+	gitleaksLevel = regexp.MustCompile(`^\d{1,2}:\d{2}[AP]M (TRC|DBG|INF|WRN|ERR|FTL) (.*)$`)
+	ansiEscape    = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+	gitleaksFound = regexp.MustCompile(`^(leaks found: [1-9]|[1-9][0-9]* leaks found)`)
+)
+
+// readGitleaksLog reads gitleaks' own log lines: leaks is whether it
+// reported findings, incomplete why it did not scan the whole range ("" when
+// it did). gitleaks v8.21.2 logs "failed to scan Git repository" when its git
+// child writes anything to stderr (an ambiguous ref, an option an older git
+// does not know), then still prints "scan completed" and "no leaks found" and
+// exits 0; so any ERR or FTL line, or a "partial scan", means the scan did
+// not complete, and so does a run that never says "scan completed".
+func readGitleaksLog(output string) (leaks bool, incomplete string) {
+	completed := false
+	for _, line := range strings.Split(ansiEscape.ReplaceAllString(output, ""), "\n") {
+		m := gitleaksLevel.FindStringSubmatch(strings.TrimSpace(line))
+		if m == nil {
+			continue
+		}
+		if m[1] == "WRN" && gitleaksFound.MatchString(m[2]) {
+			leaks = true
+		}
+		switch {
+		case incomplete != "":
+		case m[1] == "ERR" || m[1] == "FTL" || strings.Contains(m[2], "partial scan"):
+			incomplete = m[1] + " " + m[2]
+		case strings.HasPrefix(m[2], "scan completed"):
+			completed = true
+		}
+	}
+	if incomplete == "" && !completed {
+		incomplete = `no "scan completed" line`
+	}
+	return leaks, incomplete
+}
+
+// scanSecrets runs gitleaks over the commits the branch adds to base and
+// refuses on any finding. Without gitleaks it warns and goes on (the GitHub
+// Action still scans every push).
+//
+// Policy is embedded in the tool. The source directory is private and empty
+// except for a gitdir pointer: repository ignore files cannot suppress findings.
+func scanSecrets(ctx context.Context, opts Options, run Runner, base, branchSHA string, out io.Writer) error {
+	look := opts.LookPath
+	if look == nil {
+		look = lookPath
+	}
+	if _, err := look("gitleaks"); err != nil {
+		fmt.Fprintln(out, "warning: gitleaks not found on PATH, secret scan skipped (install gitleaks to scan before shipping)")
+		return nil
+	}
+	// The range is built from commits, never from the base's name: a tag (or
+	// any ref) named like the base makes the name ambiguous, and git's
+	// warning about it fails the scan (or, read as the tag, scans the wrong
+	// range).
+	baseRef := base
+	if !strings.HasPrefix(baseRef, "refs/") {
+		baseRef = "refs/heads/" + base
+	}
+	baseSHA, err := runGit(ctx, opts.Root, "rev-parse", "--verify", "--quiet", baseRef+"^{commit}")
+	if err != nil {
+		return fmt.Errorf("secret scan: cannot resolve %s: %v", baseRef, err)
+	}
+	cfgDir, err := os.MkdirTemp("", "cmdr-ship-gitleaks-")
+	if err != nil {
+		return fmt.Errorf("secret scan: %v", err)
+	}
+	defer os.RemoveAll(cfgDir)
+	config := filepath.Join(cfgDir, "gitleaks.toml")
+	ignore := filepath.Join(cfgDir, ".gitleaksignore")
+	for path, body := range map[string]string{config: defaultGitleaksConfig, ignore: ""} {
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			return fmt.Errorf("secret scan: %v", err)
+		}
+	}
+	gitDir, err := runGit(ctx, opts.Root, "rev-parse", "--absolute-git-dir")
+	if err != nil {
+		return fmt.Errorf("secret scan: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(cfgDir, ".git"), []byte("gitdir: "+gitDir+"\n"), 0o600); err != nil {
+		return fmt.Errorf("secret scan: %v", err)
+	}
+	// No ref or checkout changes. Scan base-to-each-introduced-tree patches:
+	// a multi-line secret can be assembled, then deleted before the final tip.
+	// rev-list includes side branches introduced by merges, not just first parents.
+	commits, err := runGit(ctx, opts.Root, "rev-list", baseSHA+".."+branchSHA)
+	if err != nil {
+		return fmt.Errorf("secret scan: cannot enumerate intermediate commits: %v", err)
+	}
+	revs := baseSHA + ".." + branchSHA
+	// Retain the explicit base-to-tip check even when the range is empty.
+	for _, commit := range append([]string{branchSHA}, strings.Fields(commits)...) {
+		net, err := runGit(ctx, opts.Root, "-c", "user.name=Commander scan", "-c", "user.email=scan@example.invalid",
+			"commit-tree", commit+"^{tree}", "-p", baseSHA, "-m", "Cumulative secret scan")
+		if err != nil {
+			return fmt.Errorf("secret scan: cannot construct cumulative diff: %v", err)
+		}
+		revs += " " + net + "^.." + net
+	}
+	// --ignore-gitleaks-allow: an inline "gitleaks:allow" comment is the
+	// branch's own word about its own line, so it silences nothing.
+	argv := []string{"gitleaks", "detect", "--source", cfgDir, "--log-opts", gitleaksLogOpts(revs),
+		"--config", config, "--gitleaks-ignore-path", ignore, "--ignore-gitleaks-allow", "--log-level", "info",
+		"--redact", "--no-banner", "--exit-code", "1"}
+	fmt.Fprintf(out, "ship check: gitleaks detect (history and cumulative diffs for all introduced commits %s..%s; tool-owned rules; inline allows ignored)\n", short(baseSHA), short(branchSHA))
+	o, err := run(ctx, opts.Root, argv[0], argv[1:]...)
+	if err != nil && ctx.Err() != nil {
+		return Inconclusive{fmt.Errorf("%v during gitleaks, so %s is not known red: ship it again", context.Cause(ctx), short(branchSHA))}
+	}
+	leaks, incomplete := readGitleaksLog(o)
+	if !leaks && incomplete != "" {
+		return fmt.Errorf("secret scan of %s did not complete (%s): refusing to ship (gitleaks exit: %v)\n%s", short(branchSHA), incomplete, err, tail(o))
+	}
+	if err != nil && !leaks {
+		return fmt.Errorf("secret scan of %s failed: refusing to ship (gitleaks: %v)\n%s", short(branchSHA), err, tail(o))
+	}
+	if err != nil || leaks {
+		return fmt.Errorf("%s has secret findings: refusing to ship (gitleaks: %v)\n%s\nRemove the secret from the branch history (rewrite the commits) and rotate it; false positives require a reviewed change to the tool-owned rules", short(branchSHA), err, tail(o))
 	}
 	return nil
 }

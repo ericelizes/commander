@@ -5,12 +5,28 @@
     "broken-build": {"demo.go": "package demo\n\nfunc Answer() int { return missing }\n"},
     "broken-test": {"demo_test.go": "package demo\n\nimport \"testing\"\n\nfunc TestAnswer(t *testing.T) { t.Fatal(\"wrong answer\") }\n"},
     "broken-app": {"app/package.json": "{\"name\":\"demo\",\"scripts\":{\"typecheck\":\"exit 0\",\"test\":\"echo app-test-failed; exit 1\"}}\n"},
+    "leaky": {"config.txt": "key=AKIAFAKEFAKEFAKEFAKE\n"},
+    "leaky-self-allowed": {"config.txt": "key=AKIAFAKEFAKEFAKEFAKE\n", ".gitleaksignore": "fake-key\n", ".gitleaks.toml": "[allowlist]\npaths = ['''config.txt''']\n"},
+    "leaky-inline-allowed": {"config.txt": "key=AKIAFAKEFAKEFAKEFAKE # gitleaks:allow\n"},
+    "leaky-lockfile": {"package-lock.json": "key=AKIAFAKEFAKEFAKEFAKE\n"},
     "green": {"demo_test.go": "package demo\n\nimport \"testing\"\n\nfunc TestAnswer(t *testing.T) {\n\tif Answer() != 1 {\n\t\tt.Fatal(\"wrong answer\")\n\t}\n}\n"}
   },
+  "histories": {
+    "split-deleted": [
+      {"key.txt": "BEGIN-INVENTED-KEY\ninvented-material\n"},
+      {"key.txt": "BEGIN-INVENTED-KEY\ninvented-material\nEND-INVENTED-KEY\n"},
+      {"key.txt": null}
+    ]
+  },
   "cases": [
+    {"name": "an assembled secret deleted before tip", "args": ["split-deleted", "--dry-run"], "refused": true, "output": ["secret findings"], "absent": ["ship check: go build"]},
     {"name": "a branch that does not build", "args": ["broken-build", "--dry-run"], "refused": true, "output": ["dry run", "is red: go build", "missing"]},
     {"name": "a branch whose test fails", "args": ["broken-test", "--dry-run"], "refused": true, "output": ["dry run", "is red", "wrong answer"]},
     {"name": "a branch whose app test fails", "args": ["broken-app", "--dry-run"], "needs": "npm", "refused": true, "output": ["dry run", "is red: npm test", "app-test-failed"]},
+    {"name": "a branch with a secret", "args": ["leaky", "--dry-run"], "refused": true, "output": ["ship check: gitleaks detect", "secret findings", "fake-key"], "absent": ["ship check: go build"]},
+    {"name": "a branch that allows its own secret", "args": ["leaky-self-allowed", "--dry-run"], "refused": true, "output": ["tool-owned rules", "secret findings", "fake-key"], "absent": ["ship check: go build"]},
+    {"name": "a branch whose secret carries an inline gitleaks:allow", "args": ["leaky-inline-allowed", "--dry-run"], "refused": true, "output": ["inline allows ignored", "secret findings", "fake-key"], "absent": ["ship check: go build"]},
+    {"name": "a secret in an upstream allowlisted path", "args": ["leaky-lockfile", "--dry-run"], "refused": true, "output": ["tool-owned rules", "secret findings"], "absent": ["ship check: go build"]},
     {"name": "a branch that is not there", "args": ["no-such-branch", "--dry-run"], "refused": true, "output": ["not found"]},
     {"name": "a green branch", "args": ["green", "--dry-run"], "output": ["ship check: go build", "ship check: go test", "would move main", "nothing merged"], "absent": ["not installed: installing"]},
     {"name": "the same branch, shipped for real", "args": ["green"], "moves": true, "output": ["not installed: installing"], "absent": ["would move"]}

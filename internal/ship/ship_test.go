@@ -14,6 +14,12 @@ import (
 	"time"
 )
 
+func TestMain(m *testing.M) {
+	// Hermetic: a real gitleaks on PATH would add a call to every check list.
+	lookPath = func(string) (string, error) { return "", exec.ErrNotFound }
+	os.Exit(m.Run())
+}
+
 func git(t *testing.T, dir string, args ...string) string {
 	t.Helper()
 	cmd := exec.Command("git", append([]string{"-c", "user.name=t", "-c", "user.email=t@t"}, args...)...)
@@ -39,6 +45,7 @@ func newRepo(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	git(t, dir, "init", "-b", "main")
+	addWorkflowPolicy(t, dir)
 	commit(t, dir, "a")
 	git(t, dir, "branch", "feat")
 	git(t, dir, "checkout", "feat")
@@ -318,6 +325,7 @@ func newAppRepo(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	git(t, dir, "init", "-b", "main")
+	addWorkflowPolicy(t, dir)
 	commit(t, dir, "a")
 	git(t, dir, "checkout", "-b", "feat")
 	if err := os.MkdirAll(filepath.Join(dir, "app"), 0o755); err != nil {
@@ -614,5 +622,142 @@ func TestRunCommandDropsTheShippersRole(t *testing.T) {
 	}
 	if strings.Contains(out, "COMMANDER_ROLE=") {
 		t.Fatalf("the check inherited the role:\n%s", out)
+	}
+}
+
+func TestShipRefusesOnGitleaksFindings(t *testing.T) {
+	dir := newRepo(t)
+	var calls []call
+	gl := func(string) (string, error) { return "/bin/gitleaks", nil }
+	var out bytes.Buffer
+	clean := func(ctx context.Context, dir, name string, args ...string) (string, error) {
+		recorder("", &calls)(ctx, dir, name, args...)
+		if name == "gitleaks" {
+			return gitleaksClean, nil
+		}
+		return "", nil
+	}
+	mainSHA := git(t, dir, "rev-parse", "main")
+	err := Run(context.Background(), Options{Root: dir, Branch: "feat", LookPath: gl, Run: clean}, &out)
+	if err != nil || len(calls) != 4 || (!strings.HasPrefix(calls[0].cmd, "gitleaks detect --source ") || !strings.Contains(calls[0].cmd, "--no-renames --diff-merges=first-parent "+mainSHA+"..")) || calls[0].dir != dir {
+		t.Fatalf("clean scan: err=%v calls=%+v", err, calls)
+	}
+	if !strings.Contains(calls[0].cmd, " --ignore-gitleaks-allow ") {
+		t.Fatalf("inline gitleaks:allow comments are honoured: %s", calls[0].cmd)
+	}
+	failing := func(_ context.Context, _ string, name string, _ ...string) (string, error) {
+		if name == "gitleaks" {
+			return "Finding: aws-key\n" + gitleaksLeak, os.ErrInvalid
+		}
+		t.Fatalf("ran %s after a red scan", name)
+		return "", nil
+	}
+	err = Run(context.Background(), Options{Root: newRepo(t), Branch: "feat", LookPath: gl, Run: failing}, &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "secret findings") || !strings.Contains(err.Error(), "aws-key") {
+		t.Fatalf("want refusal, got %v", err)
+	}
+}
+
+// Neither main nor the branch supplies rules or ignores; the tool owns policy
+// and the detector uses a private source directory.
+func TestShipGitleaksUsesToolConfigNeverRepositoryPolicy(t *testing.T) {
+	gl := func(string) (string, error) { return "/bin/gitleaks", nil }
+	scan := func(t *testing.T, dir string) (config, ignore, source string) {
+		t.Helper()
+		run := func(_ context.Context, rdir, name string, args ...string) (string, error) {
+			if name != "gitleaks" {
+				return "", nil
+			}
+			flag := func(f string) string {
+				for i, a := range args {
+					if a == f && i+1 < len(args) {
+						return args[i+1]
+					}
+				}
+				t.Fatalf("gitleaks without %s: %v", f, args)
+				return ""
+			}
+			c, err := os.ReadFile(flag("--config"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			i, err := os.ReadFile(flag("--gitleaks-ignore-path"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if rdir == flag("--source") {
+				t.Errorf("gitleaks must use a private source, ran in %s, source %s", rdir, flag("--source"))
+			}
+			config, ignore, source = string(c), string(i), flag("--source")
+			return gitleaksClean, nil
+		}
+		if err := Run(context.Background(), Options{Root: dir, Branch: "feat", LookPath: gl, Run: run}, &bytes.Buffer{}); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+	branchAllowsItself := func(t *testing.T, dir string) {
+		git(t, dir, "checkout", "-q", "feat")
+		os.WriteFile(filepath.Join(dir, ".gitleaksignore"), []byte("branch-fingerprint\n"), 0o644)
+		os.WriteFile(filepath.Join(dir, ".gitleaks.toml"), []byte("[allowlist]\npaths = [\".*\"]\n"), 0o644)
+		git(t, dir, "add", ".gitleaksignore", ".gitleaks.toml")
+		git(t, dir, "commit", "-qm", "allow everything")
+		git(t, dir, "checkout", "-q", "main")
+	}
+
+	t.Run("main has none", func(t *testing.T) {
+		dir := newRepo(t)
+		branchAllowsItself(t, dir)
+		config, ignore, source := scan(t, dir)
+		if config != defaultGitleaksConfig || ignore != "" || source == dir {
+			t.Fatalf("config=%q ignore=%q source=%s, want the default rules, an empty list, the main checkout", config, ignore, source)
+		}
+	})
+	t.Run("main has its own", func(t *testing.T) {
+		dir := newRepo(t)
+		os.WriteFile(filepath.Join(dir, ".gitleaksignore"), []byte("main-fingerprint\n"), 0o644)
+		os.WriteFile(filepath.Join(dir, ".gitleaks.toml"), []byte("title = \"main\"\n"), 0o644)
+		git(t, dir, "add", ".gitleaksignore", ".gitleaks.toml")
+		git(t, dir, "commit", "-qm", "main rules")
+		git(t, dir, "checkout", "-q", "feat")
+		git(t, dir, "rebase", "-q", "main")
+		git(t, dir, "checkout", "-q", "main")
+		branchAllowsItself(t, dir)
+		config, ignore, _ := scan(t, dir)
+		if config != defaultGitleaksConfig || ignore != "" {
+			t.Fatalf("config=%q ignore=%q, want main's", config, ignore)
+		}
+	})
+}
+
+// A gitleaks on the tester's PATH must not reach a test that injects no
+// LookPath: TestMain pins the package default to "not found".
+func TestShipTestsIgnoreAGitleaksOnPATH(t *testing.T) {
+	bin := t.TempDir()
+	if err := os.WriteFile(filepath.Join(bin, "gitleaks"), []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	var calls []call
+	if err := Run(context.Background(), Options{Root: newRepo(t), Branch: "feat", Run: recorder("", &calls)}, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range calls {
+		if strings.HasPrefix(c.cmd, "gitleaks") {
+			t.Fatalf("the PATH's gitleaks ran: %+v", calls)
+		}
+	}
+}
+
+func TestShipSkipsGitleaksWithAWarningWhenAbsent(t *testing.T) {
+	dir := newRepo(t)
+	var calls []call
+	var out bytes.Buffer
+	missing := func(string) (string, error) { return "", os.ErrNotExist }
+	if err := Run(context.Background(), Options{Root: dir, Branch: "feat", LookPath: missing, Run: recorder("", &calls)}, &out); err != nil {
+		t.Fatal(err)
+	}
+	if len(calls) != 3 || !strings.Contains(out.String(), "gitleaks not found") {
+		t.Fatalf("calls=%d out=%q", len(calls), out.String())
 	}
 }
