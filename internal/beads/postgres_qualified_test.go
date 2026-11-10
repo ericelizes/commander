@@ -384,3 +384,17 @@ func TestPostgresQualifiedLocalEditsKeepTheirSemantics(t *testing.T) {
 		t.Fatalf("local global-cycle completion accepted: %v", e)
 	}
 }
+
+func TestPostgresQualifiedManagerNameIsNotForeignCustody(t *testing.T) {
+	f := newQualifiedFixture(t)
+	ctx := context.Background()
+	if e := f.c.SetLabel(ctx, f.dir, f.source, "owner:manager-fixture", true); e != nil {
+		t.Fatal(e)
+	}
+	if e := f.link(ctx); e != nil {
+		t.Fatal(e)
+	}
+	if e := f.c.Close(ctx, f.foreign, f.target); !IsCrossProjectError(e) {
+		t.Fatalf("Manager name stood in for foreign custody: %v", e)
+	}
+}
