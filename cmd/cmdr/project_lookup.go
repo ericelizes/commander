@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/example-user/commander/internal/beads"
 	"github.com/example-user/commander/internal/store"
 	promptassets "github.com/example-user/commander/prompts"
 )

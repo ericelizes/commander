@@ -21,12 +21,15 @@ type qualifiedViews map[int64]*qualifiedView
 
 // The recursive query retains projects at every step. LIMIT is an explicit
 // refusal bound, never a partial success. UNION terminates pre-existing cycles.
+const qualifiedEdgesSQL = `SELECT project_id,issue_id,target_project_id,depends_on_id,type FROM bead_dependencies
+ UNION SELECT project_id,id,project_id,parent_id,'parent-child' FROM bead_tasks WHERE parent_id IS NOT NULL AND deleted_at IS NULL`
+
 const qualifiedComponentSQL = `WITH RECURSIVE component(project_id,id) AS (
  SELECT project_id,id FROM bead_tasks WHERE project_id=? AND deleted_at IS NULL
  UNION
  SELECT CASE WHEN d.project_id=c.project_id AND d.issue_id=c.id THEN d.target_project_id ELSE d.project_id END,
  CASE WHEN d.project_id=c.project_id AND d.issue_id=c.id THEN d.depends_on_id ELSE d.issue_id END
- FROM component c JOIN bead_dependencies d ON (d.project_id=c.project_id AND d.issue_id=c.id) OR (d.target_project_id=c.project_id AND d.depends_on_id=c.id)
+ FROM component c JOIN (` + qualifiedEdgesSQL + `) d ON (d.project_id=c.project_id AND d.issue_id=c.id) OR (d.target_project_id=c.project_id AND d.depends_on_id=c.id)
 ) SELECT project_id,id FROM component LIMIT ?`
 
 func loadQualifiedView(ctx context.Context, q store.Querier, pid int64, force bool) (*qualifiedView, error) {
@@ -108,7 +111,7 @@ func loadQualifiedSeeded(ctx context.Context, q store.Querier, pid int64, force 
 	if e != nil {
 		return nil, e
 	}
-	rows, e = q.QueryContext(ctx, `SELECT project_id,issue_id,target_project_id,depends_on_id,type FROM bead_dependencies WHERE (project_id,issue_id) IN (`+pairs+`)`, args...)
+	rows, e = q.QueryContext(ctx, `SELECT project_id,issue_id,target_project_id,depends_on_id,type FROM (`+qualifiedEdgesSQL+`) d WHERE (project_id,issue_id) IN (`+pairs+`) LIMIT ?`, append(append([]any{}, args...), qualifiedGraphLimit*4+1)...)
 	if e != nil {
 		return nil, e
 	}
@@ -120,6 +123,10 @@ func loadQualifiedSeeded(ctx context.Context, q store.Querier, pid int64, force 
 			return nil, e
 		}
 		v.edges = append(v.edges, edge)
+		if len(v.edges) > qualifiedGraphLimit*4 {
+			rows.Close()
+			return nil, qualifiedFailure("closure", "project", errors.New("qualified edge count exceeds bound"))
+		}
 	}
 	e = rows.Err()
 	rows.Close()

@@ -61,12 +61,26 @@ func projectID(ctx context.Context, q store.Querier, dir string) (int64, error) 
 	if real, e := filepath.EvalSymlinks(abs); e == nil {
 		abs = real
 	}
-	var id int64
-	err = q.QueryRowContext(ctx, `SELECT id FROM projects WHERE path=? OR repo_path=? ORDER BY CASE WHEN path=? THEN 0 ELSE 1 END LIMIT 1`, abs, abs, abs).Scan(&id)
-	if errors.Is(err, sql.ErrNoRows) {
-		return 0, fmt.Errorf("project is not registered: %s", dir)
+	rows, err := q.QueryContext(ctx, `SELECT DISTINCT id FROM projects WHERE path=? OR repo_path=?`, abs, abs)
+	if err != nil {
+		return 0, err
 	}
-	return id, err
+	defer rows.Close()
+	var id int64
+	count := 0
+	for rows.Next() {
+		if err = rows.Scan(&id); err != nil {
+			return 0, err
+		}
+		count++
+	}
+	if err = rows.Err(); err != nil {
+		return 0, err
+	}
+	if count != 1 {
+		return 0, qualifiedFailure("project", dir, fmt.Errorf("expected one registered project identity, found %d", count))
+	}
+	return id, nil
 }
 
 const pgBeadColumns = `b.id,b.title,b.description,b.acceptance_criteria,b.status,b.issue_type,b.priority,b.labels,COALESCE(b.parent_id,''),b.assigned_agent,b.created_at,b.updated_at,b.close_reason,

@@ -678,8 +678,6 @@ func objectiveRowsTimed(ctx context.Context, bc beads.Client, projects []store.P
 				var partial *beads.PartialDetailsError
 				if errors.As(errs[i], &partial) && len(cache.rows[rowsKey(project)]) == 0 {
 					// Cold start: no last-good rows, so show what was read.
-				} else if beads.PostgresConfigured() && errs[i] != nil {
-					rows[i] = nil
 				} else if errs[i] != nil || errors.Is(readErr, beads.ErrChangedDuringRead) {
 					rows[i] = slices.Clone(cache.rows[rowsKey(project)])
 				} else {
@@ -899,7 +897,30 @@ func projectObjectiveRows(ctx context.Context, bc beads.Client, project store.Pr
 		return out, partial
 	}
 	out = dropOrphans(out, closed)
-	attachFoldedOutcomes(out, objectiveBeads, details)
+	outcomeBeads := objectiveBeads
+	if beads.PostgresConfigured() {
+		var missing []string
+		seen := map[string]bool{}
+		for _, b := range objectiveBeads {
+			seen[b.ID] = true
+		}
+		for _, row := range out {
+			for _, id := range row.BlockedBy {
+				if !seen[id] {
+					seen[id] = true
+					missing = append(missing, id)
+				}
+			}
+		}
+		if len(missing) > 0 {
+			blockers, e := bc.List(ctx, project.Path, beads.ListOptions{Status: "all", IDs: missing})
+			if e != nil {
+				return nil, e
+			}
+			outcomeBeads = append(slices.Clone(objectiveBeads), blockers...)
+		}
+	}
+	attachFoldedOutcomes(out, outcomeBeads, details)
 	attachFoldedBlocks(out, objectiveBeads, details, reviewBlocks)
 	if len(out) == 0 && expectsRows(expected, closed, func(id string) string { return parentOf(details, id) }) {
 		return nil, errors.New("rows missing: open beads were listed but no rows were built")

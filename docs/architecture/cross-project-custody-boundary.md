@@ -1,5 +1,9 @@
 # Cross-project custody boundary (source unit 1)
 
+This document describes the first source unit. The subsequent provisional PG
+lifecycle candidate is documented in [qualified PostgreSQL lifecycle](qualified-postgres-lifecycle.md);
+its migration remains release-blocked pending version coordination and independent review.
+
 This candidate adds the custody boundary required before a PostgreSQL reader can
 expose foreign dependency endpoints. It does **not** enable cross-project reads
 or writes in the PostgreSQL adapter. Its local-only dependency schema, lookup,

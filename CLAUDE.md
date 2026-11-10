@@ -2238,3 +2238,13 @@ source only: the PG adapter still supports local dependencies only. See
 Tests: `TestCrossProjectCustodyCLI`, `TestCrossProjectCustodyForeignReceipt`,
 private HTTP eval `TestCrossProjectCustodyScenario`
 (`scenarios/cross-project-custody-boundary.json`).
+
+Qualified PostgreSQL dependency SOURCE CANDIDATE: see
+[qualified lifecycle](docs/architecture/qualified-postgres-lifecycle.md).
+Provisional migration 3 rejects unpublished schema 2 and requires Manager version
+coordination before deployment; no live apply/install/ship is authorized by its
+source tests. Explicit `internal-dep --project SOURCE --target-project TARGET`
+passes expected endpoints to the transaction; ID-only clients remain unchanged.
+Native coverage is `TestPostgresQualified*` in beads/store/livedata/cmdr and
+`tests/evals/scenarios/qualified-postgres-lifecycle.json`. Foreign custody release
+rolls back without foreign receipts, including writes lacking Intent.

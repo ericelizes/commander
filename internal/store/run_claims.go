@@ -17,6 +17,9 @@ func (s *Store) insertClaimedRun(ctx context.Context, r AgentRun) (int64, error)
 		return 0, errors.New("native execution requires a startup claim and complete session/provider binding")
 	}
 	e := s.WithTx(ctx, func(q Querier) error {
+		if _, e := q.ExecContext(ctx, `SELECT pg_advisory_xact_lock(734031823)`); e != nil {
+			return e
+		}
 		// Hold the mode through run binding. A concurrent cutover/drain cannot
 		// commit between this admission decision and the execution insert.
 		var mode string

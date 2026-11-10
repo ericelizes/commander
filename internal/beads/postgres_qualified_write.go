@@ -125,3 +125,13 @@ func pgQualifiedDep(ctx context.Context, q store.Querier, pid int64, from, to, s
 	_, e = q.ExecContext(ctx, `INSERT INTO bead_dependencies(project_id,issue_id,target_project_id,depends_on_id,type) VALUES(?,?,?,?,?) ON CONFLICT DO NOTHING`, pid, from, target, to, kind)
 	return nil, e
 }
+
+// QualifiedDependency writes only the source-owned dependency record. Expected
+// registered project paths travel through the ordinary write door to pgWrite.
+func QualifiedDependency(ctx context.Context, sourceDir, targetDir, op, from, to string) error {
+	if !PostgresConfigured() {
+		return errors.New("qualified dependencies require PostgreSQL")
+	}
+	_, _, err := runBr(ctx, sourceDir, beadsBinary(), "dep", op, from, to, "--source-project", sourceDir, "--target-project", targetDir)
+	return err
+}
