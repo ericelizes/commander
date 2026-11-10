@@ -35,4 +35,4 @@ jobs:
             -e XDG_CACHE_HOME="$HOME/.cache" \
             -e GOMAXPROCS=2 -e GOFLAGS='-p=2' \
             -v "$cache:$cache:ro" -v "$PWD:/src:ro" -w /src golang:1.25 \
-            bash -c 'apt-get update && apt-get install -y tmux python3 && mkdir -p "$HOME" && go test -count=1 -timeout 5m ./tests/evals -run "^TestEvalBR|^TestCommanderEvalScenarios$/^activate-commander-(explicit|pathless)$" -v'
+            bash -c 'apt-get update && apt-get install -y tmux python3 && mkdir -p "$HOME" && git config --global --add safe.directory /src && go test -count=1 -timeout 5m ./tests/evals -run "^TestEvalBR|^TestCommanderEvalScenarios$/^activate-commander-(explicit|pathless)$" -v'

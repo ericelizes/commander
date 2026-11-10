@@ -161,3 +161,26 @@ func TestEvalBRUnavailableDefault(t *testing.T) {
 		t.Fatal("host br was consulted")
 	}
 }
+
+// The root container cannot inherit checkout's host Git trust through its fresh
+// HOME. Keep stamping enabled and scope trust to the read-only source mount.
+func TestEvalBRContainerCheckoutTrust(t *testing.T) {
+	body, err := os.ReadFile(filepath.Join(repoRoot(), ".github", "workflows", "eval-backend.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	workflow := string(body)
+	for _, required := range []string{
+		`-e HOME=/var/tmp/eval-home -e TMPDIR=/tmp`,
+		`--pids-limit 256`,
+		`-v "$cache:$cache:ro" -v "$PWD:/src:ro" -w /src golang:1.25`,
+		`mkdir -p "$HOME" && git config --global --add safe.directory /src && go test`,
+	} {
+		if !strings.Contains(workflow, required) {
+			t.Fatalf("container checkout contract missing %q", required)
+		}
+	}
+	if strings.Count(workflow, "safe.directory") != 1 || strings.Contains(workflow, "-buildvcs=false") {
+		t.Fatal("container must trust only /src and retain VCS stamping")
+	}
+}
