@@ -98,11 +98,16 @@ func OwnsWork(b Bead) bool {
 	if !slices.Contains(b.Labels, WorkstreamLabel) || slices.Contains(b.Labels, "kind:task") {
 		return false
 	}
+	return !outOfPlay(b)
+}
+
+// outOfPlay: closed, parked or superseded.
+func outOfPlay(b Bead) bool {
 	switch b.Status {
 	case "closed", "tombstone", StatusDeferred:
-		return false
+		return true
 	}
-	return !Superseded(b)
+	return Superseded(b)
 }
 
 // Owner is the workstream whose Manager owns id: the nearest bead of its
@@ -162,12 +167,16 @@ func ChainOwners(chain []string, beads map[string]Bead) []string {
 		if ok && (b.Status == "closed" || b.Status == "tombstone") && !slices.Contains(b.Labels, WorkstreamLabel) {
 			break
 		}
-		if !ok || !slices.Contains(b.Labels, WorkstreamLabel) || slices.Contains(b.Labels, "kind:task") {
-			// kind:task never registers (wsmgr refuses it), so it owns nothing.
+		if !ok || !slices.Contains(b.Labels, WorkstreamLabel) {
 			continue
 		}
-		if !OwnsWork(b) {
+		if outOfPlay(b) {
 			break
+		}
+		if slices.Contains(b.Labels, "kind:task") {
+			// kind:task never registers (wsmgr refuses it), so it owns nothing,
+			// but only once in play: an out-of-play one still ends the walk.
+			continue
 		}
 		down = append(down, chain[i])
 	}
