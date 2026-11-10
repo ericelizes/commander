@@ -30,7 +30,7 @@ func usageHome(t *testing.T, accounts ...string) string {
 		if err := os.MkdirAll(d, 0o700); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(filepath.Join(d, ".credentials.json"), []byte("{}"), 0o600); err != nil {
+		if err := os.WriteFile(filepath.Join(d, ".credentials.json"), []byte(`{"claudeAiOauth":{"accessToken":"test-token"}}`), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}

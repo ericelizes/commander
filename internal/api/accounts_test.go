@@ -95,7 +95,7 @@ func TestReconnectDefaultReturnsIdentityAndCopyableCommand(t *testing.T) {
 	t.Setenv("HOME", user)
 	t.Setenv("CLAUDE_CONFIG_DIR", "/invented/wrong-profile")
 	os.MkdirAll(filepath.Join(user, ".claude"), 0700)
-	os.WriteFile(filepath.Join(user, ".claude", ".credentials.json"), []byte("{}"), 0600)
+	os.WriteFile(filepath.Join(user, ".claude", ".credentials.json"), []byte(`{"claudeAiOauth":{"accessToken":"test-token"}}`), 0600)
 	os.WriteFile(filepath.Join(user, ".claude.json"), []byte(`{"oauthAccount":{"emailAddress":"one@example.test","accountUuid":"one"}}`), 0600)
 	e := chat.New(chat.Options{Home: t.TempDir()})
 	var command string

@@ -112,7 +112,7 @@ func (e *Engine) settleLimit(c *chatRole, p *process, ev Event) {
 	c.publish(Event{Kind: KindNotice, Source: SourceEngine, Subtype: "usage_limit",
 		Text: fmt.Sprintf("%s hit its usage limit: %s", who, u.Text)})
 	switch {
-	case isManagerRole(c.role):
+	case isManagedChatRole(c.role):
 		go e.moveManager(c)
 	case u.Runtime == RuntimeClaude && AutoSwitch(e.opts.Home, c.role):
 		go e.autoSwitch(c, u.Account)
@@ -186,11 +186,13 @@ func (e *Engine) autoSwitch(c *chatRole, from string) {
 
 func isManagerRole(role string) bool { return strings.HasPrefix(role, "manager-") }
 
+func isManagedChatRole(role string) bool { return role == "commander" || isManagerRole(role) }
+
 // moveOptions continue a limited turn; a Manager is also told to read its
 // handover again, since the limit may have stopped it before it did.
 func (e *Engine) moveOptions(role string) SwitchOptions {
 	o := SwitchOptions{Continue: true}
-	if isManagerRole(role) {
+	if isManagedChatRole(role) {
 		o.Message = ContinueMessage + "; first re-read your handover and unread mail (cmdr internal-inbox --agent " + role + ")"
 	}
 	return o

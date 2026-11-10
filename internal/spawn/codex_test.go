@@ -248,7 +248,7 @@ func TestOperatorAccountDefaultsToItsManagers(t *testing.T) {
 	t.Setenv("COMMANDER_HOME", home)
 	t.Setenv("HOME", t.TempDir())
 	os.MkdirAll(filepath.Join(home, "claude-accounts", "work"), 0o700)
-	os.WriteFile(filepath.Join(home, "claude-accounts", "work", ".credentials.json"), []byte("{}"), 0o600)
+	os.WriteFile(filepath.Join(home, "claude-accounts", "work", ".credentials.json"), []byte(`{"claudeAiOauth":{"accessToken":"test-token"}}`), 0o600)
 	os.MkdirAll(filepath.Join(home, "claude-accounts", "spare"), 0o700)
 	req := SpawnRequest{managerRole: "manager-bd-1"}
 	if got, err := resolveOperatorAccount(req, "operator-a"); err != nil || got != claudeacct.Default {

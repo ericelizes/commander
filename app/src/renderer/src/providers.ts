@@ -74,7 +74,7 @@ export function switchTargets(accounts: ChatAccount[], cur: Provider | undefined
   const list = accounts.length > 0 ? accounts : [{ name: 'default', runtime: 'claude' as const, logged_in: true }, { name: 'codex', runtime: 'codex' as const, logged_in: true }]
   const out: SwitchTarget[] = []
   for (const a of list) {
-    if (!a.logged_in) continue
+    if (!a.logged_in || a.duplicate_of) continue
     const p: Provider = a.runtime === 'codex' ? { runtime: 'codex' } : { runtime: 'claude', account: a.name }
     const key = providerKey(p)
     out.push({

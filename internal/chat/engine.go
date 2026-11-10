@@ -391,10 +391,10 @@ func (e *Engine) start(ctx context.Context, role string, o StartOptions) (st Sta
 	// could not reach holds the lock, so it never gets this far. For a
 	// Manager the steer below makes that call (only when Claude has usage), so
 	// an outage never flips it to Claude and back, losing its Codex thread.
-	resolve := !isManagerRole(role) && dropDrawnCodex(e.opts.Home, role)
+	resolve := !isManagedChatRole(role) && dropDrawnCodex(e.opts.Home, role)
 	// Every Manager start lands on a runtime and account with usage left.
 	moved := ""
-	if isManagerRole(role) {
+	if isManagedChatRole(role) {
 		var changed bool
 		if moved, changed, err = e.steerManager(role, e.NeverStarted(role)); err != nil {
 			lock.release()

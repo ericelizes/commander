@@ -180,7 +180,7 @@ not enough — this is an interactive cockpit; prove it works *in the cockpit*.
   Agents may carry out that choice with `cmdr runtime <role> codex`,
   `internal-spawn-operator --runtime codex`, `internal-operator-provider --runtime codex`,
   or an authorized rebalance; these commands do not refuse agent callers.
-  The Commander chat stays on Claude (standing decision d38, the user's preference).
+  Commander uses a preferred account of either provider and automatically falls back to any connected account with usage left (supersedes d38).
   The share env overrides count only in a process with no agent role (`agentrt.share`), so an agent cannot draw
   Codex by prefixing its own command; `testguard.Isolate` unsets both role variables so a suite an Operator runs
   is nobody's agent.
@@ -1732,3 +1732,11 @@ only; intent-before-write audit and exact-request recovery, no atomic backend
 check/write guarantee. See docs/cli/retire-legacy.md; synthetic unit/refusal/
 interruption coverage TestGateRetireLegacy*, private-handler eval
 TestRetireLegacyScenario (scenarios/retire-legacy.json).
+
+## Unified Commander accounts
+
+Commander starts and handles usage limits through `planChatStart`: prefer the chosen account, then the current account, then another connected Claude or Codex account with usage left. Provider choices are preferences for Commander, so a Claude choice still falls back to Codex. Runtime/account intent and the shared conversation log survive the move; a continuation reads the handover and mail. Managers retain their existing policy. `cmdr account use <role> codex` and the chat account endpoint accept Codex alongside named Claude profiles. `AutoSwitch` is always on for Commander and Managers.
+
+Only `claudeAiOauth.accessToken` counts as a Claude file login: `.credentials.json` may contain MCP logins after Claude has signed out. Codex requires actual auth fields, not merely an auth file. No credentials are changed by listing accounts. The UI names a profile whose email is unavailable, offers either provider under Add account, and hides signed-out empty profiles. TopBar shows the reported model beside the chat title as regular muted text (Sol 6.1, Opus 5.5); the provider bubble is removed.
+
+Verification: `TestCommanderFallsBackAcrossProviders`, `TestCommanderPlanSkipsDisconnectedAndExhaustedAccounts`, `TestCodexIsSelectableAsAnAccount`, `TestMCPOnlyCredentialsAreNotAConnectedClaudeAccount`; eval `TestUnifiedAccountsScenario` / `scenarios/unified-accounts.json`; app `top-bar.test.tsx`, `settings-accounts.test.tsx`, `providers.test.ts`, `ChatPane.test.tsx`; isolated cockpit and headless renderer smoke.

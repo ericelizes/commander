@@ -259,7 +259,7 @@ describe('native chat attach', () => {
     const top = await within(within(dialog).getByLabelText('Codex: codex@example.test')).findByLabelText('Top agents')
     expect(top).toHaveTextContent('1.2M tokens today, 97M this week')
     expect(top.querySelector('.acct-agent')).toHaveTextContent('gpt-6-astra97M')
-    await user.click(within(dialog).getByRole('button', { name: 'Add or reconnect a Claude account' }))
+    await user.click(within(dialog).getByRole('button', { name: 'Add account' }))
     await user.type(within(dialog).getByRole('textbox', { name: 'Account name' }), 'Third')
     await user.click(within(dialog).getByRole('button', { name: 'Add account' }))
     await waitFor(() => expect(posts().at(-1)).toMatchObject({ url: 'http://127.0.0.1:9/api/chat/accounts', body: { name: 'third' } }))

@@ -6,6 +6,7 @@ import { isMac } from '../host'
 import { useStore } from '../store'
 import { useChatTarget } from './ChatSlot'
 import { FocusHeader } from './FocusHeader'
+import { modelName } from '../../../features/chat/modelName'
 
 export function TopBar({ left, chat }: { left: number; chat: number }) {
   const focus = useStore((s) => s.focus)
@@ -13,7 +14,9 @@ export function TopBar({ left, chat }: { left: number; chat: number }) {
   const focused = useStore((s) => s.selected.kind !== 'commander' && s.selected.kind !== 'progress')
   const narrow = useStore((s) => s.narrow)
   const chatTab = useStore((s) => s.chatTab)
-  const chatTitle = useChatTarget().title
+  const target = useChatTarget()
+  const chatTitle = target.title
+  const model = useStore((s) => s.chats[target.role]?.model)
   const split = focused && !narrow
   // A narrow window shows one pane at a time, so it names the one on screen.
   const showFocus = focused && (!narrow || !chatTab)
@@ -30,8 +33,9 @@ export function TopBar({ left, chat }: { left: number; chat: number }) {
       )}
       {showFocus && <div className="app-top-pane">{focus && <FocusHeader target={focus} />}</div>}
       {showChat && !page && (
-        <div className="app-top-pane">
+        <div className="app-top-pane app-top-chat">
           <span className="app-top-title">{chatTitle}</span>
+          {model && <span className="app-top-model" title={model}>{modelName(model)}</span>}
         </div>
       )}
     </header>

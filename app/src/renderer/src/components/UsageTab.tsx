@@ -68,7 +68,7 @@ export function UsageCard({ a, agents, tokens, nowSec, onSignedOut }: { a: ChatA
   const isCodex = a.runtime === 'codex'
   const provider = isCodex ? 'Codex' : 'Claude'
   const known = !!(a.email || a.account_uuid)
-  const title = a.email || a.account_uuid || (a.logged_in ? 'Identity unavailable' : 'Identity unknown')
+  const title = a.email || a.account_uuid || (isCodex ? 'Codex account' : `Claude · ${a.name}`)
   const usage = a.logged_in && !a.duplicate_of ? usageState(a.usage, nowSec) : 'unknown'
 
   const finish = async (message: string) => {
@@ -147,6 +147,7 @@ export function UsageCard({ a, agents, tokens, nowSec, onSignedOut }: { a: ChatA
 
       {reservedName(a) && <p className="acct-warn" role="status">This Claude profile is named codex, which Codex uses, so it can't be signed in or out here. Rename its folder under claude-accounts to manage it.</p>}
       {!a.logged_in && agents > 0 && !reservedName(a) && <p className="acct-warn" role="status">{plural(agents, 'agent')} on this profile can't run until you sign it in again.</p>}
+      {a.logged_in && !known && <p className="acct-quiet">Connected. This account has no saved email address.</p>}
 
       {a.logged_in && a.duplicate_of && <p className="acct-warn" role="status">Same identity as another connected Claude profile, so it adds no usage. Switch it to a different Claude account.</p>}
 
@@ -261,11 +262,21 @@ function AddAccount({ listed, keep }: { listed: ChatAccount[]; keep: (id: string
   const config = useStore((s) => s.config)
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
+  const [provider, setProvider] = useState<'claude' | 'codex'>('claude')
   const [note, setNote] = useState('')
   const [error, setError] = useState('')
   const input = useRef<HTMLInputElement>(null)
   useEffect(() => { if (open) input.current?.focus() }, [open])
   const add = async () => {
+    if (provider === 'codex') {
+      const codex = accounts.find((a) => a.runtime === 'codex')
+      if (codex) {
+        keep(accountId(codex))
+        setNote(codex.logged_in ? 'That account is already connected.' : 'Press Connect on the Codex account to sign in.')
+        setOpen(false)
+      }
+      return
+    }
     const want = name.trim()
     if (!want) return
     setError('')
@@ -292,12 +303,16 @@ function AddAccount({ listed, keep }: { listed: ChatAccount[]; keep: (id: string
       {codex && !listed.some((a) => a.runtime === 'codex') && <button type="button" className="acct-btn" onClick={() => { setNote(''); keep(accountId(codex)) }}>Connect Codex</button>}
       {open ? (
         <form onSubmit={(e) => { e.preventDefault(); void add() }}>
-          <input ref={input} value={name} onChange={(e) => setName(e.target.value.toLowerCase())} placeholder="Name it, like second" aria-label="Account name" />
-          <button type="submit" className="btn btn-primary" disabled={!name.trim()}>Add account</button>
+          <select aria-label="Account provider" value={provider} onChange={(e) => setProvider(e.target.value as 'claude' | 'codex')}>
+            <option value="claude">Claude</option>
+            <option value="codex">Codex</option>
+          </select>
+          {provider === 'claude' && <input ref={input} value={name} onChange={(e) => setName(e.target.value.toLowerCase())} placeholder="Name it, like second" aria-label="Account name" />}
+          <button type="submit" className="btn btn-primary" disabled={provider === 'claude' && !name.trim()}>Add account</button>
           <button type="button" className="acct-btn" onClick={() => { setOpen(false); setError('') }}>Cancel</button>
         </form>
       ) : (
-        <button type="button" className="acct-btn acct-add-open" onClick={() => { setNote(''); setOpen(true) }}><Plus size={14} aria-hidden />Add or reconnect a Claude account</button>
+        <button type="button" className="acct-btn acct-add-open" onClick={() => { setNote(''); setOpen(true) }}><Plus size={14} aria-hidden />Add account</button>
       )}
       {note && <p className="acct-quiet" role="status">{note}</p>}
       {error && <p className="state-error" role="alert">{error}</p>}
