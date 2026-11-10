@@ -2166,3 +2166,11 @@ approval requests when an option explicitly sets `approves:true`.
 Coverage: recovery/automation-failure unit tests, interaction scenario
 `tests/evals/scenarios/automation-failure.json`, renderer overview/diagram tests
 and isolated fake cockpit + renderer proof.
+
+Scoped review bootstrap: `workflow own-run --project P --project-dir ROOT --task T`
+verifies immutable launcher identity against the current PostgreSQL active claim,
+returning only the own run; read-only connections, no schema initialization or legacy
+fallback. `review-exec --context-file FILE` (repeatable) preserves independent context
+hashes; `--private-git` redirects transient objects into sealed run scratch without
+changing sandbox permissions. Finite controller acceptance remains INCOMPLETE/source
+not assessed. See [docs/cli/scoped-review-bootstrap.md](docs/cli/scoped-review-bootstrap.md).

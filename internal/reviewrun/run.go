@@ -22,18 +22,23 @@ type Request struct {
 	RunID                                    int64
 	Registry                                 string
 	Full                                     bool
+	ContextFiles                             []string
+	PrivateGit                               bool
 	Command                                  []string
 }
 
 type Manifest struct {
-	Version    string              `json:"version"`
-	Task       string              `json:"task"`
-	RunID      int64               `json:"run_id"`
-	Actor      string              `json:"actor"`
-	Policy     reviewpolicy.Result `json:"policy"`
-	PromptHash string              `json:"prompt_sha256"`
-	Command    []string            `json:"command"`
-	Created    time.Time           `json:"created_at"`
+	Version        string              `json:"version"`
+	Task           string              `json:"task"`
+	RunID          int64               `json:"run_id"`
+	Actor          string              `json:"actor"`
+	Policy         reviewpolicy.Result `json:"policy"`
+	PromptHash     string              `json:"prompt_sha256"`
+	Command        []string            `json:"command"`
+	Context        []ContextArtifact   `json:"context,omitempty"`
+	GitEnvironment []string            `json:"git_environment,omitempty"`
+	GitScratch     string              `json:"git_scratch,omitempty"`
+	Created        time.Time           `json:"created_at"`
 }
 
 type Result struct {
@@ -110,7 +115,23 @@ func Run(ctx context.Context, req Request) (Result, error) {
 	if err = os.Mkdir(req.Dir, 0700); err != nil {
 		return result, fmt.Errorf("a fresh run directory is required: %w", err)
 	}
-	manifest := Manifest{Version: "review-run@v1", Task: req.Task, RunID: req.RunID, Actor: req.Actor, Policy: policy, PromptHash: digest(prompt), Command: req.Command, Created: time.Now().UTC()}
+	artifacts, err := stageContext(req.Dir, req.ContextFiles)
+	if err != nil {
+		return result, err
+	}
+	gitEnv, scratch, err := privateGit(ctx, req)
+	if err != nil {
+		return result, err
+	}
+	if scratch != "" {
+		alternates := "git-scratch/objects/info/alternates"
+		hash, err := fileHash(filepath.Join(req.Dir, alternates))
+		if err != nil {
+			return result, err
+		}
+		artifacts = append(artifacts, ContextArtifact{Source: "git object-store alternates", Path: alternates, SHA256: hash})
+	}
+	manifest := Manifest{Context: artifacts, GitScratch: scratch, GitEnvironment: gitEnv, Version: "review-run@v1", Task: req.Task, RunID: req.RunID, Actor: req.Actor, Policy: policy, PromptHash: digest(prompt), Command: req.Command, Created: time.Now().UTC()}
 	result.ManifestHash, err = seal(filepath.Join(req.Dir, "manifest.json"), manifest)
 	if err != nil {
 		return result, err
@@ -161,6 +182,7 @@ func Run(ctx context.Context, req Request) (Result, error) {
 	cmd.Stderr = errout
 	cmd.ExtraFiles = []*os.File{gate}
 	cmd.Env = append(os.Environ(), "COMMANDER_REVIEW_RUN_DIR="+req.Dir)
+	cmd.Env = append(cmd.Env, gitEnv...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Cancel = func() error { _ = cleanup(); return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
 	cmd.WaitDelay = 2 * time.Second

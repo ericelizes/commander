@@ -1,0 +1,6 @@
+{
+ "schema": "own-run-bootstrap@v1",
+ "runner": "internal/store:TestOwnRunBootstrapScenario",
+ "about": "Own run snapshot rejects all identity, location and active-claim mismatches; selector refuses legacy; disposable PostgreSQL verifies connection read-only enforcement.",
+ "cases": ["claim-fences", "no-legacy", "postgres-read-only"]
+}
