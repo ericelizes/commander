@@ -79,6 +79,19 @@ func (t *TmuxDeliverer) chatPane(ctx context.Context, role string) (string, erro
 						// Its mail hook takes the mail at its next tool call.
 						return "", ErrHostOperator
 					}
+					if pr, ok := t.Projects.(PlaceRuns); ok {
+						// A run on a paired place (the user's Mac) has no pane
+						// here either: its mail hook asks cmdrd at each tool
+						// call. Opening a window would start a second, local
+						// Operator on the same task.
+						run, err := pr.GetPlaceRun(ctx, r.ID)
+						if err != nil {
+							return "", err
+						}
+						if run != nil {
+							return "", ErrPlaceOperator
+						}
+					}
 					return t.Director.EnsureOperatorChatPane(ctx, r.TaskBeadID, p.Name, p.Path)
 				}
 			}
@@ -93,6 +106,16 @@ func (t *TmuxDeliverer) chatPane(ctx context.Context, role string) (string, erro
 // or stop (an Operator inside a long tool call sees it when that call returns).
 // A Codex one-shot has no such hook: its mail stays unread and is reported.
 var ErrHostOperator = fmt.Errorf("%w: host Operator reads its mail at its next tool call (mid long tool call: when it returns)", ErrDeferred)
+
+// PlaceRuns is the optional part of a ProjectSource that knows place runs
+// (*store.Store has it).
+type PlaceRuns interface {
+	GetPlaceRun(ctx context.Context, runID int64) (*store.PlaceRun, error)
+}
+
+// ErrPlaceOperator is ErrHostOperator for an Operator on a paired place: its
+// mail is never typed anywhere; the Mac's mail hook reads it from cmdrd.
+var ErrPlaceOperator = fmt.Errorf("%w (on a paired place)", ErrHostOperator)
 
 // ErrOperatorGone means the role is an Operator whose run has ended: its mail
 // has nobody to wake, so the waker drops it instead of retrying forever.

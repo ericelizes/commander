@@ -500,3 +500,13 @@ func gitSubcommand(args []string) (string, []string) {
 	}
 	return "", nil
 }
+
+// LogPlaceRefusal appends a refusal on the Mac to logs/place-refusals.jsonl;
+// the app sends them in the next heartbeat so the Manager sees them on the bead.
+func LogPlaceRefusal(home, role, tool, command, why string, now time.Time) error {
+	line, err := json.Marshal(map[string]any{"time": now.UTC().Format(time.RFC3339), "role": role, "tool": tool, "command": command, "why": why})
+	if err != nil {
+		return err
+	}
+	return appendLine(filepath.Join(home, "logs", "place-refusals.jsonl"), line)
+}

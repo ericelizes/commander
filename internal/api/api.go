@@ -28,6 +28,7 @@ import (
 	"github.com/example-user/commander/internal/linearsync"
 	"github.com/example-user/commander/internal/livedata"
 	"github.com/example-user/commander/internal/overview"
+	"github.com/example-user/commander/internal/place"
 	"github.com/example-user/commander/internal/store"
 	"github.com/example-user/commander/internal/workflowtemplate"
 )
@@ -88,6 +89,10 @@ type Options struct {
 	// LiveOwner answers whether an agent role runs, for an intent's holder check; nil = every
 	// owner is taken as live (the check cannot say otherwise).
 	LiveOwner func(owner string) (state string, known bool)
+	// Places serves /api/places (paired Macs and their runs); nil = 503.
+	Places *place.Service
+	// PlacesHome holds pending pairing codes ($COMMANDER_HOME).
+	PlacesHome string
 }
 
 // Server holds the latest snapshot and fans changes out to WebSocket clients.
@@ -427,6 +432,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/linear", s.auth(http.HandlerFunc(s.serveLinear)))
 	s.machineRoutes(mux)
 	s.updateRoutes(mux)
+	s.placeRoutes(mux)
 	mux.Handle("GET /api/usage/agents", s.auth(http.HandlerFunc(s.serveUsageAgents)))
 	mux.Handle("GET /api/pitches", s.auth(http.HandlerFunc(s.servePitches)))
 	return cors(mux)

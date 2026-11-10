@@ -32,6 +32,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/example-user/commander/internal/agentmail"
@@ -49,6 +50,7 @@ import (
 	"github.com/example-user/commander/internal/livedata"
 	"github.com/example-user/commander/internal/notify"
 	"github.com/example-user/commander/internal/opencode"
+	"github.com/example-user/commander/internal/place"
 	"github.com/example-user/commander/internal/rolemail"
 	"github.com/example-user/commander/internal/scheduler"
 	"github.com/example-user/commander/internal/spawn"
@@ -187,6 +189,8 @@ type Daemon struct {
 	notifier           notify.Notifier
 	cfg                *config.Config
 	socket             *Socket
+	places *place.Service
+	apiServer atomic.Pointer[api.Server]
 
 	// notifyEnabled gates the OS-notification fan-out. Default true; the
 	// cmdrd `--notifications=false` flag flips it off for headless runs
@@ -341,6 +345,7 @@ func New() (*Daemon, error) {
 		PitchAsked: func() map[string]int64 { return pitch.Asked() },
 		Live:       liveOps.get,
 		Reported:   reported.list,
+		Places:     snapPlaces(st, time.Now),
 		Chats: func() map[string]livedata.ChatState {
 			if chatEngine == nil {
 				return nil
@@ -378,10 +383,13 @@ func New() (*Daemon, error) {
 		return snap, true
 	}}
 	watch.manager = func(ctx context.Context, run store.AgentRun) string { return runManager(ctx, st, cached, run) }
+	watch.placeRuns = activePlaceRuns(st)
 	watch.degraded = &degradedAlert{home: home, names: st, key: commanderRepo, now: time.Now}
+	var placeAM *agentmail.ServerClient
 	if amServer, err := agentmail.NewServerClientFromEnv(); err != nil {
 		log.Printf("daemon: mail wake disabled: %v", err)
 	} else {
+		placeAM = amServer
 		dir := layout.NewDirector()
 		managers := &wsmgr.Manager{Store: st, Beads: cached, Reg: amServer, AmKey: commanderRepo, Dir: dir, Numbered: liveWorkstreams(live)}
 		deliverer := chatDeliverer{chat: chatEngine, tmux: &wake.TmuxDeliverer{Projects: st, Director: dir, Managers: managers}}
@@ -496,6 +504,8 @@ func New() (*Daemon, error) {
 		home:               home,
 		notifyEnabled:      true,
 	}, nil
+	places *place.Service
+	apiServer atomic.Pointer[api.Server]
 }
 
 // SetNotificationsEnabled toggles the OS-notification fan-out. Call before
@@ -929,6 +939,7 @@ func (d *Daemon) startAPI(ctx context.Context) {
 		opts.Interval = 30 * time.Second
 	}
 	srv := api.New(opts)
+	d.apiServer.Store(srv)
 	port := 0
 	if d.cfg != nil {
 		port = d.cfg.API.Port
@@ -948,7 +959,7 @@ func (d *Daemon) startAPI(ctx context.Context) {
 func (d *Daemon) apiOptions(token string) api.Options {
 	src := d.live
 	lin := linearsync.New(linearsync.Options{Home: d.home})
-	return api.Options{Token: token, Source: withBoards(d.home, src.Snapshot, &sprintFeed{lin: lin}), Linear: lin, Run: api.ExecRunner(cmdrPath()), AppDir: appDir(), AppDevURL: appDevURL(), Tabs: &api.Tabs{Store: d.store}, Pitches: d.store, LiveData: src.Last, FinishBoard: src.FinishBoard, Interval: time.Second, Chat: d.chat, ShotsDir: filepath.Join(d.home, "shots"), ConfigPath: filepath.Join(d.home, "config.toml"), MailToRole: mailUserToRole, WaitingMail: livedata.NewUnreadListFunc(d.store), UsageByAgent: d.store.UsageByAgent, Update: d.newUpdater(), LiveOwner: d.liveOwner}
+	return api.Options{Token: token, Source: withBoards(d.home, src.Snapshot, &sprintFeed{lin: lin}), Linear: lin, Run: api.ExecRunner(cmdrPath()), AppDir: appDir(), AppDevURL: appDevURL(), Tabs: &api.Tabs{Store: d.store}, Pitches: d.store, LiveData: src.Last, FinishBoard: src.FinishBoard, Interval: time.Second, Chat: d.chat, ShotsDir: filepath.Join(d.home, "shots"), ConfigPath: filepath.Join(d.home, "config.toml"), MailToRole: mailUserToRole, WaitingMail: livedata.NewUnreadListFunc(d.store), UsageByAgent: d.store.UsageByAgent, Update: d.newUpdater(), LiveOwner: d.liveOwner, Places: d.places, PlacesHome: d.home}
 }
 
 // appDir is the built app renderer the API serves at /app/:
@@ -1066,6 +1077,7 @@ func (d *Daemon) reapHostRuns(ctx context.Context) {
 			log.Printf("daemon: killed %d orphaned pipe-pane writers %v (err=%v)", len(pids), pids, err)
 		}
 		first = false
+		d.sweepPlaces(ctx)
 		if d.store.IsPostgres() && d.orchestrationMode == "active" {
 			watch := d.watch
 			watch.deliver = nil

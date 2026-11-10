@@ -39,6 +39,9 @@ type watchStore interface {
 
 type opWatch struct {
 	store watchStore
+	// placeRuns lists the runs on a paired place, which the quiet check skips;
+	// nil = none.
+	placeRuns func(ctx context.Context) map[int64]bool
 	// deliver puts a check-in in front of a Manager; wake.ErrDeferred means it
 	// is mid-turn, so the check-in waits for the next pass. Nil turns check-ins off.
 	deliver func(ctx context.Context, role, prompt string) error
@@ -72,6 +75,10 @@ func (w opWatch) pass(ctx context.Context) {
 	}
 	now := w.now()
 	owners := w.snapshotOwners()
+	var placeRuns map[int64]bool
+	if w.placeRuns != nil {
+		placeRuns = w.placeRuns(ctx)
+	}
 	byManager := map[string][]store.AgentRun{}
 	for _, run := range runs {
 		manager, ok := owners[run.TaskBeadID]
@@ -83,6 +90,9 @@ func (w opWatch) pass(ctx context.Context) {
 			manager = wsmgr.Role(beads.Root(ctx, nil, "", nil, run.TaskBeadID))
 		}
 		byManager[manager] = append(byManager[manager], run)
+		if placeRuns[run.ID] {
+			continue // heartbeats judge it (place.Service.Sweep), not a session file
+		}
 		rw := seen[run.ID]
 		active := run.SpawnTime
 		if t, ok := w.activeAt(run.OpencodeSessionID); ok && t.Unix() > active {

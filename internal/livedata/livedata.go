@@ -124,6 +124,7 @@ type ObjectiveRow struct {
 	Viz                                                 int          // the bead's own viz:<n> label (0 = none); see EffectiveViz
 	Task                                                bool         // an Operator task bead (kind:task, not an objective, gate or track): agent-internal, not a step the user plans
 	KindTask                                            bool         // labelled kind:task at all (also with kind:objective, e.g. converted then --no-workstream): never a workstream row, as wsmgr refuses to register one
+	PlaceText string
 	// Owns: a nested workstream with a Manager of its own (an open kind:workstream
 	// bead under another, in a project whose nested Managers are on); see beads.Owner.
 	Owns        bool

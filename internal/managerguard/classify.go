@@ -398,9 +398,16 @@ var wrapperValueFlags = map[string]map[string]bool{
 // -S "cmd args" is expanded into its words. With pure set, exec is left in
 // place (it is not a read).
 func unwrap(words []string, pure bool) []string {
+	return unwrapChecking(words, pure, nil)
+}
+
+func unwrapChecking(words []string, pure bool, refuse func(string) bool) []string {
 	for len(words) > 0 {
 		w := words[0]
 		b := baseName(w)
+		if refuse != nil && refuse(b) {
+			return nil
+		}
 		switch {
 		case envAssign.MatchString(w):
 			words = words[1:]

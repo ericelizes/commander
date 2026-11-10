@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/example-user/commander/internal/place"
 	"os"
 	"path/filepath"
 	"slices"
@@ -64,7 +65,11 @@ func (s *Server) checkWrite(ctx context.Context, dir, role string, ops [][]strin
 		bc = beads.New()
 	}
 	for i, args := range ops {
-		if err := checkOp(ctx, bc, dir, args); err != nil {
+		err := s.checkRunOnLabels(ctx, addedLabels(args))
+		if err == nil {
+			err = checkOp(ctx, bc, dir, args)
+		}
+		if err != nil {
 			if len(ops) > 1 {
 				return fmt.Errorf("op %d of %d (%s): %w", i+1, len(ops), strings.Join(args, " "), err)
 			}
@@ -302,4 +307,49 @@ func appendDoorLog(name string, rec map[string]any) {
 	defer f.Close()
 	line, _ := json.Marshal(rec)
 	f.Write(append(line, '\n'))
+}
+
+// addedLabels lists the labels one op adds (update --add-label, label add,
+// create --labels).
+func addedLabels(args []string) []string {
+	if len(args) == 0 {
+		return nil
+	}
+	switch args[0] {
+	case "update":
+		return flagVals(args, "--add-label")
+	case "label":
+		if len(args) >= 4 && args[1] == "add" {
+			return args[3:]
+		}
+	case "create":
+		var out []string
+		for _, l := range flagVals(args, "--labels") {
+			out = append(out, strings.Split(l, ",")...)
+		}
+		return out
+	}
+	return nil
+}
+
+// checkRunOnLabels refuses a run-on: label naming a place that is not paired
+// (unknown or revoked): a step must not name a Mac nobody paired.
+func (s *Server) checkRunOnLabels(ctx context.Context, added []string) error {
+	for _, l := range added {
+		name, ok := strings.CutPrefix(strings.TrimSpace(l), place.LabelPrefix)
+		if !ok {
+			continue
+		}
+		if s.opts.Places == nil {
+			return fmt.Errorf("label %s: places are not enabled on this cmdrd", l)
+		}
+		paired, err := s.opts.Places.Paired(ctx, name)
+		if err != nil {
+			return fmt.Errorf("label %s: read places: %w", l, err)
+		}
+		if !paired {
+			return fmt.Errorf("label %s: %s is not a paired place (cmdr place list)", l, name)
+		}
+	}
+	return nil
 }

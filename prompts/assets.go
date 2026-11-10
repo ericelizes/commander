@@ -245,3 +245,11 @@ func writeFileAtomically(path string, body []byte) error {
 	}
 	return os.Rename(tmpPath, path)
 }
+
+// PlaceOperatorPrompt is the role prompt of an Operator on a paired place (the
+// user's Mac), read-only: the Mac's cmdr prints it (cmdr place prompt) and the
+// app passes it as --append-system-prompt.
+func PlaceOperatorPrompt() string {
+	b, _ := templateFS.ReadFile("place-operator.md")
+	return string(b)
+}

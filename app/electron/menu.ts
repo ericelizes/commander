@@ -22,6 +22,8 @@ export interface MenuOptions {
   // Where the page comes from (the live dev server or the bundle): shown in
   // View; undefined = not known yet / not watched (smoke, electron-vite dev).
   rendererSource?: RendererSource
+  // Pair this Mac as a place for governed Operators (macOS); undefined = no item.
+  pairPlace?: () => void
 }
 
 export function buildMenuTemplate(opts: MenuOptions): MenuItemConstructorOptions[] {
@@ -40,6 +42,7 @@ export function buildMenuTemplate(opts: MenuOptions): MenuItemConstructorOptions
       { role: 'about' },
       { type: 'separator' },
       settings,
+      ...(opts.pairPlace ? [{ label: 'Pair this Mac as a place…', click: opts.pairPlace } as MenuItemConstructorOptions] : []),
       { type: 'separator' },
       { role: 'services' },
       { type: 'separator' },

@@ -27,6 +27,7 @@ import (
 	"github.com/example-user/commander/internal/livedata"
 	"github.com/example-user/commander/internal/opencode"
 	"github.com/example-user/commander/internal/ownercompat"
+	"github.com/example-user/commander/internal/place"
 	"github.com/example-user/commander/internal/spawn"
 	"github.com/example-user/commander/internal/store"
 	"github.com/example-user/commander/internal/tmuxctl"
@@ -43,6 +44,9 @@ type operatorSpawnDeps struct {
 	// CheckCap refuses one more Operator under step when its workstream
 	// already runs its cap (spawn.CheckWorkstreamCap). nil = no cap.
 	CheckCap func(ctx context.Context, bc beads.Client, project *store.Project, step string) error
+	// OfferPlace records a run on a paired place (the step's run-on label)
+	// instead of starting a host Operator. nil = places unavailable.
+	OfferPlace func(ctx context.Context, req place.OfferRequest) (*spawn.SpawnResult, error)
 	// RunningOn names an Operator running on a task bead ("" = none). nil = none known.
 	RunningOn func(ctx context.Context, taskID string) (string, error)
 	Cleanup   func()
@@ -64,6 +68,11 @@ type internalSpawnOperatorResult struct {
 	Runtime string `json:"runtime,omitempty"`
 	Account string `json:"account,omitempty"`
 	Moved   string `json:"moved,omitempty"`
+	// Place is the paired place a run was offered to; OfferSent says the Mac
+	// got the offer now (else at its app's next connect). The user's dialog
+	// on the Mac starts it.
+	Place     string `json:"place,omitempty"`
+	OfferSent bool   `json:"offer_sent,omitempty"`
 }
 
 // runInternalSpawnOperator is how a Manager delegates work: it creates a
@@ -131,6 +140,7 @@ func spawnOperatorAttempt(args []string, stdout, stderr *os.File, retried bool) 
 	writesWorkflow := fs.Bool("writes-workflow", false, "the Operator's brief is writing the workflow itself: skip the workflow-approved check")
 	asParent := fs.Bool("as-parent", false, "a parent Manager runs an Operator under a nested workstream itself (its Manager is down); recorded on the step")
 	prodGate := fs.String("prod-gate", "", "closed user-approved gate bead whose description is the one production action this Operator may take (Managers only, after approving that action)")
+	placeFlag := fs.String("place", "", "the paired place the step runs on (mac:<name>); must match the step's run-on label, which alone also selects it")
 	if err := fs.Parse(args); err != nil {
 		emitErr(stderr, fmt.Sprintf("parse flags: %v", err))
 		return 1
@@ -233,6 +243,17 @@ func spawnOperatorAttempt(args []string, stdout, stderr *os.File, retried bool) 
 		// A busy or timed-out read is not a missing bead: keep the retry and the mail.
 		return fail(fmt.Sprintf("cannot read step %q: %v", *step, err))
 	}
+	stepPlace, err := place.FromLabels(beadLabels(target))
+	if err == nil {
+		err = placeSpawnRefusal(stepPlace, *placeFlag, *runtime, *account, *writesWorkflow)
+	}
+	if err == nil && stepPlace != "" && deps.OfferPlace == nil {
+		err = fmt.Errorf("places are not available to this spawn")
+	}
+	if err != nil {
+		emitErr(stderr, "cannot spawn on a place: "+err.Error())
+		return 1
+	}
 
 	if deps.CheckCap != nil {
 		if err := deps.CheckCap(ctx, bc, project, *step); err != nil {
@@ -261,6 +282,12 @@ func spawnOperatorAttempt(args []string, stdout, stderr *os.File, retried bool) 
 		}
 	}
 
+	if stepPlace != "" {
+		if err := placeGateCovers(ctx, bc, project.Path, *step); err != nil {
+			emitErr(stderr, "cannot spawn on "+stepPlace+": "+err.Error())
+			return 1
+		}
+	}
 	if !*writesWorkflow {
 		gate, err := openGateAbove(ctx, bc, project.Path, *step)
 		if err != nil {
@@ -294,7 +321,7 @@ func spawnOperatorAttempt(args []string, stdout, stderr *os.File, retried bool) 
 	// Before the task bead is made: what the run would really start on (the
 	// Manager's account, a share draw either way) has usage left.
 	if err := spawn.CheckUsage(spawn.SpawnRequest{TaskText: *title + "\n" + *prompt, Runtime: *runtime, Account: *account},
-		"", spawn.ManagerRole(ctx, bc, project.Path, *step)); err != nil {
+		"", spawn.ManagerRole(ctx, bc, project.Path, *step)); stepPlace == "" && err != nil {
 		emitErr(stderr, fmt.Sprintf("spawn operator: %v; no task was created", err))
 		return 1
 	}
@@ -344,7 +371,7 @@ func spawnOperatorAttempt(args []string, stdout, stderr *os.File, retried bool) 
 	// names the git branch.
 	name := strings.ReplaceAll(operatorBranch(*title, taskID), "/", "-")
 	taskBranch := *branch
-	if taskBranch == "" && project.Type == "code" {
+	if taskBranch == "" && project.Type == "code" && stepPlace == "" { // a place run has no branch
 		taskBranch = operatorBranch(*title, taskID)
 	}
 	useModel := *model
@@ -354,22 +381,29 @@ func spawnOperatorAttempt(args []string, stdout, stderr *os.File, retried bool) 
 	// Its own budget: the create and its retries may have used up ctx's.
 	spawnCtx, spawnCancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer spawnCancel()
-	res, err := deps.Spawner.Spawn(spawnCtx, spawn.SpawnRequest{
-		ProjectID:     project.ID,
-		ProjectName:   project.Name,
-		ProjectPath:   project.Path,
-		ProjectType:   project.Type,
-		RepoPath:      project.RepoPath,
-		TaskBeadID:    taskID,
-		Branch:        taskBranch,
-		Name:          name,
-		Model:         useModel,
-		Runtime:       *runtime,
-		TaskText:      *title + "\n" + *prompt,
-		Account:       *account,
-		ProdGate:      *prodGate,
-		ProdGateScope: prodScope,
-	})
+	var res *spawn.SpawnResult
+	if stepPlace != "" {
+		res, err = deps.OfferPlace(spawnCtx, place.OfferRequest{ProjectID: project.ID, TaskID: taskID, AgentName: "operator-" + name,
+			Place: stepPlace, StepID: *step, ManagerRole: spawn.ManagerRole(spawnCtx, bc, project.Path, taskID), ProdGate: *prodGate,
+			Brief: *prompt, Runtime: *runtime})
+	} else {
+		res, err = deps.Spawner.Spawn(spawnCtx, spawn.SpawnRequest{
+			ProjectID:     project.ID,
+			ProjectName:   project.Name,
+			ProjectPath:   project.Path,
+			ProjectType:   project.Type,
+			RepoPath:      project.RepoPath,
+			TaskBeadID:    taskID,
+			Branch:        taskBranch,
+			Name:          name,
+			Model:         useModel,
+			Runtime:       *runtime,
+			TaskText:      *title + "\n" + *prompt,
+			Account:       *account,
+			ProdGate:      *prodGate,
+			ProdGateScope: prodScope,
+		})
+	}
 	if err != nil {
 		// The task never ran: delete it, so neither a retry duplicates it nor
 		// does a closed bead read as finished work.
@@ -406,6 +440,7 @@ func spawnOperatorAttempt(args []string, stdout, stderr *os.File, retried bool) 
 		Project: project.Name, Step: *step, TaskID: taskID, Branch: taskBranch,
 		Agent: res.AgentName, Mail: res.AgentName, MailAlias: spawn.CanonicalRole(res.AgentName),
 		Runtime: res.Runtime, Account: res.Account, Moved: res.Moved,
+		Place: stepPlace, OfferSent: res.PlaceOfferSent,
 	}); err != nil {
 		emitErr(stderr, fmt.Sprintf("encode result: %v", err))
 		return 1
@@ -650,6 +685,19 @@ func realSpawnOperatorDeps(projectName string) (*operatorSpawnDeps, error) {
 			// past them without closing them: closing here skipped cmdrd's settle,
 			// so their beads stayed in progress and their Managers never heard.
 			return spawn.CheckWorkstreamCap(ctx, spawn.NewLiveRuns(st), bc, p.ID, p.Path, step, cfg.Concurrency.MaxOperatorsPerWorkstream)
+		},
+		OfferPlace: func(ctx context.Context, req place.OfferRequest) (*spawn.SpawnResult, error) {
+			id, err := place.RecordOffer(ctx, st, req)
+			if err != nil {
+				return nil, err
+			}
+			// The run's role takes mail like any Operator's.
+			if err := am.Register(ctx, project.Name, "claude-code", "mac", req.AgentName); err != nil {
+				_, _ = st.EndPlaceRun(ctx, id, store.PlaceDeclined, "mail registration failed", time.Now().Unix())
+				return nil, fmt.Errorf("register %s for mail: %w", req.AgentName, err)
+			}
+			sent := pokePlaceOffer(ctx, filepath.Dir(statePath), id)
+			return &spawn.SpawnResult{RunID: id, AgentName: req.AgentName, Runtime: "claude", Account: req.Place, PlaceOfferSent: sent}, nil
 		},
 		RunningOn: func(ctx context.Context, taskID string) (string, error) {
 			runs, err := st.ListAgentRunsByTaskBeadID(ctx, taskID, "running")

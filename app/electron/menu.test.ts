@@ -74,3 +74,16 @@ describe('buildMenuTemplate', () => {
     expect(flatten(build('darwin').template).some((i) => i.label?.startsWith('Renderer:'))).toBe(false)
   })
 })
+
+describe('Pair this Mac as a place', () => {
+  const labels = (t: MenuItemConstructorOptions[]) => (t[0].submenu as MenuItemConstructorOptions[]).map((i) => i.label)
+  it('is in the App menu only when the shell passes it', () => {
+    const pair = vi.fn()
+    const withIt = buildMenuTemplate({ platform: 'darwin', isDev: false, appName: 'Commander', dispatch: vi.fn(), pairPlace: pair })
+    expect(labels(withIt)).toContain('Pair this Mac as a place…')
+    const item = (withIt[0].submenu as MenuItemConstructorOptions[]).find((i) => i.label === 'Pair this Mac as a place…')
+    ;(item!.click as () => void)()
+    expect(pair).toHaveBeenCalledOnce()
+    expect(labels(buildMenuTemplate({ platform: 'darwin', isDev: false, appName: 'Commander', dispatch: vi.fn() }))).not.toContain('Pair this Mac as a place…')
+  })
+})

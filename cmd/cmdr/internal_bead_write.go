@@ -334,6 +334,7 @@ var reservedLabelPrefixes = []struct{ prefix, verb string }{
 	{"owner:", "cmdr internal-set-objective --owner"},
 	{"proposed:", "cmdr proposals accept|overrule (Commander)"},
 	{"prod-gate:", "cmdr internal-spawn-operator --prod-gate"},
+	{"run-on:", "cmdr internal-set-objective --run-on"},
 	{"auto-respawn:", "cmdrd"},
 	{"crash-respawn:", "cmdrd"},
 	{"operator-died", "cmdrd"},

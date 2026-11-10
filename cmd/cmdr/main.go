@@ -212,6 +212,9 @@ func run(args []string, stdout, stderr *os.File) int {
 	case "fresh":
 		// A clean restart: a new session with today's prompt that reads its predecessor first.
 		return runFresh(args[1:], stdout, stderr)
+	case "place":
+		// Paired places (the user's Mac): pair/revoke/list, and the run verbs on the Mac.
+		return runPlace(args[1:], stdout, stderr)
 	case "internal-operator-provider":
 		// Respawn a running Operator on another account or runtime.
 		return runInternalOperatorProvider(args[1:], stdout, stderr)
