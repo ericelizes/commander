@@ -1,0 +1,31 @@
+name: eval-backend
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  private-activation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GOMAXPROCS: '2'
+      GOFLAGS: '-p=2'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+      - name: Provision explicit pinned private backend
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y tmux
+          rustup toolchain install nightly-2026-08-31 --profile minimal
+          cargo +nightly-2026-08-31 install beads_rust --version 0.7.6 --locked --no-default-features --root "$RUNNER_TEMP/eval-rust"
+          python3 scripts/setup-eval-backend.py "$RUNNER_TEMP/eval-rust/bin/br"
+      - name: Default entrypoint and private activation (no backend override)
+        run: |
+          unset COMMANDER_EVAL_BR_BIN
+          go test -count=1 -timeout 5m ./tests/evals -run '^TestEvalBR|^TestCommanderEvalScenarios$/^activate-commander-(explicit|pathless)$' -v

@@ -9,6 +9,20 @@ Operator). `cmdr` lays out native `opencode` chat panes plus commander-rendered
 chrome columns (objectives, fleet, tasks). Because it's a TUI, you can drive and
 inspect it as **text** — no GUI, no screenshots required.
 
+## Eval backend prerequisite
+
+Before `go test ./...`, `just test-go`, `just test-evals`, or ship verification,
+run `python3 scripts/setup-eval-backend.py /absolute/path/to/trusted/beads_rust`
+(or `just setup-eval-backend /absolute/path/to/trusted/beads_rust`). Python 3
+and beads_rust **0.7.6** are required. This copies the explicitly chosen binary
+into the user's private cache and records its version and SHA-256. All these
+entrypoints resolve and hash-check the same record automatically, before test
+HOME isolation; no ambient `COMMANDER_EVAL_BR_BIN` is required. Missing or changed
+dependencies fail closed with setup instructions. Never pass the host routing
+wrapper as the source. See [eval setup](tests/evals/README.md) for cache locations
+and CI provisioning. This command only provisions test tooling; it does not
+install Commander or modify the host `br` wrapper.
+
 ## The golden rule: two tests per feature, always
 
 A feature is **not done** until you have BOTH:

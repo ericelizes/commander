@@ -1,15 +1,38 @@
-The Commander harness uses beads_rust databases. Set `COMMANDER_EVAL_BR_BIN`
-to an absolute path to the intended Rust executable before running harness
-scenarios, for example `COMMANDER_EVAL_BR_BIN=/path/to/br-rust`. The harness
-requires an executable reporting `br ...` from `--version`, logs its path,
-version and SHA-256, and installs a private `br` launcher before inherited PATH.
-It never discovers the dependency through the host `br` name, which may route
-to another database backend. Missing or incompatible dependencies fail setup.
-The injected executable is trusted test tooling; the version check is a
-compatibility check, not authentication of arbitrary executable contents.
+The Commander harness uses beads_rust 0.7.6 for private fixture databases.
+Before running Go tests or ship checks, explicitly provision a trusted executable:
 
-`TestEvalBRSelection` covers host fence shadowing, argument preservation,
-unavailable dependency and incompatible version rejection. Existing
-`activate-commander-explicit` and `activate-commander-pathless` scenarios cover
-successful activation through this launcher with their normal assertions and
-deadlines. Supply this dependency to CI harness invocations as well.
+```sh
+python3 scripts/setup-eval-backend.py /absolute/path/to/trusted/beads_rust
+# equivalent: just setup-eval-backend /absolute/path/to/trusted/beads_rust
+```
+
+Python 3 is required for provisioning. The setup command copies the selected
+binary into the user cache (`$XDG_CACHE_HOME/commander/eval-tools` or
+`~/.cache/commander/eval-tools` on Linux; `~/Library/Caches/commander/eval-tools`
+on macOS), validates exact `br 0.7.6` output on that copy, and atomically publishes
+`backend.json` with schema, absolute path, version and SHA-256. Re-run setup to
+replace or repair it. Use the same cache/user for setup and tests.
+
+Direct `go test ./tests/evals`, `go test ./...`, Justfile `test-evals`, `test-go`
+and `test`, and internal ship verification all resolve this record through the
+shared harness, before test HOME isolation. Ship's temporary checkout uses the
+same user cache. No developer environment variable is needed. The bounded
+`eval-backend` CI job provisions the pinned crate with a pinned Rust toolchain,
+then runs the normal activation scenarios without an override.
+
+The harness checks the recorded SHA-256 before execution, validates the version,
+logs path/version/hash, and installs a private `br` launcher before inherited
+PATH. It never discovers `br` through PATH or changes the host routing wrapper.
+Absent records, unavailable executables, changed bytes, and wrong versions fail
+closed. Setup selects trusted test tooling; its version/hash record detects
+accidental replacement and is not authentication against a malicious same-user
+writer. An explicit absolute `COMMANDER_EVAL_BR_BIN` remains supported for
+one-off private fixtures, with executable/version validation and identity logging;
+standard entrypoints do not depend on it.
+
+`TestEvalBRDefaultEntrypoint` exercises real provisioning, default selection,
+quoted paths/arguments, copy independence and hash/missing-file refusal.
+`TestEvalBRUnavailableDefault` checks missing setup never invokes host `br`.
+`TestEvalBRSelection` covers explicit selection and incompatible identities.
+Existing `activate-commander-explicit` and `activate-commander-pathless`
+scenarios cover activation with unchanged assertions and deadlines.

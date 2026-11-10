@@ -286,7 +286,14 @@ func newHarness(t *testing.T, live bool, setup scenarioSetup) *harness {
 }
 
 func (h *harness) buildBinaries(live bool) {
-	if err := installEvalBR(h.binDir, os.Getenv("COMMANDER_EVAL_BR_BIN")); err != nil {
+	if evalBackendCacheErr != nil {
+		h.t.Fatal(evalBackendCacheErr)
+	}
+	backend, err := resolveEvalBR(os.Getenv("COMMANDER_EVAL_BR_BIN"), evalBackendCache)
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	if err := installEvalBR(h.binDir, backend); err != nil {
 		h.t.Fatal(err)
 	}
 	h.realCmdrBin = filepath.Join(h.binDir, "cmdr-real")
