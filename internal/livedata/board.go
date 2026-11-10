@@ -558,13 +558,18 @@ func (b board) workstreamBaseLine(ws SnapWorkstream, agent SnapAgent, hasAgent b
 	return b.brokenBeside(ws, p)
 }
 
-// brokenBeside: a live Operator does not make the open work nothing holds beside it true, so that stays
-// the row's line, the same whatever the Manager is doing; why keeps the live work in view. Its age is the
-// live work's (ageState), so it runs through the Manager's turns as "Manager picking it up", and through a
-// Manager-owned step that is broken only while the Manager is idle.
+// brokenBeside keeps factual missing custody ahead of generic Manager activity.
+// With a live Operator, keep its work and age in view; without one, an unheld
+// step stays missing until its custody changes. Handoff receipts keep their
+// own status and recovery semantics.
 func (b board) brokenBeside(ws SnapWorkstream, l line) line {
-	if broken := brokenSteps(ws.Steps); len(broken) > 0 && l.kind == "working" && workingOperators(ws) > 0 {
-		return line{kind: "stalled", text: "State missing", why: brokenWhy(b.liveSteps(ws), broken), ageAs: l.ageState()}
+	if broken := brokenSteps(ws.Steps); len(broken) > 0 && l.kind == "working" {
+		if workingOperators(ws) > 0 {
+			return line{kind: "stalled", text: "State missing", why: brokenWhy(b.liveSteps(ws), broken), ageAs: l.ageState()}
+		}
+		if maskedBroken(ws.Steps) {
+			return line{kind: "stalled", text: "State missing"}
+		}
 	}
 	return l
 }

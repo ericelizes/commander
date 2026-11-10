@@ -1,6 +1,7 @@
 package livedata
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -91,6 +92,55 @@ func TestNestedCapacityOwnerActivity(t *testing.T) {
 					t.Fatalf("missing inherited children: %+v", row.Tracks)
 				}
 			})
+		}
+	}
+}
+
+func TestMissingStateSurvivesCapacityClearDuringManagerActivity(t *testing.T) {
+	for _, nested := range []bool{false, true} {
+		for _, state := range []string{"idle", "working", "waiting"} {
+			for _, unread := range []int{0, 2} {
+				t.Run(fmt.Sprintf("nested=%v/%s/unread=%d", nested, state, unread), func(t *testing.T) {
+					role := "manager-w"
+					leaf := st("w.missing")
+					leaf.Broken = true
+					steps := []SnapStep{leaf}
+					if nested {
+						role = "manager-nested"
+						track := st("w.nested", asTrack, kids(st("w.child", asTrack, kids(leaf)), st("w.other", asTrack)))
+						track.ManagerRole = role
+						steps = []SnapStep{track}
+					}
+					s := Snapshot{Workstreams: []SnapWorkstream{{N: 1, Project: "p", BeadID: "w", Title: "Work", ManagerRole: "manager-w", NowStep: leaf.BeadID, Status: "open", Steps: steps}}, Agents: map[string]SnapAgent{role: {State: state}}, Unread: map[string]int{role: unread}, ManagerCapacity: map[string]string{role: "no account has usage left"}}
+					check := func(want string) {
+						t.Helper()
+						row := Board(s, caseNow).Workstreams[0]
+						expectLine(t, row, "stalled", want)
+						if row.Flag != 0 || !strings.Contains(row.Why, "Owner: "+role) {
+							t.Fatalf("lost ownership or invented user card: %+v", row)
+						}
+						if nested && (len(row.Tracks) != 2 || row.Tracks[0].Kind != "stalled" || row.Tracks[0].Text != want) {
+							t.Fatalf("inherited track lost failure: %+v", row.Tracks)
+						}
+					}
+					check("Manager out of usage")
+					s.ManagerCapacity = nil
+					check("State missing")
+				})
+			}
+		}
+	}
+}
+
+func TestMissingStatePrecedesBusyManagerAtGate(t *testing.T) {
+	missing := st("w.missing")
+	missing.Broken = true
+	gate := st("w.review", gateOf("Example review", "reviewer"), blockedBy(missing.BeadID))
+	for _, state := range []string{"idle", "working", "waiting"} {
+		r := boardOne([]SnapStep{missing, gate}, &SnapAgent{State: state})
+		expectLine(t, r, "stalled", "State missing")
+		if r.Flag != 0 || !strings.Contains(r.Why, "Automation failure") {
+			t.Fatalf("missing failure: %+v", r)
 		}
 	}
 }

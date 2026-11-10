@@ -71,3 +71,49 @@ func TestNestedCapacityOwnerScenario(t *testing.T) {
 	s.Agents["manager-sample-nested"] = livedata.SnapAgent{State: "idle"}
 	check("Not started: Manager to plan")
 }
+
+func TestMissingCapacityClearScenario(t *testing.T) {
+	raw, err := os.ReadFile("scenarios/missing-capacity-clear.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var s livedata.Snapshot
+	if err := json.Unmarshal(raw, &s); err != nil {
+		t.Fatal(err)
+	}
+	check := func(want string) {
+		t.Helper()
+		r := livedata.Board(s, s.GeneratedAt.Unix()).Workstreams[0]
+		if r.Kind != "stalled" || r.Text != want || r.Flag != 0 || !strings.Contains(r.Why, "Owner: manager-sample-flow") {
+			t.Fatalf("factual missing custody hidden: %+v", r)
+		}
+		if len(livedata.SnapshotViolations(s)) != 1 {
+			t.Fatal("lost invariant failure")
+		}
+	}
+	check("Manager out of usage")
+	s.ManagerCapacity = nil
+	check("State missing")
+	s.Unread = map[string]int{"manager-sample-flow": 2}
+	check("State missing")
+	// A genuine user card keeps its priority while the failure remains visible
+	// to Checkin. Projection must not synthesize a second card or gate.
+	s.Workstreams[0].Steps = append(s.Workstreams[0].Steps, livedata.SnapStep{BeadID: "sample-flow.card", Title: "Example access", Status: "open", State: "needs-user", Waiting: "you"})
+	if r := livedata.Board(s, s.GeneratedAt.Unix()).Workstreams[0]; r.Kind != "needs" || r.Gate != nil {
+		t.Fatalf("genuine user action hidden or duplicated: %+v", r)
+	}
+	if failures := livedata.StalledWork(s, s.GeneratedAt.Unix()); len(failures) != 1 {
+		t.Fatalf("user card hid missing custody: %+v", failures)
+	}
+	s.Workstreams[0].Steps = s.Workstreams[0].Steps[:1]
+	// Only actual custody repairs the failure; Manager activity alone cannot.
+	s.Workstreams[0].Steps[0].Broken = false
+	s.Workstreams[0].Steps[0].Owner = "operator-op-example"
+	s.Workstreams[0].Steps[0].OwnerState = "working"
+	if r := livedata.Board(s, s.GeneratedAt.Unix()).Workstreams[0]; r.Kind != "working" || r.Flag != 0 {
+		t.Fatalf("healthy replacement worker hidden: %+v", r)
+	}
+	if len(livedata.SnapshotViolations(s)) != 0 {
+		t.Fatal("actual custody did not recover")
+	}
+}
