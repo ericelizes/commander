@@ -139,10 +139,11 @@ func (r BoardRow) AllTracks() []BoardTrack {
 // line is a derived status line; why says what the line rests on when it is
 // not what the beads last said (a claim on an agent that is not running).
 type line struct {
-	kind, text string
-	since      int64
-	why        string
-	ageAs      string // the state its age runs under, when two texts are one state
+	handoffTarget, handoffRef string
+	kind, text                string
+	since                     int64
+	why                       string
+	ageAs                     string // the state its age runs under, when two texts are one state
 }
 
 // ageState is the state the line's age runs under (what sinceTracker keys on).

@@ -1,6 +1,7 @@
 package livedata
 
 import (
+	"maps"
 	"slices"
 
 	"github.com/example-user/commander/internal/store"
@@ -20,10 +21,16 @@ type stalledPlace struct {
 // stalled. The row's line stops at its most urgent and a line names one thing, so each
 // open step is read alone through workstreamLine, deepest first (an open parent and child
 // are one place), and then the whole level, for what no step says (a stuck Manager, a
-// pitch owed on the workstream bead). A reacting Manager is picking all of it up.
+// pitch owed on the workstream bead). Manager reaction quiets generic inactivity,
+// but cannot resolve factual handoff or stopped-run failures.
 func (b board) stalledPlaces(ws SnapWorkstream, stalledTrack map[string]bool) []stalledPlace {
 	if managerReacting(b.s, ws.ManagerRole) {
-		return nil
+		// Unread mail grants the same generic inactivity grace as a live turn.
+		// Use a private map: Checkin must never mutate its caller's snapshot.
+		b.s.Agents = maps.Clone(b.s.Agents)
+		manager := b.s.Agents[ws.ManagerRole]
+		manager.State = store.AgentWorking
+		b.s.Agents[ws.ManagerRole] = manager
 	}
 	b.steps = map[string]SnapStep{}
 	for s := range stepValues(ws.Steps) {

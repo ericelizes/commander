@@ -87,3 +87,18 @@ func TestPlanningAndRecoveryReceiptsExposeFailures(t *testing.T) {
 		}
 	}
 }
+
+func TestRecoveryUsesSelectedHandoff(t *testing.T) {
+	pending := SnapStep{BeadID: "sample-flow.pending", Status: "open", Waiting: beads.ManagerStartWait, WaitSince: 50, WaitUntil: 500, WaitUntilAs: beads.ManagerStartWait}
+	overdue := SnapStep{BeadID: "sample-flow.overdue", Status: "open", Waiting: beads.ManagerCloseWait, WaitSince: 10, WaitUntil: 20, WaitUntilAs: beads.ManagerCloseWait}
+	newer := overdue
+	newer.BeadID, newer.WaitSince = "sample-flow.newer", 15
+	for _, steps := range [][]SnapStep{{pending, newer, overdue}, {overdue, newer, pending}} {
+		ws := SnapWorkstream{BeadID: "sample-flow", ManagerRole: "manager-sample-flow", Steps: steps}
+		l, ok := resultHandoff(steps, 100)
+		l = recoveryLine(l, ws)
+		if !ok || l.text != "Manager review overdue" || !strings.Contains(l.why, "existing report") || !strings.Contains(l.why, "on sample-flow.overdue.") || strings.Contains(l.why, "on sample-flow.pending") {
+			t.Fatalf("cause/action/target disagree: %+v", l)
+		}
+	}
+}

@@ -74,7 +74,7 @@ func resultHandoff(steps []SnapStep, now int64) (line, bool) {
 				if h.ref == beads.ManagerStartWait && OpenBlockerOf(ws, s.BeadID) != "" {
 					continue
 				}
-				candidate := line{kind: "waiting", text: h.pending, since: s.WaitSince}
+				candidate := line{kind: "waiting", text: h.pending, since: s.WaitSince, handoffTarget: s.BeadID, handoffRef: h.ref}
 				if h.ref == beads.ManagerRecoverWait {
 					candidate.kind = "stalled" // a stopped run is a failure, even during its repair window
 				}

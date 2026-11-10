@@ -25,15 +25,18 @@ func recoveryLine(l line, ws SnapWorkstream) line {
 		if stepClosed(s) || parked(s) || s.Superseded {
 			continue
 		}
+		if l.handoffTarget != "" && s.BeadID != l.handoffTarget {
+			continue
+		}
 		if holdsHandoff(s) || s.Broken || s.OwnerState == OwnerDied || s.OwnerState == OwnerFinished {
 			if s.BeadID != "" {
 				target = s.BeadID
 			}
-			if recordsHandoff(s, beads.ManagerCloseWait) {
+			if l.handoffRef == beads.ManagerCloseWait || (l.handoffRef == "" && recordsHandoff(s, beads.ManagerCloseWait)) {
 				action = "review the existing report and close or return the existing task"
-			} else if recordsHandoff(s, beads.ManagerRecoverWait) {
+			} else if l.handoffRef == beads.ManagerRecoverWait || (l.handoffRef == "" && recordsHandoff(s, beads.ManagerRecoverWait)) {
 				action = "inspect the stopped run and current holder, then resume or replan through guarded dispatch"
-			} else if recordsHandoff(s, beads.ManagerPlanWait) {
+			} else if l.handoffRef == beads.ManagerPlanWait || (l.handoffRef == "" && recordsHandoff(s, beads.ManagerPlanWait)) {
 				action = "record the missing plan and its actual next holder"
 			} else if holdsHandoff(s) {
 				action = "dispatch the existing ready work through the guarded dispatch door"

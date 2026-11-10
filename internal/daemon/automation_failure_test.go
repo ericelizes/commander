@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"github.com/example-user/commander/internal/beads"
+	"github.com/example-user/commander/internal/livedata"
 	"github.com/example-user/commander/internal/store"
 	"strings"
 	"testing"
@@ -92,5 +93,47 @@ func TestHandoffWakeNeverActsOnMovedOrUnknownCustody(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestHiddenHandoffRetainsFailureAcrossManagerReaction(t *testing.T) {
+	ctx := context.Background()
+	snap := stalledSnap()
+	leaf := &snap.Workstreams[0].Steps[0].Children[0]
+	leaf.Waiting, leaf.WaitSince, leaf.WaitUntil, leaf.WaitUntilAs = beads.ManagerCloseWait, 1, 2, beads.ManagerCloseWait
+	snap.Workstreams[0].Steps = append(snap.Workstreams[0].Steps, livedata.SnapStep{BeadID: "sample-card", Status: "open", State: "needs-user", Waiting: "you"})
+	w, _, delivered, issues, _ := commanderWatch(snap, time.Unix(2000, 0))
+	w.latest = func() (livedata.Snapshot, bool) { return snap, true }
+	var identity store.WatchIssue
+	for i, reaction := range []struct {
+		state  string
+		unread int
+	}{{"idle", 0}, {"working", 0}, {"idle", 1}, {"idle", 0}} {
+		snap.Agents["manager-c-1"] = livedata.SnapAgent{State: reaction.state}
+		snap.Unread = map[string]int{"manager-c-1": reaction.unread}
+		if row := livedata.Board(snap, 2000).Workstreams[0]; row.Kind != "needs" {
+			t.Fatalf("genuine card lost: %+v", row)
+		}
+		if failures := livedata.Checkin(snap, 2000, livedata.AuditOptions{}).Stalled; len(failures) != 1 {
+			t.Fatalf("reaction %d lost failure: %+v", i, failures)
+		}
+		w.commanderPass(ctx, time.Unix(2000+int64(i), 0), map[string]store.Checkin{})
+		if len(issues.rows) != 1 || !issues.rows[0].Told {
+			t.Fatalf("reaction %d lost Told: %+v", i, issues.rows)
+		}
+		if i == 0 {
+			identity = issues.rows[0]
+		} else if issues.rows[0].Key != identity.Key || issues.rows[0].Since != identity.Since {
+			t.Fatalf("failure identity changed: %+v -> %+v", identity, issues.rows[0])
+		}
+	}
+	if len(*delivered) != 1 {
+		t.Fatalf("repeat escalation: %+v", *delivered)
+	}
+	next, _, again, _, _ := commanderWatch(snap, time.Unix(2010, 0))
+	next.issues = issues
+	next.commanderPass(ctx, time.Unix(2010, 0), map[string]store.Checkin{})
+	if len(*again) != 0 {
+		t.Fatal("restart repeated escalation")
 	}
 }
