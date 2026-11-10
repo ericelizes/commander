@@ -27,10 +27,10 @@ func (s *Store) InsertObjectiveTask(ctx context.Context, t ObjectiveTask) (bool,
 		derived = 1
 	}
 	res, err := s.db.ExecContext(ctx, `
-		INSERT OR IGNORE INTO objective_tasks(
+		INSERT INTO objective_tasks(
 			objective_id, project_id, task_bead_id,
 			is_derived, derived_from_task_bead_id, created_at
-		) VALUES (?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING
 	`, t.ObjectiveID, t.ProjectID, t.TaskBeadID, derived, t.DerivedFromTaskBeadID, t.CreatedAt)
 	if err != nil {
 		return false, fmt.Errorf("store: insert objective_task: %w", err)

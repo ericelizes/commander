@@ -35,19 +35,20 @@ func (s *Store) InsertAgentRun(ctx context.Context, r AgentRun) (int64, error) {
 	if r.Status == "" {
 		r.Status = "running"
 	}
-	res, err := s.db.ExecContext(ctx, `
+	var id int64
+	err := s.db.QueryRowContext(ctx, `
 		INSERT INTO agent_runs(
 			project_id, task_bead_id, agent_name, opencode_session_id,
 			container_id, tmux_pane_id, spawn_time,
 			tokens_used, usd_used, consecutive_failures, status, worktree_path
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id
 	`, r.ProjectID, r.TaskBeadID, r.AgentName, r.OpencodeSessionID,
 		r.ContainerID, r.TmuxPaneID, r.SpawnTime,
-		r.TokensUsed, r.UsdUsed, r.ConsecutiveFailures, r.Status, r.WorktreePath)
+		r.TokensUsed, r.UsdUsed, r.ConsecutiveFailures, r.Status, r.WorktreePath).Scan(&id)
 	if err != nil {
 		return 0, fmt.Errorf("store: insert agent_run: %w", err)
 	}
-	return res.LastInsertId()
+	return id, nil
 }
 
 // GetAgentRun returns (nil, nil) if absent.

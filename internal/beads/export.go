@@ -22,6 +22,7 @@ import (
 // behind. Writes, Show and any read the export cannot answer exactly go to c.
 // A missing, half-written or lagging export also falls back to c.
 func ExportReads(c Client) Client {
+	if PostgresConfigured() { return c }
 	ctx, cancel := context.WithCancel(context.Background())
 	return &exportClient{ctx: ctx, cancel: cancel, Client: c, files: map[string]*exportFile{}, flushed: map[string]time.Time{}, inflight: map[string]*flushCall{}, failed: map[string]flushFailure{}, seen: map[string]map[string]fileStamp{}, seeded: map[string]time.Time{}}
 }

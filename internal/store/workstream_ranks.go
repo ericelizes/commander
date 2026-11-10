@@ -182,7 +182,7 @@ func (s *Store) MoveBead(ctx context.Context, present []WorkstreamKey, key Works
 	defer tx.Rollback()
 	for i, k := range order {
 		if _, err := tx.ExecContext(ctx,
-			`INSERT OR REPLACE INTO bead_ranks(project_id, bead_id, rank) VALUES (?, ?, ?)`,
+			`INSERT INTO bead_ranks(project_id, bead_id, rank) VALUES (?, ?, ?) ON CONFLICT(project_id,bead_id) DO UPDATE SET rank=excluded.rank`,
 			k.ProjectID, k.BeadID, i+1); err != nil {
 			return nil, fmt.Errorf("store: rank %s: %w", k.BeadID, err)
 		}

@@ -24,14 +24,15 @@ func (s *Store) InsertProject(ctx context.Context, p Project) (int64, error) {
 }
 
 func insertProject(ctx context.Context, q Querier, p Project) (int64, error) {
-	res, err := q.ExecContext(ctx, `
+	var id int64
+	err := q.QueryRowContext(ctx, `
 		INSERT INTO projects(name, type, path, activated_at, status, repo_path)
-		VALUES (?, ?, ?, ?, ?, ?)
-	`, p.Name, p.Type, p.Path, p.ActivatedAt, p.Status, p.RepoPath)
+		VALUES (?, ?, ?, ?, ?, ?) RETURNING id
+	`, p.Name, p.Type, p.Path, p.ActivatedAt, p.Status, p.RepoPath).Scan(&id)
 	if err != nil {
 		return 0, fmt.Errorf("store: insert project %q: %w", p.Name, err)
 	}
-	return res.LastInsertId()
+	return id, nil
 }
 
 // GetProject returns the project with the given id, or (nil, nil) if absent.

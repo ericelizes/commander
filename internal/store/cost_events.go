@@ -34,17 +34,18 @@ const (
 )
 
 func (s *Store) InsertCostEvent(ctx context.Context, e CostEvent) (int64, error) {
-	res, err := s.db.ExecContext(ctx, `
+	var id int64
+	err := s.db.QueryRowContext(ctx, `
 		INSERT INTO cost_events(
 			project_id, task_bead_id, agent_name, event_type, reason,
 			delta_usd, delta_tokens, occurred_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id
 	`, e.ProjectID, e.TaskBeadID, e.AgentName, e.EventType, e.Reason,
-		e.DeltaUSD, e.DeltaTokens, e.OccurredAt)
+		e.DeltaUSD, e.DeltaTokens, e.OccurredAt).Scan(&id)
 	if err != nil {
 		return 0, fmt.Errorf("store: insert cost_event: %w", err)
 	}
-	return res.LastInsertId()
+	return id, nil
 }
 
 func (s *Store) GetCostEvent(ctx context.Context, id int64) (*CostEvent, error) {

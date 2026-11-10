@@ -104,17 +104,13 @@ func (s *Store) AddTab(ctx context.Context, t InspectorTab) (id int64, created b
 		WHERE project_id = ? AND workstream_bead_id = ?`, t.ProjectID, t.WorkstreamBeadID).Scan(&next); err != nil {
 		return 0, false, fmt.Errorf("store: add inspector tab: %w", err)
 	}
-	res, err := tx.ExecContext(ctx, `INSERT INTO inspector_tabs
+	err = tx.QueryRowContext(ctx, `INSERT INTO inspector_tabs
 		(project_id, workstream_bead_id, position, title, kind, target, renderer, refresh_secs, added_by, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
 		t.ProjectID, t.WorkstreamBeadID, next, t.Title, t.Kind, t.Target, t.Renderer,
-		t.RefreshSecs, t.AddedBy, time.Now().Unix())
+		t.RefreshSecs, t.AddedBy, time.Now().Unix()).Scan(&id)
 	if err != nil {
 		return 0, false, fmt.Errorf("store: add inspector tab: %w", err)
-	}
-	id, err = res.LastInsertId()
-	if err != nil {
-		return 0, false, err
 	}
 	return id, true, tx.Commit()
 }

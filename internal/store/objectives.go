@@ -21,14 +21,15 @@ type Objective struct {
 }
 
 func (s *Store) InsertObjective(ctx context.Context, o Objective) (int64, error) {
-	res, err := s.db.ExecContext(ctx, `
+	var id int64
+	err := s.db.QueryRowContext(ctx, `
 		INSERT INTO objectives(title, description_path, status, created_at, closed_at)
-		VALUES (?, ?, ?, ?, ?)
-	`, o.Title, o.DescriptionPath, o.Status, o.CreatedAt, o.ClosedAt)
+		VALUES (?, ?, ?, ?, ?) RETURNING id
+	`, o.Title, o.DescriptionPath, o.Status, o.CreatedAt, o.ClosedAt).Scan(&id)
 	if err != nil {
 		return 0, fmt.Errorf("store: insert objective %q: %w", o.Title, err)
 	}
-	return res.LastInsertId()
+	return id, nil
 }
 
 func (s *Store) GetObjective(ctx context.Context, id int64) (*Objective, error) {

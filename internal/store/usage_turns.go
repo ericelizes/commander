@@ -26,9 +26,9 @@ type UsageTurn struct {
 // InsertUsageTurn records a turn; one already recorded (same key) is ignored.
 func (s *Store) InsertUsageTurn(ctx context.Context, u UsageTurn) error {
 	_, err := s.db.ExecContext(ctx, `
-		INSERT OR IGNORE INTO usage_turns(turn_key, source, role, runtime, account, model,
+		INSERT INTO usage_turns(turn_key, source, role, runtime, account, model,
 			input_tokens, output_tokens, cache_read, cache_create, usd, occurred_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING
 	`, u.TurnKey, u.Source, u.Role, u.Runtime, u.Account, u.Model,
 		u.InputTokens, u.OutputTokens, u.CacheRead, u.CacheCreate, u.USD, u.OccurredAt)
 	if err != nil {
@@ -78,7 +78,7 @@ func (s *Store) UsageByAgent(ctx context.Context, todaySince, weekSince int64) (
 
 // UsageScanState is how far a log has been read and the reader's carried state.
 func (s *Store) UsageScanState(ctx context.Context, path string) (offset int64, state string, err error) {
-	err = s.db.QueryRowContext(ctx, `SELECT offset, state FROM usage_scan WHERE path = ?`, path).Scan(&offset, &state)
+	err = s.db.QueryRowContext(ctx, `SELECT "offset", state FROM usage_scan WHERE path = ?`, path).Scan(&offset, &state)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, "", nil
 	}
@@ -91,8 +91,8 @@ func (s *Store) UsageScanState(ctx context.Context, path string) (offset int64, 
 // SetUsageScanState records how far a log has been read.
 func (s *Store) SetUsageScanState(ctx context.Context, path string, offset int64, state string) error {
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO usage_scan(path, offset, state) VALUES (?, ?, ?)
-		ON CONFLICT(path) DO UPDATE SET offset = excluded.offset, state = excluded.state
+		INSERT INTO usage_scan(path, "offset", state) VALUES (?, ?, ?)
+		ON CONFLICT(path) DO UPDATE SET "offset" = excluded."offset", state = excluded.state
 	`, path, offset, state)
 	if err != nil {
 		return fmt.Errorf("store: set usage scan state: %w", err)

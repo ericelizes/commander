@@ -168,6 +168,7 @@ func batchLine(op []string) (string, bool) {
 // batch one script; batchOK says batch exists. The answer's Applied and Atomic
 // tell what happened; a failure has Exit 1 and Error.
 func ApplyOps(ctx context.Context, dir string, ops [][]string, atomic, batchOK bool, run func(ctx context.Context, dir string, args []string) ([]byte, []byte, error), batch BatchRunner) DoorResponse {
+	if PostgresConfigured() { return postgresApplyOps(ctx,dir,ops) }
 	fail := func(applied int, err error, stdout, stderr []byte) DoorResponse {
 		return DoorResponse{Stdout: string(stdout), Stderr: string(stderr), Exit: 1, Error: err.Error(), Applied: applied, Busy: applied == 0 && IsBusy(err), MaybeApplied: !IsBusy(err) && cut(ctx, err)}
 	}
@@ -231,6 +232,7 @@ func Txn(ctx context.Context, dir string, ops [][]string, atomic bool) (DoorResp
 // TxnIntent is Txn with the door's holder check (DoorRequest.Intent). When cmdrd cannot be
 // reached the ops run directly, unjudged (the same fallback as every door write, logged).
 func TxnIntent(ctx context.Context, dir string, ops [][]string, atomic bool, intent *DoorIntent) (DoorResponse, error) {
+	if PostgresConfigured() && !inDoorServer && !DoorEnabled() { return DoorResponse{},errors.New("Postgres write door cannot be disabled") }
 	if !OpsWritable(ops) {
 		return DoorResponse{}, errors.New("beads: Txn needs one or more write operations")
 	}
@@ -239,6 +241,7 @@ func TxnIntent(ctx context.Context, dir string, ops [][]string, atomic bool, int
 		if !errors.Is(err, errDoorDown) {
 			return resp, err
 		}
+		if PostgresConfigured() { return DoorResponse{},fmt.Errorf("Postgres writes require the Commander service: %w",err) }
 		logDoorFallback(dir, ops[0], err)
 	}
 	run := func(ctx context.Context, dir string, args []string) ([]byte, []byte, error) {

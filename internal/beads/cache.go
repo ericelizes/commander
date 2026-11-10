@@ -234,6 +234,9 @@ func (c *CachedClient) forget(dir string) {
 // Callers append to and edit what they get back, so each gets its own copy.
 
 func (c *CachedClient) List(ctx context.Context, dir string, opts ListOptions) ([]Bead, error) {
+	if PostgresConfigured() {
+		return c.Client.List(ctx, dir, opts)
+	}
 	if labelsOnly(opts) {
 		// One `bd list --status all` answers every label filter of all statuses
 		// (same beads, same order: bd filters after it sorts). The board asks for
@@ -264,11 +267,17 @@ func cloneBeads(v []Bead) []Bead {
 }
 
 func (c *CachedClient) Deps(ctx context.Context, dir, id string) ([]Dep, error) {
+	if PostgresConfigured() {
+		return c.Client.Deps(ctx, dir, id)
+	}
 	v, err := cached(c, ctx, dir, "deps:"+id, func() ([]Dep, error) { return c.Client.Deps(ctx, dir, id) })
 	return slices.Clone(v), err
 }
 
 func (c *CachedClient) Details(ctx context.Context, dir string, ids []string) (map[string]Detail, error) {
+	if PostgresConfigured() {
+		return c.Client.Details(ctx, dir, ids)
+	}
 	key := "details:" + strings.Join(ids, ",")
 	v, err := cached(c, ctx, dir, key, func() (map[string]Detail, error) { return c.detailsSalvaging(ctx, dir, ids) })
 	if v == nil {
@@ -335,6 +344,9 @@ func (c *CachedClient) detailsSalvaging(ctx context.Context, dir string, ids []s
 // cannot answer for, a file past the limit, or an entry that owes a show goes to br
 // show.
 func (c *CachedClient) detailsIncremental(ctx context.Context, dir string, ids []string, noExport bool) (map[string]Detail, error) {
+	if PostgresConfigured() {
+		return c.Client.Details(ctx, dir, ids)
+	}
 	start := time.Now()
 	caller := readCaller(ctx, noExport)
 	trace := &detailTrace{}
@@ -575,6 +587,9 @@ func (c incrementalClient) Details(ctx context.Context, dir string, ids []string
 }
 
 func (c *CachedClient) Show(ctx context.Context, dir, id string) (*Bead, error) {
+	if PostgresConfigured() {
+		return c.Client.Show(ctx, dir, id)
+	}
 	v, err := cached(c, ctx, dir, "show:"+id, func() (*Bead, error) { return c.Client.Show(ctx, dir, id) })
 	if v == nil {
 		return nil, err
@@ -584,6 +599,9 @@ func (c *CachedClient) Show(ctx context.Context, dir, id string) (*Bead, error) 
 }
 
 func (c *CachedClient) Comments(ctx context.Context, dir, id string) ([]Comment, error) {
+	if PostgresConfigured() {
+		return c.Client.Comments(ctx, dir, id)
+	}
 	v, err := cached(c, ctx, dir, "comments:"+id, func() ([]Comment, error) { return c.Client.Comments(ctx, dir, id) })
 	return slices.Clone(v), err
 }
