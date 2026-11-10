@@ -62,7 +62,7 @@ func (b board) stalledLevel(ws SnapWorkstream, title string) []stalledPlace {
 	var out []stalledPlace
 	if t, isTrack := b.steps[ws.BeadID]; isTrack && b.holdsChildren(t) {
 		ws.Steps = heldSteps(ws.Steps)
-		out = stoppedOwner(t)
+		out = stoppedOwner(t, ws)
 	}
 	out = append(out, b.stalledSteps(ws, ws.Steps)...)
 	whole := ws
@@ -94,7 +94,7 @@ func (b board) stalledSteps(ws SnapWorkstream, steps []SnapStep) []stalledPlace 
 		var stopped []stalledPlace
 		if b.holdsChildren(x) {
 			kids = heldSteps(kids)
-			stopped = stoppedOwner(x)
+			stopped = stoppedOwner(x, ws)
 		}
 		if under := b.stalledSteps(ws, kids); len(stopped)+len(under) > 0 {
 			out = append(append(out, stopped...), under...)
@@ -116,9 +116,10 @@ func (b board) stalledSteps(ws SnapWorkstream, steps []SnapStep) []stalledPlace 
 
 // stoppedOwner names a stopped Operator on a held step with open children. The board reads
 // an Operator only on a leaf, so here nothing else would say it: the hold quiets the children.
-func stoppedOwner(s SnapStep) []stalledPlace {
+func stoppedOwner(s SnapStep, ws SnapWorkstream) []stalledPlace {
 	if l, ok := goneLine([]SnapStep{s}); ok && hasOpen(s.Children) {
-		return []stalledPlace{{s.BeadID, truncate(titleOf(s.Title, s.BeadID), 80), l}}
+		ws.BeadID, ws.Steps = s.BeadID, []SnapStep{s}
+		return []stalledPlace{{s.BeadID, truncate(titleOf(s.Title, s.BeadID), 80), recoveryLine(l, ws)}}
 	}
 	return nil
 }

@@ -186,7 +186,7 @@ func TestBoardOperatorOffGatePathIgnoresManagerState(t *testing.T) {
 			x, y := a.Tracks[j], b.Tracks[j]
 			if a.N == 4 && x.Letter == ".1" {
 				// The broken track's own row reads as every stalled row does: a busy Manager is picking it up.
-				if x.Text != "State missing" || y.Text != "Manager picking it up" {
+				if x.Text != "State missing" || y.Text != "State missing" {
 					t.Errorf("track 4.1: idle %q, busy %q", x.Text, y.Text)
 				}
 				continue
@@ -247,11 +247,11 @@ func TestBoardBrokenStepBesideLiveOperatorStaysVisible(t *testing.T) {
 	}
 	for _, c := range []struct{ state, kind, text string }{
 		{store.AgentIdle, "stalled", "State missing"},
-		{store.AgentWorking, "working", "Manager picking it up"},
+		{store.AgentWorking, "stalled", "State missing"},
 	} {
 		d := boardFixture(t, "operator-beside-broken", c.state)
 		for _, r := range d.Workstreams[:4] {
-			if r.Kind != c.kind || r.Text != c.text || r.Why != wantWhy[r.N] {
+			if r.Kind != c.kind || r.Text != c.text || !strings.HasPrefix(r.Why, wantWhy[r.N]) {
 				t.Errorf("%s row %d: %s %q why %q", c.state, r.N, r.Kind, r.Text, r.Why)
 			}
 		}
@@ -265,7 +265,7 @@ func TestBoardBrokenStepBesideLiveOperatorStaysVisible(t *testing.T) {
 		t.Errorf("no Operator, Manager idle: %q", r.Text)
 	}
 	// The unheld step is not counted as live work.
-	if r := boardFixture(t, "operator-beside-broken", store.AgentIdle).Workstreams[6]; r.Why != "Working on land the polish; nothing holds unheld task" {
+	if r := boardFixture(t, "operator-beside-broken", store.AgentIdle).Workstreams[6]; !strings.HasPrefix(r.Why, "Working on land the polish; nothing holds unheld task") {
 		t.Errorf("in-progress broken step: why %q", r.Why)
 	}
 }

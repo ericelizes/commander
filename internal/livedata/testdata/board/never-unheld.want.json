@@ -142,7 +142,8 @@
    "flag": 0,
    "unread": 0,
    "gate": null,
-   "tracks": []
+   "tracks": [],
+   "why": "Automation failure: Next step not started; Manager recovery needed. Owner: manager-p-d. Next: dispatch the existing ready work through the guarded dispatch door on p-d.2. Commander owns escalation if recovery fails."
   },
   {
    "key": "p:p-e",
@@ -198,7 +199,8 @@
     "at": false,
     "for_you": false
    },
-   "tracks": []
+   "tracks": [],
+   "why": "Automation failure: no live worker or recorded next action. Owner: manager-p-g. Next: dispatch the existing ready work through the guarded dispatch door on p-g.2. Commander owns escalation if recovery fails."
   }
  ]
 }

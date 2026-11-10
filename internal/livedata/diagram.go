@@ -34,6 +34,7 @@ type Diagram struct {
 // (a finding). Who says more: reviewers' or a team's names, what runs and
 // what starts it.
 type DiagramStep struct {
+	Why       string   `json:"why,omitempty"`
 	ID        string   `json:"id"`
 	Title     string   `json:"title"`
 	Kind      string   `json:"kind"`
@@ -195,7 +196,7 @@ const maxChildDepth = 3
 // it in Children. The second result is the wait step's id when it split.
 func (f flow) diagramSteps(s SnapStep, w *WorkflowStep, after []string, depth int) ([]DiagramStep, string) {
 	h := f.hand(s, w.Text)
-	st := DiagramStep{ID: s.BeadID, Title: w.Title, Kind: w.Kind, Text: w.Text, Since: w.Since, Lane: laneOfActor(h.actor), Actor: h.actor, Who: h.who,
+	st := DiagramStep{ID: s.BeadID, Title: w.Title, Kind: w.Kind, Text: w.Text, Why: w.Why, Since: w.Since, Lane: laneOfActor(h.actor), Actor: h.actor, Who: h.who,
 		Gate: s.Gate, Criteria: s.Criteria, After: after, Track: s.Track}
 	var out []DiagramStep
 	cur := ""
@@ -226,7 +227,7 @@ func (f flow) diagramSteps(s SnapStep, w *WorkflowStep, after []string, depth in
 			a = hand{ActorYou, ""} // the user answers its open card, whoever the approver label names
 		}
 		if h.actor != "" && a.actor != "" && h.actor != a.actor && !stepClosed(s) && !parked(s) {
-			wait := DiagramStep{ID: s.BeadID + WaitStepSuffix, Title: gateWaitTitle(s, h), Kind: w.Kind, Text: w.Text, Since: w.Since,
+			wait := DiagramStep{ID: s.BeadID + WaitStepSuffix, Title: gateWaitTitle(s, h), Kind: w.Kind, Text: w.Text, Why: w.Why, Since: w.Since,
 				Lane: st.Lane, Actor: h.actor, Who: h.who, After: st.After}
 			st.Kind, st.Text, st.Since = "idle", "Not reached", 0
 			st.Lane, st.Actor, st.Who, st.After = laneOfActor(a.actor), a.actor, a.who, []string{wait.ID}

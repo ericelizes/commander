@@ -16,6 +16,7 @@
     "criteria": "The user approved the stages and gates."
    },
    {
+    "why": "An Operator is still on it; the ask waits for its report",
     "id": "lab-hub.1",
     "title": "Importer rollout",
     "kind": "working",
@@ -33,6 +34,7 @@
     "current": "lab-hub.1.2.5",
     "steps": [
      {
+      "why": "An Operator is still on it; the ask waits for its report",
       "id": "lab-hub.1.2",
       "title": "Importer ships",
       "kind": "working",

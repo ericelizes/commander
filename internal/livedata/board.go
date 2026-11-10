@@ -497,6 +497,8 @@ func (b board) workstreamLine(ws SnapWorkstream, agent SnapAgent, hasAgent bool,
 			l = required
 		} else if queued, ok := executionQueueLine(ws); ok {
 			l = queued
+		} else if handoff, ok := resultHandoff(ws.Steps, b.now); ok && handoff.kind == "stalled" {
+			l = handoff
 		}
 	}
 	if l.kind != "needs" {
@@ -1108,6 +1110,10 @@ func (b board) managerState(ws SnapWorkstream, agent SnapAgent, live line) line 
 	if l, ok := b.pitchLine(ws, agentBusy(agent, true)); ok {
 		return l
 	}
+	// A live Manager is not proof that an overdue handoff completed.
+	if handoff, ok := resultHandoff(ws.Steps, b.now); ok && handoff.kind == "stalled" {
+		return handoff
+	}
 	operators := workingOperators(ws) > 0
 	if busy := agentBusy(agent, true); busy || operators {
 		// Name the work (the step it is on), not the tool it is running.
@@ -1412,6 +1418,9 @@ func trackWorkstream(ws SnapWorkstream, t SnapStep) SnapWorkstream {
 		ws.ManagerRole = t.ManagerRole
 	}
 	ws.GateNodes, ws.NoGates, ws.Total, ws.Done = nil, t.NoGates, 0, 0
+	if t.ManagerRole != "" {
+		ws.ManagerRole = t.ManagerRole
+	}
 	ws.Waiting, ws.WaitSince, ws.WaitUntil, ws.WaitUntilAs, ws.WaitUntils = t.Waiting, t.WaitSince, t.WaitUntil, t.WaitUntilAs, t.WaitUntils
 	ws.Hold, ws.HoldReason, ws.Withdrawn, ws.ProgressAt, ws.TypedWaits = t.Hold, t.HoldReason, t.Withdrawn, t.ProgressAt, t.TypedWaits
 	return ws

@@ -44,7 +44,7 @@ export function fromWorkflow(w: Workflow, id: string, title: string): Diagram {
   }
   const step = (s: Workflow['steps'][number]): DiagramStep => {
     const actor = actorOf(!!s.gate, s.who ?? '', s.kind, s.text)
-    return { id: s.id, title: s.title, kind: s.kind, text: s.text, lane: LANE[actor], actor, gate: s.gate, approvers: s.who, track: s.track, review: s.review }
+    return { id: s.id, title: s.title, kind: s.kind, text: s.text, why: s.why, lane: LANE[actor], actor, gate: s.gate, approvers: s.who, track: s.track, review: s.review }
   }
   const tracks = w.steps.filter((s) => s.track && s.children?.length).map((t) => {
     const sub = subWorkflow(w, t.id)!
@@ -117,7 +117,7 @@ export function flowOf(d: Diagram, steps: DiagramStep[] = d.steps): FlowStep[] {
       who: s.gate ? approves(s) : undefined,
       kind,
       text,
-      meta: [detail, s.progress].filter(Boolean).join(' · ') || (s.actor ? undefined : 'Nothing in beads says whose move this is'),
+      meta: [s.why, detail, s.progress].filter(Boolean).join(' · ') || (s.actor ? undefined : 'Nothing in beads says whose move this is'),
       track: s.track,
       noActor: !s.actor,
       inside,

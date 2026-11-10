@@ -113,6 +113,7 @@ export interface Diagram {
 }
 
 export interface DiagramStep {
+  why?: string
   id: string
   title: string
   kind: LineKind | 'done'

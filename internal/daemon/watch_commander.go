@@ -170,6 +170,11 @@ func (w opWatch) commanderPass(ctx context.Context, now time.Time, checkins map[
 	// task handoffs hidden by a sibling's genuine wait or user card. Persisted
 	// WatchIssues.Told bounds successful delivery to once per failure/evidence.
 	for _, failure := range livedata.Checkin(snap, now.Unix(), livedata.AuditOptions{}).Stalled {
+		// Generic lack of delivery already has a bounded, evidence-keyed watch.
+		// Keep that clock stable across busy/idle Manager turns.
+		if slices.ContainsFunc(cands, func(c candidate) bool { return c.ws == failure.WorkstreamBead && strings.Contains(c.key, ":stalled:") }) {
+			continue
+		}
 		digest := sha256.Sum256([]byte(failure.Bead + "|" + failure.Reason))
 		cands = append(cands, candidate{key: fmt.Sprintf("%s:failure:%x", failure.WorkstreamBead, digest[:16]), ws: failure.WorkstreamBead,
 			text: "RED automation failure: " + failure.Reason + ". Commander: ensure the owning Manager takes the named recovery action on " + failure.Bead + "; use current-holder/generation guards, never duplicate or restart healthy workers, reviews or user cards"})

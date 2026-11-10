@@ -166,7 +166,7 @@ func TestSourceSnapshotChecksClaimsAgainstLiveness(t *testing.T) {
 	if step(s).OwnerState != OwnerDied || step(s).OwnerWhy != whyNotRunning || len(s.Broken) != 1 || len(s.Watch["manager-app-1"].Operators) != 0 {
 		t.Fatalf("gone: %+v broken %v watch %+v", step(s), s.Broken, s.Watch)
 	}
-	if r := s.Display.Workstreams[0]; r.Kind != "stalled" || r.Why != whyNotRunning {
+	if r := s.Display.Workstreams[0]; r.Kind != "stalled" || !strings.HasPrefix(r.Why, whyNotRunning) {
 		t.Fatalf("row: %+v", r)
 	}
 	if s.Live == nil || s.Live.At != 1000 {

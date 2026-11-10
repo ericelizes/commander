@@ -1,0 +1,11 @@
+{
+  "now": 2000,
+  "snapshot": {
+    "workstreams": [{"bead_id":"sample-flow","title":"Sample flow","project":"sample","manager_role":"manager-sample-flow","steps":[
+      {"bead_id":"sample-flow.1","title":"Review the existing result","task":true,"status":"in_progress","state":"review","owner":"manager-sample-flow","waiting":"Manager to close","waiting_since":100,"waiting_until":200,"waiting_until_as":"Manager to close"},
+      {"bead_id":"sample-flow.2","title":"Closed report","task":true,"status":"closed","state":"review","waiting":"Manager to close","waiting_since":1,"waiting_until":2,"waiting_until_as":"Manager to close"}
+    ]}],
+    "agents":{"manager-sample-flow":{"state":"working"}},
+    "unread":{"manager-sample-flow":1}
+  }
+}

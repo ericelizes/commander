@@ -16,6 +16,7 @@
     "criteria": "The user approved the stages and gates."
    },
    {
+    "why": "Automation failure: open work has no valid holder. Owner: manager-lab-bex. Next: inspect current evidence and record the next guarded recovery action on lab-bex.4. Commander owns escalation if recovery fails.",
     "id": "lab-bex.4",
     "title": "Backfill last quarter",
     "kind": "stalled",
@@ -282,6 +283,7 @@
   "current": "lab-ops.3",
   "steps": [
    {
+    "why": "Automation failure: Agent stopped: the Manager's move. Owner: manager-lab-ops. Next: inspect the stopped run and current holder, then resume or replan through guarded dispatch on lab-ops.1. Commander owns escalation if recovery fails.",
     "id": "lab-ops.1",
     "title": "Alert router rewritten",
     "kind": "stalled",
@@ -343,10 +345,11 @@
     ]
    },
    {
+    "why": "Automation failure: no live worker or recorded next action. Owner: manager-lab-ops. Next: inspect current evidence and record the next guarded recovery action on lab-ops.6. Commander owns escalation if recovery fails.",
     "id": "lab-ops.6",
     "title": "Paging change released",
-    "kind": "working",
-    "text": "Manager picking it up",
+    "kind": "stalled",
+    "text": "Stalled",
     "lane": "agents",
     "actor": "operators",
     "after": [

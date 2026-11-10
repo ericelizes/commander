@@ -2147,3 +2147,22 @@ through cmdr plan apply, then claimed by the generic scheduler, preserving holds
 Use the explicit restored-production rehearsal against a private trial copy
 before the final installed-state check. A merged PR or installed binary alone
 does not establish active orchestration, successful retirement or accurate UI.
+
+**Automation failures:** `stalled` / `stuck` are red failure classes, separate from
+user asks and their flags. Manager activity or unread mail never recolors a
+failed handoff as working. `livedata.recoveryLine` carries cause, accountable
+Manager (Commander for its own move), actual bead target and next recovery
+action in `why`; rows, workflows and diagrams expose that detail. Operational
+beads participate in dependency projection even without `kind:objective` or
+`kind:task`. Closed reports retain their history but never keep a handoff open.
+The existing wait watcher reads task handoffs too, fresh-checks custody and
+persists one notification receipt; Commander's persisted evidence watch escalates
+otherwise unreported failures once per unchanged failure. Generic lack of
+delivery keeps its existing bounded observation window. These paths mail through
+the existing canonical delivery mechanism; they create no worker, review, gate
+or user card and never restore an old actor. Existing guarded dispatch and crash
+restart budgets remain authoritative. Ordinary action choices only count as
+approval requests when an option explicitly sets `approves:true`.
+Coverage: recovery/automation-failure unit tests, interaction scenario
+`tests/evals/scenarios/automation-failure.json`, renderer overview/diagram tests
+and isolated fake cockpit + renderer proof.

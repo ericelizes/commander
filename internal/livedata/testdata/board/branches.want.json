@@ -189,7 +189,8 @@
    "flag": 0,
    "unread": 0,
    "gate": null,
-   "tracks": []
+   "tracks": [],
+   "why": "Automation failure: Manager cannot accept its queued work. Owner: manager-w3. Next: inspect current evidence and record the next guarded recovery action on w3. Commander owns escalation if recovery fails."
   },
   {
    "key": "p:w4",
@@ -289,7 +290,8 @@
    "flag": 0,
    "unread": 0,
    "gate": null,
-   "tracks": []
+   "tracks": [],
+   "why": "Automation failure: Agent stopped on fix the build: the Manager's move. Owner: manager-w7. Next: inspect the stopped run and current holder, then resume or replan through guarded dispatch on w7.1. Commander owns escalation if recovery fails."
   },
   {
    "key": "p:w8",
@@ -314,7 +316,8 @@
    "flag": 0,
    "unread": 0,
    "gate": null,
-   "tracks": []
+   "tracks": [],
+   "why": "Automation failure: Agent finished fix the lint, step not closed: the Manager's move. Owner: manager-w8. Next: inspect the stopped run and current holder, then resume or replan through guarded dispatch on w8.1. Commander owns escalation if recovery fails."
   },
   {
    "key": "p:w9",
@@ -339,7 +342,8 @@
    "flag": 0,
    "unread": 0,
    "gate": null,
-   "tracks": []
+   "tracks": [],
+   "why": "Automation failure: a-reviewer approved #12: the Manager's move. Owner: manager-w9. Next: inspect current evidence and record the next guarded recovery action on w9. Commander owns escalation if recovery fails."
   },
   {
    "key": "p:w10",
@@ -364,7 +368,8 @@
    "flag": 0,
    "unread": 0,
    "gate": null,
-   "tracks": []
+   "tracks": [],
+   "why": "Automation failure: Waiting for a review of no PR: nothing can clear it. Owner: manager-w10. Next: inspect current evidence and record the next guarded recovery action on w10. Commander owns escalation if recovery fails."
   },
   {
    "key": "p:w11",
@@ -514,7 +519,8 @@
    "flag": 0,
    "unread": 0,
    "gate": null,
-   "tracks": []
+   "tracks": [],
+   "why": "Automation failure: open work has no valid holder. Owner: manager-w16. Next: inspect current evidence and record the next guarded recovery action on w16.1. Commander owns escalation if recovery fails."
   },
   {
    "key": "p:w17",
@@ -539,7 +545,8 @@
    "flag": 0,
    "unread": 0,
    "gate": null,
-   "tracks": []
+   "tracks": [],
+   "why": "Automation failure: no live worker or recorded next action. Owner: manager-w17. Next: inspect current evidence and record the next guarded recovery action on w17. Commander owns escalation if recovery fails."
   },
   {
    "key": "p:w18",
@@ -574,8 +581,8 @@
    "bead_id": "w19",
    "manager_role": "manager-w19",
    "starred": false,
-   "kind": "working",
-   "text": "Manager picking it up",
+   "kind": "stalled",
+   "text": "Stalled",
    "since": 0,
    "progress": {
     "done": 0,
@@ -589,7 +596,8 @@
    "flag": 0,
    "unread": 2,
    "gate": null,
-   "tracks": []
+   "tracks": [],
+   "why": "Automation failure: no live worker or recorded next action. Owner: manager-w19. Next: inspect current evidence and record the next guarded recovery action on w19. Commander owns escalation if recovery fails."
   },
   {
    "key": "p:w20",
@@ -1061,7 +1069,8 @@
     "at": false,
     "for_you": false
    },
-   "tracks": []
+   "tracks": [],
+   "why": "Automation failure: no live worker or recorded next action. Owner: manager-w35. Next: inspect current evidence and record the next guarded recovery action on w35. Commander owns escalation if recovery fails."
   },
   {
    "key": "p:w36",
@@ -1092,7 +1101,8 @@
     "at": false,
     "for_you": false
    },
-   "tracks": []
+   "tracks": [],
+   "why": "Automation failure: open work has no valid holder. Owner: manager-w36. Next: inspect current evidence and record the next guarded recovery action on w36.1. Commander owns escalation if recovery fails."
   },
   {
    "key": "p:w37",
@@ -1334,8 +1344,8 @@
      "bead_id": "w42.2",
      "letter": ".2",
      "title": "Docs",
-     "kind": "working",
-     "text": "Manager picking it up",
+     "kind": "stalled",
+     "text": "Stalled",
      "since": 0,
      "progress": {
       "done": 0,
@@ -1345,7 +1355,8 @@
       "done": 0,
       "total": 1
      },
-     "working": 0
+     "working": 0,
+     "why": "Automation failure: no live worker or recorded next action. Owner: manager-w42. Next: inspect current evidence and record the next guarded recovery action on w42.2. Commander owns escalation if recovery fails."
     }
    ]
   },
@@ -1495,7 +1506,8 @@
       "done": 0,
       "total": 1
      },
-     "working": 0
+     "working": 0,
+     "why": "Automation failure: no live worker or recorded next action. Owner: manager-w45. Next: inspect current evidence and record the next guarded recovery action on w45.3. Commander owns escalation if recovery fails."
     },
     {
      "key": "p:w45.4",
@@ -1515,7 +1527,8 @@
      },
      "working": 0
     }
-   ]
+   ],
+   "why": "Automation failure: no live worker or recorded next action. Owner: manager-w45. Next: inspect current evidence and record the next guarded recovery action on w45.3. Commander owns escalation if recovery fails."
   },
   {
    "key": "p:w46",
@@ -1732,7 +1745,8 @@
     "at": false,
     "for_you": false
    },
-   "tracks": []
+   "tracks": [],
+   "why": "Automation failure: Agent stopped on run the audit: the Manager's move. Owner: manager-w51. Next: inspect the stopped run and current holder, then resume or replan through guarded dispatch on w51.1. Commander owns escalation if recovery fails."
   },
   {
    "key": "p:w52",
@@ -1819,7 +1833,8 @@
     "at": false,
     "for_you": false
    },
-   "tracks": []
+   "tracks": [],
+   "why": "Automation failure: no live worker or recorded next action. Owner: manager-w54. Next: inspect current evidence and record the next guarded recovery action on w54. Commander owns escalation if recovery fails."
   },
   {
    "key": "p:w55",

@@ -25,7 +25,9 @@ func recoveryLine(l line, ws SnapWorkstream) line {
 			continue
 		}
 		if holdsHandoff(s) || s.Broken || s.OwnerState == OwnerDied || s.OwnerState == OwnerFinished {
-			target = s.BeadID
+			if s.BeadID != "" {
+				target = s.BeadID
+			}
 			if recordsHandoff(s, "Manager to close") {
 				action = "review the existing report and close or return the existing task"
 			} else if holdsHandoff(s) {

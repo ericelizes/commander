@@ -345,3 +345,13 @@ describe('untitled steps', () => {
     expect(container.textContent).not.toMatch(/lab-bex(\.\d+)*/)
   })
 })
+
+it('keeps failure cause, owner and recovery target on the Manager lifeline', () => {
+ const why = 'Automation failure: deadline missed. Owner: manager-sample-flow. Next: review existing report on sample-flow.1.'
+ const d: Diagram = { id: 'sample-flow', title: 'Sample flow', steps: [{ id: 'sample-flow.1', title: 'Review existing result', kind: 'stalled', text: 'Manager review overdue', why, actor: 'manager', lane: 'agents' }] }
+ const {container} = render(<DerivedDiagram diagram={d} />)
+ expect(container.querySelector('.kind-stalled')).toBeInTheDocument()
+ expect(container.querySelector('.agent-stalled')).toBeInTheDocument()
+ expect(screen.getByText(why)).toBeInTheDocument()
+ expect(container.querySelector('.kind-needs')).toBeNull()
+})

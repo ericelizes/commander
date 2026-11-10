@@ -281,6 +281,10 @@ func (w *waitWatcher) wake(ctx context.Context, p store.Project, b beads.Bead, w
 		if fresh.Status == "closed" || !slices.Contains(fresh.Labels, label) || (handoff && slices.Contains(fresh.Labels, receipt)) {
 			return
 		}
+		state, owner := beads.StepState(fresh.Status, fresh.Labels)
+		if handoff && (fresh.Status == beads.StatusDeferred || beads.Superseded(*fresh) || state == beads.StateNeedsUser || strings.HasPrefix(owner, "operator-")) {
+			return // current custody has moved; never wake the old handoff over it
+		}
 		manager := wsmgr.Role(wsmgr.Owner(ctx, w.beads, p.Path, b.ID))
 		if err := w.mail(ctx, manager, subject, body); err != nil {
 			log.Printf("daemon: waits: mail %s: %v", manager, err)
