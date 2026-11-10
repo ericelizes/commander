@@ -2213,3 +2213,11 @@ checks share the existing role/environment trust boundary and are not an atomic
 backend check-and-close transaction. Unit/eval:
 `TestUserGatePassAuthority`, `TestCloseParent*`, `TestCompletionAuthorityScenario`
 (`tests/evals/scenarios/completion-authority.json`, private command-handler eval).
+
+Ordinary parent repair: `internal-place --ordinary --project P --bead B --parent W
+[--dry-run]` changes only the parent of an ordinary nested step/existing gate.
+It refuses ownership transfers, workstream/operational/Operator-task conversion,
+incompatible placement, dependency cycles and newly unheld work; evidence failures
+refuse. No wrappers, Manager changes, gate/card/journal or run-provenance edits.
+See `docs/cli/ordinary-place.md` for limits and coverage (`TestOrdinaryPlace*`,
+private-handler eval `scenarios/ordinary-place.json`).

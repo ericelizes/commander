@@ -63,6 +63,7 @@ Commands:
   internal-migrate-workstreams --project <slug> [--apply]
                                     Label top-level objectives and old tracks kind:workstream; list workstreams with mixed children
   internal-place --project <slug> --bead <id> [--parent <workstream>] [--after <sibling>|--to <rank>]
+  internal-place --ordinary --project <slug> --bead <id> --parent <workstream> [--dry-run]
                                     Put a workstream anywhere in the tree, as a drag in the sidebar does
   internal-workstreams              List the Workstreams column's numbered rows as JSON
   internal-move-objective --project <slug> --bead <id> --to <rank>

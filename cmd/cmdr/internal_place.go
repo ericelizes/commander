@@ -35,12 +35,25 @@ func runInternalPlace(args []string, stdout, stderr *os.File) int {
 	bead := fs.String("bead", "", "the workstream bead to place")
 	parent := fs.String("parent", "", "the workstream it goes under; empty for the top level")
 	after := fs.String("after", "", "the sibling it goes after")
+	ordinary := fs.Bool("ordinary", false, "reparent an ordinary step or existing gate without conversion")
+	dry := fs.Bool("dry-run", false, "ordinary: validate without writing")
 	to := fs.Int("to", 0, "its rank among its siblings (1 = first), when --after is not given")
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
 	if *projectName == "" || *bead == "" {
 		emitErr(stderr, "missing required flag(s): --project, --bead")
+		return 1
+	}
+	if *ordinary {
+		if *parent == "" || *after != "" || *to != 0 {
+			emitErr(stderr, "--ordinary requires --parent and forbids ranking")
+			return 1
+		}
+		return runOrdinaryPlace(*projectName, *bead, *parent, *dry, stdout, stderr)
+	}
+	if *dry {
+		emitErr(stderr, "--dry-run requires --ordinary")
 		return 1
 	}
 	if callerIsOperator(os.Getenv("COMMANDER_ROLE")) {
