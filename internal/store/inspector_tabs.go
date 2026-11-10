@@ -216,14 +216,25 @@ func (s *Store) MoveTab(ctx context.Context, id int64, pos int) error {
 // SetActiveTab records which tab a window shows. Switching to a different tab
 // drops the cached card (it belongs to the previous tab).
 func (s *Store) SetActiveTab(ctx context.Context, projectID int64, wsBeadID string, tabID int64) error {
-	_, err := s.db.ExecContext(ctx, `
+	query := `
 		INSERT INTO inspector_state(project_id, workstream_bead_id, active_tab_id)
 		VALUES (?, ?, ?)
 		ON CONFLICT(project_id, workstream_bead_id) DO UPDATE SET
 			cache_json = CASE WHEN active_tab_id IS excluded.active_tab_id THEN cache_json ELSE NULL END,
 			cached_at  = CASE WHEN active_tab_id IS excluded.active_tab_id THEN cached_at  ELSE NULL END,
-			active_tab_id = excluded.active_tab_id`,
-		projectID, wsBeadID, tabID)
+			active_tab_id = excluded.active_tab_id`
+	if s.postgres {
+		// PostgreSQL has no SQLite-style IS comparison between values. Qualify
+		// incumbent columns to distinguish them from the excluded row.
+		query = `
+			INSERT INTO inspector_state(project_id, workstream_bead_id, active_tab_id)
+			VALUES (?, ?, ?)
+			ON CONFLICT(project_id, workstream_bead_id) DO UPDATE SET
+				cache_json = CASE WHEN inspector_state.active_tab_id IS NOT DISTINCT FROM excluded.active_tab_id THEN inspector_state.cache_json ELSE NULL END,
+				cached_at = CASE WHEN inspector_state.active_tab_id IS NOT DISTINCT FROM excluded.active_tab_id THEN inspector_state.cached_at ELSE NULL END,
+				active_tab_id = excluded.active_tab_id`
+	}
+	_, err := s.db.ExecContext(ctx, query, projectID, wsBeadID, tabID)
 	if err != nil {
 		return fmt.Errorf("store: set active inspector tab: %w", err)
 	}
