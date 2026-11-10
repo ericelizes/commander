@@ -210,10 +210,28 @@ func ParseWait(arg string) (Wait, error) {
 			stamp, label = stamp[:i], ref[i+1:]
 		}
 		w.Until, w.Ref = t, strings.TrimSpace(label)
+		if err := w.checkLabelFits(arg); err != nil {
+			return w, err
+		}
 	default:
 		return w, fmt.Errorf("--waiting %q: kind must be ci, main-ci, prod-tag, review, user, operator or until", arg)
 	}
 	return w, nil
+}
+
+// checkLabelFits refuses a plain-words until label whose stored form would not
+// keep two whole words under MaxLabelLen: cut to one word it would read as an
+// untyped slug and hold nothing.
+func (w Wait) checkLabelFits(arg string) error {
+	if !strings.Contains(w.Ref, " ") {
+		return nil
+	}
+	w.Since = time.Now()
+	p, ok := ParseWaitLabel(w.Label())
+	if ok && strings.Contains(strings.TrimSpace(p.Ref), " ") {
+		return nil
+	}
+	return fmt.Errorf("--waiting %q: the label is too long to store (labels are limited to %d characters, apostrophes and punctuation count three); use a shorter label of at least two words", arg, MaxLabelLen)
 }
 
 // ReadableUntilLabel reports whether a time wait's label reads as plain words
@@ -285,22 +303,37 @@ func (w Wait) compactLabel() string {
 		return head + ":" + strings.TrimPrefix(w.Ref, "operator-")
 	case WaitUntil:
 		head += ":" + strconv.FormatInt(w.Until.Unix(), 36)
-		ref := []rune(w.Ref)
-		cut := false
-		for {
-			l := head
-			if len(ref) > 0 {
-				l += ":" + EscapeLabel(string(ref))
+		full := func(ref string) string {
+			if ref == "" {
+				return head
 			}
-			if len(l) <= MaxLabelLen || len(ref) == 0 {
-				if s := string(ref); cut && strings.Contains(strings.TrimRight(s, " "), " ") {
-					// Cut at a word boundary, keeping the space: a trailing space marks the cut.
-					return head + ":" + EscapeLabel(s[:strings.LastIndex(strings.TrimRight(s, " "), " ")+1])
+			return head + ":" + EscapeLabel(ref)
+		}
+		if l := full(w.Ref); len(l) <= MaxLabelLen {
+			return l
+		}
+		// Too long: keep whole words only, the trailing space marking the cut.
+		// Cutting mid-word would leave a slug that reads untyped and holds nothing.
+		ref := strings.TrimRight(w.Ref, " ")
+		for i := len(ref) - 1; i > 0; i-- {
+			if ref[i] == ' ' {
+				if l := full(ref[:i] + " "); len(l) <= MaxLabelLen && strings.Contains(strings.TrimRight(ref[:i], " "), " ") {
+					return l
 				}
+			}
+		}
+		// Fewer than two words fit (ParseWait refuses such a label): the first word.
+		if i := strings.Index(ref, " "); i > 0 {
+			if l := full(ref[:i] + " "); len(l) <= MaxLabelLen {
 				return l
 			}
-			ref, cut = ref[:len(ref)-1], true
 		}
+		// No word boundary fits: cut by characters (a single long slug).
+		r := []rune(ref)
+		for len(r) > 0 && len(full(string(r))) > MaxLabelLen {
+			r = r[:len(r)-1]
+		}
+		return full(string(r))
 	}
 	// Other kinds keep their long body behind the short head.
 	_, body, _ := strings.Cut(w.longBody(), ":")
