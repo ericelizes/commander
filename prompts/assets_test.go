@@ -778,7 +778,14 @@ func TestToolRejectionIsNotAHoldInPrompts(t *testing.T) {
 		// The rule is keyed on the note: no wording may tell an agent that an
 		// interruption without text is not a hold, since the user's own Stop
 		// carries no text either.
-		for _, banned := range []string{"with no user text is not a hold", "no user text is not a hold"} {
+		// Only an interrupt can be the user's Stop: Managers meet many tool
+		// refusals (guard denies, disallowed tools) that are no hold.
+		for _, needle := range []string{"guard or hook refusal", "first message"} {
+			if !strings.Contains(body, needle) {
+				t.Errorf("%s prompt missing %q", role, needle)
+			}
+		}
+		for _, banned := range []string{"with no user text is not a hold", "no user text is not a hold", "A tool rejection is the user saying stop"} {
 			if strings.Contains(body, banned) {
 				t.Errorf("%s prompt says %q: that overrides the user's own Stop", role, banned)
 			}

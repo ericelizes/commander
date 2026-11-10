@@ -499,6 +499,7 @@ func (e *Engine) start(ctx context.Context, role string, o StartOptions) (st Sta
 	if moved != "" {
 		e.startMoved(c, moved)
 	}
+	e.sendPendingInterruptNote(role)
 	st, err = e.Status(role)
 	return st, true, err
 }
@@ -1337,7 +1338,9 @@ func (e *Engine) interrupt(ctx context.Context, role string) (fellBack bool, err
 // proceed with this tool use ... STOP ... wait for the user" and a
 // "[Request interrupted by user for tool use]" line follows. Agents took that
 // for the user saying stop and held, so the interrupt is followed at once by
-// InterruptNote, which says who it was and to read the mail and act on it. Idle, there is no
+// InterruptNote, which says who it was and to read the mail and act on it.
+// When the interrupt ends the process (the SIGINT fallback) the note is kept
+// and sent as the next process's first message. Idle, there is no
 // turn to cut: nothing is interrupted and no note is sent (the mail is
 // delivered as the next message, as ever).
 func (e *Engine) InterruptForMail(ctx context.Context, role, by string) error {
@@ -1355,10 +1358,54 @@ func (e *Engine) InterruptForMail(ctx context.Context, role, by string) error {
 	if err != nil {
 		return err
 	}
-	if fellBack || !e.Running(role) { // the process is ending (SIGINT fallback); its restart resumes
-		return nil
+	note := InterruptNote(by, role)
+	if fellBack || !e.Running(role) {
+		// The process is ending (SIGINT fallback): its resumed session still
+		// shows the "user" rejection, so the next process started for the role
+		// gets the note first (sendPendingInterruptNote).
+		return e.keepInterruptNote(role, note)
 	}
-	return e.send(role, InterruptNote(by, role), "mail")
+	return e.send(role, note, "mail")
+}
+
+// InterruptNoteFile holds the note for a role whose interrupt ended its
+// process; the next start sends it.
+func InterruptNoteFile(home, role string) string {
+	return filepath.Join(home, "chat", role+".interrupt-note")
+}
+
+// interruptNoteMaxAge bounds a kept note: one older than this no longer sits
+// right under the interrupt it explains.
+const interruptNoteMaxAge = time.Hour
+
+func (e *Engine) keepInterruptNote(role, note string) error {
+	path := InterruptNoteFile(e.opts.Home, role)
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, []byte(note), 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
+}
+
+// sendPendingInterruptNote sends a kept interrupt note to role's new process,
+// once, as its first message (origin mail), unless it is stale.
+func (e *Engine) sendPendingInterruptNote(role string) {
+	path := InterruptNoteFile(e.opts.Home, role)
+	fi, err := os.Stat(path)
+	if err != nil {
+		return
+	}
+	raw, err := os.ReadFile(path)
+	_ = os.Remove(path)
+	if err != nil || e.opts.Now().Sub(fi.ModTime()) > interruptNoteMaxAge || strings.TrimSpace(string(raw)) == "" {
+		return
+	}
+	if err := e.send(role, string(raw), "mail"); err != nil {
+		e.opts.Logf("chat: interrupt note to %s: %v", role, err)
+	}
 }
 
 // InterruptNote is the labelled note that follows an interrupt sent to
