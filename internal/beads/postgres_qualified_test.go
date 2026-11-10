@@ -398,3 +398,33 @@ func TestPostgresQualifiedManagerNameIsNotForeignCustody(t *testing.T) {
 		t.Fatalf("Manager name stood in for foreign custody: %v", e)
 	}
 }
+
+func TestPostgresQualifiedStoppedAndUnknownCustody(t *testing.T) {
+	f := newQualifiedFixture(t)
+	ctx := context.Background()
+	role := "operator-fixture-presence"
+	if e := f.c.SetLabel(ctx, f.dir, f.source, "owner:"+role, true); e != nil {
+		t.Fatal(e)
+	}
+	run, e := f.s.InsertAgentRun(ctx, store.AgentRun{ProjectID: f.pid, TaskBeadID: f.source, AgentName: role, SpawnTime: time.Now().Unix()})
+	if e != nil {
+		t.Fatal(e)
+	}
+	if e = f.link(ctx); e != nil {
+		t.Fatal(e)
+	}
+	if _, e = f.s.DB().Exec(`INSERT INTO run_observations(run_id,alive,checked_at) VALUES(?,FALSE,?)`, run, time.Now().Unix()); e != nil {
+		t.Fatal(e)
+	}
+	if e = f.c.Close(ctx, f.foreign, f.target); !IsCrossProjectError(e) {
+		t.Fatalf("stopped process excused foreign receipt: %v", e)
+	}
+	if _, e = f.s.DB().Exec(`UPDATE run_observations SET checked_at=0 WHERE run_id=?`, run); e != nil {
+		t.Fatal(e)
+	}
+	// Expired evidence is unknown, matching the existing holder policy. Do not
+	// invent either stopped or a working turn from the missing current sample.
+	if e = f.c.Close(ctx, f.foreign, f.target); e != nil {
+		t.Fatalf("unknown evidence became stopped: %v", e)
+	}
+}
