@@ -443,22 +443,26 @@ func TestSpawnOperator_ProdGate(t *testing.T) {
 		labels  []string
 		desc    string
 		wantErr string
+		title   string
 	}{
-		"ok":               {caller: "manager-ms-1", status: "● P2 · CLOSED", labels: good, desc: "run migration 42"},
-		"plain gate label": {caller: "manager-ms-1", status: "● P2 · CLOSED", labels: []string{beads.GateLabel, "approver:user", "gate-of:" + beads.EscapeLabel("ms-1.2")}, desc: "run migration 42"},
-		"legacy approver":  {caller: "manager-ms-1", status: "● P2 · CLOSED", labels: []string{gates.KindLabel, "approver:sample-owner", "gate-of:" + beads.EscapeLabel("ms-1")}, desc: "run migration 42"},
-		"open gate":        {caller: "manager-ms-1", status: "● P2 · OPEN", labels: good, desc: "x", wantErr: "not closed"},
-		"not a gate":       {caller: "manager-ms-1", status: "● P2 · CLOSED", labels: []string{"kind:task"}, desc: "x", wantErr: "not a gate bead"},
-		"wrong approver":   {caller: "manager-ms-1", status: "● P2 · CLOSED", labels: []string{gates.KindLabel, "approver:someone", "gate-of:" + beads.EscapeLabel("ms-1.2")}, desc: "x", wantErr: "not approved by the user"},
-		"not a manager":    {caller: "operator-x", status: "● P2 · CLOSED", labels: good, desc: "x", wantErr: "only a Manager"},
-		"no caller":        {caller: "", status: "● P2 · CLOSED", labels: good, desc: "x", wantErr: "only a Manager"},
-		"not linked":       {caller: "manager-ms-1", status: "● P2 · CLOSED", labels: []string{gates.KindLabel, "approver:user", "gate-of:other"}, desc: "x", wantErr: "not linked"},
-		"no scope written": {caller: "manager-ms-1", status: "● P2 · CLOSED", labels: good, desc: " ", wantErr: "no description"},
+		"ok":                {caller: "manager-ms-1", status: "● P2 · CLOSED", labels: good, desc: "run migration 42"},
+		"plain gate label":  {caller: "manager-ms-1", status: "● P2 · CLOSED", labels: []string{beads.GateLabel, "approver:user", "gate-of:" + beads.EscapeLabel("ms-1.2")}, desc: "run migration 42"},
+		"legacy approver":   {caller: "manager-ms-1", status: "● P2 · CLOSED", labels: []string{gates.KindLabel, "approver:sample-owner", "gate-of:" + beads.EscapeLabel("ms-1")}, desc: "run migration 42"},
+		"open gate":         {caller: "manager-ms-1", status: "● P2 · OPEN", labels: good, desc: "x", wantErr: "not closed"},
+		"not a gate":        {caller: "manager-ms-1", status: "● P2 · CLOSED", labels: []string{"kind:task"}, desc: "x", wantErr: "not a gate bead"},
+		"wrong approver":    {caller: "manager-ms-1", status: "● P2 · CLOSED", labels: []string{gates.KindLabel, "approver:someone", "gate-of:" + beads.EscapeLabel("ms-1.2")}, desc: "x", wantErr: "not approved by the user"},
+		"not a manager":     {caller: "operator-x", status: "● P2 · CLOSED", labels: good, desc: "x", wantErr: "only a Manager"},
+		"no caller":         {caller: "", status: "● P2 · CLOSED", labels: good, desc: "x", wantErr: "only a Manager"},
+		"not linked":        {caller: "manager-ms-1", status: "● P2 · CLOSED", labels: []string{gates.KindLabel, "approver:user", "gate-of:other"}, desc: "x", wantErr: "not linked"},
+		"no scope written":  {caller: "manager-ms-1", status: "● P2 · CLOSED", labels: good, desc: " ", wantErr: "no description"},
+		"workflow approval": {caller: "manager-ms-1", status: "● P2 · CLOSED", labels: good, desc: "Approved by the user: the plan", title: "Dev flow: workflow approved", wantErr: "workflow approval"},
+		"spec approval":     {caller: "manager-ms-1", status: "● P2 · CLOSED", labels: good, desc: "the spec", title: "Spec approved", wantErr: "workflow approval"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			sp := &fakeOperatorSpawner{}
 			stubSpawnDeps(t, sp, 0, 3)
 			mock := prodGateMock(tc.status, tc.labels, tc.desc)
+			mock.ShowResult.Title = tc.title
 			useMockBeads(t, mock)
 			stubMail(t)
 			t.Setenv("COMMANDER_ROLE", tc.caller)

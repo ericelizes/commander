@@ -699,7 +699,7 @@ when already acted on.
 **Production exception (`--prod-gate`):** `internal-spawn-operator --prod-gate <bead>` (Manager callers only,
 `COMMANDER_ROLE=manager-*`) lets an Operator take the ONE production action a gate covers: the bead must be a
 CLOSED `kind:gate` with approver `user` (`ownercompat`, the legacy owner approver counts), a non-empty description (the exact
-scope) and be linked to the step (`gate-of:` the step/an ancestor, or a blocks edge). A user gate answered with an approving choice and no description gets the card's question, chosen option, its implications and the user's words as its description before it closes (`approvedGateDescription`, `internal-resolve-needs`; an existing description is kept; test `TestApprovedGateKeepsTheCardAsItsDescription`). The task bead gets label
+scope) and be linked to the step (`gate-of:` the step/an ancestor, or a blocks edge). Approving a gate never writes its description (an approval must not widen production authority), and a workflow approval (title matching `firstGateRE`: Workflow/Spec/Approach/Route, `workflow approved`) is refused whatever its description says, so the scope is always the gate's own description, the text its card showed the user (test `TestApprovingAGateNeverWidensProductionAuthority`). The task bead gets label
 `prod-gate:<beads.EscapeLabel(id)>` (br labels forbid dots); the Operator's bootstrap prompt ends with a `PRODUCTION GATE` paragraph quoting the description
 and env `COMMANDER_PROD_GATE` is set (`spawn.prodGatePrompt`). Without it the role prompt's no-production guardrail
 and `operatorguard` stand. Tests: `TestSpawnOperator_ProdGate`, `TestHostBootstrapPrompt_ProdGate`, `TestProdGateInPrompts`.

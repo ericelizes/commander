@@ -295,43 +295,49 @@ func TestGateCardApproves_ResumeClosesAnsweredOpenGate(t *testing.T) {
 	}
 }
 
-// An approved gate with no description keeps what the user approved, so
-// --prod-gate (which needs the exact scope) can accept it. One that has a
-// description, or a card that does not approve, keeps it as it was.
-func TestApprovedGateKeepsTheCardAsItsDescription(t *testing.T) {
-	const card = `{"question":"Run the prod migration on the VM?","options":[{"label":"Run it","approves":true,"implications":"Applies migration 12 to the prod database once."},{"label":"Not yet"}]}`
+// Approving a gate never widens production authority: the card is not
+// written into the gate's description, so a description-less approval is no
+// --prod-gate, and a workflow approval is refused whatever its description. An
+// explicit production gate's scope is its own description, verbatim: the text
+// the user's card showed and the user approved.
+func TestApprovingAGateNeverWidensProductionAuthority(t *testing.T) {
+	const card = `{"question":"Approve?","options":[{"label":"Approve","approves":true,"implications":"Starts the build."},{"label":"Not yet"}]}`
 	for _, tc := range []struct {
-		name, choice, existing string
-		want                   []string
+		name, title, desc, wantErr string
 	}{
-		{"empty description", "Run it", "", []string{"Approved by the user: Run the prod migration on the VM?", "Chosen: Run it", "Implications: Applies migration 12 to the prod database once.", "The user's words: tonight only"}},
-		{"kept description", "Run it", "Deploy tag v3 to the VM.", []string{"Deploy tag v3 to the VM."}},
-		{"not approved", "Not yet", "", nil},
+		{"workflow approval, no description", "Workflow approved", "", "no description"},
+		{"greenlight, no description", "Greenlight: rebuild", "", "no description"},
+		{"workflow approval with a description", "Dev flow: workflow approved", "The plan in ms-1.", "workflow approval"},
+		{"explicit production gate", "Greenlight: deploy v3", "Deploy tag v3 to the VM once.", ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			stubMail(t)
 			bc, _, _ := approvingChoiceSetup(t, card)
-			bc.ListResult[1].Description = tc.existing
+			bc.ListResult[1].Title = tc.title
+			bc.ListResult[1].Description = tc.desc
+			bc.ListResult[1].Labels = append(bc.ListResult[1].Labels, "gate-of:"+beads.EscapeLabel("ms-1"))
 			stdout, stderr, output := withTempOutputFiles(t)
-			args := []string{"--project", "manifest", "--bead", "ms-1.1", "--action", "decide", "--choice", tc.choice, "--text", "tonight only"}
+			args := []string{"--project", "manifest", "--bead", "ms-1.1", "--action", "decide", "--choice", "Approve", "--text", "tonight only"}
 			if code := runInternalResolveNeeds(args, stdout, stderr); code != 0 {
 				_, errOut := output()
 				t.Fatalf("exit %d: %s", code, errOut)
 			}
 			b, _ := bc.Show(context.Background(), "", "ms-1.1")
-			if tc.want == nil {
-				if b.Description != "" {
-					t.Fatalf("an unapproved gate got a description: %q", b.Description)
+			if b.Status != "closed" {
+				t.Fatalf("gate not closed: %s", b.Status)
+			}
+			if b.Description != tc.desc {
+				t.Fatalf("approval rewrote the description: %q, want %q", b.Description, tc.desc)
+			}
+			scope, err := checkProdGate(context.Background(), bc, "", "ms-1", "ms-1.1", "manager-ms-1")
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("--prod-gate accepted an approval (scope %q, err %v), want %q", scope, err, tc.wantErr)
 				}
 				return
 			}
-			for _, w := range tc.want {
-				if !strings.Contains(b.Description, w) {
-					t.Fatalf("description %q lacks %q", b.Description, w)
-				}
-			}
-			if b.Status != "closed" {
-				t.Fatalf("gate not closed: %s", b.Status)
+			if err != nil || scope != tc.desc {
+				t.Fatalf("scope %q err %v, want %q verbatim", scope, err, tc.desc)
 			}
 		})
 	}

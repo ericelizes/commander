@@ -455,7 +455,8 @@ const prodGateLabelPrefix = "prod-gate:"
 
 // checkProdGate validates a --prod-gate bead and returns its description, the
 // exact action allowed: only a Manager may pass it, the bead is a gate (kind:gate),
-// closed, approved by the user, and linked to the step (gate-of: the step or an
+// closed, approved by the user, not a workflow approval, with a description
+// (never written by an approval), and linked to the step (gate-of: the step or an
 // ancestor, a blocks edge from one of them, or its approval covering the step
 // on the board).
 func checkProdGate(ctx context.Context, bc beads.Client, dir, step, gateID, caller string) (string, error) {
@@ -483,6 +484,11 @@ func checkProdGate(ctx context.Context, bc beads.Client, dir, step, gateID, call
 	}
 	if strings.TrimSpace(gate.Description) == "" {
 		return "", fmt.Errorf("--prod-gate %s: gate has no description naming the exact action it covers", gateID)
+	}
+	// A workflow approval approves a plan, never a production action, whatever
+	// its description says: approving one must not widen production authority.
+	if firstGateRE.MatchString(strings.TrimSpace(gate.Title)) {
+		return "", fmt.Errorf("--prod-gate %s: %q is a workflow approval, not a production gate; ask the user for a gate whose description names the one production action", gateID, gate.Title)
 	}
 	chain := beads.Lineage(ctx, bc, dir, nil, step)
 	linked := false
