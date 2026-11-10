@@ -165,7 +165,7 @@ func exclusiveStub(released *bool, then func()) func(context.Context, io.Writer)
 func wantEndedInTime(t *testing.T, opts Options, released *bool, says ...string) {
 	t.Helper()
 	start := time.Now()
-	err := Run(context.Background(), opts, io.Discard)
+	err := runFakeShip(context.Background(), opts, io.Discard)
 	if err == nil {
 		t.Fatal("a hang under the lock reads as a landed ship")
 	}
@@ -414,7 +414,7 @@ func TestReplayKeepsItsSlot(t *testing.T) {
 		}
 	}, &checks)
 	var out bytes.Buffer
-	if err := Run(context.Background(), Options{Root: dir, Branch: "feat", Run: run, Exclusive: exclusive}, &out); err != nil {
+	if err := runFakeShip(context.Background(), Options{Root: dir, Branch: "feat", Run: run, Exclusive: exclusive}, &out); err != nil {
 		t.Fatalf("Run: %v\n%s", err, out.String())
 	}
 	if checks != 2 || slots != 1 {
