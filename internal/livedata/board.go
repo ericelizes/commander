@@ -389,9 +389,6 @@ func (b board) trackLevel(ws SnapWorkstream, steps []SnapStep, prefix string, ma
 		}
 		kids := b.trackLevel(tws, t.Children, number, childManager, hasChildManager, pickingUp, byTrack)
 		local := own
-		if local.kind == "stalled" && managerReacting(b.s, tws.ManagerRole) {
-			local = line{kind: "working", text: "Manager picking it up", why: local.why, ageAs: local.ageAs}
-		}
 		local = humanWait(local, b.tasks)
 		l := rollUp(local, kids, ownOpen(t.Children))
 		l = b.capacityLine(tws.ManagerRole, l)
@@ -1422,9 +1419,6 @@ func trackWorkstream(ws SnapWorkstream, t SnapStep) SnapWorkstream {
 		ws.ManagerRole = t.ManagerRole
 	}
 	ws.GateNodes, ws.NoGates, ws.Total, ws.Done = nil, t.NoGates, 0, 0
-	if t.ManagerRole != "" {
-		ws.ManagerRole = t.ManagerRole
-	}
 	ws.Waiting, ws.WaitSince, ws.WaitUntil, ws.WaitUntilAs, ws.WaitUntils = t.Waiting, t.WaitSince, t.WaitUntil, t.WaitUntilAs, t.WaitUntils
 	ws.Hold, ws.HoldReason, ws.Withdrawn, ws.ProgressAt, ws.TypedWaits = t.Hold, t.HoldReason, t.Withdrawn, t.ProgressAt, t.TypedWaits
 	return ws

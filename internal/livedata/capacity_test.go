@@ -22,7 +22,15 @@ func TestCapacityFailureReplacesPickupAtEveryScope(t *testing.T) {
 		}
 	}
 	delete(s.ManagerCapacity, "manager-w")
-	expectLine(t, Board(s, caseNow).Workstreams[0], "working", "Manager picking it up")
+	// Clearing exhausted capacity restores the underlying stalled handoff;
+	// unread mail alone cannot establish that recovery has started.
+	recovered := Board(s, caseNow).Workstreams[0]
+	expectLine(t, recovered, "stalled", "Stalled")
+	for _, tr := range recovered.Tracks {
+		if tr.Kind != "stalled" || tr.Text != "Stalled" || !strings.Contains(tr.Why, "Automation failure") {
+			t.Fatalf("capacity cleared but failed track recolored: %+v", tr)
+		}
+	}
 }
 
 func TestCapacityFailureDoesNotInventAWaitOrHideLiveWork(t *testing.T) {
