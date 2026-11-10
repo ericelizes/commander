@@ -16,8 +16,13 @@ sources/destinations refuse. The underlying Beads issue type may be `task`;
 
 Checks use fresh ownership, placement and parent/blocking-edge evidence. A
 proposed cycle refuses; the reachable dependency walk is bounded to 128 beads.
-Custody uses the existing 60-bead closure reader and refuses unreadable/oversize
-closures or any newly unheld work, including an emptied old parent. It writes
+Custody reads every actual descendant transitively, both parent chains and
+blockers fresh, with fresh sibling status where an open child holds a parent.
+This evidence is bounded to 60 beads. Missing, inconsistent, cyclic, unreadable
+or oversized evidence refuses before any write. Each descendant is judged
+explicitly, including deep leaves that would lose an inherited approval blocker
+while the moving stage and old parent remain held. Any newly unheld work,
+including an emptied old parent, refuses. It writes
 no custody labels to make a move pass. An existing parent with a genuine holder
 retains that holder. The move does not close or approve a gate, publish a card,
 change gate-of edges, remove blocking waits, or rewrite run provenance, card
@@ -31,8 +36,11 @@ or lost response can mean the parent landed: read before retrying. A retry to
 the same parent validates again and performs no additional write. This command
 is not an ownership-transfer control and never creates/starts/removes Managers.
 
-Coverage: `TestOrdinaryPlacePreservesApproval`, `TestOrdinaryPlaceRefuses` and
+Coverage: `TestOrdinaryPlacePreservesApproval`, `TestOrdinaryPlaceRefuses`,
+`TestOrdinaryPlaceDescendantCustody`, `TestOrdinaryPlaceIncompleteSubtree` and
 private-handler eval `TestOrdinaryPlaceScenario`, driven by
 `tests/evals/scenarios/ordinary-place.json`. The scenario moves an ordinary step
 and its unchanged approval gate out of an operational parent, preserving the
-step's blocking edge. Live cockpit proof uses only synthetic fixtures.
+step's blocking edge. It also refuses dry-run and apply of a stage whose leaf
+would lose inherited approval custody, asserting zero mutation. Live cockpit
+proof uses only synthetic fixtures.
