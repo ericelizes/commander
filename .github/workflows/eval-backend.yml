@@ -20,12 +20,19 @@ jobs:
           go-version: '1.25.x'
       - name: Provision explicit pinned private backend
         run: |
-          sudo apt-get update
-          sudo apt-get install -y tmux
           rustup toolchain install nightly-2026-08-31 --profile minimal
           cargo +nightly-2026-08-31 install beads_rust --version 0.7.6 --locked --no-default-features --root "$RUNNER_TEMP/eval-rust"
           python3 scripts/setup-eval-backend.py "$RUNNER_TEMP/eval-rust/bin/br"
       - name: Default entrypoint and private activation (no backend override)
         run: |
-          unset COMMANDER_EVAL_BR_BIN
-          go test -count=1 -timeout 5m ./tests/evals -run '^TestEvalBR|^TestCommanderEvalScenarios$/^activate-commander-(explicit|pathless)$' -v
+          # Same bounded container contract as postgres-state; hosted runners
+          # need no user systemd bus. Preserve absolute manifest paths, but
+          # expose only the private fixture-tool cache, read-only.
+          cache="$HOME/.cache/commander/eval-tools"
+          docker run --rm --pids-limit 256 \
+            --tmpfs /var/tmp --tmpfs /tmp \
+            -e HOME=/var/tmp/eval-home -e TMPDIR=/tmp \
+            -e XDG_CACHE_HOME="$HOME/.cache" \
+            -e GOMAXPROCS=2 -e GOFLAGS='-p=2' \
+            -v "$cache:$cache:ro" -v "$PWD:/src:ro" -w /src golang:1.25 \
+            bash -c 'apt-get update && apt-get install -y tmux python3 && mkdir -p "$HOME" && go test -count=1 -timeout 5m ./tests/evals -run "^TestEvalBR|^TestCommanderEvalScenarios$/^activate-commander-(explicit|pathless)$" -v'
