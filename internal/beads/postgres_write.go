@@ -223,6 +223,7 @@ func postgresRun(ctx context.Context, dir string, args []string) ([]byte, []byte
 
 // Every operation, including its event trigger, runs in the caller's transaction.
 func pgWrite(ctx context.Context, q store.Querier, pid int64, args []string) ([]byte, error) {
+ if _, e := q.ExecContext(ctx, `SELECT pg_advisory_xact_lock(734031823)`); e != nil { return nil,e }
 	if e := checkPublicationOperation(ctx, pid, args); e != nil {
 		return nil, e
 	}
@@ -284,7 +285,7 @@ func pgWrite(ctx context.Context, q store.Querier, pid int64, args []string) ([]
 		return nil, e
 	}
 	verb := args[0]
-	pos, f, e := parsePGFlags(args[1:], "--title --description --acceptance --notes --status --priority --type --labels --add-label --remove-label --parent --assignee --reason --force --silent --no-inherit-labels --claim")
+	pos, f, e := parsePGFlags(args[1:], "--title --description --acceptance --notes --status --priority --type --labels --add-label --remove-label --parent --assignee --reason --force --silent --no-inherit-labels --claim --source-project --target-project")
 	if e != nil {
 		return nil, e
 	}
@@ -394,6 +395,16 @@ func pgWrite(ctx context.Context, q store.Querier, pid int64, args []string) ([]
 		if e := pgCheckCompletedStructure(ctx, q, pid, from); e != nil {
 			return nil, e
 		}
+		if f.has("--source-project") || f.has("--target-project") {
+			return pgQualifiedDep(ctx, q, pid, from, to, sub, kind, f)
+		}
+		var foreign bool
+		if e = q.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM bead_dependencies WHERE project_id=? AND issue_id=? AND target_project_id<>project_id)`, pid, from).Scan(&foreign); e != nil {
+			return nil, e
+		}
+		if foreign {
+			return nil, qualifiedFailure("endpoint", from, errors.New("qualified source requires explicit endpoint projects"))
+		}
 		if sub == "remove" || sub == "rm" {
 			if kind == "blocks" {
 				if e := pgCheckHumanUnlink(ctx, q, pid, from, to); e != nil {
@@ -419,6 +430,15 @@ func pgWrite(ctx context.Context, q store.Querier, pid int64, args []string) ([]
 		// links cannot jointly introduce a cycle.
 		if _, e = q.ExecContext(ctx, `SELECT pg_advisory_xact_lock(?)`, pid); e != nil {
 			return nil, e
+		}
+		v, err := loadQualifiedView(ctx, q, pid, false)
+		if err != nil {
+			return nil, err
+		}
+		if v != nil {
+			if err = qualifiedCycle(v.edges, qualifiedNode{pid, from}, qualifiedNode{pid, to}, kind, qualifiedGraphLimit); err != nil {
+				return nil, err
+			}
 		}
 		var cycle bool
 		e = q.QueryRowContext(ctx, `WITH RECURSIVE reachable(id) AS (SELECT ?::text UNION SELECT d.depends_on_id FROM bead_dependencies d JOIN reachable r ON d.issue_id=r.id WHERE d.project_id=? AND d.type=?) SELECT EXISTS(SELECT 1 FROM reachable WHERE id=?)`, to, pid, kind, from).Scan(&cycle)
@@ -580,9 +600,9 @@ func postgresApplyOps(ctx context.Context, dir string, ops [][]string) DoorRespo
 		return DoorResponse{Exit: 1, Error: err.Error(), Atomic: true}
 	}
 	e = s.WithTx(ctx, func(q store.Querier) error {
-		pid, e := projectID(ctx, q, dir)
-		if e != nil {
-			return e
+		values, err := pgGuardedOps(ctx, q, dir, ops)
+		if err != nil {
+			return err
 		}
 		if _, e = q.ExecContext(ctx, `SELECT pg_advisory_xact_lock(?)`, pid); e != nil {
 			return e

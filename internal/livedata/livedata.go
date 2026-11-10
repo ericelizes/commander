@@ -678,6 +678,8 @@ func objectiveRowsTimed(ctx context.Context, bc beads.Client, projects []store.P
 				var partial *beads.PartialDetailsError
 				if errors.As(errs[i], &partial) && len(cache.rows[rowsKey(project)]) == 0 {
 					// Cold start: no last-good rows, so show what was read.
+				} else if beads.PostgresConfigured() && errs[i] != nil {
+					rows[i] = nil
 				} else if errs[i] != nil || errors.Is(readErr, beads.ErrChangedDuringRead) {
 					rows[i] = slices.Clone(cache.rows[rowsKey(project)])
 				} else {
