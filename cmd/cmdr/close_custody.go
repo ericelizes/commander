@@ -25,6 +25,24 @@ const custodyWithin = beads.ManagerCloseWithin
 // may lag). closing is the bead the write is about to close ("" for none). It
 // returns the steps it wrote.
 func holdForManager(ctx context.Context, bc beads.Client, dir string, ids []string, closing string, now time.Time) ([]string, error) {
+	var held []string
+	err := beads.ReadCustodySnapshot(ctx, bc, dir, func(ctx context.Context) error {
+		var err error
+		held, err = holdForManagerInSnapshot(ctx, bc, dir, ids, closing, now)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return held, nil
+}
+
+func holdForManagerInSnapshot(ctx context.Context, bc beads.Client, dir string, ids []string, closing string, now time.Time) ([]string, error) {
+	// Validate the complete set before queuing any receipt, including callers
+	// that settled custody without the CLI closure preflight.
+	if err := beads.RequireLocalCustody(ctx, bc, dir, ids); err != nil {
+		return nil, err
+	}
 	writes := beads.NewStateWrite(bc)
 	var held []string
 	for _, id := range ids {

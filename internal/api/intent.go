@@ -31,8 +31,29 @@ const intentMaxClosure = 60
 // the ops gain the Manager's "Manager to start" receipt on what would be unheld, unless the user's
 // leave_unheld (logged) says to leave it so. It returns the ops ordered holder-first (I3) and what holds each
 // bead of the closure afterwards. A closure it cannot read or simulate is not judged (fail open,
-// logged to door-errors.jsonl), as every door check does.
+// logged to door-errors.jsonl). Typed cross-project failures always refuse.
 func (s *Server) planIntent(ctx context.Context, dir, role string, in beads.DoorIntent, ops [][]string) ([][]string, *intentPlan, error) {
+	if in.Bead == "" || !doorChecksOn() {
+		return ops, nil, nil
+	}
+	bc := s.opts.Beads
+	if bc == nil {
+		bc = beads.New()
+	}
+	var planned [][]string
+	var plan *intentPlan
+	err := beads.ReadCustodySnapshot(ctx, bc, dir, func(ctx context.Context) error {
+		var err error
+		planned, plan, err = s.planIntentInSnapshot(ctx, bc, dir, role, in, ops)
+		return err
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	return planned, plan, nil
+}
+
+func (s *Server) planIntentInSnapshot(ctx context.Context, bc beads.Client, dir, role string, in beads.DoorIntent, ops [][]string) ([][]string, *intentPlan, error) {
 	if in.Bead == "" || !doorChecksOn() {
 		return ops, nil, nil
 	}
@@ -41,12 +62,11 @@ func (s *Server) planIntent(ctx context.Context, dir, role string, in beads.Door
 		logDoorFailOpen(dir, in.Bead, "intent", fmt.Errorf("ops not simulated, not judged"))
 		return ops, nil, nil
 	}
-	bc := s.opts.Beads
-	if bc == nil {
-		bc = beads.New()
-	}
 	g, err := holdread.Load(ctx, bc, dir, in.Bead, s.opts.LiveOwner, intentMaxClosure)
 	if err != nil {
+		if beads.IsCrossProjectError(err) {
+			return nil, nil, err
+		}
 		logDoorFailOpen(dir, in.Bead, "intent", fmt.Errorf("closure not read (%v), not judged", err))
 		return ops, nil, nil
 	}
@@ -70,6 +90,13 @@ func (s *Server) planIntent(ctx context.Context, dir, role string, in beads.Door
 	left := holding.NewlyUnheld(g, in.Bead, edits)
 	if len(left) == 0 {
 		return holdread.HolderFirst(ops), plan, nil
+	}
+	var receiptIDs []string
+	for _, v := range left {
+		receiptIDs = append(receiptIDs, v.ID)
+	}
+	if err := beads.RequireLocalCustody(ctx, bc, dir, receiptIDs); err != nil {
+		return nil, nil, err
 	}
 	var names []string
 	for _, v := range left {

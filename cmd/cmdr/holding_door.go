@@ -65,7 +65,7 @@ func loadGraph(ctx context.Context, bc beads.Client, dir, id string) (*holding.G
 // through and owes the Manager's "Manager to start" receipt on what it leaves unheld, which the
 // caller writes right after its write (custodyOwed.settle), or skips with the user's recorded
 // --leave-unheld <reason>. A write whose closure cannot be read passes (the door fails open on a
-// read error, as the others do).
+// local read error, as the others do). Typed cross-project failures refuse.
 func requireHeldAfter(ctx context.Context, bc beads.Client, dir, id, verb, fix string, edits map[string]holding.Edit) (custodyOwed, error) {
 	return requireHeldAfterSkipping(ctx, bc, dir, id, verb, fix, edits, false)
 }
@@ -73,8 +73,24 @@ func requireHeldAfter(ctx context.Context, bc beads.Client, dir, id, verb, fix s
 // requireHeldAfterSkipping is requireHeldAfter that can leave id's ancestors out: closing a
 // stage's last step leaves the stage to be closed next (the plan's stage-done prompt), not unheld work.
 func requireHeldAfterSkipping(ctx context.Context, bc beads.Client, dir, id, verb, fix string, edits map[string]holding.Edit, skipAncestors bool) (custodyOwed, error) {
+	var owed custodyOwed
+	err := beads.ReadCustodySnapshot(ctx, bc, dir, func(ctx context.Context) error {
+		var err error
+		owed, err = requireHeldInSnapshot(ctx, bc, dir, id, verb, fix, edits, skipAncestors)
+		return err
+	})
+	if err != nil {
+		return custodyOwed{}, err
+	}
+	return owed, nil
+}
+
+func requireHeldInSnapshot(ctx context.Context, bc beads.Client, dir, id, verb, fix string, edits map[string]holding.Edit, skipAncestors bool) (custodyOwed, error) {
 	g, err := loadGraph(ctx, bc, dir, id)
 	if err != nil {
+		if beads.IsCrossProjectError(err) {
+			return custodyOwed{}, err
+		}
 		return custodyOwed{}, nil
 	}
 	left := holding.NewlyUnheld(g, id, edits)
@@ -93,6 +109,11 @@ func requireHeldAfterSkipping(ctx context.Context, bc beads.Client, dir, id, ver
 	for _, v := range left {
 		names = append(names, fmt.Sprintf("%s %q (%s)", v.ID, v.Title, v.Why))
 		ids = append(ids, v.ID)
+	}
+	// Check before even recording leave-unheld: a foreign receipt is never
+	// authorized by the user's local exemption or an agent's flags.
+	if err := beads.RequireLocalCustody(ctx, bc, dir, ids); err != nil {
+		return custodyOwed{}, err
 	}
 	if ok, err := leaveUnheld(ctx, bc, dir, id, verb, names); ok || err != nil {
 		return custodyOwed{}, err
@@ -134,7 +155,7 @@ func (c custodyOwed) settle(ctx context.Context, closing string) ([]string, erro
 	}
 	held, err := holdForManager(ctx, c.bc, c.dir, c.ids, closing, time.Now())
 	if err != nil {
-		return held, fmt.Errorf("%s: the Manager's %q hold on %s was not written (%v): hold it with cmdr internal-set-objective --bead <id> --waiting until:<time>:<what happens then>", c.verb, beads.ManagerStartWait, strings.Join(c.ids, ", "), err)
+		return held, fmt.Errorf("%s: the Manager's %q hold on %s was not written (%w): hold it with cmdr internal-set-objective --bead <id> --waiting until:<time>:<what happens then>", c.verb, beads.ManagerStartWait, strings.Join(c.ids, ", "), err)
 	}
 	return held, nil
 }

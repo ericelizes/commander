@@ -2229,3 +2229,12 @@ incompatible placement, dependency cycles and newly unheld work; evidence failur
 refuse. No wrappers, Manager changes, gate/card/journal or run-provenance edits.
 See `docs/cli/ordinary-place.md` for limits and coverage (`TestOrdinaryPlace*`,
 private-handler eval `scenarios/ordinary-place.json`).
+Cross-project custody source boundary: CLI closure and HTTP intent planning refuse
+`beads.CrossProjectError` while preserving local-read fail-open behavior. Optional
+`CustodySnapshotReader` binds closure reads and receipt locality checks to one
+snapshot; foreign receipts refuse before comments or writes. This is prerequisite
+source only: the PG adapter still supports local dependencies only. See
+[the boundary and remaining coordinated work](docs/architecture/cross-project-custody-boundary.md).
+Tests: `TestCrossProjectCustodyCLI`, `TestCrossProjectCustodyForeignReceipt`,
+private HTTP eval `TestCrossProjectCustodyScenario`
+(`scenarios/cross-project-custody-boundary.json`).

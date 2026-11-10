@@ -65,6 +65,19 @@ func Derive(hb *holding.Bead) {
 // more than max fully read beads is not read on: ErrTooLarge, which the caller must not take as
 // "nothing left unheld".
 func Load(ctx context.Context, bc beads.Client, dir, id string, live func(string) (string, bool), max int) (*holding.Graph, error) {
+	var g *holding.Graph
+	err := beads.ReadCustodySnapshot(ctx, bc, dir, func(ctx context.Context) error {
+		var err error
+		g, err = load(ctx, bc, dir, id, live, max)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return g, nil
+}
+
+func load(ctx context.Context, bc beads.Client, dir, id string, live func(string) (string, bool), max int) (*holding.Graph, error) {
 	l := &loader{ctx: ctx, bc: bc, dir: dir, g: holding.NewGraph(live), max: max}
 	if err := l.full([]string{id}); err != nil {
 		return nil, err
