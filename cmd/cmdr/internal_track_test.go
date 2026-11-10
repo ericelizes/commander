@@ -101,6 +101,9 @@ func TestInternalTrackConvert_MovesUnderWorkstream(t *testing.T) {
 	if !slices.Contains(b.Labels, beads.WorkstreamLabel) || !slices.Contains(b.Labels, "kind:objective") {
 		t.Fatalf("labels=%v", b.Labels)
 	}
+	if slices.Contains(b.Labels, "kind:task") {
+		t.Fatalf("convert kept kind:task: %v", b.Labels)
+	}
 
 	// Workstreams nest, and the shape holds.
 	convert := func(bead, into string) (int, string) {

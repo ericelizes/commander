@@ -130,3 +130,22 @@ func TestSetNestedManagers_AtomicAndUnreadableIsOff(t *testing.T) {
 		}
 	}
 }
+
+func TestChainOwners_KindTaskOwnsNothing(t *testing.T) {
+	bs := map[string]Bead{
+		"top": {ID: "top", Labels: []string{WorkstreamLabel}, Status: "open"},
+		"t":   {ID: "t", Labels: []string{WorkstreamLabel, "kind:task"}, Status: "open"},
+		"w":   {ID: "w", Labels: []string{WorkstreamLabel}, Status: "open"},
+	}
+	if OwnsWork(bs["t"]) {
+		t.Fatal("a kind:task bead owns work")
+	}
+	chain := []string{"step", "t", "w", "top"}
+	got := ChainOwners(chain, bs)
+	if len(got) != 1 || got[0] != "w" {
+		t.Fatalf("ChainOwners = %v, want [w]", got)
+	}
+	if n := NearestOwner([]string{"step", "t", "top"}, bs); n != "top" {
+		t.Fatalf("NearestOwner = %s, want top", n)
+	}
+}

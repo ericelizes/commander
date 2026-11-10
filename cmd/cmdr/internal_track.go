@@ -81,5 +81,9 @@ func convertToTrack(ctx context.Context, bc beads.Client, dir, beadID, into stri
 			return err
 		}
 	}
+	// wsmgr refuses kind:task targets, so a converted bead must not keep it.
+	if err := bc.SetLabel(ctx, dir, beadID, "kind:task", false); err != nil {
+		return err
+	}
 	return bc.SetLabel(ctx, dir, beadID, beads.TrackLabel, false)
 }

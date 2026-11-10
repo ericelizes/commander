@@ -95,7 +95,7 @@ type LabelsOf func(id string) (b Bead, ok bool)
 // OwnsWork: an open (not closed, parked or superseded) kind:workstream bead. Only
 // the new label counts: an unmigrated kind:track stays with its workstream.
 func OwnsWork(b Bead) bool {
-	if !slices.Contains(b.Labels, WorkstreamLabel) {
+	if !slices.Contains(b.Labels, WorkstreamLabel) || slices.Contains(b.Labels, "kind:task") {
 		return false
 	}
 	switch b.Status {
@@ -162,7 +162,8 @@ func ChainOwners(chain []string, beads map[string]Bead) []string {
 		if ok && (b.Status == "closed" || b.Status == "tombstone") && !slices.Contains(b.Labels, WorkstreamLabel) {
 			break
 		}
-		if !ok || !slices.Contains(b.Labels, WorkstreamLabel) {
+		if !ok || !slices.Contains(b.Labels, WorkstreamLabel) || slices.Contains(b.Labels, "kind:task") {
+			// kind:task never registers (wsmgr refuses it), so it owns nothing.
 			continue
 		}
 		if !OwnsWork(b) {
