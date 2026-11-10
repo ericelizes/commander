@@ -2310,3 +2310,10 @@ passes expected endpoints to the transaction; ID-only clients remain unchanged.
 Native coverage is `TestPostgresQualified*` in beads/store/livedata/cmdr and
 `tests/evals/scenarios/qualified-postgres-lifecycle.json`. Foreign custody release
 rolls back without foreign receipts, including writes lacking Intent.
+Scoped review bootstrap: `workflow own-run --project P --project-dir ROOT --task T`
+verifies immutable launcher identity against the current PostgreSQL active claim,
+returning only the own run; read-only connections, no schema initialization or legacy
+fallback. `review-exec --context-file FILE` (repeatable) preserves independent context
+hashes; `--private-git` redirects transient objects into sealed run scratch without
+changing sandbox permissions. Finite controller acceptance remains INCOMPLETE/source
+not assessed. See [docs/cli/scoped-review-bootstrap.md](docs/cli/scoped-review-bootstrap.md).
