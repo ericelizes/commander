@@ -2317,3 +2317,14 @@ fallback. `review-exec --context-file FILE` (repeatable) preserves independent c
 hashes; `--private-git` redirects transient objects into sealed run scratch without
 changing sandbox permissions. Finite controller acceptance remains INCOMPLETE/source
 not assessed. See [docs/cli/scoped-review-bootstrap.md](docs/cli/scoped-review-bootstrap.md).
+Explicit gate cancellation: `internal-gate withdraw --project P --bead G
+--expected-state open --generation N --reason R --instruction CITATION --dry-run`
+returns `expected_snapshot`; repeat without dry-run and with
+`--expected-snapshot HASH`. Owning Manager/Commander/user only. Intent-before-write
+exact retries retain scope/pitches/journal, defer with distinct `withdrawn`, and
+remove only the active ask. Every nonclosed incoming waiter/child (parked and
+superseded included), execution holder, answered/approved gate and stale snapshot
+refuses. Withdrawn never grants workflow/production approval, including after a
+later close. Fresh checks are not backend CAS. See `docs/cli/gate-withdrawal.md`;
+`TestGateWithdraw*`, private-handler `TestGateWithdrawalScenario`
+(`scenarios/gate-withdrawal.json`).
