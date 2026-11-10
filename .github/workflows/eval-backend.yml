@@ -28,9 +28,10 @@ jobs:
           # Same bounded container contract as postgres-state; hosted runners
           # need no user systemd bus. Preserve absolute manifest paths, but
           # expose only the private fixture-tool cache, read-only.
+          # Go launches test binaries from TMPDIR on this private tmpfs.
           cache="$HOME/.cache/commander/eval-tools"
           docker run --rm --pids-limit 256 \
-            --tmpfs /var/tmp --tmpfs /tmp \
+            --tmpfs /var/tmp --tmpfs /tmp:exec \
             -e HOME=/var/tmp/eval-home -e TMPDIR=/tmp \
             -e XDG_CACHE_HOME="$HOME/.cache" \
             -e GOMAXPROCS=2 -e GOFLAGS='-p=2' \

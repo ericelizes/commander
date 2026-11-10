@@ -184,3 +184,27 @@ func TestEvalBRContainerCheckoutTrust(t *testing.T) {
 		t.Fatal("container must trust only /src and retain VCS stamping")
 	}
 }
+
+// Docker tmpfs defaults to noexec. Go must launch compiled tests and fixture
+// binaries from the private TMPDIR without using a host-writable source mount.
+func TestEvalBRContainerExecutableTemp(t *testing.T) {
+	body, err := os.ReadFile(filepath.Join(repoRoot(), ".github", "workflows", "eval-backend.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	workflow := string(body)
+	for _, required := range []string{
+		`--tmpfs /var/tmp --tmpfs /tmp:exec`,
+		`-e HOME=/var/tmp/eval-home -e TMPDIR=/tmp`,
+		`--pids-limit 256`,
+		`go test -count=1 -timeout 5m ./tests/evals`,
+		`^activate-commander-(explicit|pathless)$`,
+	} {
+		if !strings.Contains(workflow, required) {
+			t.Fatalf("private executable temp contract missing %q", required)
+		}
+	}
+	if strings.Contains(workflow, "--privileged") || strings.Contains(workflow, "GOTMPDIR=") {
+		t.Fatal("private temp execution must use the explicit tmpfs mount contract")
+	}
+}
