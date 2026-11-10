@@ -59,7 +59,7 @@ func namesPR(b beads.Bead) bool {
 // never, a Manager only when it owns the stage, Commander and the user always.
 // An empty reason is no waiver.
 func newNoPRWaiver(ctx context.Context, bc beads.Client, dir, stage, reason, evidence string) (*noPRWaiver, error) {
-	reason, evidence = oneLine(reason), oneLine(evidence)
+	reason, evidence = flattenLine(reason), flattenLine(evidence)
 	if reason == "" {
 		return nil, nil
 	}
@@ -96,4 +96,4 @@ func newNoPRWaiver(ctx context.Context, bc beads.Client, dir, stage, reason, evi
 	return &noPRWaiver{By: by, Reason: reason, Evidence: evidence}, nil
 }
 
-func oneLine(s string) string { return strings.Join(strings.Fields(s), " ") }
+func flattenLine(s string) string { return strings.Join(strings.Fields(s), " ") }
