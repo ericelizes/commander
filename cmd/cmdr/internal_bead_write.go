@@ -76,6 +76,10 @@ func runInternalComment(args []string, in io.Reader, stdout, stderr *os.File) in
 		return 1
 	}
 	// Evidence is written only by a door, after its check ran.
+	if strings.HasPrefix(strings.TrimSpace(body), withdrawalPrefix) {
+		emitErr(stderr, "refused: withdrawal audit is written only by internal-gate withdraw")
+		return 1
+	}
 	if strings.HasPrefix(strings.TrimSpace(body), legacyRetirementPrefix) {
 		emitErr(stderr, "refused: legacy retirement audit is written only by internal-gate retire-legacy")
 		return 1
@@ -308,6 +312,7 @@ var reservedLabelPrefixes = []struct{ prefix, verb string }{
 	{"pr:", "cmdr internal-set-objective --review <pr>"},
 	{"review:", "cmdr internal-set-objective --review <pr>"},
 	{"superseded", "cmdr internal-close-objective --reason superseded"},
+	{beads.WithdrawnLabel, "cmdr internal-gate withdraw"},
 	{"retired", "cmdr internal-gate rm (a retired gate) or internal-close-objective --reason superseded"},
 	{"wait-nudged", "cmdrd (it stamps this)"},
 	{"reviewed", "cmdr internal-gate pass (the reviewed gate)"},

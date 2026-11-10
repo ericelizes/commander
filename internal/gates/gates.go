@@ -91,6 +91,8 @@ func parse(b beads.Bead, projectID int64, comments []beads.Comment) Node {
 		Status:    store.GateOpen,
 	}
 	switch {
+	case slices.Contains(b.Labels, beads.WithdrawnLabel):
+		g.Status = "withdrawn"
 	case b.Status == "closed":
 		g.Status = store.GatePassed
 	case slices.Contains(b.Labels, FailedLabel):
@@ -211,6 +213,13 @@ func Upsert(ctx context.Context, bc beads.Client, dir string, g store.Gate) (str
 // leaves the evidence), then the bead's state. Passed closes the bead; open or
 // failed leaves (or reopens) it.
 func SetResult(ctx context.Context, bc beads.Client, dir string, n Node, status, evidence, by string, at time.Time) error {
+	b, err := beads.FreshShow(ctx, bc, dir, n.ID)
+	if err != nil {
+		return err
+	}
+	if b == nil || slices.Contains(b.Labels, beads.WithdrawnLabel) {
+		return fmt.Errorf("gate %s is missing or withdrawn; withdrawal never authorizes approval", n.ID)
+	}
 	if by == "" {
 		by = "unknown"
 	}

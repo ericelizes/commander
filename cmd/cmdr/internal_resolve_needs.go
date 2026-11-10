@@ -116,6 +116,9 @@ func runInternalResolveNeeds(args []string, stdout, stderr *os.File) int {
 		if err != nil {
 			return result, err
 		}
+		if b != nil && slices.Contains(b.Labels, beads.WithdrawnLabel) {
+			return result, fmt.Errorf("withdrawn gate cannot be answered or approved")
+		}
 		if !*resume && *revision > 0 && (b == nil || b.PlanRevision != *revision) {
 			return result, fmt.Errorf("this work changed after the decision was displayed; refresh it before answering")
 		}

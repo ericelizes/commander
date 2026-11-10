@@ -27,7 +27,7 @@ var gateRunFn gates.RunFn = gates.RunShell
 // (internal/gates). internal-close-objective refuses until every one passed.
 func runInternalGate(args []string, stdout, stderr *os.File) int {
 	if len(args) == 0 {
-		emitErr(stderr, "internal-gate: want add, apply, check, pass, list, rm, link, unlink, convert, publish, retire-legacy or migrate")
+		emitErr(stderr, "internal-gate: want add, apply, check, pass, list, rm, link, unlink, convert, publish, retire-legacy, withdraw or migrate")
 		return 1
 	}
 	verb, args := args[0], args[1:]
@@ -53,6 +53,10 @@ func runInternalGate(args []string, stdout, stderr *os.File) int {
 	parent := fs.String("parent", "", "publish: existing parent of the guarded stage")
 	repairWaiters := fs.String("repair-ancestor-waits", "", "publish: explicit comma-separated redundant strict ancestors; requires --reason, preserves guarded leaf wait")
 	replacement := fs.String("replacement", "", "retire-legacy: exact genuine open user gate")
+	expectedState := fs.String("expected-state", "", "withdraw: exact original gate state (open)")
+	expectedSnapshot := fs.String("expected-snapshot", "", "withdraw: exact dry-run snapshot SHA256")
+	generation := fs.Int("generation", 0, "withdraw: exact unanswered pitch generation")
+	instruction := fs.String("instruction", "", "withdraw: cited durable cancellation instruction")
 	dryRun := fs.Bool("dry-run", false, "publish/retire-legacy: validate fresh evidence without writing")
 	approver := fs.String("approver", "", "convert: who approves the gate, comma-separated (user, a GitHub login, a name)")
 	criteria := fs.String("criteria", "", "convert: what counts as passed, in one sentence")
@@ -76,11 +80,11 @@ func runInternalGate(args []string, stdout, stderr *os.File) int {
 	if verb == "migrate" {
 		return runGateMigrate(stdout, stderr)
 	}
-	if *beadID == "" || (verb != "retire-legacy" && verb != "publish" && verb != "list" && verb != "check" && verb != "apply" && verb != "link" && verb != "unlink" && verb != "convert" && *name == "") {
+	if *beadID == "" || (verb != "withdraw" && verb != "retire-legacy" && verb != "publish" && verb != "list" && verb != "check" && verb != "apply" && verb != "link" && verb != "unlink" && verb != "convert" && *name == "") {
 		emitErr(stderr, "missing required flag(s): --bead, and --name (except for publish, retire-legacy, list, check, apply, link and unlink)")
 		return 1
 	}
-	if (verb == "retire-legacy" || verb == "publish" || verb == "add" || verb == "check" || verb == "apply" || verb == "link" || verb == "unlink" || verb == "convert") && *projectName == "" {
+	if (verb == "withdraw" || verb == "retire-legacy" || verb == "publish" || verb == "add" || verb == "check" || verb == "apply" || verb == "link" || verb == "unlink" || verb == "convert") && *projectName == "" {
 		emitErr(stderr, "missing required flag: --project")
 		return 1
 	}
@@ -95,6 +99,8 @@ func runInternalGate(args []string, stdout, stderr *os.File) int {
 
 	var out any
 	switch verb {
+	case "withdraw":
+		out, err = gateWithdraw(ctx, st, *projectName, withdrawalRequest{Bead: *beadID, State: *expectedState, Snapshot: *expectedSnapshot, Generation: *generation, Reason: *reason, Instruction: *instruction}, *dryRun)
 	case "retire-legacy":
 		err = gateRetireLegacy(ctx, st, *projectName, *beadID, *replacement, *reason, *dryRun)
 		out = map[string]any{"bead_id": *beadID, "replacement": *replacement, "dry_run": *dryRun}
@@ -141,7 +147,7 @@ func runInternalGate(args []string, stdout, stderr *os.File) int {
 		}
 		out = map[string]any{"bead_id": *beadID, "gates": nonNilGates(gs)}
 	default:
-		err = fmt.Errorf("internal-gate: unknown verb %q (want add, apply, check, pass, list, rm, link, unlink, convert, publish, retire-legacy or migrate)", verb)
+		err = fmt.Errorf("internal-gate: unknown verb %q (want add, apply, check, pass, list, rm, link, unlink, convert, publish, retire-legacy, withdraw or migrate)", verb)
 	}
 	if err != nil {
 		emitErr(stderr, err.Error())

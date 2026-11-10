@@ -1183,7 +1183,9 @@ func ownByChain(rows []ObjectiveRow, list []beads.Bead, details map[string]beads
 
 // supersededBead is a bead the plan dropped: labeled superseded or retired, or
 // closed with a reason that says superseded. Closed is not approved for it.
-func supersededBead(b beads.Bead) bool { return beads.Superseded(b) }
+func supersededBead(b beads.Bead) bool {
+	return slices.Contains(b.Labels, beads.WithdrawnLabel) || beads.Superseded(b)
+}
 
 // closeReasonOf is a closed bead's close reason, from the list read already made
 // (no extra br call), capped so a long report cannot swell every snapshot.

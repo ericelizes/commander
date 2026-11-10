@@ -470,6 +470,9 @@ func checkProdGate(ctx context.Context, bc beads.Client, dir, step, gateID, call
 	if gate == nil || !(slices.Contains(gate.Labels, gates.KindLabel) || slices.Contains(gate.Labels, beads.GateLabel)) {
 		return "", fmt.Errorf("--prod-gate %s: not a gate bead (label gate or kind:gate)", gateID)
 	}
+	if slices.Contains(gate.Labels, beads.WithdrawnLabel) {
+		return "", fmt.Errorf("--prod-gate %s: withdrawn is never approval", gateID)
+	}
 	if !strings.Contains(strings.ToLower(gate.Status), "closed") {
 		return "", fmt.Errorf("--prod-gate %s: gate is not closed (the user has not approved it)", gateID)
 	}
