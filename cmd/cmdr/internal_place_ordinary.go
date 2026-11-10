@@ -10,6 +10,8 @@ import (
 
 	"github.com/example-user/commander/internal/beads"
 	"github.com/example-user/commander/internal/holding"
+	"github.com/example-user/commander/internal/holdread"
+	"github.com/example-user/commander/internal/spawn"
 	"github.com/example-user/commander/internal/wsmgr"
 )
 
@@ -122,13 +124,20 @@ func placeOrdinary(ctx context.Context, bc beads.Client, dir, id, parent, role s
 			}
 		}
 	}
-	g, err := loadGraph(ctx, bc, dir, id)
+	g, err := loadOrdinaryMoveGraph(ctx, bc, dir, id, parent)
 	if err != nil {
 		return "", fmt.Errorf("ordinary placement custody evidence: %w", err)
 	}
 	edits := map[string]holding.Edit{id: func(b *holding.Bead) { b.Parent = parent }}
-	if left := holding.NewlyUnheld(g, id, edits); len(left) > 0 {
-		return fail(fmt.Sprintf("move would leave work unheld: %v", left))
+	after := g.With(edits)
+	// Every loaded descendant and ancestor is judged explicitly. Closure's
+	// ancestor walk must not suppress descent from the moving bead.
+	for x, before := range g.Beads {
+		_, wasHeld, _ := holding.Held(before, g)
+		_, held, why := holding.Held(after.Beads[x], after)
+		if (wasHeld || before.Status == holding.StatusClosed) && !held && why != holding.WhyClosed {
+			return fail(fmt.Sprintf("move would leave work unheld: %s", x))
+		}
 	}
 	old := d[id].Parent
 	if dry || old == parent {
@@ -139,4 +148,160 @@ func placeOrdinary(ctx context.Context, bc beads.Client, dir, id, parent, role s
 		return "", err
 	}
 	return old, nil
+}
+
+// loadOrdinaryMoveGraph reads all actual descendants, both parent chains and
+// blocker facts. Siblings need only fresh status for HasOpenChild. Unlike the
+// general write loader, missing facts, cycles and bounds always refuse a move.
+func loadOrdinaryMoveGraph(ctx context.Context, bc beads.Client, dir, id, parent string) (*holding.Graph, error) {
+	g := holding.NewGraph(func(string) (string, bool) { return "", true })
+	full := map[string]bool{}
+	subtree := map[string]bool{}
+	type request struct {
+		id   string
+		down bool
+	}
+	queue := []request{{id, true}, {parent, false}}
+	for len(queue) > 0 {
+		r := queue[0]
+		queue = queue[1:]
+		if full[r.id] && (!r.down || subtree[r.id]) {
+			continue
+		}
+		if !full[r.id] {
+			if _, exists := g.Beads[r.id]; !exists && len(g.Beads) >= maxClosure {
+				return nil, fmt.Errorf("custody closure exceeds %d beads", maxClosure)
+			}
+			b, err := beads.FreshShow(ctx, bc, dir, r.id)
+			if err != nil {
+				return nil, err
+			}
+			ds, err := beads.FreshDetails(ctx, bc, dir, []string{r.id})
+			if err != nil {
+				return nil, err
+			}
+			d, ok := ds[r.id]
+			if b == nil || b.ID != r.id || !ok {
+				return nil, fmt.Errorf("missing custody facts for %s", r.id)
+			}
+			var blockers []string
+			for _, e := range d.Deps {
+				if e.Type == "blocks" {
+					blockers = append(blockers, e.DependsOnID)
+					queue = append(queue, request{e.DependsOnID, false})
+				}
+			}
+			g.Beads[r.id] = holdread.Bead(b, d.Parent, blockers)
+			full[r.id] = true
+			if d.Parent != "" {
+				queue = append(queue, request{d.Parent, false})
+			}
+		}
+		deps, err := bc.Dependents(ctx, dir, r.id)
+		if err != nil {
+			return nil, err
+		}
+		for _, e := range deps {
+			if e.Type != "parent-child" {
+				continue
+			}
+			if r.down {
+				queue = append(queue, request{e.IssueID, true})
+			}
+			if _, ok := g.Beads[e.IssueID]; !ok {
+				if len(g.Beads) >= maxClosure {
+					return nil, fmt.Errorf("custody closure exceeds %d beads", maxClosure)
+				}
+				b, err := beads.FreshShow(ctx, bc, dir, e.IssueID)
+				if err != nil {
+					return nil, err
+				}
+				if b == nil || b.ID != e.IssueID {
+					return nil, fmt.Errorf("missing child %s", e.IssueID)
+				}
+				g.Beads[e.IssueID] = holdread.Bead(b, r.id, nil)
+			}
+			g.Children[r.id] = append(g.Children[r.id], e.IssueID)
+		}
+		if r.down {
+			subtree[r.id] = true
+		}
+	}
+	// Full child reads must agree with reverse parent edges. Detect every cycle
+	// in the required ancestry rather than silently truncating the holding walk.
+	for p, kids := range g.Children {
+		for _, k := range kids {
+			if full[k] && g.Beads[k].Parent != p {
+				return nil, fmt.Errorf("inconsistent parent facts for %s", k)
+			}
+		}
+	}
+	state := map[string]int{}
+	var visit func(string) error
+	visit = func(x string) error {
+		if state[x] == 1 {
+			return fmt.Errorf("cyclic custody evidence at %s", x)
+		}
+		if state[x] == 2 {
+			return nil
+		}
+		if !full[x] {
+			return fmt.Errorf("incomplete custody evidence at %s", x)
+		}
+		state[x] = 1
+		b := g.Beads[x]
+		refs := append([]string(nil), b.BlockedBy...)
+		if b.Parent != "" {
+			refs = append(refs, b.Parent)
+		}
+		for _, ref := range refs {
+			if err := visit(ref); err != nil {
+				return err
+			}
+		}
+		state[x] = 2
+		return nil
+	}
+	for x := range full {
+		if err := visit(x); err != nil {
+			return nil, err
+		}
+	}
+	// Managers have no implicit custody. Query live runs only when a required
+	// bead names an Operator; an unavailable or partial store cannot imply life.
+	needsLive := false
+	for x := range full {
+		b := g.Beads[x]
+		if (b.Owner != "" && !holding.IsManager(b.Owner)) || len(b.OperatorWaits) > 0 {
+			needsLive = true
+		}
+	}
+	if needsLive {
+		st, cleanup, err := needsYouStoreFn()
+		if err != nil {
+			return nil, fmt.Errorf("custody live owners: %w", err)
+		}
+		defer cleanup()
+		projects, err := st.ListProjects(ctx)
+		if err != nil {
+			return nil, err
+		}
+		running := map[string]bool{}
+		for _, p := range projects {
+			runs, err := st.ListAgentRunsByProject(ctx, p.ID, "running")
+			if err != nil {
+				return nil, err
+			}
+			for _, r := range runs {
+				running[spawn.CanonicalRole(r.AgentName)] = true
+			}
+		}
+		g.Live = func(owner string) (string, bool) {
+			if !holding.IsManager(owner) && running[spawn.CanonicalRole(owner)] {
+				return "working", true
+			}
+			return "", true
+		}
+	}
+	return g, nil
 }

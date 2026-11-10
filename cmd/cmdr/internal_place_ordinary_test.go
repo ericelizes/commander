@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"reflect"
 	"strings"
@@ -66,6 +68,9 @@ func TestOrdinaryPlaceRefuses(t *testing.T) {
 			step := add("step", wrapper)
 			role := "manager-" + root
 			parent := root
+			if mode != "custody" {
+				_ = m.SetLabel(ctx, "", wrapper, (beads.Wait{Kind: beads.WaitUntil, Since: time.Now(), Until: time.Now().Add(time.Hour), Ref: "fixture hold"}).Label(), true)
+			}
 			switch mode {
 			case "operator":
 				role = "operator-sample"
@@ -82,13 +87,16 @@ func TestOrdinaryPlaceRefuses(t *testing.T) {
 			case "mixed":
 				_ = add("nested", root, beads.WorkstreamLabel)
 			case "custody":
-				_ = m.DependOn(ctx, "", wrapper, step)
+				gate := add("approval", root, "gate", "approver:user")
+				_ = m.DependOn(ctx, "", wrapper, gate)
 			case "missing":
 				parent = "absent"
 			}
 			before, _ := m.Details(ctx, "", []string{step, wrapper, root})
-			if _, err := placeOrdinary(ctx, m, "/d", step, parent, role, false); err == nil {
-				t.Fatal("allowed unsafe move")
+			_, err := placeOrdinary(ctx, m, "/d", step, parent, role, false)
+			expected := map[string]string{"operator": "Operators", "foreign": "owning Manager", "conversion": "excluded", "task": "excluded", "ownership": "ownership transfer", "cycle": "cycle", "mixed": "", "missing": "", "custody": "unheld"}[mode]
+			if err == nil || !strings.Contains(err.Error(), expected) {
+				t.Fatalf("expected %q refusal: %v", expected, err)
 			}
 			after, _ := m.Details(ctx, "", []string{step, wrapper, root})
 			if !reflect.DeepEqual(before, after) {
@@ -99,7 +107,7 @@ func TestOrdinaryPlaceRefuses(t *testing.T) {
 }
 
 func TestOrdinaryPlaceScenario(t *testing.T) {
-	var scenario struct{ Root, Wrapper, Step, Gate string }
+	var scenario struct{ Root, Wrapper, Step, Gate, Moving, Descendant string }
 	data, err := os.ReadFile("../../tests/evals/scenarios/ordinary-place.json")
 	if err != nil {
 		t.Fatal(err)
@@ -146,6 +154,30 @@ func TestOrdinaryPlaceScenario(t *testing.T) {
 			}
 		}
 	}
+	// The manifest also drives the refusal through the real private CLI handler.
+	m.Seed(beads.Bead{ID: scenario.Moving, Status: "open", Labels: []string{"kind:objective"}})
+	m.Seed(beads.Bead{ID: scenario.Descendant, Status: "open", Labels: []string{"kind:objective"}})
+	_ = m.SetParent(ctx, "/d", scenario.Moving, scenario.Wrapper)
+	_ = m.SetParent(ctx, "/d", scenario.Descendant, scenario.Moving)
+	_ = m.DependOn(ctx, "/d", scenario.Wrapper, scenario.Gate)
+	before, _ := m.Details(ctx, "/d", []string{scenario.Moving, scenario.Descendant, scenario.Wrapper, scenario.Gate})
+	for _, dry := range []bool{true, false} {
+		args := []string{"--project", "manifest", "--bead", scenario.Moving, "--parent", scenario.Root, "--ordinary"}
+		if dry {
+			args = append(args, "--dry-run")
+		}
+		out, stderr, read := withTempOutputFiles(t)
+		code := runInternalPlace(args, out, stderr)
+		_, e := read()
+		if code == 0 || !strings.Contains(e, scenario.Descendant) {
+			t.Fatalf("expected descendant custody refusal: %d %s", code, e)
+		}
+		after, _ := m.Details(ctx, "/d", []string{scenario.Moving, scenario.Descendant, scenario.Wrapper, scenario.Gate})
+		if !reflect.DeepEqual(before, after) {
+			t.Fatal("handler refusal mutated graph")
+		}
+	}
+
 	ds, _ := m.Details(ctx, "/d", []string{scenario.Step})
 	found := false
 	for _, e := range ds[scenario.Step].Deps {
@@ -155,5 +187,89 @@ func TestOrdinaryPlaceScenario(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("lost approval block")
+	}
+}
+
+// The moving stage and its wrapper remain held by children. Only the deep
+// leaf loses the approval inherited from the wrapper after reparenting.
+func TestOrdinaryPlaceDescendantCustody(t *testing.T) {
+	for _, safe := range []bool{false, true} {
+		for _, dry := range []bool{false, true} {
+			t.Run(fmt.Sprintf("safe=%t/dry=%t", safe, dry), func(t *testing.T) {
+				ctx := context.Background()
+				m, add := placeFixture(t)
+				root := add("scope", "", beads.WorkstreamLabel)
+				wrapper := add("wrapper", root, "kind:operational")
+				stage := add("stage", wrapper)
+				middle := add("middle", stage)
+				leaf := add("leaf", middle)
+				gate := add("approval", root, "gate", "approver:user")
+				_ = m.DependOn(ctx, "", wrapper, gate)
+				if safe {
+					_ = m.DependOn(ctx, "", leaf, gate)
+				}
+				ids := []string{root, wrapper, stage, middle, leaf, gate}
+				before, _ := m.Details(ctx, "", ids)
+				_, err := placeOrdinary(ctx, m, "/d", stage, root, "manager-"+root, dry)
+				if safe && err != nil {
+					t.Fatal(err)
+				}
+				if !safe && (err == nil || !strings.Contains(err.Error(), leaf)) {
+					t.Fatalf("expected leaf refusal, got %v", err)
+				}
+				after, _ := m.Details(ctx, "", ids)
+				if (!safe || dry) && !reflect.DeepEqual(before, after) {
+					t.Fatal("refusal/dry run mutated graph")
+				}
+			})
+		}
+	}
+}
+
+type ordinaryReadFailure struct {
+	beads.Client
+	target string
+}
+
+func (f ordinaryReadFailure) Dependents(ctx context.Context, dir, id string) ([]beads.Dep, error) {
+	if id == f.target {
+		return nil, errors.New("fixture subtree unreadable")
+	}
+	return f.Client.Dependents(ctx, dir, id)
+}
+func TestOrdinaryPlaceIncompleteSubtree(t *testing.T) {
+	for _, mode := range []string{"unreadable", "missing", "cycle", "limit"} {
+		t.Run(mode, func(t *testing.T) {
+			ctx := context.Background()
+			m, add := placeFixture(t)
+			root := add("scope", "", beads.WorkstreamLabel)
+			wrapper := add("wrapper", root, "kind:operational")
+			stage := add("stage", wrapper)
+			leaf := add("leaf", stage)
+			_ = m.SetLabel(ctx, "", wrapper, "gate", true)
+			var bc beads.Client = m
+			switch mode {
+			case "unreadable":
+				bc = ordinaryReadFailure{m, leaf}
+			case "missing":
+				_ = m.DependOn(ctx, "", leaf, "absent")
+			case "cycle":
+				_ = m.DependOn(ctx, "", stage, leaf)
+			case "limit":
+				for n := 0; n < maxClosure; n++ {
+					leaf = add(fmt.Sprintf("child %d", n), leaf)
+				}
+			}
+			before, _ := m.List(ctx, "", beads.ListOptions{Status: "all"})
+			for _, dry := range []bool{true, false} {
+				if _, err := placeOrdinary(ctx, bc, "/d", stage, root, "manager-"+root, dry); err == nil {
+					t.Fatal("allowed incomplete/cyclic/oversize subtree")
+				}
+				after, _ := m.List(ctx, "", beads.ListOptions{Status: "all"})
+				if !reflect.DeepEqual(before, after) {
+					t.Fatal("refusal mutated fixture")
+				}
+			}
+		})
 	}
 }
