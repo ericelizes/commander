@@ -286,6 +286,9 @@ func newHarness(t *testing.T, live bool, setup scenarioSetup) *harness {
 }
 
 func (h *harness) buildBinaries(live bool) {
+	if err := installEvalBR(h.binDir, os.Getenv("COMMANDER_EVAL_BR_BIN")); err != nil {
+		h.t.Fatal(err)
+	}
 	h.realCmdrBin = filepath.Join(h.binDir, "cmdr-real")
 	mustBuild(h.t, h.baseEnv, h.realCmdrBin, "./cmd/cmdr")
 	h.cmdrBin = filepath.Join(h.binDir, "cmdr")
