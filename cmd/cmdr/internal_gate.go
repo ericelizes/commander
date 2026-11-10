@@ -513,6 +513,22 @@ func gatePass(ctx context.Context, st *store.Store, projectName, beadID, name, e
 		if g.Name != name {
 			continue
 		}
+
+		// --by is attribution only. Inherited Operator context is not a user.
+		gateBead, err := beads.FreshShow(ctx, bc, p.Path, n.ID)
+		if err != nil || gateBead == nil {
+			return nil, fmt.Errorf("cannot verify gate %s authority: %v", n.ID, err)
+		}
+		userGate := g.Verifier == store.VerifierUser
+		for _, label := range gateBead.Labels {
+			if approver, ok := strings.CutPrefix(label, beads.ApproverLabelPrefix); ok && ownercompat.Normalize(approver) == "user" {
+				userGate = true
+			}
+		}
+		role := os.Getenv("COMMANDER_ROLE")
+		if userGate && (callerIsOperator(role) || (role != "" && role != "commander")) {
+			return nil, fmt.Errorf("refused: only the user or Commander may pass user gate %q; --by is attribution, not approval authority", name)
+		}
 		if g.Verifier == store.VerifierAuto {
 			return nil, fmt.Errorf("gate %q is auto: run `cmdr internal-gate check` instead of passing it by hand", name)
 		}

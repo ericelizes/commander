@@ -2200,3 +2200,16 @@ refuses. Withdrawn never grants workflow/production approval, including after a
 later close. Fresh checks are not backend CAS. See `docs/cli/gate-withdrawal.md`;
 `TestGateWithdraw*`, private-handler `TestGateWithdrawalScenario`
 (`scenarios/gate-withdrawal.json`).
+
+**Completion authority:** `internal-gate pass` checks the caller before workflow
+or result writes on a user-verifier or user-approver gate (legacy aliases read
+through ownercompat). Only roleless user and Commander pass; inherited Operator
+context refuses, and `--by` supplies attribution only. Answered approvals still
+use their retained answer path. `internal-close-objective` first reads fresh
+actual child edges and statuses: ordinary, task, nested and deferred children
+must finish, and a recorded review wait refuses completion. Closed children
+remain folded history. Read failures refuse before custody writes. These CLI
+checks share the existing role/environment trust boundary and are not an atomic
+backend check-and-close transaction. Unit/eval:
+`TestUserGatePassAuthority`, `TestCloseParent*`, `TestCompletionAuthorityScenario`
+(`tests/evals/scenarios/completion-authority.json`, private command-handler eval).

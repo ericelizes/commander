@@ -1,0 +1,5 @@
+{
+ "goal": "A claimed --by user cannot pass a user gate; closing a parent cannot hide unfinished nested or deferred work. Private command-handler eval in cmd/cmdr:TestCompletionAuthorityScenario.",
+ "roles": ["manager-sample", "operator-sample", "reviewer-sample"],
+ "childStatuses": ["open", "deferred"]
+}
