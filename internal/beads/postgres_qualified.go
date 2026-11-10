@@ -22,7 +22,7 @@ type qualifiedViews map[int64]*qualifiedView
 // The recursive query retains projects at every step. LIMIT is an explicit
 // refusal bound, never a partial success. UNION terminates pre-existing cycles.
 const qualifiedEdgesSQL = `SELECT project_id,issue_id,target_project_id,depends_on_id,type FROM bead_dependencies
- UNION SELECT project_id,id,project_id,parent_id,'parent-child' FROM bead_tasks WHERE parent_id IS NOT NULL AND deleted_at IS NULL`
+ UNION ALL SELECT b.project_id,b.id,b.project_id,b.parent_id,'parent-child' FROM bead_tasks b WHERE b.parent_id IS NOT NULL AND b.deleted_at IS NULL AND NOT EXISTS(SELECT 1 FROM bead_dependencies d WHERE d.project_id=b.project_id AND d.issue_id=b.id AND d.target_project_id=b.project_id AND d.depends_on_id=b.parent_id AND d.type='parent-child')`
 
 const qualifiedComponentSQL = `WITH RECURSIVE component(project_id,id) AS (
  SELECT project_id,id FROM bead_tasks WHERE project_id=? AND deleted_at IS NULL
