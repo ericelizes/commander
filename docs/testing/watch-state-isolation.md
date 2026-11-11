@@ -54,3 +54,13 @@ Verification for the candidate:
 - Detached `cockpit-test.sh up/text/down` passes inside a build slot; text shows
   `(no projects yet)` and `Tell Commander to add a project` in its isolated home.
   This is a smoke verification; the PostgreSQL overlap proof is the regression.
+
+Full-suite limitation: the first `go test ./...` inherited execution identity
+and failed decision fixtures with `execution sessions cannot record or apply
+human decisions`. A second run cleared those variables only in test subprocesses;
+`cmd/cmdr` and `internal/api` passed. It failed the unchanged
+`TestFreshDetailsSeesDBEdgeBehindDisplayExport` because installed `br init`
+rejects `--no-auto-flush`. After these failures were established, the remaining
+broad eval workloads were stopped through their exact dedicated testguard
+scopes. No full-suite or full-eval pass is claimed. The new targeted PostgreSQL
+eval scenario completed successfully separately.
