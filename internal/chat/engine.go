@@ -1084,7 +1084,7 @@ func (e *Engine) onExit(c *chatRole, p *process, hx *hostExit) {
 	// A mail interrupt's SIGINT fallback is our own stop, not a crash: the
 	// role comes back (where crashes would) with the kept note as its first
 	// message, never the crash notice and resume message.
-	autoRestart := e.opts.CrashRestart != nil && e.opts.CrashRestart(c.role)
+	autoRestart := p.spec.ExecutionRunID == 0 && e.opts.CrashRestart != nil && e.opts.CrashRestart(c.role)
 	if !ex.Expected && (ex.Code != 0 || ex.Signal != "") {
 		if tail := strings.TrimSpace(hx.Stderr); tail != "" {
 			c.publishFrom(p, Event{Kind: KindError, Source: SourceEngine, Error: tail})

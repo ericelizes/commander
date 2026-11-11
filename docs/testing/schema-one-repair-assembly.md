@@ -1,5 +1,9 @@
 # Schema-one repair assembly
 
+> Historical Nov 10 preparation, superseded for delivery by the PostgreSQL
+> cutover. See [the current repair rebuild](reviewed-repair-rebuild.md).
+> Its schema-one installation and rollback inputs are not current candidates.
+
 This is private source preparation on `op/assemble-commander-il9.204.6.53`,
 starting at `77d816f0165025a1a9e610204e88aae62e6f9272`. It grants no release,
 installation, restart, migration or production authority. Independent full

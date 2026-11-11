@@ -141,3 +141,17 @@ func TestActiveBoardHidesWithdrawnRequestsAndRollsUpCounts(t *testing.T) {
 		t.Fatal("the row hides what else is going on", row.Text)
 	}
 }
+
+func TestActiveBoardIgnoresRetiredManagerCapacity(t *testing.T) {
+	for _, pending := range []bool{false, true} {
+		s := activeBoardFixture()
+		s.Workstreams[0].PlanningPending = pending
+		s.Workstreams[0].Steps[0].PlanningPending = pending
+		want := Board(s, 86400).Workstreams[0]
+		s.ManagerCapacity = map[string]string{"manager-old": "retired Manager has no usage"}
+		got := Board(s, 86400).Workstreams[0]
+		if got.Kind != want.Kind || got.Text != want.Text || got.Why != want.Why || got.Working != want.Working {
+			t.Fatalf("retired Manager capacity replaced canonical planning/custody: got %+v; want %+v", got, want)
+		}
+	}
+}

@@ -2112,6 +2112,11 @@ func (b board) trackActor(project, bead string) *nextactor.Row {
 // capacityLine attaches a real failed start to every affected scope. External
 // waits, user decisions and live Operators retain their more specific line.
 func (b board) capacityLine(role string, l line) line {
+	// Active orchestration derives custody from canonical runs and planning
+	// obligations; retired permanent Manager failures cannot replace it.
+	if b.s.OrchestrationMode == "active" {
+		return l
+	}
 	detail := b.s.ManagerCapacity[role]
 	if detail == "" {
 		return l
