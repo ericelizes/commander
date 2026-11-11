@@ -157,13 +157,19 @@ func loadQualifiedSeeded(ctx context.Context, q store.Querier, pid int64, force 
 }
 
 func withQualifiedView(ctx context.Context, dir string, read func(context.Context, *qualifiedView) error) (err error) {
+	localOnly := false
 	defer func() {
-		if err != nil && !errors.Is(err, ErrNotFound) && !IsCrossProjectError(err) {
+		if !localOnly && err != nil && !errors.Is(err, ErrNotFound) && !IsCrossProjectError(err) {
 			err = qualifiedFailure("read", dir, err)
 		}
 	}()
 	if _, ok := ctx.Value(postgresReaderKey{}).(store.Querier); !ok {
-		return ReadPostgresSnapshot(ctx, func(ctx context.Context) error { return withQualifiedView(ctx, dir, read) })
+		return ReadPostgresSnapshot(ctx, func(ctx context.Context) error {
+			return withQualifiedView(ctx, dir, func(ctx context.Context, v *qualifiedView) error {
+				localOnly = v == nil
+				return read(ctx, v)
+			})
+		})
 	}
 	s, e := postgresStore()
 	if e != nil {
@@ -187,6 +193,7 @@ func withQualifiedView(ctx context.Context, dir string, read func(context.Contex
 		}
 		views[pid] = v
 	}
+	localOnly = v == nil
 	return read(ctx, v)
 }
 
@@ -285,9 +292,14 @@ func (v *qualifiedView) list(o ListOptions) []Bead {
 }
 func (v *qualifiedView) details(ctx context.Context, q store.Querier, ids []string) (map[string]Detail, error) {
 	out := map[string]Detail{}
+	var args []any
+	var pairs []string
 	for _, id := range ids {
 		n, ok := v.ids[id]
 		if !ok {
+			continue
+		}
+		if _, exists := out[id]; exists {
 			continue
 		}
 		b := v.nodes[n]
@@ -295,25 +307,30 @@ func (v *qualifiedView) details(ctx context.Context, q store.Querier, ids []stri
 		if e != nil {
 			return nil, e
 		}
-		d := Detail{Parent: b.ParentID, Deps: deps, Comments: []Comment{}}
-		rows, e := q.QueryContext(ctx, `SELECT id,author,text,created_at FROM bead_comments WHERE project_id=? AND bead_id=? ORDER BY created_at,id`, n.Project, id)
-		if e != nil {
+		out[id] = Detail{Parent: b.ParentID, Deps: deps, Comments: []Comment{}}
+		pairs = append(pairs, "(?,?)")
+		args = append(args, n.Project, id)
+	}
+	if len(args) == 0 {
+		return out, nil
+	}
+	rows, e := q.QueryContext(ctx, `SELECT bead_id,id,author,text,created_at FROM bead_comments WHERE (project_id,bead_id) IN (`+strings.Join(pairs, ",")+`) ORDER BY bead_id,created_at,id`, args...)
+	if e != nil {
+		return nil, e
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		var c Comment
+		if e = rows.Scan(&id, &c.ID, &c.Author, &c.Text, &c.CreatedAt); e != nil {
 			return nil, e
 		}
-		for rows.Next() {
-			var c Comment
-			if e = rows.Scan(&c.ID, &c.Author, &c.Text, &c.CreatedAt); e != nil {
-				rows.Close()
-				return nil, e
-			}
-			d.Comments = append(d.Comments, c)
-		}
-		e = rows.Err()
-		rows.Close()
-		if e != nil {
-			return nil, e
-		}
+		d := out[id]
+		d.Comments = append(d.Comments, c)
 		out[id] = d
+	}
+	if e = rows.Err(); e != nil {
+		return nil, e
 	}
 	return out, nil
 }

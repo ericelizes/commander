@@ -101,10 +101,10 @@ func qualifiedCustodyLive(ctx context.Context, q store.Querier, v *qualifiedView
 		h := holding.Bead{Status: b.Status, Labels: b.Labels}
 		DeriveHolding(&h)
 		if h.Owner != "" {
-			roles[h.Owner] = true
+			roles[OwnerLabelName(h.Owner)] = true
 		}
 		for _, r := range h.OperatorWaits {
-			roles[r] = true
+			roles[OwnerLabelName(r)] = true
 		}
 	}
 	args := []any{}
@@ -115,16 +115,16 @@ func qualifiedCustodyLive(ctx context.Context, q store.Querier, v *qualifiedView
 		if holding.IsManager(r) {
 			return "idle", true
 		}
-		f := facts[r]
+		f := facts[OwnerLabelName(r)]
 		return f.state, f.known
 	}
 	if len(args) == 0 {
 		return live, nil
 	}
 	in := strings.TrimSuffix(strings.Repeat("?,", len(args)), ",")
-	rows, e := q.QueryContext(ctx, `SELECT DISTINCT ON (r.agent_name) r.agent_name,r.status,CASE WHEN p.run_id IS NULL THEN COALESCE(o.alive,FALSE) ELSE p.state='running' AND p.last_beat>=EXTRACT(EPOCH FROM CURRENT_TIMESTAMP)::bigint-120 END,
+	rows, e := q.QueryContext(ctx, `SELECT DISTINCT ON (regexp_replace(r.agent_name,'[^A-Za-z0-9_:-]','-','g')) regexp_replace(r.agent_name,'[^A-Za-z0-9_:-]','-','g'),r.status,CASE WHEN p.run_id IS NULL THEN COALESCE(o.alive,FALSE) ELSE p.state='running' AND p.last_beat>=EXTRACT(EPOCH FROM CURRENT_TIMESTAMP)::bigint-120 END,
  CASE WHEN p.run_id IS NULL THEN COALESCE(o.checked_at,0) WHEN p.state='offered' OR p.last_beat>=EXTRACT(EPOCH FROM CURRENT_TIMESTAMP)::bigint-120 THEN EXTRACT(EPOCH FROM CURRENT_TIMESTAMP)::bigint ELSE 0 END,
- COALESCE(b.active_run_id=r.id,FALSE) FROM agent_runs r LEFT JOIN run_observations o ON o.run_id=r.id LEFT JOIN place_runs p ON p.run_id=r.id LEFT JOIN bead_tasks b ON b.project_id=r.project_id AND b.id=r.task_bead_id WHERE r.agent_name IN (`+in+`) ORDER BY r.agent_name,r.spawn_time DESC,r.id DESC`, args...)
+ COALESCE(b.active_run_id=r.id,FALSE) FROM agent_runs r LEFT JOIN run_observations o ON o.run_id=r.id LEFT JOIN place_runs p ON p.run_id=r.id LEFT JOIN bead_tasks b ON b.project_id=r.project_id AND b.id=r.task_bead_id WHERE regexp_replace(r.agent_name,'[^A-Za-z0-9_:-]','-','g') IN (`+in+`) ORDER BY regexp_replace(r.agent_name,'[^A-Za-z0-9_:-]','-','g'),r.spawn_time DESC,r.id DESC`, args...)
 	if e != nil {
 		return nil, e
 	}
@@ -152,7 +152,7 @@ func qualifiedCustodyLive(ctx context.Context, q store.Querier, v *qualifiedView
 	if e != nil {
 		return nil, e
 	}
-	rows, e = q.QueryContext(ctx, `SELECT role,alive,checked_at FROM native_presence WHERE role IN (`+in+`)`, args...)
+	rows, e = q.QueryContext(ctx, `SELECT DISTINCT ON (regexp_replace(role,'[^A-Za-z0-9_:-]','-','g')) regexp_replace(role,'[^A-Za-z0-9_:-]','-','g'),alive,checked_at FROM native_presence WHERE regexp_replace(role,'[^A-Za-z0-9_:-]','-','g') IN (`+in+`) ORDER BY regexp_replace(role,'[^A-Za-z0-9_:-]','-','g'),checked_at DESC,role`, args...)
 	if e != nil {
 		return nil, e
 	}

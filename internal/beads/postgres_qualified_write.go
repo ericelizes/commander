@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/example-user/commander/internal/store"
@@ -32,8 +33,13 @@ func pgSourceAuthority(ctx context.Context, q store.Querier, pid int64, source *
 		return nil
 	} // the user's own writes
 	if strings.HasPrefix(actor, "operator-") {
+		run, err := strconv.ParseInt(pgCallerValue(ctx, "COMMANDER_RUN_ID"), 10, 64)
+		session := pgCallerValue(ctx, "COMMANDER_RUN_SESSION")
+		if err != nil || run <= 0 || session == "" {
+			return qualifiedFailure("authority", source.ID, errors.New("Operator requires immutable caller run ID and session"))
+		}
 		var active bool
-		e := q.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM bead_tasks b JOIN agent_runs r ON r.id=b.active_run_id WHERE b.project_id=? AND b.id=? AND r.project_id=b.project_id AND r.task_bead_id=b.id AND r.agent_name=? AND r.status='running' AND b.assigned_agent=?)`, pid, source.ID, actor, actor).Scan(&active)
+		e := q.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM bead_tasks b JOIN agent_runs r ON r.id=b.active_run_id WHERE b.project_id=? AND b.id=? AND r.project_id=b.project_id AND r.task_bead_id=b.id AND r.agent_name=? AND r.status='running' AND b.assigned_agent=? AND r.id=? AND r.opencode_session_id=?)`, pid, source.ID, actor, actor, run, session).Scan(&active)
 		if e != nil {
 			return e
 		}
@@ -138,6 +144,6 @@ func QualifiedDependency(ctx context.Context, sourceDir, targetDir, op, from, to
 	if !PostgresConfigured() {
 		return errors.New("qualified dependencies require PostgreSQL")
 	}
-	_, _, err := runBr(ctx, sourceDir, beadsBinary(), "dep", op, from, to, "--source-project", sourceDir, "--target-project", targetDir)
+	_, _, err := defaultRunInDir(ctx, sourceDir, beadsBinary(), "dep", op, from, to, "--source-project", sourceDir, "--target-project", targetDir)
 	return err
 }

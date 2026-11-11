@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"sync"
 	"testing"
@@ -237,11 +238,11 @@ func TestPostgresQualifiedSourceAuthority(t *testing.T) {
 	if e = QualifiedDependency(actor, f.dir, f.foreign, "rm", f.source, f.target); e != nil {
 		t.Fatal(e)
 	}
-	run, e := f.s.InsertAgentRun(ctx, store.AgentRun{ProjectID: f.pid, TaskBeadID: f.source, AgentName: "operator-fixture-owner", SpawnTime: time.Now().Unix()})
+	run, e := f.s.InsertAgentRun(ctx, store.AgentRun{ProjectID: f.pid, TaskBeadID: f.source, AgentName: "operator-fixture-owner", OpencodeSessionID: "fixture-session", SpawnTime: time.Now().Unix()})
 	if e != nil {
 		t.Fatal(e)
 	}
-	actor = WithDoorEnv(ctx, []string{"COMMANDER_ROLE=operator-fixture-owner"})
+	actor = WithDoorEnv(ctx, []string{"COMMANDER_ROLE=operator-fixture-owner", fmt.Sprint("COMMANDER_RUN_ID=", run), "COMMANDER_RUN_SESSION=fixture-session"})
 	if e = f.link(actor); e != nil {
 		t.Fatal(e)
 	}
@@ -406,7 +407,7 @@ func TestPostgresQualifiedStoppedAndUnknownCustody(t *testing.T) {
 	if e := f.c.SetLabel(ctx, f.dir, f.source, "owner:"+role, true); e != nil {
 		t.Fatal(e)
 	}
-	run, e := f.s.InsertAgentRun(ctx, store.AgentRun{ProjectID: f.pid, TaskBeadID: f.source, AgentName: role, SpawnTime: time.Now().Unix()})
+	run, e := f.s.InsertAgentRun(ctx, store.AgentRun{ProjectID: f.pid, TaskBeadID: f.source, AgentName: role, OpencodeSessionID: "fixture-session", SpawnTime: time.Now().Unix()})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -432,11 +433,11 @@ func TestPostgresQualifiedStoppedAndUnknownCustody(t *testing.T) {
 func TestPostgresQualifiedRunRetirementSerializesWithAuthority(t *testing.T) {
 	f := newQualifiedFixture(t)
 	ctx := context.Background()
-	run, e := f.s.InsertAgentRun(ctx, store.AgentRun{ProjectID: f.pid, TaskBeadID: f.source, AgentName: "operator-fixture-race", SpawnTime: time.Now().Unix()})
+	run, e := f.s.InsertAgentRun(ctx, store.AgentRun{ProjectID: f.pid, TaskBeadID: f.source, AgentName: "operator-fixture-race", OpencodeSessionID: "fixture-session", SpawnTime: time.Now().Unix()})
 	if e != nil {
 		t.Fatal(e)
 	}
-	actor := WithDoorEnv(ctx, []string{"COMMANDER_ROLE=operator-fixture-race"})
+	actor := WithDoorEnv(ctx, []string{"COMMANDER_ROLE=operator-fixture-race", fmt.Sprint("COMMANDER_RUN_ID=", run), "COMMANDER_RUN_SESSION=fixture-session"})
 	e = f.s.WithTx(ctx, func(q store.Querier) error {
 		// This is the same serialization interval as an actual qualified write.
 		if _, e := pgGuardedOps(actor, q, f.dir, [][]string{{"dep", "add", f.source, f.target, "--source-project", f.dir, "--target-project", f.foreign}}); e != nil {
@@ -476,11 +477,11 @@ func TestPostgresQualifiedPlaceCustody(t *testing.T) {
 	if e := f.s.AddPlace(ctx, store.Place{Name: "mac:fixture", Kind: "mac", PublicKey: "fixture-key", PairedAt: 1, PairedBy: "user"}); e != nil {
 		t.Fatal(e)
 	}
-	run, e := f.s.InsertPlaceOffer(ctx, store.AgentRun{ProjectID: f.pid, TaskBeadID: f.source, AgentName: role, SpawnTime: time.Now().Unix()}, store.PlaceRun{Place: "mac:fixture", StepID: "fixture-step", ManagerRole: "manager-fixture", BriefSHA: "fixture", OfferedAt: time.Now().Unix()})
+	run, e := f.s.InsertPlaceOffer(ctx, store.AgentRun{ProjectID: f.pid, TaskBeadID: f.source, AgentName: role, OpencodeSessionID: "fixture-session", SpawnTime: time.Now().Unix()}, store.PlaceRun{Place: "mac:fixture", StepID: "fixture-step", ManagerRole: "manager-fixture", BriefSHA: "fixture", OfferedAt: time.Now().Unix()})
 	if e != nil {
 		t.Fatal(e)
 	}
-	actor := WithDoorEnv(ctx, []string{"COMMANDER_ROLE=" + role})
+	actor := WithDoorEnv(ctx, []string{"COMMANDER_ROLE=" + role, fmt.Sprint("COMMANDER_RUN_ID=", run), "COMMANDER_RUN_SESSION=fixture-session"})
 	if e = QualifiedDependency(actor, f.dir, f.foreign, "add", f.source, f.target); e != nil {
 		t.Fatal(e)
 	}
