@@ -175,6 +175,10 @@ func TestClassify_RefusesTheInstallEndpoints(t *testing.T) {
 		`curl $U/api/up$'\x64'ate`, `curl $U/api/up$'\144'ate`, `curl "$U/api / update"`, `curl $U/api/UP`,
 		`python3 -c "import urllib.request as u; u.urlopen('http://127.0.0.1:8787/ap'+'i/upd'+'ate/install')"`,
 		`node -e "fetch('http://localhost:8787/'+['update'].join())"`, `wget -qO- $(cat ~/.commander/api-url)/x/update`,
+		// ANSI-C quoting around the path: escapes must be decoded before the
+		// parser strips the $'...' delimiters (review finding R1, .204.6.82.1).
+		`curl -X POST $U/$'\x61pi/\x75pdate/install'`, `curl $U/$'\x61pi/up\x64ate'`,
+		`curl $U/api/$'\165pdate'`, `curl $U/$'api/update/install'`,
 	} {
 		if v := Classify(cmd, ""); !v.Deny {
 			t.Errorf("%q was allowed", cmd)

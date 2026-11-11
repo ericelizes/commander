@@ -67,7 +67,9 @@ func touchesUpdateAPI(command string, depth int) bool {
 	// input, including text piped from a heredoc into an interpreter. Keep the
 	// conservative whole-command heuristic for all remaining words.
 	var executable strings.Builder
-	segs := parse(command)
+	// Decode while ANSI-C quote delimiters still exist. The parser removes
+	// those delimiters, after which their escapes cannot be recognized.
+	segs := parse(decodeANSIC(command))
 	interpreter := false
 	for _, seg := range segs {
 		words := unwrap(stripGroup(seg.words), false)
