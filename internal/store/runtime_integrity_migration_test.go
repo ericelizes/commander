@@ -28,7 +28,7 @@ func TestSchemaTwoUpgradePreservesLiveCustodyAndHumanDirection(t *testing.T) {
 	ctx := context.Background()
 	var version, progress, epoch, cursor, runID int64
 	var session, labels, answer, driver, account string
-	if err := s.DB().QueryRow(`SELECT version FROM commander_schema`).Scan(&version); err != nil || version != 3 {
+	if err := s.DB().QueryRow(`SELECT version FROM commander_schema`).Scan(&version); err != nil || version != PostgresSchemaVersion {
 		t.Fatal(version, err)
 	}
 	if err := s.DB().QueryRow(`SELECT progress_seq,responsibility_epoch,labels::text,active_run_id FROM bead_tasks WHERE id='live'`).Scan(&progress, &epoch, &labels, &runID); err != nil || progress != 73 || epoch != 19 || labels != `["hold"]` || runID != 17 {

@@ -1,17 +1,20 @@
 # Qualified PostgreSQL dependency candidate
 
+Current numbering and refusal behavior: [Mac runtime composition](mac-runtime-composition.md).
+
+
 This is a source candidate for independent review. Do not install it or open a
-configured live store to try it: `OpenPostgres` applies migrations. Schema 2 is the exact reserved Mac places migration from
-`158f0064d08c0e5bfd815917c081ca22fa7b67ac`; schema 3 adds qualified dependencies.
-Fresh databases and schema 1 upgrade through places 2 before qualified 3 in one
-transaction under advisory migration lock `734031820`. Existing exact Mac 2
-upgrades to 3 with all places, runs, comments, indexes and event triggers retained.
-The store includes Mac claim/heartbeat/presence persistence, without enabling the
-Mac execution service or app. Shared host/remote claims take the qualified graph
+configured live store to try it: `OpenPostgres` applies migrations. Canonical runtime
+schemas 1–3 remain unchanged; additive places 4 precedes qualified custody 5.
+Fresh and canonical 1/2/3/4 databases converge in one transaction under advisory
+migration lock `734031820`. Historical Mac 2/3 numbering is refused without writes; canonical 4 upgrades
+with places, runs, comments, indexes and event triggers retained.
+The composition includes Mac service/app source and store claim/heartbeat/presence
+persistence; it does not establish native Mac runtime or active dispatch proof. Shared host/remote claims take the qualified graph
 lock before task rows. Transactional custody honors remote heartbeat evidence
 rather than local process absence. Release remains subject to independent review
 and the [Mac release prerequisites](../releases/mac-schema-two-contract.md).
-Old schema-1/2-only binaries reject 3 and are not recovery binaries.
+Old schema-1/2/3-only binaries reject 5 and are not recovery binaries.
 
 The public `beads.Client` remains ID-only. Qualified `(project,id)` identities are
 private to PostgreSQL graph validation. Cross-project references require each

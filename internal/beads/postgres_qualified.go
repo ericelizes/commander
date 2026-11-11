@@ -2,7 +2,6 @@ package beads
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"slices"
 	"strings"
@@ -93,12 +92,7 @@ func loadQualifiedSeeded(ctx context.Context, q store.Querier, pid int64, force 
 	}
 	for rows.Next() {
 		var pid int64
-		var b Bead
-		var labels []byte
-		e = rows.Scan(&pid, &b.ID, &b.Title, &b.Description, &b.AcceptanceCriteria, &b.Status, &b.Type, &b.Priority, &labels, &b.ParentID, &b.AssignedAgent, &b.CreatedAt, &b.UpdatedAt, &b.CloseReason, &b.DependencyCount, &b.DependentCount, &b.CommentCount)
-		if e == nil {
-			e = json.Unmarshal(labels, &b.Labels)
-		}
+		b, e := scanPGBead(projectBeadRow{row: rows, project: &pid})
 		if e != nil {
 			rows.Close()
 			return nil, e
@@ -398,4 +392,14 @@ func (c *exportClient) ReadCustodySnapshot(ctx context.Context, dir string, read
 }
 func (c *exportClient) RequireLocalCustody(ctx context.Context, dir string, ids []string) error {
 	return RequireLocalCustody(ctx, c.Client, dir, ids)
+}
+
+// Keep qualified snapshots on the same complete row decoder as local reads.
+type projectBeadRow struct {
+	row     interface{ Scan(...any) error }
+	project *int64
+}
+
+func (r projectBeadRow) Scan(dest ...any) error {
+	return r.row.Scan(append([]any{r.project}, dest...)...)
 }

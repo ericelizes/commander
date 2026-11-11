@@ -1,5 +1,7 @@
 # Mac source candidate on PostgreSQL
 
+This document preserves historical candidate evidence. Current source uses canonical runtime 1–3, places 4 and qualified custody 5; historical places 2/custody 3 refuse. See [current composition](../architecture/mac-runtime-composition.md) for the superseding migration contract.
+
 This candidate transplants only the reviewed Mac feature delta from foundation
 `07ffcce26037660f497844da54df0832b57ba4af` through
 `9aa9ab5d2381ecf52d1dccafd9d81d955765ef9e` onto PostgreSQL main

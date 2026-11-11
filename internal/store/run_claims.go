@@ -13,9 +13,6 @@ import (
 // A live previous claim cannot be stolen by another dispatch.
 func (s *Store) insertClaimedRun(ctx context.Context, r AgentRun) (int64, error) {
 	var id int64
-	if r.ExecutionDriver == "native" && (r.ExecutionClaimToken == "" || (r.ExecutionRuntime != "claude" && r.ExecutionRuntime != "codex") || r.ExecutionAccount == "" || strings.TrimSpace(r.ExecutionModel) == "" || r.OpencodeSessionID == "") {
-		return 0, errors.New("native execution requires a startup claim and complete session/provider binding")
-	}
 	e := s.WithTx(ctx, func(q Querier) error {
 		var e error
 		id, e = claimRun(ctx, q, r)
@@ -26,15 +23,15 @@ func (s *Store) insertClaimedRun(ctx context.Context, r AgentRun) (int64, error)
 
 // claimRun composes the canonical claim with other records in the same transaction.
 func claimRun(ctx context.Context, q Querier, r AgentRun) (int64, error) {
+	if r.ExecutionDriver == "native" && (r.ExecutionClaimToken == "" || (r.ExecutionRuntime != "claude" && r.ExecutionRuntime != "codex") || r.ExecutionAccount == "" || strings.TrimSpace(r.ExecutionModel) == "" || r.OpencodeSessionID == "") {
+		return 0, errors.New("native execution requires a startup claim and complete session/provider binding")
+	}
 	// Acquire graph custody before task row locks, including remote offers.
 	if _, err := q.ExecContext(ctx, `SELECT pg_advisory_xact_lock(734031823)`); err != nil {
 		return 0, err
 	}
 	var id int64
 	e := func() error {
-		if _, e := q.ExecContext(ctx, `SELECT pg_advisory_xact_lock(734031823)`); e != nil {
-			return e
-		}
 		// Hold the mode through run binding. A concurrent cutover/drain cannot
 		// commit between this admission decision and the execution insert.
 		var mode string

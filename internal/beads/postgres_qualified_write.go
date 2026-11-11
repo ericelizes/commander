@@ -3,24 +3,13 @@ package beads
 import (
 	"context"
 	"errors"
-	"os"
 	"slices"
 	"strings"
 
 	"github.com/example-user/commander/internal/store"
 )
 
-func pgActor(ctx context.Context) string {
-	actor := os.Getenv("COMMANDER_ROLE")
-	if env, ok := ctx.Value(doorEnvKey{}).([]string); ok {
-		for _, kv := range env {
-			if v, ok := strings.CutPrefix(kv, "COMMANDER_ROLE="); ok {
-				actor = v
-			}
-		}
-	}
-	return actor
-}
+func pgActor(ctx context.Context) string { return pgCallerValue(ctx, "COMMANDER_ROLE") }
 
 func pgQualifiedEndpoint(ctx context.Context, q store.Querier, pid int64, id string) (*Bead, error) {
 	var count int
@@ -52,6 +41,23 @@ func pgSourceAuthority(ctx context.Context, q store.Querier, pid int64, source *
 			return nil
 		}
 		return qualifiedFailure("authority", source.ID, errors.New("Operator does not hold the current source run"))
+	}
+	active, err := pgActiveExecution(ctx, q)
+	if err != nil {
+		return err
+	}
+	if active {
+		if err := requirePlanningCaller(ctx); err != nil {
+			return err
+		}
+		var owner string
+		if err := q.QueryRowContext(ctx, `SELECT commander_planning_owner(?,?)`, pid, source.ID).Scan(&owner); err != nil {
+			return err
+		}
+		if owner != actor {
+			return qualifiedFailure("authority", source.ID, errors.New("source belongs to a different planning Commander"))
+		}
+		return nil
 	}
 	current := source.ID
 	seen := map[string]bool{}

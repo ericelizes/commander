@@ -1,4 +1,15 @@
 {
-  "description": "Private commander_trial schema composition scenario run by internal/store TestPostgresComposedConvergence: fresh, populated core 1 and populated exact Mac places 2 converge to qualified 3; active claim, heartbeat and comment deduplication records survive. Rollback and lifecycle assertions run in native companion tests. No live store or Mac service.",
-  "versions": [0, 1, 2]
+  "description": "Private commander_trial: canonical fresh and runtime 1/2/3 plus additive places 4 converge to qualified custody 5; populated facts survive, interrupted migration rolls back, locks serialize, and historical b6a345cb 2/3 and damaged current shapes refuse without changes.",
+  "versions": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "refused_historical_versions": [
+    2,
+    3
+  ]
 }

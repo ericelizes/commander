@@ -265,7 +265,7 @@ type SnapStep struct {
 	Restarts             int                     `json:"restarts,omitempty"`    // automatic restarts cmdrd made of its Operator
 	Starred              bool                    `json:"starred,omitempty"`
 	Review               string                  `json:"review,omitempty"` // PR number while in review ("?" = unknown)
-	PlaceText string `json:"place_text,omitempty"`
+	PlaceText            string                  `json:"place_text,omitempty"`
 	// ReviewFact is what GitHub says now about the reviews this step waits on,
 	// looked up live by cmdrd rather than recorded by an agent.
 	PRRepo      string           `json:"pr_repo,omitempty"`

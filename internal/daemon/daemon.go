@@ -189,8 +189,8 @@ type Daemon struct {
 	notifier           notify.Notifier
 	cfg                *config.Config
 	socket             *Socket
-	places *place.Service
-	apiServer atomic.Pointer[api.Server]
+	places             *place.Service
+	apiServer          atomic.Pointer[api.Server]
 
 	// notifyEnabled gates the OS-notification fan-out. Default true; the
 	// cmdrd `--notifications=false` flag flips it off for headless runs
@@ -473,7 +473,7 @@ func New() (*Daemon, error) {
 		liveGates = &gateWatcher{projects: st, beads: bd, gh: runGH, run: gates.RunShell, repoOf: livedata.GitHubRepo, now: time.Now, last: map[string]gateSeen{}, failing: map[string]int{}}
 	}
 
-	return &Daemon{
+	d := &Daemon{
 		store:              st,
 		opencode:           oc,
 		beads:              bd,
@@ -503,9 +503,16 @@ func New() (*Daemon, error) {
 		cfg:                cfg,
 		home:               home,
 		notifyEnabled:      true,
-	}, nil
-	places *place.Service
-	apiServer atomic.Pointer[api.Server]
+	}
+	pd := &placeDeps{st: st, am: placeAM, repo: commanderRepo, settle: settle, home: home}
+	d.places = place.NewService(pd.deps(func(ctx context.Context, dir, bead, role, text string) error {
+		srv := d.apiServer.Load()
+		if srv == nil {
+			return fmt.Errorf("cmdrd's API is not up")
+		}
+		return srv.DoorComment(ctx, dir, bead, role, text)
+	}))
+	return d, nil
 }
 
 // SetNotificationsEnabled toggles the OS-notification fan-out. Call before

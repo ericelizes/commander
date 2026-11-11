@@ -96,6 +96,12 @@ func pgCheckPlanningScope(ctx context.Context, q store.Querier, pid int64, verb 
 			if e := check(pos[1]); e != nil {
 				return e
 			}
+			// A qualified edge mutates the source record only. Its foreign
+			// target is resolved and validated in pgQualifiedDep, not here
+			// against an unrelated local bead with the same spelling.
+			if f.has("--source-project") || f.has("--target-project") {
+				return nil
+			}
 			return check(pos[2])
 		}
 		return nil
@@ -202,28 +208,32 @@ func postgresRun(ctx context.Context, dir string, args []string) ([]byte, []byte
 		return nil, nil, e
 	}
 	e = s.WithTx(ctx, func(q store.Querier) error {
-		pid, e := projectID(ctx, q, dir)
-		if e != nil {
+		return pgWithCustody(ctx, q, dir, func() error {
+			pid, e := projectID(ctx, q, dir)
+			if e != nil {
+				return e
+			}
+			if _, e = q.ExecContext(ctx, `SELECT pg_advisory_xact_lock(?)`, pid); e != nil {
+				return e
+			}
+			if e = pgCheckPlanBasis(ctx, q, pid, [][]string{args}); e != nil {
+				return e
+			}
+			if e = pgCheckAutomaticGateResult(ctx, q, pid, dir); e != nil {
+				return e
+			}
+			out, e = pgWrite(ctx, q, pid, args)
 			return e
-		}
-		if _, e = q.ExecContext(ctx, `SELECT pg_advisory_xact_lock(?)`, pid); e != nil {
-			return e
-		}
-		if e = pgCheckPlanBasis(ctx, q, pid, [][]string{args}); e != nil {
-			return e
-		}
-		if e = pgCheckAutomaticGateResult(ctx, q, pid, dir); e != nil {
-			return e
-		}
-		out, e = pgWrite(ctx, q, pid, args)
-		return e
+		})
 	})
 	return out, nil, e
 }
 
 // Every operation, including its event trigger, runs in the caller's transaction.
 func pgWrite(ctx context.Context, q store.Querier, pid int64, args []string) ([]byte, error) {
- if _, e := q.ExecContext(ctx, `SELECT pg_advisory_xact_lock(734031823)`); e != nil { return nil,e }
+	if _, e := q.ExecContext(ctx, `SELECT pg_advisory_xact_lock(734031823)`); e != nil {
+		return nil, e
+	}
 	if e := checkPublicationOperation(ctx, pid, args); e != nil {
 		return nil, e
 	}
@@ -600,74 +610,76 @@ func postgresApplyOps(ctx context.Context, dir string, ops [][]string) DoorRespo
 		return DoorResponse{Exit: 1, Error: err.Error(), Atomic: true}
 	}
 	e = s.WithTx(ctx, func(q store.Querier) error {
-		values, err := pgGuardedOps(ctx, q, dir, ops)
-		if err != nil {
-			return err
-		}
-		if _, e = q.ExecContext(ctx, `SELECT pg_advisory_xact_lock(?)`, pid); e != nil {
-			return e
-		}
-		if record {
-			prior, err := readPlanReceipt(ctx, q, pid, envelope)
-			if err != nil {
-				return err
-			}
-			if prior != nil {
-				response = *prior
-				return nil
-			}
-		}
-		if e = pgCheckPlanBasis(ctx, q, pid, ops); e != nil {
-			return e
-		}
-		if e = pgCheckAutomaticGateResult(ctx, q, pid, dir); e != nil {
-			return e
-		}
-		if AutomaticGateUnchanged(ctx) {
-			response = DoorResponse{Atomic: true}
-			return nil
-		}
-		var err error
-		ctx, err = authorizeCoordinatedPlan(ctx, q, pid, ops)
-		if err != nil {
-			return err
-		}
-		aliases := map[string]string{}
-		writeCtx := context.WithValue(ctx, postgresReaderKey{}, q)
-		for _, op := range ops {
-			ref := ""
-			if record {
-				var err error
-				op, ref, err = resolvePlanOperation(op, aliases)
-				if err != nil {
-					return err
-				}
-				if validator, ok := ctx.Value(planValidatorKey{}).(PlanValidator); ok {
-					if err = validator(writeCtx, [][]string{op}); err != nil {
-						return err
-					}
-				}
-			}
-			out, e := pgWrite(writeCtx, q, pid, op)
+		return pgWithCustody(ctx, q, dir, func() error {
+			pid, e := projectID(ctx, q, dir)
 			if e != nil {
 				return e
 			}
-			if ref != "" {
-				aliases[ref] = strings.TrimSpace(string(out))
+			if _, e = q.ExecContext(ctx, `SELECT pg_advisory_xact_lock(?)`, pid); e != nil {
+				return e
 			}
-			if len(out) > 0 {
-				outputs = append(outputs, string(out))
+			if record {
+				prior, err := readPlanReceipt(ctx, q, pid, envelope)
+				if err != nil {
+					return err
+				}
+				if prior != nil {
+					response = *prior
+					return nil
+				}
 			}
-		}
-		response = DoorResponse{Stdout: strings.Join(outputs, "\n"), Applied: len(ops), Atomic: true}
-		if len(aliases) > 0 {
-			response.Created = aliases
-		}
-		if record {
-			response.PlanReceipt = envelope.Key
-			return savePlanReceipt(ctx, q, pid, envelope, response)
-		}
-		return nil
+			if e = pgCheckPlanBasis(ctx, q, pid, ops); e != nil {
+				return e
+			}
+			if e = pgCheckAutomaticGateResult(ctx, q, pid, dir); e != nil {
+				return e
+			}
+			if AutomaticGateUnchanged(ctx) {
+				response = DoorResponse{Atomic: true}
+				return nil
+			}
+			var err error
+			ctx, err = authorizeCoordinatedPlan(ctx, q, pid, ops)
+			if err != nil {
+				return err
+			}
+			aliases := map[string]string{}
+			writeCtx := context.WithValue(ctx, postgresReaderKey{}, q)
+			for _, op := range ops {
+				ref := ""
+				if record {
+					var err error
+					op, ref, err = resolvePlanOperation(op, aliases)
+					if err != nil {
+						return err
+					}
+					if validator, ok := ctx.Value(planValidatorKey{}).(PlanValidator); ok {
+						if err = validator(writeCtx, [][]string{op}); err != nil {
+							return err
+						}
+					}
+				}
+				out, e := pgWrite(writeCtx, q, pid, op)
+				if e != nil {
+					return e
+				}
+				if ref != "" {
+					aliases[ref] = strings.TrimSpace(string(out))
+				}
+				if len(out) > 0 {
+					outputs = append(outputs, string(out))
+				}
+			}
+			response = DoorResponse{Stdout: strings.Join(outputs, "\n"), Applied: len(ops), Atomic: true}
+			if len(aliases) > 0 {
+				response.Created = aliases
+			}
+			if record {
+				response.PlanReceipt = envelope.Key
+				return savePlanReceipt(ctx, q, pid, envelope, response)
+			}
+			return nil
+		})
 	})
 	if e != nil {
 		return DoorResponse{Exit: 1, Error: e.Error(), Atomic: true}

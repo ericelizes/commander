@@ -47,11 +47,11 @@ func (s *Server) serveWrite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	status, resp := s.applyDoorPath(r.Context(), req, r.URL.Path)
-	writeJSON(w,status,resp)
+	writeJSON(w, status, resp)
 }
 
 func (s *Server) applyDoor(ctx context.Context, req beads.DoorRequest) (int, beads.DoorResponse) {
- return s.applyDoorPath(ctx,req,"/api/write")
+	return s.applyDoorPath(ctx, req, "/api/write")
 }
 
 func (s *Server) applyDoorPath(reqCtx context.Context, req beads.DoorRequest, path string) (int, beads.DoorResponse) {
@@ -95,7 +95,7 @@ func (s *Server) applyDoorPath(reqCtx context.Context, req beads.DoorRequest, pa
 			return http.StatusOK, beads.DoorResponse{Exit: 1, Error: e.Error(), Settled: true}
 		}
 		if prior != nil {
-			return http.StatusOK, prior
+			return http.StatusOK, *prior
 		}
 	}
 	if role := roleOf(req.Env); role != "" {

@@ -32,7 +32,16 @@ var beadQuestionsSchema string
 //go:embed runtime_integrity_schema.sql
 var runtimeIntegritySchema string
 
-const PostgresSchemaVersion = 3
+// PostgreSQL 1-3 are shipped runtime migrations. Historical b6a345cb used
+// incompatible 2/3 markers; catalog attestation below refuses that lineage.
+//
+//go:embed postgres_0004_places.sql
+var postgresPlacesSchema string
+
+//go:embed postgres_0005_qualified.sql
+var postgresQualifiedSchema string
+
+const PostgresSchemaVersion = 5
 
 // PostgresDSN selects the database explicitly beside state.db. A configured but
 // invalid/unreachable Postgres never falls back to the old SQLite database.
@@ -106,9 +115,7 @@ func (s *Store) IsPostgres() bool { return s.postgres }
 func (s *Store) migratePostgres(ctx context.Context) error {
 	var ready int
 	if err := s.db.QueryRowContext(ctx, `SELECT version FROM commander_schema WHERE id=1`).Scan(&ready); err == nil {
-		if ready == PostgresSchemaVersion {
-			return nil
-		}
+
 		if ready > 0 && ready < PostgresSchemaVersion {
 			if home, e := os.UserHomeDir(); e == nil {
 				if raw, e := os.ReadFile(filepath.Join(home, ".commander/state.postgres")); e == nil && strings.TrimSpace(string(raw)) == s.postgresDSN {
@@ -118,7 +125,7 @@ func (s *Store) migratePostgres(ctx context.Context) error {
 				}
 			}
 		}
-		if ready != 1 && ready != 2 {
+		if ready < 1 || ready > PostgresSchemaVersion {
 			return fmt.Errorf("store: unsupported Postgres schema %d", ready)
 		}
 	}
@@ -141,10 +148,13 @@ func (s *Store) migratePostgres(ctx context.Context) error {
 		}
 		_, err = tx.ExecContext(ctx, `INSERT INTO commander_schema(id,version) VALUES(1,1)`)
 		version = 1
-	} else if err == nil && version != 1 && version != 2 && version != PostgresSchemaVersion {
+	} else if err == nil && (version < 1 || version > PostgresSchemaVersion) {
 		return fmt.Errorf("store: unsupported Postgres schema %d", version)
 	}
 	if err != nil {
+		return err
+	}
+	if err = validatePostgresLineage(ctx, tx, version); err != nil {
 		return err
 	}
 	if version == 1 {
@@ -172,6 +182,27 @@ func (s *Store) migratePostgres(ctx context.Context) error {
 		if _, err = tx.ExecContext(ctx, `UPDATE commander_schema SET version=3 WHERE id=1`); err != nil {
 			return err
 		}
+		version = 3
+	}
+	if version == 3 {
+		if _, err = tx.ExecContext(ctx, postgresPlacesSchema); err != nil {
+			return fmt.Errorf("store: migrate PostgreSQL 4 places: %w", err)
+		}
+		if _, err = tx.ExecContext(ctx, `UPDATE commander_schema SET version=4 WHERE id=1`); err != nil {
+			return err
+		}
+		version = 4
+	}
+	if version == 4 {
+		if _, err = tx.ExecContext(ctx, postgresQualifiedSchema); err != nil {
+			return fmt.Errorf("store: migrate PostgreSQL 5 qualified custody: %w", err)
+		}
+		if _, err = tx.ExecContext(ctx, `UPDATE commander_schema SET version=5 WHERE id=1`); err != nil {
+			return err
+		}
+	}
+	if err = validatePostgresLineage(ctx, tx, PostgresSchemaVersion); err != nil {
+		return err
 	}
 	return tx.Commit()
 }

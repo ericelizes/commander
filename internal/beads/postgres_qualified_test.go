@@ -525,3 +525,35 @@ func TestPostgresQualifiedPlaceCustody(t *testing.T) {
 		t.Fatalf("ended remote authority: %v", e)
 	}
 }
+
+func TestPostgresQualifiedCurrentPlannerAndExplicitContext(t *testing.T) {
+	f := newQualifiedFixture(t)
+	ctx := context.Background()
+	if _, err := f.s.DB().Exec(`INSERT INTO commander_sessions(agent_id,title) VALUES('commander-source','Source'); UPDATE orchestration_control SET mode='active'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.s.DB().Exec(`INSERT INTO commander_jurisdictions(project_id,bead_id,commander_id) VALUES(? ,?,'commander-source')`, f.pid, f.source); err != nil {
+		t.Fatal(err)
+	}
+	planner := WithDoorEnv(ctx, []string{"COMMANDER_ROLE=commander-source"})
+	if err := f.link(planner); err != nil {
+		t.Fatal("current source planner refused", err)
+	}
+	// Qualified snapshot must retain canonical runtime and authority fields.
+	b, err := FreshShow(ctx, f.c, f.dir, f.source)
+	if err != nil || b.PlanningCommander != "commander-source" || b.PlanRevision < 1 {
+		t.Fatal(b, err)
+	}
+	other := WithDoorEnv(ctx, []string{"COMMANDER_ROLE=commander"})
+	if err = QualifiedDependency(other, f.dir, f.foreign, "rm", f.source, f.target); err == nil {
+		t.Fatal("foreign planner changed source")
+	}
+	executor := WithDoorEnv(ctx, []string{"COMMANDER_ROLE=commander-source", "COMMANDER_RUN_ID=999", "COMMANDER_RUN_SESSION=unbound"})
+	if err = QualifiedDependency(executor, f.dir, f.foreign, "rm", f.source, f.target); err == nil {
+		t.Fatal("execution borrowed planning authority")
+	}
+	t.Setenv("COMMANDER_ROLE", "operator-ambient")
+	if got := pgActor(WithDoorEnv(ctx, nil)); got != "" {
+		t.Fatal("explicit empty caller borrowed ambient role", got)
+	}
+}

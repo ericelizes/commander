@@ -1,5 +1,7 @@
 # Mac places: schema-two release prerequisites
 
+This document preserves historical candidate evidence. Current source uses canonical runtime 1–3, places 4 and qualified custody 5; historical places 2/custody 3 refuse. See [current composition](../architecture/mac-runtime-composition.md) for the superseding migration contract.
+
 Prepared for commander-il9.206.4.12. **Readiness: false.** This is a source and
 retained-record contract, not permission to migrate, install, restart or activate.
 No target Mac, SSH, credentials, selected live database or endpoint was inspected.

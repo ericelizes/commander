@@ -45,12 +45,15 @@ func composedFixture(t *testing.T, version int) (*Store, string) {
 			t.Fatal(err)
 		}
 	}
-	if version == 2 {
-		if _, err = db.Exec(postgresPlacesSchema); err != nil {
-			t.Fatal(err)
-		}
-		if _, err = db.Exec(`UPDATE commander_schema SET version=2`); err != nil {
-			t.Fatal(err)
+	for next, sql := range []string{jurisdictionSchema + beadQuestionsSchema + executionSchema + supervisionSchema, runtimeIntegritySchema, postgresPlacesSchema, postgresQualifiedSchema} {
+		n := next + 2
+		if version >= n {
+			if _, err = db.Exec(sql); err != nil {
+				t.Fatal(err)
+			}
+			if _, err = db.Exec(fmt.Sprintf("UPDATE commander_schema SET version=%d", n)); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 	return raw, schema
@@ -97,7 +100,7 @@ func TestPostgresComposedConvergence(t *testing.T) {
 	if e = json.Unmarshal(raw, &scenario); e != nil {
 		t.Fatal(e)
 	}
-	if len(scenario.Versions) != 3 {
+	if len(scenario.Versions) != 6 {
 		t.Fatal("missing migration paths")
 	}
 	for _, version := range scenario.Versions {
@@ -118,7 +121,7 @@ func TestPostgresComposedConvergence(t *testing.T) {
 					t.Fatal(e)
 				}
 			}
-			if version == 2 {
+			if version == 4 {
 				if e := s.AddPlace(ctx, Place{Name: "mac:fixture", Kind: "mac", PublicKey: "fixture-key", PairedAt: 1, PairedBy: "user"}); e != nil {
 					t.Fatal(e)
 				}
@@ -143,7 +146,7 @@ func TestPostgresComposedConvergence(t *testing.T) {
 				t.Fatal(e)
 			}
 			var got int
-			if e = s.DB().QueryRow(`SELECT version FROM commander_schema`).Scan(&got); e != nil || got != 3 {
+			if e = s.DB().QueryRow(`SELECT version FROM commander_schema`).Scan(&got); e != nil || got != PostgresSchemaVersion {
 				t.Fatalf("version=%d %v", got, e)
 			}
 			if version > 0 {
@@ -152,7 +155,7 @@ func TestPostgresComposedConvergence(t *testing.T) {
 					t.Fatalf("backfill %d %v", target, e)
 				}
 			}
-			if version == 2 {
+			if version == 4 {
 				alive, _, known, e := s.RuntimePresence(ctx)
 				if e != nil || !known || len(alive) != 1 {
 					t.Fatalf("retained heartbeat %v %v %v", alive, known, e)
@@ -173,7 +176,7 @@ func TestPostgresComposedConvergence(t *testing.T) {
 }
 
 func TestPostgresComposedRollback(t *testing.T) {
-	for _, version := range []int{1, 2} {
+	for _, version := range []int{1, 3, 4} {
 		t.Run(fmt.Sprint(version), func(t *testing.T) {
 			s, _ := composedFixture(t, version)
 			// Failure late in migration 3 must roll back its earlier DDL, events and
@@ -199,7 +202,12 @@ func TestPostgresComposedRollback(t *testing.T) {
 			if e := s.DB().QueryRow(`SELECT count(*) FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='bead_dependencies' AND column_name='target_project_id'`).Scan(&columns); e != nil || columns != 0 {
 				t.Fatalf("partial qualified DDL %d %v", columns, e)
 			}
-			if e := s.DB().QueryRow(`SELECT count(*) FROM information_schema.tables WHERE table_schema=current_schema() AND table_name IN ('places','place_runs','place_comments')`).Scan(&places); e != nil || places != 3*(version-1) {
+			if e := s.DB().QueryRow(`SELECT count(*) FROM information_schema.tables WHERE table_schema=current_schema() AND table_name IN ('places','place_runs','place_comments')`).Scan(&places); e != nil || places != func() int {
+				if version >= 4 {
+					return 3
+				}
+				return 0
+			}() {
 				t.Fatalf("partial places DDL %d %v", places, e)
 			}
 		})
@@ -207,7 +215,7 @@ func TestPostgresComposedRollback(t *testing.T) {
 }
 
 func TestPostgresComposedMigrationLock(t *testing.T) {
-	s, _ := composedFixture(t, 2)
+	s, _ := composedFixture(t, 3)
 	tx, e := s.DB().Begin()
 	if e != nil {
 		t.Fatal(e)

@@ -2295,7 +2295,7 @@ Cross-project custody source boundary: CLI closure and HTTP intent planning refu
 `beads.CrossProjectError` while preserving local-read fail-open behavior. Optional
 `CustodySnapshotReader` binds closure reads and receipt locality checks to one
 snapshot; foreign receipts refuse before comments or writes. This is prerequisite
-source only: the PG adapter still supports local dependencies only. See
+source boundary; the composed PG adapter supports qualified dependencies. See
 [the boundary and remaining coordinated work](docs/architecture/cross-project-custody-boundary.md).
 Tests: `TestCrossProjectCustodyCLI`, `TestCrossProjectCustodyForeignReceipt`,
 private HTTP eval `TestCrossProjectCustodyScenario`
@@ -2303,8 +2303,10 @@ private HTTP eval `TestCrossProjectCustodyScenario`
 
 Qualified PostgreSQL dependency SOURCE CANDIDATE: see
 [qualified lifecycle](docs/architecture/qualified-postgres-lifecycle.md).
-Migration 2 retains exact reserved Mac places SQL (158f0064); migration 3 adds
-qualified graphs, with fresh/1/2 convergence under one migration transaction.
+Canonical runtime migrations 1–3 remain unchanged. Additive migration 4 retains
+reserved Mac places SQL (158f0064); 5 adds qualified graphs. Canonical 0–5
+converge under one transaction; historical b6a345cb 2/3 refuse by lineage/shape.
+See docs/architecture/mac-runtime-composition.md.
 No live apply/install/ship is authorized by source tests. Explicit `internal-dep --project SOURCE --target-project TARGET`
 passes expected endpoints to the transaction; ID-only clients remain unchanged.
 Native coverage is `TestPostgresQualified*` in beads/store/livedata/cmdr and

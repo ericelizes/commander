@@ -104,3 +104,34 @@ func TestPostgresPlaceClaimAndPresence(t *testing.T) {
 		t.Fatalf("replacement: %v", e)
 	}
 }
+
+func TestPostgresPlaceOfferPreservesActiveAdmission(t *testing.T) {
+	s := postgresTestStore(t)
+	ctx := context.Background()
+	pid, err := s.InsertProject(ctx, Project{Name: "active-place", Type: "code", Path: t.TempDir(), Status: "active"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.DB().Exec(`INSERT INTO bead_tasks(project_id,id,title,created_at,updated_at) VALUES(?,'place-active','Task','now','now')`, pid); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.AddPlace(ctx, Place{Name: "mac:active", Kind: "mac", PublicKey: "key", PairedBy: "user", PairedAt: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.DB().Exec(`UPDATE orchestration_control SET mode='active'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.InsertPlaceOffer(ctx, AgentRun{ProjectID: pid, TaskBeadID: "place-active", AgentName: "operator-active"}, PlaceRun{Place: "mac:active", StepID: "place-active", ManagerRole: "commander", BriefSHA: "brief", OfferedAt: 1}); err == nil {
+		t.Fatal("remote offer bypassed canonical admission")
+	}
+	var runs, offers int
+	if err = s.DB().QueryRow(`SELECT count(*) FROM agent_runs`).Scan(&runs); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.DB().QueryRow(`SELECT count(*) FROM place_runs`).Scan(&offers); err != nil {
+		t.Fatal(err)
+	}
+	if runs != 0 || offers != 0 {
+		t.Fatal("failed admission left partial claim or offer", runs, offers)
+	}
+}

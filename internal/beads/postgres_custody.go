@@ -13,25 +13,20 @@ import (
 // pgGuardedOps holds graph/identity serialization across the actual mutation and
 // custody comparison. It also covers requests without Intent and operations that
 // the HTTP simulation cannot model. Failure rolls back every operation and event.
-func pgGuardedOps(ctx context.Context, q store.Querier, dir string, ops [][]string) ([][]byte, error) {
+func pgWithCustody(ctx context.Context, q store.Querier, dir string, mutate func() error) error {
 	if _, err := q.ExecContext(ctx, `SELECT pg_advisory_xact_lock(734031823)`); err != nil {
-		return nil, err
+		return err
 	}
 	pid, err := projectID(ctx, q, dir)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	before, err := loadQualifiedView(ctx, q, pid, false)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	outputs := [][]byte{}
-	for _, op := range ops {
-		out, e := pgWrite(ctx, q, pid, op)
-		if e != nil {
-			return nil, e
-		}
-		outputs = append(outputs, out)
+	if err := mutate(); err != nil {
+		return err
 	}
 	var seeds []qualifiedNode
 	if before != nil {
@@ -43,12 +38,12 @@ func pgGuardedOps(ctx context.Context, q store.Querier, dir string, ops [][]stri
 	}
 	after, err := loadQualifiedSeeded(ctx, q, pid, before != nil, seeds)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if before != nil {
 		live, e := qualifiedCustodyLive(ctx, q, before)
 		if e != nil {
-			return nil, qualifiedFailure("custody", "runtime", e)
+			return qualifiedFailure("custody", "runtime", e)
 		}
 		old, next := before.holdingGraph(live), after.holdingGraph(live)
 		for id, n := range before.ids {
@@ -58,16 +53,16 @@ func pgGuardedOps(ctx context.Context, q store.Querier, dir string, ops [][]stri
 			was := old.Beads[id]
 			now, ok := next.Beads[id]
 			if !ok {
-				return nil, qualifiedFailure("receipt", id, errors.New("foreign source disappeared during mutation"))
+				return qualifiedFailure("receipt", id, errors.New("foreign source disappeared during mutation"))
 			}
 			_, heldBefore, _ := holding.Held(was, old)
 			_, heldAfter, why := holding.Held(now, next)
 			if (heldBefore || was.Status == holding.StatusClosed) && !heldAfter && why != holding.WhyClosed {
-				return nil, qualifiedFailure("receipt", id, errors.New("mutation requires foreign source custody; its owning Manager must establish a local holder first"))
+				return qualifiedFailure("receipt", id, errors.New("mutation requires foreign source custody; its owning Manager must establish a local holder first"))
 			}
 		}
 	}
-	return outputs, nil
+	return nil
 }
 
 func (v *qualifiedView) holdingGraph(live func(string) (string, bool)) *holding.Graph {
@@ -183,4 +178,23 @@ func qualifiedCustodyLive(ctx context.Context, q store.Querier, v *qualifiedView
 		return nil, e
 	}
 	return live, nil
+}
+
+func pgGuardedOps(ctx context.Context, q store.Querier, dir string, ops [][]string) ([][]byte, error) {
+	var outputs [][]byte
+	err := pgWithCustody(ctx, q, dir, func() error {
+		pid, err := projectID(ctx, q, dir)
+		if err != nil {
+			return err
+		}
+		for _, op := range ops {
+			out, err := pgWrite(ctx, q, pid, op)
+			if err != nil {
+				return err
+			}
+			outputs = append(outputs, out)
+		}
+		return nil
+	})
+	return outputs, err
 }
