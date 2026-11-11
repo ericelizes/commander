@@ -48,3 +48,19 @@ func TestPostgresChangedExecutionPlansTellsARunOncePerRevision(t *testing.T) {
 		t.Fatalf("an exited run was reported: %+v %v", changes, e)
 	}
 }
+
+func TestPostgresHasClaimableExecutionIgnoresClaimedWork(t *testing.T) {
+	s, _, ctx := executionFixture(t)
+	if ok, e := s.HasClaimableExecution(ctx); e != nil || !ok {
+		t.Fatalf("ready work not seen: %v %v", ok, e)
+	}
+	now := time.Now()
+	for _, slot := range []string{"vm-0", "vm-1"} {
+		if c, e := s.ClaimNextExecution(ctx, slot, 8, now); e != nil || c == nil {
+			t.Fatal(e)
+		}
+	}
+	if ok, e := s.HasClaimableExecution(ctx); e != nil || ok {
+		t.Fatalf("claimed work reported claimable: %v %v", ok, e)
+	}
+}

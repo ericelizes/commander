@@ -1906,6 +1906,29 @@ func (e *Engine) List() []Status {
 	return out
 }
 
+// ListRunning is List limited to chats with a live process in this engine.
+// It reads no chat logs and asks no other process about sessions, so it stays
+// cheap however many conversations have ever existed.
+func (e *Engine) ListRunning() []Status {
+	e.mu.Lock()
+	roles := make([]string, 0, len(e.chats))
+	for role := range e.chats {
+		roles = append(roles, role)
+	}
+	e.mu.Unlock()
+	sort.Strings(roles)
+	var out []Status
+	for _, role := range roles {
+		if !e.Running(role) {
+			continue
+		}
+		if s, err := e.Status(role); err == nil && s.Running {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
 // Subscription is a live event feed for one role. C is closed when the
 // subscriber falls too far behind (reconnect with since = last seq seen) or
 // on Close.

@@ -16,8 +16,8 @@ type fakeChats struct {
 	stopped []string
 }
 
-func (f *fakeChats) List() []chat.Status      { return f.list }
-func (f *fakeChats) Talking(role string) bool { return f.talking[role] }
+func (f *fakeChats) ListRunning() []chat.Status { return f.list }
+func (f *fakeChats) Talking(role string) bool   { return f.talking[role] }
 func (f *fakeChats) Stop(_ context.Context, role string) error {
 	f.stopped = append(f.stopped, role)
 	return nil

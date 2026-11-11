@@ -17,7 +17,7 @@ import (
 // itself never sleeps.
 type managerSleeper struct {
 	chat interface {
-		List() []chat.Status
+		ListRunning() []chat.Status
 		Talking(role string) bool
 		Stop(ctx context.Context, role string) error
 	}
@@ -56,7 +56,7 @@ func (s managerSleeper) sweep(ctx context.Context) []string {
 		since[a.Role] = a
 	}
 	var slept []string
-	for _, st := range s.chat.List() {
+	for _, st := range s.chat.ListRunning() {
 		role := st.Role
 		if !strings.HasPrefix(role, "manager-") || !st.Running || st.State != "idle" {
 			continue

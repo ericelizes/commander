@@ -57,7 +57,7 @@ func (w *Worker) watchChats(ctx context.Context) {
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 	for ctx.Err() == nil {
-		for _, status := range w.Engine.List() {
+		for _, status := range w.Engine.ListRunning() {
 			if !status.Running {
 				continue
 			}

@@ -50,6 +50,7 @@ func main() {
 	notifications := flag.Bool("notifications", true, "emit native OS notifications on ceiling-hit / urgent mail")
 	flag.Parse()
 	singleInstance()
+	startProfiler()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

@@ -229,3 +229,15 @@ func (s *Store) FailExecutionClaim(ctx context.Context, c ExecutionClaim, detail
 		return e
 	})
 }
+
+// HasClaimableExecution reports whether any ready, open bead has no execution:
+// a cheap check before waking every slot to try a claim.
+func (s *Store) HasClaimableExecution(ctx context.Context) (bool, error) {
+	if !s.postgres {
+		return false, nil
+	}
+	var ok bool
+	err := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM bead_tasks b WHERE b.execution_ready AND b.status='open' AND b.deleted_at IS NULL
+ AND NOT EXISTS(SELECT 1 FROM execution_slots x WHERE x.project_id=b.project_id AND x.bead_id=b.id))`).Scan(&ok)
+	return ok, err
+}

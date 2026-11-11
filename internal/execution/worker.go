@@ -67,6 +67,7 @@ func (w *Worker) Run(ctx context.Context) {
 		}(slot, signals[i])
 	}
 	changes := w.Changes
+	var lastWake time.Time
 	for {
 		select {
 		case <-ctx.Done():
@@ -77,6 +78,16 @@ func (w *Worker) Run(ctx context.Context) {
 				changes = nil
 				continue
 			}
+			// Changes arrive several times a second. Wake the slots at most once
+			// a second, and only when some ready bead is unclaimed; each slot's
+			// own ticker still reaps and retries.
+			if time.Since(lastWake) < time.Second {
+				continue
+			}
+			if claimable, e := w.Store.HasClaimableExecution(ctx); e == nil && !claimable {
+				continue
+			}
+			lastWake = time.Now()
 			for _, signal := range signals {
 				select {
 				case signal <- struct{}{}:
