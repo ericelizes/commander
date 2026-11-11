@@ -78,6 +78,12 @@ those in the test child does not change the executing agent's identity. The
 legacy `br` integration requires beads_rust flag compatibility, rather than a
 `br` wrapper that redirects its flags to `bd`.
 
+Checkpoint continuation keeps the recorded provider binding separate from explicit
+runtime intent. `TestExhaustedCapacityScenario` also runs code and knowledge
+question/answer/resume sequences: automatic Claude selection later recovers to
+Codex after exhaustion, while a genuine Claude pin waits without a third run.
+These cases use the real worker, spawner, native host and isolated PostgreSQL.
+
 ## Limits
 
 Usage is provider-report driven; missing reports are unknown, and an unknown

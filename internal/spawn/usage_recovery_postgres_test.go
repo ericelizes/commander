@@ -37,8 +37,13 @@ func TestExhaustedCapacityScenario(t *testing.T) {
 		t.Fatal(e)
 	}
 	for _, kind := range scenario.Kinds {
-		for _, target := range []string{"backup", "codex"} {
+		for _, target := range []string{"backup", "codex", "codex-resume-auto", "codex-resume-pin"} {
 			t.Run(kind+"/"+target, func(t *testing.T) {
+				checkpoint := strings.Contains(target, "resume")
+				pinned := strings.HasSuffix(target, "-pin")
+				if checkpoint {
+					target = "codex"
+				}
 				ctx := context.Background()
 				home := t.TempDir()
 				testguard.NoLeakedProcesses(t, home)
@@ -119,8 +124,11 @@ func TestExhaustedCapacityScenario(t *testing.T) {
 					engine.Close()
 				})
 				inner := spawn.New(st, &opencode.MockClient{}, beads.New(), &agentmail.MockClient{}, &docker.MockClient{}, &tmuxctl.MockClient{}, t.TempDir()).WithNativeExecution(engine)
-				adapter := &runtimeContractSpawner{inner: inner}
+				adapter := &usageScenarioSpawner{inner: inner}
 				worker := execution.Worker{Store: st, Spawner: adapter, Capacity: 1}
+				if checkpoint {
+					write(filepath.Join(fakeDir, "checkpoint-usage"), "question before usage")
+				}
 				if e = worker.PassSlot(ctx, "usage-vm"); e != nil {
 					t.Fatal(e)
 				}
@@ -128,7 +136,69 @@ func TestExhaustedCapacityScenario(t *testing.T) {
 				if first == nil {
 					t.Fatal("missing first execution")
 				}
+				if checkpoint {
+					awaitNative(t, "question prompt", func() bool { s, _ := engine.Status(first.AgentName); return len(s.Pending) > 0 })
+					if pinned {
+						if e = chat.WriteRuntime(home, first.AgentName, chat.RuntimeClaude); e != nil {
+							t.Fatal(e)
+						}
+					}
+					var revision int64
+					if e = st.DB().QueryRow(`SELECT plan_revision FROM bead_tasks WHERE project_id=? AND id='usagelimit'`, pid).Scan(&revision); e != nil {
+						t.Fatal(e)
+					}
+					q, err := st.AskQuestion(ctx, store.QuestionRequest{ProjectID: pid, BeadID: "usagelimit", PlanRevision: revision, Actor: first.AgentName, RunID: first.RunID, Session: first.SessionID, ClientKey: "usage-checkpoint", Question: "Continue?", Checkpoint: "Prepared work", CheckpointRuntime: chat.RuntimeClaude, Blocking: true})
+					if err != nil {
+						t.Fatal(err)
+					}
+					if _, e = st.AnswerQuestion(ctx, q, "commander", "Continue", true); e != nil {
+						t.Fatal(e)
+					}
+					status, _ := engine.Status(first.AgentName)
+					for _, pending := range status.Pending {
+						if e = engine.Approve(ctx, first.AgentName, pending.ID, chat.Decision{Behavior: "allow"}); e != nil {
+							t.Fatal(e)
+						}
+					}
+					awaitNative(t, "question physical exit", func() bool { r, e := st.GetAgentRun(ctx, first.RunID); return e == nil && r.Status == "exited" })
+					if e = worker.PassSlot(ctx, "usage-vm"); e != nil {
+						t.Fatal(e)
+					}
+					resumed := adapter.result
+					if resumed.RunID == first.RunID || resumed.SessionID != first.SessionID {
+						t.Fatalf("checkpoint not resumed: %+v", resumed)
+					}
+					first = resumed
+				}
 				awaitNative(t, "usage-limited physical exit", func() bool { r, e := st.GetAgentRun(ctx, first.RunID); return e == nil && r.Status == "native-error" })
+				if checkpoint {
+					if got := chat.ReadRuntimePin(home, first.AgentName); pinned && got != chat.RuntimeClaude {
+						t.Fatalf("continuation changed runtime intent: pin=%q", got)
+					}
+					if pinned {
+						if e = worker.PassSlot(ctx, "usage-vm"); e == nil {
+							t.Fatal("real Claude pin escaped to Codex")
+						}
+						var runs int
+						if e = st.DB().QueryRow(`SELECT count(*) FROM agent_runs WHERE project_id=?`, pid).Scan(&runs); e != nil || runs != 2 {
+							t.Fatalf("pinned continuation launched another run: %d %v", runs, e)
+						}
+						return
+					}
+					// Only Codex has capacity now; recover directly without changing intent.
+					if e = worker.PassSlot(ctx, "usage-vm"); e != nil {
+						t.Fatal(e)
+					}
+					next := adapter.result
+					if next == nil || next.RunID == first.RunID || next.SessionID == first.SessionID || next.AgentName != first.AgentName || next.Runtime != chat.RuntimeCodex {
+						t.Fatalf("automatic continuation did not recover to Codex: first=%+v next=%+v", first, next)
+					}
+					if got := chat.ReadRuntimePin(home, first.AgentName); got != "" {
+						t.Fatalf("automatic continuation created pin %q", got)
+					}
+					awaitNative(t, "checkpoint recovery completed", func() bool { r, e := st.GetAgentRun(ctx, next.RunID); return e == nil && r.Status == "exited" })
+					return
+				}
 				workspace := dir
 				if kind == "code" {
 					workspace = first.WorktreePath
@@ -206,4 +276,16 @@ func TestExhaustedCapacityScenario(t *testing.T) {
 			})
 		}
 	}
+}
+
+// Preserve the worker's request, including checkpoint binding and explicit intent.
+type usageScenarioSpawner struct {
+	inner  *spawn.Spawner
+	result *spawn.SpawnResult
+}
+
+func (s *usageScenarioSpawner) Spawn(ctx context.Context, req spawn.SpawnRequest) (*spawn.SpawnResult, error) {
+	result, err := s.inner.Spawn(ctx, req)
+	s.result = result
+	return result, err
 }

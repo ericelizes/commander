@@ -74,7 +74,7 @@ func writeOperatorRuntime(req SpawnRequest, agentName, rt string, pinned bool) {
 	if !req.Resume {
 		_ = os.Remove(chat.CodexThreadFile(home, agentName)) // a new run is a new thread
 	}
-	if req.Runtime != "" || pinned {
+	if req.Runtime != "" || pinned || req.ResumeRuntime != "" {
 		_ = chat.WriteEffectiveRuntime(home, agentName, rt)
 	} else {
 		_ = chat.WriteAutoRuntime(home, agentName, rt)

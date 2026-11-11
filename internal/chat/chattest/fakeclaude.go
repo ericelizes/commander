@@ -224,6 +224,8 @@ func (f *fake) turn(text string) int {
 	switch {
 	case strings.Contains(text, "fresh provider conversation"):
 		f.textBlock("", "continued prepared work after usage fallback", 0, false)
+	case strings.Contains(text, "usagelimit") && f.cost == 0 && checkpointUsageFixture(f.dir):
+		f.toolTurn("AskUserQuestion", map[string]any{"questions": []any{map[string]any{"question": "Continue?", "header": "Continue", "multiSelect": false, "options": []any{map[string]any{"label": "yes", "description": "Continue"}, map[string]any{"label": "no", "description": "Wait"}}}}}, nil)
 	case strings.Contains(text, "usagelimit"):
 		f.emit(map[string]any{"type": "rate_limit_event", "rate_limit_info": map[string]any{"status": "rejected", "rateLimitType": "five_hour",
 			"resetsAt": 4102444800, "overageStatus": "rejected", "isUsingOverage": false,
@@ -406,4 +408,10 @@ func (f *fake) longText(deaf bool) bool {
 	f.emit(map[string]any{"type": "assistant", "message": map[string]any{"id": msg, "role": "assistant", "content": []any{map[string]any{"type": "text", "text": "long done"}}}})
 	f.stream("", msg, map[string]any{"type": "content_block_stop", "index": 0})
 	return true
+}
+
+// checkpointUsageFixture opts the private multi-run fixture into a question before exhaustion.
+func checkpointUsageFixture(dir string) bool {
+	_, err := os.Stat(filepath.Join(dir, "checkpoint-usage"))
+	return err == nil
 }

@@ -18,6 +18,7 @@
     "Every affected row shows exhaustion without inventing a holder or reset",
     "Explicit runtime pins, pauses and planning checkpoints remain constraints",
     "Capacity waits do not spend the launch failure budget",
-    "Unknown usage reset remains unknown"
+    "Unknown usage reset remains unknown",
+    "An automatic Claude question/answer continuation never creates a user pin and later usage exhaustion can move to Codex; a genuine Claude pin waits instead"
   ]
 }

@@ -53,7 +53,12 @@ func (s *Spawner) resolveProvider(ctx context.Context, req SpawnRequest, agentNa
 	}
 	asked := req
 	pick := &providerPick{asked: asked, wasCodex: wasOnCodex(req, agentName)}
-	pick.runtime, pick.reason, pick.pinned = pickOperatorRuntime(req, agentName)
+	selection := req
+	// A checkpoint binds this continuation, independently of persistent user intent.
+	if req.ResumeRuntime != "" && !req.UsageRecovery {
+		selection.Runtime = req.ResumeRuntime
+	}
+	pick.runtime, pick.reason, pick.pinned = pickOperatorRuntime(selection, agentName)
 	if req.UsageRecovery && asked.Runtime != "" && pick.runtime != asked.Runtime {
 		return req, fmt.Errorf("%w: pinned runtime %s is unavailable", chat.ErrNoUsage, asked.Runtime)
 	}
@@ -71,7 +76,7 @@ func (s *Spawner) resolveProvider(ctx context.Context, req SpawnRequest, agentNa
 	req.Account = acct
 	req.pick = pick
 	home := agentrt.CommanderHome()
-	mv, err := steerByUsage(home, readUsage(home), usageNow(), req.Runtime, req.Account, usageRuntimeIntent(asked, agentName, pick.reason), asked.Account)
+	mv, err := steerByUsage(home, readUsage(home), usageNow(), req.Runtime, req.Account, usageRuntimeIntent(selection, agentName, pick.reason), asked.Account)
 	if err != nil {
 		return req, fmt.Errorf("spawn: %s: %w: %w", agentName, chat.ErrNoUsage, err)
 	}
@@ -147,6 +152,9 @@ func (s *Spawner) applyUsageMove(ctx context.Context, req SpawnRequest, agentNam
 // task bead not made yet is refused only when both runtimes would be.
 func CheckUsage(req SpawnRequest, agentName, managerRole string) error {
 	req.managerRole = managerRole
+	if req.ResumeRuntime != "" && !req.UsageRecovery {
+		req.Runtime = req.ResumeRuntime
+	}
 	home := agentrt.CommanderHome()
 	usage, now := readUsage(home), usageNow()
 	rt, reason, _ := pickOperatorRuntime(req, agentName)

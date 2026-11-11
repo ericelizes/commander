@@ -47,7 +47,8 @@ func (w *Worker) resumeQuestionCheckpoint(ctx context.Context, c store.Execution
 	if r.ResumeRuntime == "" {
 		return errors.New("question checkpoint has no recorded provider")
 	}
-	r.Runtime = r.ResumeRuntime
+	// Runtime carries explicit intent; ResumeRuntime binds only this continuation.
+	r.Runtime = chat.ReadRuntimePin(agentrt.CommanderHome(), prior.AgentName)
 	if prior.ExecutionDriver == "native" {
 		if prior.ExecutionRuntime != r.ResumeRuntime || prior.ExecutionAccount == "" || prior.ExecutionModel == "" {
 			return errors.New("native checkpoint disagrees with its recorded provider binding")
