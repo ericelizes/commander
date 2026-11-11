@@ -17,7 +17,7 @@ type RuntimePresence struct {
 func (s *Store) RecordRuntimePresence(ctx context.Context, alive map[int64]bool, checked time.Time, native []string) error {
 	return s.WithTx(ctx, func(q Querier) error {
 		if alive == nil {
-			if _, e := q.ExecContext(ctx, `UPDATE run_observations SET checked_at=0 WHERE checked_at<>0`); e != nil {
+			if _, e := q.ExecContext(ctx, `UPDATE run_observations o SET checked_at=0 FROM agent_runs r WHERE r.id=o.run_id AND r.execution_driver<>'native' AND o.checked_at<>0`); e != nil {
 				return e
 			}
 		} else {
@@ -33,7 +33,7 @@ func (s *Store) RecordRuntimePresence(ctx context.Context, alive map[int64]bool,
 			if e != nil {
 				return e
 			}
-			if _, e = q.ExecContext(ctx, `INSERT INTO run_observations(run_id,alive,checked_at) SELECT x.id,x.alive,? FROM jsonb_to_recordset(?::jsonb) AS x(id bigint,alive boolean) ON CONFLICT(run_id) DO UPDATE SET alive=excluded.alive,checked_at=excluded.checked_at WHERE run_observations.alive<>excluded.alive OR run_observations.checked_at<?`, checked.Unix(), string(raw), checked.Add(-30*time.Second).Unix()); e != nil {
+			if _, e = q.ExecContext(ctx, `INSERT INTO run_observations(run_id,alive,checked_at) SELECT x.id,x.alive,? FROM jsonb_to_recordset(?::jsonb) AS x(id bigint,alive boolean) JOIN agent_runs r ON r.id=x.id AND r.execution_driver<>'native' ON CONFLICT(run_id) DO UPDATE SET alive=excluded.alive,checked_at=excluded.checked_at WHERE run_observations.alive<>excluded.alive OR run_observations.checked_at<?`, checked.Unix(), string(raw), checked.Add(-30*time.Second).Unix()); e != nil {
 				return e
 			}
 		}
@@ -41,10 +41,10 @@ func (s *Store) RecordRuntimePresence(ctx context.Context, alive map[int64]bool,
 		if e != nil {
 			return e
 		}
-		if _, e = q.ExecContext(ctx, `INSERT INTO native_presence(role,alive,checked_at) SELECT jsonb_array_elements_text(?::jsonb),TRUE,? ON CONFLICT(role) DO UPDATE SET alive=TRUE,checked_at=excluded.checked_at WHERE NOT native_presence.alive OR native_presence.checked_at<?`, string(raw), time.Now().Unix(), time.Now().Add(-30*time.Second).Unix()); e != nil {
+		if _, e = q.ExecContext(ctx, `INSERT INTO native_presence(role,alive,checked_at) SELECT jsonb_array_elements_text(?::jsonb),TRUE,? ON CONFLICT(role) DO UPDATE SET alive=TRUE,checked_at=excluded.checked_at WHERE native_presence.run_id IS NULL AND (NOT native_presence.alive OR native_presence.checked_at<?)`, string(raw), time.Now().Unix(), time.Now().Add(-30*time.Second).Unix()); e != nil {
 			return e
 		}
-		_, e = q.ExecContext(ctx, `UPDATE native_presence SET alive=FALSE,checked_at=? WHERE alive AND NOT jsonb_exists(?::jsonb,role)`, time.Now().Unix(), string(raw))
+		_, e = q.ExecContext(ctx, `UPDATE native_presence SET alive=FALSE,checked_at=? WHERE alive AND run_id IS NULL AND NOT jsonb_exists(?::jsonb,role)`, time.Now().Unix(), string(raw))
 		return e
 	})
 }
@@ -78,13 +78,13 @@ func (s *Store) RuntimePresence(ctx context.Context) ([]string, []RuntimePresenc
 		return nil, nil, false, e
 	}
 	var stale bool
-	if e = s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM native_presence WHERE alive AND checked_at<?)`, floor).Scan(&stale); e != nil {
+	if e = s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM native_presence n WHERE alive AND checked_at<? AND (n.run_id IS NULL AND NOT EXISTS(SELECT 1 FROM agent_runs r WHERE r.status='running' AND replace(r.agent_name,'.','-')=replace(n.role,'.','-')) OR EXISTS(SELECT 1 FROM agent_runs r JOIN bead_tasks b ON b.active_run_id=r.id WHERE r.id=n.run_id AND r.status='running' AND r.opencode_session_id=n.session_id)))`, floor).Scan(&stale); e != nil {
 		return nil, nil, false, e
 	}
 	if stale {
 		known = false
 	}
-	rows, e = s.db.QueryContext(ctx, `SELECT p.role,COALESCE(a.state,'unknown'),COALESCE(a.detail,'') FROM native_presence p LEFT JOIN agent_state a ON a.role=p.role WHERE p.alive AND p.checked_at>=?`, floor)
+	rows, e = s.db.QueryContext(ctx, `SELECT p.role,COALESCE(a.state,'unknown'),COALESCE(a.detail,'') FROM native_presence p LEFT JOIN LATERAL(SELECT state,detail FROM agent_state a WHERE replace(a.role,'.','-')=replace(p.role,'.','-') ORDER BY updated DESC LIMIT 1)a ON TRUE WHERE p.alive AND p.checked_at>=? AND (p.run_id IS NULL AND NOT EXISTS(SELECT 1 FROM agent_runs r WHERE r.status='running' AND replace(r.agent_name,'.','-')=replace(p.role,'.','-')) OR EXISTS(SELECT 1 FROM agent_runs r JOIN bead_tasks b ON b.active_run_id=r.id WHERE r.id=p.run_id AND r.status='running' AND r.opencode_session_id=p.session_id))`, floor)
 	if e != nil {
 		return nil, nil, false, e
 	}

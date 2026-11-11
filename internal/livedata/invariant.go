@@ -1,7 +1,7 @@
 package livedata
 
 import (
- "slices"
+	"slices"
 	"time"
 
 	"github.com/example-user/commander/internal/beads"
@@ -111,7 +111,10 @@ func (w *rowWorld) OwnerLive(owner string) (string, bool) {
 // rowBead is a row as the one predicate reads it at now (zero: no wait has expired, as a
 // snapshot's text waits carry no deadline to judge).
 func rowBead(r ObjectiveRow, now time.Time) holding.Bead {
- var labels []string;if r.WorkflowCheck!=nil{labels=slices.Clone(r.WorkflowCheck.Bead.Labels)}
+	var labels []string
+	if r.WorkflowCheck != nil {
+		labels = slices.Clone(r.WorkflowCheck.Bead.Labels)
+	}
 	waits := 0
 	for _, w := range r.Waits {
 		if now.IsZero() || beads.WaitHolds(w, now) {
@@ -119,7 +122,7 @@ func rowBead(r ObjectiveRow, now time.Time) holding.Bead {
 		}
 	}
 	return holding.Bead{
- Labels:labels,Queued:r.ExecutionReady&&r.PlanningCommander!="",QuestionWaiting:r.QuestionWaiting,HumanAnswerPending:r.HumanAnswerPending,
+		Labels: labels, Queued: r.ExecutionReady && r.PlanningCommander != "", QuestionWaiting: r.QuestionWaiting, HumanAnswerPending: r.HumanAnswerPending,
 		ID: r.BeadID, Parent: r.ParentBeadID, Status: r.Status, Gate: r.Gate,
 		NeedsUser: r.State == beads.StateNeedsUser, Superseded: r.Superseded,
 		Owner: r.Owner, OwnerState: r.OwnerState, Waits: waits, Untyped: untypedWait(r),
@@ -134,7 +137,7 @@ func rowBead(r ObjectiveRow, now time.Time) holding.Bead {
 func SnapshotViolations(s Snapshot) []Violation {
 	var rows []ObjectiveRow
 	for _, ws := range s.Workstreams {
-		rows = append(rows, ObjectiveRow{QuestionWaiting:ws.QuestionWaiting,HumanAnswerPending:ws.HumanAnswerPending,ExecutionReady:ws.ExecutionReady,PlanningCommander:ws.PlanningCommander,BlockedBy:ws.BlockedBy,BeadID: ws.BeadID, Title: ws.Title, ProjectName: ws.Project, Status: ws.Status, State: ws.State, Owner: ws.Owner})
+		rows = append(rows, ObjectiveRow{QuestionWaiting: ws.QuestionWaiting, HumanAnswerPending: ws.HumanAnswerPending, ExecutionReady: ws.ExecutionReady, PlanningCommander: ws.PlanningCommander, BlockedBy: ws.BlockedBy, BeadID: ws.BeadID, Title: ws.Title, ProjectName: ws.Project, Status: ws.Status, State: ws.State, Owner: ws.Owner})
 		rows = append(rows, workstreamRows(ws)...)
 	}
 	return OpenBeadInvariant(rows, func(owner string) string { return s.Agents[owner].State })
@@ -157,9 +160,9 @@ func workstreamRows(ws SnapWorkstream) []ObjectiveRow {
 	walk = func(parent string, steps []SnapStep) {
 		for _, st := range steps {
 			row := ObjectiveRow{
-				QuestionWaiting:st.QuestionWaiting,HumanAnswerPending:st.HumanAnswerPending,ExecutionReady:st.ExecutionReady,PlanningCommander:st.PlanningCommander,
- BeadID: st.BeadID, ParentBeadID: parent, Title: st.Title, ProjectName: ws.Project, Status: st.Status,
-				WorkflowCheck:st.WorkflowCheck,State: st.State, Owner: st.Owner, OwnerState: st.OwnerState, BlockedBy: st.BlockedBy, Until: st.Until, Gate: st.Gate, Superseded: st.Superseded,
+				QuestionWaiting: st.QuestionWaiting, HumanAnswerPending: st.HumanAnswerPending, ExecutionReady: st.ExecutionReady, PlanningCommander: st.PlanningCommander,
+				BeadID: st.BeadID, ParentBeadID: parent, Title: st.Title, ProjectName: ws.Project, Status: st.Status,
+				WorkflowCheck: st.WorkflowCheck, State: st.State, Owner: st.Owner, OwnerState: st.OwnerState, BlockedBy: st.BlockedBy, Until: st.Until, Gate: st.Gate, Superseded: st.Superseded,
 				Owns: st.ManagerRole != "",
 			}
 			if st.Waiting != "" {

@@ -17,12 +17,12 @@
      "says": ["Claude account work is out of usage until", "nothing was changed"]}
   ],
   "moves": [
-    {"name": "share draw to an out Codex runs on Claude and records it", "project_type": "code", "share": "1",
-     "out": ["codex"], "runtime": "claude", "account": "default", "intent": "", "note": "was headed for Codex"},
+    {"name": "Codex first in the agents' order but out: the agent starts on Claude", "project_type": "code",
+     "out": ["codex"], "runtime": "claude", "account": "default", "intent": "", "note": ""},
     {"name": "crash restart on the role's out account moves and keeps the intent", "project_type": "code", "resume": true,
      "role_account": "work", "out": ["claude:work", "claude:default"], "runtime": "claude", "account": "spare", "intent": "work", "note": "was headed for Claude account work"},
-    {"name": "knowledge Operator drawn to an out Codex runs on Claude", "project_type": "knowledge", "share": "1",
-     "out": ["codex"], "runtime": "claude", "account": "default", "intent": "", "note": "was headed for Codex"},
+    {"name": "knowledge agent with Codex out starts on Claude", "project_type": "knowledge",
+     "out": ["codex"], "runtime": "claude", "account": "default", "intent": "", "note": ""},
     {"name": "knowledge restart on the role's out account moves", "project_type": "knowledge", "resume": true,
      "role_account": "work", "out": ["claude:work", "claude:spare"], "runtime": "claude", "account": "default", "intent": "work", "note": "was headed for Claude account work"},
     {"name": "crash restart with nothing left writes nothing", "project_type": "code", "resume": true, "role_runtime": "codex",

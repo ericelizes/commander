@@ -4,44 +4,103 @@
 package workflowclose
 
 import (
- "context"
- "encoding/json"
- "errors"
- "fmt"
- "maps"
- "regexp"
- "slices"
- "strings"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"maps"
+	"regexp"
+	"slices"
+	"strings"
 
- "github.com/example-user/commander/internal/beads"
- "github.com/example-user/commander/internal/gates"
- "github.com/example-user/commander/internal/workflowtemplate"
+	"github.com/example-user/commander/internal/beads"
+	"github.com/example-user/commander/internal/gates"
+	"github.com/example-user/commander/internal/workflowtemplate"
 )
 
 // Verifier has no process-global actor or mutable test hooks. Authority and
 // provenance readers are supplied by the owning CLI or service integration.
 type Verifier struct {
- RecheckRetired bool
- GH workflowtemplate.GHRunner
- Repo func(string) string
- FreshDetails func(context.Context, beads.Client, string, []string) (map[string]beads.Detail, error)
- TaskRoles func(context.Context, string, string) ([]string, error)
- OperatorCommits func(context.Context, string, string, []string) (map[string]string, error)
- LoadResults func(context.Context, string, string, *workflowtemplate.Review) error
- FileFollowUps func(context.Context, beads.Client, string, beads.Bead, string, string, string, string, []workflowtemplate.ReviewFinding) ([]string, error)
- ResolveAddendum func(context.Context, beads.Client, string, string, beads.Bead, string, workflowtemplate.WriterBinding, workflowtemplate.Head, *workflowtemplate.Proof, workflowtemplate.Review) error
- Warn func(string)
+	RecheckRetired  bool
+	GH              workflowtemplate.GHRunner
+	Repo            func(string) string
+	FreshDetails    func(context.Context, beads.Client, string, []string) (map[string]beads.Detail, error)
+	TaskRoles       func(context.Context, string, string) ([]string, error)
+	OperatorCommits func(context.Context, string, string, []string) (map[string]string, error)
+	LoadResults     func(context.Context, string, string, *workflowtemplate.Review) error
+	FileFollowUps   func(context.Context, beads.Client, string, beads.Bead, string, string, string, string, []workflowtemplate.ReviewFinding) ([]string, error)
+	ResolveAddendum func(context.Context, beads.Client, string, string, beads.Bead, string, workflowtemplate.WriterBinding, workflowtemplate.Head, *workflowtemplate.Proof, workflowtemplate.Review) error
+	Warn            func(string)
 }
-func(v Verifier) gh()workflowtemplate.GHRunner{if v.GH!=nil{return v.GH};return workflowtemplate.RunGH}
-func(v Verifier) repo(dir string)string{if v.Repo!=nil{return v.Repo(dir)};return ""}
-func(v Verifier) details(ctx context.Context,bc beads.Client,dir string,ids []string)(map[string]beads.Detail,error){if v.FreshDetails!=nil{return v.FreshDetails(ctx,bc,dir,ids)};return beads.FreshDetails(ctx,bc,dir,ids)}
-func(v Verifier) warn(message string){if v.Warn!=nil{v.Warn(message)}}
-func(v Verifier) operatorCommits(ctx context.Context,project,task string,shas []string)(map[string]string,error){if v.OperatorCommits==nil{return nil,errors.New("workflow completion requires immutable commit provenance")};return v.OperatorCommits(ctx,project,task,shas)}
-func(v Verifier) loadResults(ctx context.Context,project,task string,r *workflowtemplate.Review)error{if v.LoadResults==nil{return errors.New("workflow completion requires sealed review provenance")};return v.LoadResults(ctx,project,task,r)}
-func(v Verifier) fileFollowUps(ctx context.Context,bc beads.Client,dir string,block beads.Bead,instance,step,review,head string,f []workflowtemplate.ReviewFinding)([]string,error){if v.FileFollowUps==nil{return nil,errors.New("workflow completion requires durable minor follow-ups")};return v.FileFollowUps(ctx,bc,dir,block,instance,step,review,head,f)}
-func(v Verifier) resolveAddendum(ctx context.Context,bc beads.Client,dir,project string,block beads.Bead,step string,b workflowtemplate.WriterBinding,h workflowtemplate.Head,p *workflowtemplate.Proof,r workflowtemplate.Review)error{if v.ResolveAddendum==nil{return errors.New("workflow completion requires attributed addendum validation")};return v.ResolveAddendum(ctx,bc,dir,project,block,step,b,h,p,r)}
-func(v Verifier) rolesInScope(ctx context.Context,bc beads.Client,dir,project,root,task string)([]string,error){other,e:=v.Root(ctx,bc,dir,task);if e!=nil{return nil,e};if other!=root{return nil,fmt.Errorf("task %s is outside workstream %s",task,root)};if v.TaskRoles==nil{return nil,errors.New("workflow completion requires immutable task-run provenance")};return v.TaskRoles(ctx,project,task)}
-func roleOverlap(a,b []string)bool{for _,r:=range a{if slices.Contains(b,r){return true}};return false}
+
+func (v Verifier) gh() workflowtemplate.GHRunner {
+	if v.GH != nil {
+		return v.GH
+	}
+	return workflowtemplate.RunGH
+}
+func (v Verifier) repo(dir string) string {
+	if v.Repo != nil {
+		return v.Repo(dir)
+	}
+	return ""
+}
+func (v Verifier) details(ctx context.Context, bc beads.Client, dir string, ids []string) (map[string]beads.Detail, error) {
+	if v.FreshDetails != nil {
+		return v.FreshDetails(ctx, bc, dir, ids)
+	}
+	return beads.FreshDetails(ctx, bc, dir, ids)
+}
+func (v Verifier) warn(message string) {
+	if v.Warn != nil {
+		v.Warn(message)
+	}
+}
+func (v Verifier) operatorCommits(ctx context.Context, project, task string, shas []string) (map[string]string, error) {
+	if v.OperatorCommits == nil {
+		return nil, errors.New("workflow completion requires immutable commit provenance")
+	}
+	return v.OperatorCommits(ctx, project, task, shas)
+}
+func (v Verifier) loadResults(ctx context.Context, project, task string, r *workflowtemplate.Review) error {
+	if v.LoadResults == nil {
+		return errors.New("workflow completion requires sealed review provenance")
+	}
+	return v.LoadResults(ctx, project, task, r)
+}
+func (v Verifier) fileFollowUps(ctx context.Context, bc beads.Client, dir string, block beads.Bead, instance, step, review, head string, f []workflowtemplate.ReviewFinding) ([]string, error) {
+	if v.FileFollowUps == nil {
+		return nil, errors.New("workflow completion requires durable minor follow-ups")
+	}
+	return v.FileFollowUps(ctx, bc, dir, block, instance, step, review, head, f)
+}
+func (v Verifier) resolveAddendum(ctx context.Context, bc beads.Client, dir, project string, block beads.Bead, step string, b workflowtemplate.WriterBinding, h workflowtemplate.Head, p *workflowtemplate.Proof, r workflowtemplate.Review) error {
+	if v.ResolveAddendum == nil {
+		return errors.New("workflow completion requires attributed addendum validation")
+	}
+	return v.ResolveAddendum(ctx, bc, dir, project, block, step, b, h, p, r)
+}
+func (v Verifier) rolesInScope(ctx context.Context, bc beads.Client, dir, project, root, task string) ([]string, error) {
+	other, e := v.Root(ctx, bc, dir, task)
+	if e != nil {
+		return nil, e
+	}
+	if other != root {
+		return nil, fmt.Errorf("task %s is outside workstream %s", task, root)
+	}
+	if v.TaskRoles == nil {
+		return nil, errors.New("workflow completion requires immutable task-run provenance")
+	}
+	return v.TaskRoles(ctx, project, task)
+}
+func roleOverlap(a, b []string) bool {
+	for _, r := range a {
+		if slices.Contains(b, r) {
+			return true
+		}
+	}
+	return false
+}
 
 // workflowNodes reads what a close of id is judged on and nothing else, fresh, so
 // its cost follows the bead's own edges and never the size of the project. A failed
@@ -217,7 +276,9 @@ func (v Verifier) Check(ctx context.Context, bc beads.Client, dir, project, id s
 // recorded on it. Any other finding still refuses.
 func (v Verifier) CheckWaiving(ctx context.Context, bc beads.Client, dir, project, id string, w *NoPRWaiver) error {
 	// Caller supplies an uncached reader; transaction-bound clients must remain bound.
- if v.RecheckRetired{bc=completionView{Client:bc,target:id}}
+	if v.RecheckRetired {
+		bc = completionView{Client: bc, target: id}
+	}
 	var seen settleSeen
 	err := v.checkOnce(ctx, bc, dir, project, id, &seen, w)
 	if err == nil || seen.pr == "" {
@@ -313,7 +374,9 @@ func (v Verifier) checkOnce(ctx context.Context, bc beads.Client, dir, project, 
 				return fmt.Errorf("workflow step %s still needs closed predecessor %s", id, dep)
 			}
 		}
-  if settled,settleErr:=v.checkSettlement(ctx,bc,dir,project,n,block,instance,step);settled||settleErr!=nil{return settleErr}
+		if settled, settleErr := v.checkSettlement(ctx, bc, dir, project, n, block, instance, step); settled || settleErr != nil {
+			return settleErr
+		}
 		binding, err := workflowtemplate.Binding(block.Comments)
 		if err != nil {
 			return err
@@ -551,8 +614,7 @@ func (v Verifier) checkOnce(ctx context.Context, bc beads.Client, dir, project, 
 	return nil
 }
 
-
-func(v Verifier) Root(ctx context.Context, bc beads.Client, dir, id string) (string, error) {
+func (v Verifier) Root(ctx context.Context, bc beads.Client, dir, id string) (string, error) {
 	seen := map[string]bool{}
 	for id != "" {
 		if seen[id] {
@@ -584,8 +646,11 @@ func(v Verifier) Root(ctx context.Context, bc beads.Client, dir, id string) (str
 
 // NoPRWaiver is an already-authorized waiver, never inferred from an arbitrary
 // comment. The caller must validate the actor and recorded user authority.
-type NoPRWaiver struct{By,Reason,Evidence string}
-func(w *NoPRWaiver)Comment()string{return fmt.Sprintf("merge rule waived for a ship with no PR by %s: %s. Approval: %s",w.By,w.Reason,w.Evidence)}
+type NoPRWaiver struct{ By, Reason, Evidence string }
+
+func (w *NoPRWaiver) Comment() string {
+	return fmt.Sprintf("merge rule waived for a ship with no PR by %s: %s. Approval: %s", w.By, w.Reason, w.Evidence)
+}
 
 // onlyNoPR: every finding is target id's "has no PR yet".
 func onlyNoPR(findings []workflowtemplate.Finding, id string) bool {
@@ -613,4 +678,3 @@ func namesPR(b beads.Bead) bool {
 	}
 	return false
 }
-

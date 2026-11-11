@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"slices"
 	"strings"
 	"time"
 
@@ -48,6 +49,11 @@ func (s *Spawner) resolveProvider(ctx context.Context, req SpawnRequest, agentNa
 	pick := &providerPick{asked: asked, wasCodex: wasOnCodex(req, agentName)}
 	pick.runtime, pick.reason, pick.pinned = pickOperatorRuntime(req, agentName)
 	req.Runtime, req.runtimeReason = pick.runtime, pick.reason
+	if pick.reason == ReasonAgentAccounts && req.Account == "" {
+		if p, ok := firstAgentAccount(req); ok && p.Account != "" && slices.Contains(agentOrder(req), p.Account) {
+			req.Account = p.Account
+		}
+	}
 	acct, err := pickOperatorAccount(req, agentName)
 	if err != nil {
 		return req, fmt.Errorf("spawn: %w", err)
@@ -133,7 +139,7 @@ func CheckUsage(req SpawnRequest, agentName, managerRole string) error {
 	usage, now := readUsage(home), usageNow()
 	rt, _, _ := pickOperatorRuntime(req, agentName)
 	runtimes := []string{rt}
-	if req.TaskBeadID == "" && rt == chat.RuntimeClaude && shareMayDraw(req) {
+	if rt == chat.RuntimeClaude && req.Runtime == "" && req.Account == "" && !req.Resume && slices.Contains(agentOrder(req), chat.RuntimeCodex) && codexHooksReady() {
 		runtimes = append(runtimes, chat.RuntimeCodex)
 	}
 	var err error

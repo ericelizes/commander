@@ -47,6 +47,9 @@ type Options struct {
 	Costs    CostSink // optional: per-turn cost of each role
 	// OnUsageMove, when set, is told of every move a usage limit made (role, text).
 	OnUsageMove func(role, text string)
+	// AccountOrder is a kind's saved account order (store.AgentAccounts);
+	// nil or empty = store.DefaultAgentAccounts.
+	AccountOrder func(ctx context.Context, kind string) ([]string, error)
 	// CodexHooksReady gates a Manager's move onto Codex; default CodexHooksReady.
 	CodexHooksReady func() bool
 	// Usage keeps the latest plan usage per account; default OpenUsage(Home).

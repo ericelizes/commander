@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/example-user/commander/internal/agentrt"
 	"github.com/example-user/commander/internal/beads"
 	"github.com/example-user/commander/internal/chat"
 	"github.com/example-user/commander/internal/claudeacct"
@@ -283,8 +282,9 @@ func TestCheckUsage(t *testing.T) {
 	if len(after) != len(before) {
 		t.Fatalf("CheckUsage wrote: %d -> %d files", len(before), len(after))
 	}
-	// Codex has usage and the draw may pick it: not refused before the bead.
-	t.Setenv(agentrt.CodexShareEnvVar, "0.5")
+	// Codex has usage and the order may pick it: not refused.
+	useAgentOrder(t, chat.RuntimeCodex, chat.RuntimeClaude)
+	codexSignedIn(t)
 	if err := CheckUsage(SpawnRequest{TaskText: "fix it"}, "", "manager-sample-1"); err != nil {
 		t.Fatalf("draw could land on Codex: %v", err)
 	}
@@ -365,13 +365,15 @@ func TestSpawnCodeHost_CodexOutRunsClaude(t *testing.T) {
 		t.Fatalf("named Codex while out: %v", err)
 	}
 
-	t.Setenv(agentrt.CodexShareEnvVar, "1")
+	// Unnamed: the order skips the out Codex and runs on its Claude fallback.
+	useAgentOrder(t, chat.RuntimeCodex, chat.RuntimeClaude)
+	codexSignedIn(t)
 	req = goodRequest(t, dir)
 	res, err := sp.Spawn(context.Background(), req)
 	if err != nil {
 		t.Fatalf("Spawn: %v", err)
 	}
-	if res.Runtime != chat.RuntimeClaude || !strings.Contains(res.Moved, "Codex is out of usage") {
+	if res.Runtime != chat.RuntimeClaude {
 		t.Fatalf("result %s %q", res.Runtime, res.Moved)
 	}
 	if cmd := launcherCmd(t, dir); strings.Contains(cmd, "__codex-bridge") {
@@ -389,7 +391,8 @@ func TestRefusedSpawnRecordsNoUsageMove(t *testing.T) {
 	sp, _, bd, _, _, _ := newHostSpawner(t, dir)
 	home := os.Getenv("COMMANDER_HOME")
 	markOut(t, home, chat.RuntimeCodex, "")
-	t.Setenv(agentrt.CodexShareEnvVar, "1")
+	useAgentOrder(t, chat.RuntimeCodex, chat.RuntimeClaude)
+	codexSignedIn(t)
 	current, err := exec.Command("git", "-C", dir, "branch", "--show-current").Output()
 	if err != nil {
 		t.Fatal(err)
@@ -433,7 +436,7 @@ func TestSpawnRecordsTheUsageMove(t *testing.T) {
 	codexHooksReady = func() bool { return true }
 	t.Cleanup(func() { codexHooksReady = old })
 	for _, projectType := range []string{"code", "knowledge"} {
-		for _, move := range []string{"codex-out", "account-out"} {
+		for _, move := range []string{"account-out"} {
 			t.Run(projectType+"/"+move, func(t *testing.T) {
 				dir := makeGitRepo(t)
 				sp, _, bd, _, _, _ := newHostSpawner(t, dir)
@@ -445,20 +448,13 @@ func TestSpawnRecordsTheUsageMove(t *testing.T) {
 					req.Branch = ""
 					role = "operator-" + flatTask("bd-100")
 				}
-				wantIntent, wantNote := "", "was headed for Codex"
-				if move == "codex-out" {
-					// A share draw to Codex while Codex is out.
-					markOut(t, home, chat.RuntimeCodex, "")
-					t.Setenv(agentrt.CodexShareEnvVar, "1")
-				} else {
-					// A crash restart on the role's out account.
-					if err := chat.WriteAccount(home, role, "work"); err != nil {
-						t.Fatal(err)
-					}
-					markOut(t, home, chat.RuntimeClaude, "work")
-					req.Resume = true
-					wantIntent, wantNote = "work", "was headed for Claude account work"
+				// A crash restart on the role's out account.
+				if err := chat.WriteAccount(home, role, "work"); err != nil {
+					t.Fatal(err)
 				}
+				markOut(t, home, chat.RuntimeClaude, "work")
+				req.Resume = true
+				wantIntent, wantNote := "work", "was headed for Claude account work"
 				res, err := sp.Spawn(context.Background(), req)
 				if err != nil {
 					t.Fatalf("Spawn: %v", err)

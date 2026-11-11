@@ -266,3 +266,17 @@ ALTER TABLE agent_runs ADD COLUMN execution_driver TEXT NOT NULL DEFAULT '' CHEC
 ALTER TABLE agent_runs ADD COLUMN execution_runtime TEXT NOT NULL DEFAULT '' CHECK(execution_runtime IN('','claude','codex'));
 ALTER TABLE agent_runs ADD COLUMN execution_account TEXT NOT NULL DEFAULT '';
 ALTER TABLE agent_runs ADD COLUMN execution_model TEXT NOT NULL DEFAULT '';
+
+-- Native presence binds a process to a run/session; NULL is a logical planner.
+ALTER TABLE native_presence ADD COLUMN run_id BIGINT REFERENCES agent_runs(id);
+ALTER TABLE native_presence ADD COLUMN session_id TEXT NOT NULL DEFAULT '';
+
+-- Which accounts each kind of agent runs on, in order: the first with usage
+-- left is used. An entry is a provider ("claude" = any Claude account,
+-- "codex") or one account's name. No row = the built-in default.
+CREATE TABLE agent_accounts (
+ kind TEXT PRIMARY KEY CHECK(kind IN('commander','agent')),
+ accounts JSONB NOT NULL CHECK(jsonb_typeof(accounts)='array' AND jsonb_array_length(accounts)>0),
+ updated_at BIGINT NOT NULL
+);
+CREATE TRIGGER agent_accounts_events AFTER INSERT OR UPDATE ON agent_accounts FOR EACH ROW EXECUTE FUNCTION commander_state_event();

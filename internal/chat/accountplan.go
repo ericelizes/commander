@@ -6,56 +6,31 @@ import (
 	"os"
 	"path/filepath"
 	"time"
-
-	"github.com/example-user/commander/internal/claudeacct"
 )
 
-// Commander treats a chosen account as a preference. At a limit it can use
-// any connected account, regardless of provider, and retains that preference.
-func planChatStart(home, role string, fresh bool, usage map[string]Usage, now time.Time, hooksReady func() bool) (managerPlan, error) {
+// Commander runs on the first account in its order (store.AgentAccounts) that
+// has usage left. A person's explicit choice in the chat comes first while it
+// has usage, and is kept across a move.
+func planChatStart(home, role string, fresh bool, usage map[string]Usage, now time.Time, hooksReady func() bool, order []string) (managerPlan, error) {
 	if !IsCommanderRole(role) {
 		return planManagerStart(home, role, fresh, usage, now, hooksReady)
 	}
-	cur := ProviderOf(home, role)
 	pin := ManagerPin(home, role)
 	want := ReadAccountIntent(home, role)
 	if want == "" {
 		want = ReadAccount(home, role)
 	}
-	preferred := cur
-	if pin != "" {
-		preferred.Runtime = pin
-	}
-	preferred.Account = want
 	accounts := Accounts(home, usage, now)
-	available := func(p Provider) bool {
-		for _, a := range accounts {
-			if a.Runtime != p.Runtime || (p.Runtime == RuntimeClaude && a.Name != p.Account) {
-				continue
-			}
-			if !a.LoggedIn || a.DuplicateOf != "" || (a.Usage != nil && a.Usage.Out(now)) {
-				return false
-			}
-			if p.Runtime == RuntimeCodex {
-				return hooksReady()
-			}
-			// Separate profiles for one login share the same usage limit.
-			for _, b := range accounts {
-				if b.Runtime == RuntimeClaude && b.Usage != nil && b.Usage.Out(now) &&
-					claudeacct.SameIdentity(claudeacct.Account{LoggedIn: a.LoggedIn, Email: a.Email, AccountUUID: a.AccountUUID}, claudeacct.Account{LoggedIn: b.LoggedIn, Email: b.Email, AccountUUID: b.AccountUUID}) {
-					return false
-				}
-			}
-			return true
-		}
-		return false
+	var candidates []Provider
+	switch {
+	case pin == RuntimeCodex:
+		candidates = append(candidates, Provider{Runtime: RuntimeCodex})
+	case pin == RuntimeClaude || fileExists(AccountFile(home, role)):
+		candidates = append(candidates, Provider{Runtime: RuntimeClaude, Account: want})
 	}
-	candidates := []Provider{preferred, cur}
-	for _, a := range accounts {
-		candidates = append(candidates, Provider{Runtime: a.Runtime, Account: a.Name})
-	}
+	candidates = append(candidates, OrderAccounts(order, accounts)...)
 	for _, p := range candidates {
-		if !available(p) {
+		if !AccountAvailable(p, accounts, now, hooksReady) {
 			continue
 		}
 		plan := managerPlan{runtime: p.Runtime, pin: pin, leave: "account unavailable"}

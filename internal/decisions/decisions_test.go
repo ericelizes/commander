@@ -113,11 +113,24 @@ func TestDeliver_OncePerContextAndScopedToTheManager(t *testing.T) {
 	}
 }
 
-func TestScopedCommanderRetainsStandingUserDecisions(t *testing.T){
- home:=t.TempDir()
- if _,e:=Add(home,Decision{Words:"Keep the release hold",Scope:Global},now);e!=nil{t.Fatal(e)}
- if _,e:=Add(home,Decision{Words:"Keep this branch paused",Scope:"urgent-work"},now);e!=nil{t.Fatal(e)}
- all,e:=Load(home);if e!=nil{t.Fatal(e)}
- if got:=ForRole(all,"commander-urgent");len(got)!=2{t.Fatalf("scoped Commander lost standing direction: %+v",got)}
- text,commit:=Deliver(home,"commander-urgent",now);if !strings.Contains(text,"Keep the release hold")||!strings.Contains(text,"Keep this branch paused"){t.Fatal("standing directions were absent from its turn",text)};commit()
+func TestScopedCommanderRetainsStandingUserDecisions(t *testing.T) {
+	home := t.TempDir()
+	if _, e := Add(home, Decision{Words: "Keep the release hold", Scope: Global}, now); e != nil {
+		t.Fatal(e)
+	}
+	if _, e := Add(home, Decision{Words: "Keep this branch paused", Scope: "urgent-work"}, now); e != nil {
+		t.Fatal(e)
+	}
+	all, e := Load(home)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if got := ForRole(all, "commander-urgent"); len(got) != 2 {
+		t.Fatalf("scoped Commander lost standing direction: %+v", got)
+	}
+	text, commit := Deliver(home, "commander-urgent", now)
+	if !strings.Contains(text, "Keep the release hold") || !strings.Contains(text, "Keep this branch paused") {
+		t.Fatal("standing directions were absent from its turn", text)
+	}
+	commit()
 }

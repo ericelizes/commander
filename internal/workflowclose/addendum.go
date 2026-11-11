@@ -1,16 +1,18 @@
 package workflowclose
+
 import (
- "context"
- "encoding/json"
- "fmt"
- "slices"
- "strings"
- "time"
- "github.com/example-user/commander/internal/beads"
- "github.com/example-user/commander/internal/spawn"
- "github.com/example-user/commander/internal/store"
- "github.com/example-user/commander/internal/workflowtemplate"
+	"context"
+	"encoding/json"
+	"fmt"
+	"github.com/example-user/commander/internal/beads"
+	"github.com/example-user/commander/internal/spawn"
+	"github.com/example-user/commander/internal/store"
+	"github.com/example-user/commander/internal/workflowtemplate"
+	"slices"
+	"strings"
+	"time"
 )
+
 func addendumComment(ctx context.Context, bc beads.Client, dir string, ref workflowtemplate.CommentRef) (beads.Comment, error) {
 	cs, err := bc.Comments(ctx, dir, ref.Bead)
 	if err != nil {
@@ -76,11 +78,16 @@ func ownerBeadOf(actor string, owners []string) string {
 	return ""
 }
 
-func(p Provenance) ValidateAddendum(ctx context.Context,bc beads.Client,dir,project string,block beads.Bead,stepID string,binding workflowtemplate.WriterBinding,r workflowtemplate.AddendumRecord,h workflowtemplate.Head,review workflowtemplate.Review)error{return p.validateAddendum(ctx,bc,dir,project,block,stepID,binding,r,h,review,false)}
+func (p Provenance) ValidateAddendum(ctx context.Context, bc beads.Client, dir, project string, block beads.Bead, stepID string, binding workflowtemplate.WriterBinding, r workflowtemplate.AddendumRecord, h workflowtemplate.Head, review workflowtemplate.Review) error {
+	return p.validateAddendum(ctx, bc, dir, project, block, stepID, binding, r, h, review, false)
+}
+
 // ValidateNewAddendum checks current ownership before recording; stored records
 // instead carry immutable service attribution and survive subsequent handoffs.
-func(p Provenance) ValidateNewAddendum(ctx context.Context,bc beads.Client,dir,project string,block beads.Bead,stepID string,binding workflowtemplate.WriterBinding,r workflowtemplate.AddendumRecord,h workflowtemplate.Head,review workflowtemplate.Review)error{return p.validateAddendum(ctx,bc,dir,project,block,stepID,binding,r,h,review,true)}
-func(p Provenance) validateAddendum(ctx context.Context, bc beads.Client, dir, project string, block beads.Bead, stepID string, binding workflowtemplate.WriterBinding, r workflowtemplate.AddendumRecord, h workflowtemplate.Head, review workflowtemplate.Review,recording bool) error {
+func (p Provenance) ValidateNewAddendum(ctx context.Context, bc beads.Client, dir, project string, block beads.Bead, stepID string, binding workflowtemplate.WriterBinding, r workflowtemplate.AddendumRecord, h workflowtemplate.Head, review workflowtemplate.Review) error {
+	return p.validateAddendum(ctx, bc, dir, project, block, stepID, binding, r, h, review, true)
+}
+func (p Provenance) validateAddendum(ctx context.Context, bc beads.Client, dir, project string, block beads.Bead, stepID string, binding workflowtemplate.WriterBinding, r workflowtemplate.AddendumRecord, h workflowtemplate.Head, review workflowtemplate.Review, recording bool) error {
 	if r.ID == "" || r.Project != project || r.Block != block.ID || r.Step != stepID || r.Binding != binding.Revision || r.Assessment.Head != h.SHA || r.Assessment.Base != h.Base || binding.Head != h.SHA || r.Assessment.Original.Bead != review.ID {
 		return fmt.Errorf("addendum identity, head, base or writer revision differs")
 	}
@@ -88,7 +95,9 @@ func(p Provenance) validateAddendum(ctx context.Context, bc beads.Client, dir, p
 	if err != nil {
 		return err
 	}
- if err=p.addendumPrincipal(ctx,bc,dir,project,block,root,r,recording);err!=nil{return err}
+	if err = p.addendumPrincipal(ctx, bc, dir, project, block, root, r, recording); err != nil {
+		return err
+	}
 
 	if _, err = time.Parse(time.RFC3339Nano, r.RecordedAt); err != nil {
 		return fmt.Errorf("invalid recording time")
@@ -169,7 +178,7 @@ func(p Provenance) validateAddendum(ctx context.Context, bc beads.Client, dir, p
 	return workflowtemplate.VerifyAddendumArtifacts(a, original.Text)
 }
 
-func(src Provenance) ResolveAddendum(ctx context.Context, bc beads.Client, dir, project string, block beads.Bead, stepID string, binding workflowtemplate.WriterBinding, h workflowtemplate.Head, p *workflowtemplate.Proof, review workflowtemplate.Review) error {
+func (src Provenance) ResolveAddendum(ctx context.Context, bc beads.Client, dir, project string, block beads.Bead, stepID string, binding workflowtemplate.WriterBinding, h workflowtemplate.Head, p *workflowtemplate.Proof, review workflowtemplate.Review) error {
 	cs, err := bc.Comments(ctx, dir, block.ID)
 	if err != nil {
 		return err
@@ -199,24 +208,49 @@ func(src Provenance) ResolveAddendum(ctx context.Context, bc beads.Client, dir, 
 	return src.ValidateAddendum(ctx, bc, dir, project, block, stepID, binding, record, h, review)
 }
 
-
-func(p Provenance) addendumPrincipal(ctx context.Context,bc beads.Client,dir,project string,block beads.Bead,root string,r workflowtemplate.AddendumRecord,recording bool)error{
- if p.Canonical{
-  pid,_,e:=p.project(ctx,project);if e!=nil{return e}
-  if recording{
-   var owner string;var registered bool
-   e=p.Q.QueryRowContext(ctx,`SELECT commander_planning_owner(?,?),EXISTS(SELECT 1 FROM commander_sessions WHERE agent_id=?)`,pid,block.ID,r.Actor).Scan(&owner,&registered)
-   if e!=nil{return e};if !registered||owner!=r.Actor{return fmt.Errorf("addendum recorder is not the current planning Commander")};return nil
-  }
-  stamped,e:=beads.RecordedReviewAddendum(ctx,p.Q,pid,block.ID,r.Actor,r.Comment());if e!=nil{return e};if stamped{return nil}
-  // Preserve only the pre-jurisdiction Manager attribution path for legacy
-  // history. A current Commander record always needs its canonical stamp.
-  if !strings.HasPrefix(r.Actor,"manager-"){return fmt.Errorf("addendum has no service-recorded planning authority")}
- }
- owners,e:=recordedOwnerRoles(ctx,bc,dir,block.ID,root);if e!=nil{return e}
- owner:=ownerBeadOf(r.Actor,owners);if owner==""{return fmt.Errorf("addendum recording principal is not owning registered Manager")}
- var registered string
- e=p.Q.QueryRowContext(ctx,`SELECT m.am_role FROM workstream_managers m JOIN projects p ON p.id=m.project_id WHERE p.name=? AND m.workstream_bead_id=?`,project,owner).Scan(&registered)
- if e!=nil||registered!=store.WorkstreamManagerRole(owner)||spawn.CanonicalRole(r.Actor)!=spawn.CanonicalRole(registered){return fmt.Errorf("addendum recording principal is not owning registered Manager")}
- return nil
+func (p Provenance) addendumPrincipal(ctx context.Context, bc beads.Client, dir, project string, block beads.Bead, root string, r workflowtemplate.AddendumRecord, recording bool) error {
+	if p.Canonical {
+		pid, _, e := p.project(ctx, project)
+		if e != nil {
+			return e
+		}
+		if recording {
+			var owner string
+			var registered bool
+			e = p.Q.QueryRowContext(ctx, `SELECT commander_planning_owner(?,?),EXISTS(SELECT 1 FROM commander_sessions WHERE agent_id=?)`, pid, block.ID, r.Actor).Scan(&owner, &registered)
+			if e != nil {
+				return e
+			}
+			if !registered || owner != r.Actor {
+				return fmt.Errorf("addendum recorder is not the current planning Commander")
+			}
+			return nil
+		}
+		stamped, e := beads.RecordedReviewAddendum(ctx, p.Q, pid, block.ID, r.Actor, r.Comment())
+		if e != nil {
+			return e
+		}
+		if stamped {
+			return nil
+		}
+		// Preserve only the pre-jurisdiction Manager attribution path for legacy
+		// history. A current Commander record always needs its canonical stamp.
+		if !strings.HasPrefix(r.Actor, "manager-") {
+			return fmt.Errorf("addendum has no service-recorded planning authority")
+		}
+	}
+	owners, e := recordedOwnerRoles(ctx, bc, dir, block.ID, root)
+	if e != nil {
+		return e
+	}
+	owner := ownerBeadOf(r.Actor, owners)
+	if owner == "" {
+		return fmt.Errorf("addendum recording principal is not owning registered Manager")
+	}
+	var registered string
+	e = p.Q.QueryRowContext(ctx, `SELECT m.am_role FROM workstream_managers m JOIN projects p ON p.id=m.project_id WHERE p.name=? AND m.workstream_bead_id=?`, project, owner).Scan(&registered)
+	if e != nil || registered != store.WorkstreamManagerRole(owner) || spawn.CanonicalRole(r.Actor) != spawn.CanonicalRole(registered) {
+		return fmt.Errorf("addendum recording principal is not owning registered Manager")
+	}
+	return nil
 }

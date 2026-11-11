@@ -692,6 +692,49 @@ HTTP write interface, code worktree, detached native host and fake Claude proces
 for code and knowledge work. It proves committed-start recovery, same-PID daemon
 adoption, one first-turn journal entry, immutable provider selection and physical
 exit. A separate actual fake Codex host test covers native exit and fresh thread
-identity. The actual Worker-to-Codex path and native checkpoint continuation need
-additional full-flow verification, as do legacy process attestation/drain,
-ceiling enforcement, plan revocation, activation preflight and sidebar behavior.
+identity. The actual Worker-to-Codex and checkpoint paths are now exercised below.
+Release verification still includes legacy process attestation/drain,
+plan revocation, activation preflight and sidebar behavior.
+
+Per-agent cost ceilings are not a release requirement: production enforces
+none today (the old watchdog only consumed opencode streams), and subscription
+accounts make dollar caps misleading. Usage is recorded per run, and the
+account order (store.AgentAccounts) moves new work off an account that runs out.
+
+Accounts are generic: each is a Claude or Codex login. store.AgentAccounts maps
+each kind of agent to an ordered list of accounts, editable in Settings, Agents.
+Defaults: Commander on any Claude account with Codex as fallback; execution
+agents on Codex with Claude as fallback.
+
+
+### Native checkpoint continuation
+
+Checkpoint resume reads the source run's driver, session, provider, account and
+model from PostgreSQL. The worker carries that binding into a new capacity
+reservation and run; the binding transaction rejects a silent provider/account
+change. Derived role session files and mutable provider preferences do not grant
+or revoke native checkpoint authority. The question CLI also reads the actual
+native provider and session thread from that run, so preference changes cannot
+corrupt the saved answer's checkpoint. Nonblocking questions need no paused
+conversation cursor.
+
+Code checkpoints reuse the existing guarded worktree and branch, preserving
+prepared files and commits. They never attempt to recreate or reset an already
+checked-out checkpoint branch. Claude continuation requires its actual transcript
+at both preparation and final engine launch. Codex continuation uses its exact
+saved thread; a missing derived cursor can be restored from the recorded
+checkpoint, but an existing different cursor is refused. A validated legacy
+Codex checkpoint may promote that exact cursor into the immutable session path.
+The bridge receives require-resume: missing, rejected or different-thread server
+responses fail instead of falling back to thread/start. A restored cursor does
+not itself prove the conversation exists; the provider must accept resume.
+
+The native-checkpoint and native-worker scenarios cover actual Worker/Spawner/
+PostgreSQL/HTTP/native-host/fake-provider flows for code and knowledge work on
+Claude and Codex. They delete derived session/chat metadata/cursors, alter role
+preferences, preserve a code commit and prepared files, and verify same-session
+Claude --resume or exact-thread Codex thread/resume. Unit and CLI tests cover
+missing conversations, conflicting cursors, rejected server resumes, provider
+binding refusals and actual question-command checkpoint recording. These tests
+do not establish cross-provider conversation translation or legacy process
+attestation; those remain separate recovery/migration requirements.

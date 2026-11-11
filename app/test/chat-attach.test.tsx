@@ -266,20 +266,20 @@ describe('native chat attach', () => {
     expect(await within(dialog).findByText(/Account added/)).toBeInTheDocument()
   })
 
-  it('Settings, Agents: the Codex shares save to cmdrd and Rebalance now calls it', async () => {
+  it('Settings, Agents: the account order of each kind saves to cmdrd', async () => {
     const user = userEvent.setup()
-    useStore.setState({ chatEngine: 'on' })
+    useStore.setState({ chatEngine: 'on', accounts: [account('default'), account('work'), account('codex')] })
     render(<Rail />)
     await user.click(await screen.findByRole('button', { name: 'Settings' }))
     const dialog = screen.getByRole('dialog', { name: 'Settings' })
-    const mgr = await within(dialog).findByRole('spinbutton', { name: 'Managers on Codex (%)' })
-    await waitFor(() => expect(mgr).toHaveValue(25))
-    await user.clear(mgr)
-    await user.type(mgr, '40')
-    await user.click(within(dialog).getByRole('button', { name: 'Save' }))
-    await waitFor(() => expect(posts().at(-1)).toMatchObject({ url: 'http://127.0.0.1:9/api/settings/runtime', body: { codex_manager_share: 0.4, codex_operator_share: 0.5 } }))
-    await user.click(within(dialog).getByRole('button', { name: 'Rebalance now' }))
-    await waitFor(() => expect(posts().at(-1)).toMatchObject({ url: 'http://127.0.0.1:9/api/runtime/rebalance', body: { dry_run: false } }))
+    const commander = await within(dialog).findByRole('group', { name: 'Commander accounts' })
+    const agents = within(dialog).getByRole('group', { name: 'Agents accounts' })
+    expect(within(commander).getAllByRole('listitem').map((li) => li.querySelector('span')?.textContent)).toEqual(['Any Claude account', 'Codex'])
+    expect(within(agents).getAllByRole('listitem').map((li) => li.querySelector('span')?.textContent)).toEqual(['Codex', 'Any Claude account'])
+    await user.click(within(commander).getByRole('button', { name: 'Move up: Codex' }))
+    await waitFor(() => expect(posts().at(-1)).toMatchObject({ url: 'http://127.0.0.1:9/api/settings/agent-accounts', body: { kind: 'commander', accounts: ['codex', 'claude'] } }))
+    await user.selectOptions(within(agents).getByRole('combobox', { name: 'Add a fallback' }), 'work')
+    await waitFor(() => expect(posts().at(-1)).toMatchObject({ url: 'http://127.0.0.1:9/api/settings/agent-accounts', body: { kind: 'agent', accounts: ['codex', 'claude', 'work'] } }))
   })
 
   it('shows a tmux-only Operator read-only, with no actions', async () => {

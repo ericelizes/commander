@@ -272,6 +272,9 @@ func restartsOf(labels []string) int {
 // withLiveness is s with every claim checked against s.Live (unchanged
 // without one). Steps are copied, so the caller's snapshot is not edited.
 func withLiveness(s Snapshot) Snapshot {
+	if s.Storage == "postgres" && s.Executions != nil {
+		return s
+	} // exact run evidence was already projected; absence is not proven death
 	live := s.Live.operators()
 	if live == nil {
 		return s

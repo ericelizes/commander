@@ -33,7 +33,6 @@ func TestSpawnUsageMoveScenario(t *testing.T) {
 		Moves    []struct {
 			Name        string
 			ProjectType string `json:"project_type"`
-			Share       string
 			Resume      bool
 			RoleRuntime string `json:"role_runtime"`
 			RoleAccount string `json:"role_account"`
@@ -62,7 +61,11 @@ func TestSpawnUsageMoveScenario(t *testing.T) {
 			t.Setenv("COMMANDER_HOME", home)
 			t.Setenv("CLAUDE_CONFIG_DIR", "")
 			t.Setenv(spawn.EnvOperatorRuntime, "host")
-			t.Setenv("COMMANDER_CODEX_OPERATOR_SHARE", c.Share)
+			// Codex is signed in, so only the usage file decides whether the
+			// agents' default order (Codex, then Claude) can use it.
+			codexHome := t.TempDir()
+			t.Setenv("CODEX_HOME", codexHome)
+			os.WriteFile(filepath.Join(codexHome, "auth.json"), []byte(`{"tokens":{"access_token":"test"}}`), 0o600)
 			codex := filepath.Join(t.TempDir(), "codex")
 			writeExecutable(t, codex, "#!/bin/sh\necho 'hooks stable true'\n")
 			t.Setenv("COMMANDER_CODEX_BIN", codex)
@@ -146,6 +149,12 @@ func TestSpawnUsageMoveScenario(t *testing.T) {
 			}
 			if i := chat.ReadAccountIntent(home, role); i != c.Intent {
 				t.Fatalf("intent %q, want %q", i, c.Intent)
+			}
+			if c.Note == "" {
+				if len(notes) != 0 || res.Moved != "" {
+					t.Fatalf("the order chose this account; nothing moved: notes %v, moved %q", notes, res.Moved)
+				}
+				return
 			}
 			if len(notes) != 1 || !strings.Contains(notes[0], c.Note) || !strings.Contains(res.Moved, c.Note) {
 				t.Fatalf("notes %v, moved %q, want one with %q", notes, res.Moved, c.Note)

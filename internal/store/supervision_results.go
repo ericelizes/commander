@@ -58,6 +58,12 @@ func (s *Store) closeSupervisedRunIdentity(ctx context.Context, rid int64, statu
 				return e
 			}
 		}
+		if _, e = q.ExecContext(ctx, `UPDATE run_observations SET alive=FALSE,checked_at=? WHERE run_id=?`, time.Now().Unix(), rid); e != nil {
+			return e
+		}
+		if _, e = q.ExecContext(ctx, `UPDATE native_presence SET alive=FALSE,checked_at=? WHERE run_id=? AND session_id=?`, time.Now().Unix(), rid, session); e != nil {
+			return e
+		}
 		if !current.Valid || current.Int64 != rid {
 			return nil
 		}

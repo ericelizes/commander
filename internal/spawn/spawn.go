@@ -136,6 +136,9 @@ type SpawnRequest struct {
 	// TaskText is the task bead's title and brief; a Codex draw is overridden to
 	// Claude when it names a local background service (needsBackgroundService).
 	TaskText string
+	// AgentAccounts is the account order of a new execution agent
+	// (store.AgentAccounts); nil = read from the store, else the default.
+	AgentAccounts []string
 
 	// Account is the Claude account (claudeacct) of a host Operator; "" = its
 	// Manager's (resolveOperatorAccount).
@@ -232,6 +235,15 @@ func (s *Spawner) Spawn(ctx context.Context, req SpawnRequest) (result *SpawnRes
 		}
 	}
 
+	if req.AgentAccounts == nil {
+		if src, ok := s.store.(interface {
+			AgentAccounts(context.Context) (map[string][]string, error)
+		}); ok {
+			if order, e := src.AgentAccounts(ctx); e == nil {
+				req.AgentAccounts = order[store.AgentKindAgent]
+			}
+		}
+	}
 	// The ready-bead scheduler delegates provider/model choice to the runtime.
 	// Preserve explicit legacy callers while giving claimed execution its
 	// configured default before either host validator runs.

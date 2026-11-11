@@ -12,7 +12,16 @@ export interface Settings {
   host?: string
   codex_manager_share: number
   codex_operator_share: number
+  agent_accounts?: AgentAccounts
 }
+
+/** AgentKind is a kind of agent with its own account order. */
+export type AgentKind = 'commander' | 'agent'
+
+/** AgentAccounts is each kind's account order: the first account with usage left is used. An entry is a provider ('claude' = any Claude account, 'codex') or one account's name. */
+export type AgentAccounts = Record<AgentKind, string[]>
+
+export const defaultAgentAccounts: AgentAccounts = { commander: ['claude', 'codex'], agent: ['codex', 'claude'] }
 
 export interface RebalanceResult {
   ok: boolean
@@ -21,7 +30,7 @@ export interface RebalanceResult {
   error?: string
 }
 
-let demo: Settings = { user_name: 'Demo User', codex_manager_share: 0.25, codex_operator_share: 0.5 }
+let demo: Settings = { user_name: 'Demo User', codex_manager_share: 0.25, codex_operator_share: 0.5, agent_accounts: { ...defaultAgentAccounts } }
 
 const auth = (cfg: HostConfig) => ({ Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json' })
 
@@ -42,6 +51,17 @@ export async function saveShares(cfg: HostConfig, shares: Partial<Pick<Settings,
   const res = await fetch(`${cfg.apiUrl}/api/settings/runtime`, { method: 'POST', headers: auth(cfg), body: JSON.stringify(shares) })
   const body = (await res.json().catch(() => ({}))) as { settings?: Settings; error?: string }
   return res.ok ? { settings: body.settings } : { error: body.error ?? `HTTP ${res.status}` }
+}
+
+/** saveAgentAccounts saves one kind's account order; it answers every kind's order or an error. */
+export async function saveAgentAccounts(cfg: HostConfig, kind: AgentKind, accounts: string[]): Promise<{ order?: AgentAccounts; error?: string }> {
+  if (cfg.demo) {
+    demo = { ...demo, agent_accounts: { ...(demo.agent_accounts ?? defaultAgentAccounts), [kind]: accounts } }
+    return { order: demo.agent_accounts }
+  }
+  const res = await fetch(`${cfg.apiUrl}/api/settings/agent-accounts`, { method: 'POST', headers: auth(cfg), body: JSON.stringify({ kind, accounts }) })
+  const body = (await res.json().catch(() => ({}))) as { agent_accounts?: AgentAccounts; error?: string }
+  return res.ok ? { order: body.agent_accounts } : { error: body.error ?? `HTTP ${res.status}` }
 }
 
 export async function rebalance(cfg: HostConfig, dryRun: boolean): Promise<RebalanceResult> {

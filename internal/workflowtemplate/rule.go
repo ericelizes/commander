@@ -36,10 +36,10 @@ func Label(b beads.Bead, prefix string) string {
 }
 
 // The write boundary and workflow rules share one merge-target classifier.
-func inPlay(b beads.Bead)bool{return beads.WorkflowInPlay(b)}
-func MergeGate(n Node)bool{return beads.WorkflowMergeGate(n.Bead)}
-func MergeTarget(n Node)bool{return beads.WorkflowMergeTarget(n.Bead)}
-func Guardable(b beads.Bead)bool{return beads.WorkflowGuardable(b)}
+func inPlay(b beads.Bead) bool    { return beads.WorkflowInPlay(b) }
+func MergeGate(n Node) bool       { return beads.WorkflowMergeGate(n.Bead) }
+func MergeTarget(n Node) bool     { return beads.WorkflowMergeTarget(n.Bead) }
+func Guardable(b beads.Bead) bool { return beads.WorkflowGuardable(b) }
 
 // IsReviewBlock is a plugged pr-review container (not one of its steps).
 func IsReviewBlock(b beads.Bead) bool {

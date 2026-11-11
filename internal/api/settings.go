@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"github.com/example-user/commander/internal/agentrt"
 	"net/http"
@@ -20,11 +21,14 @@ type Settings struct {
 	Host               string  `json:"host"`
 	CodexManagerShare  float64 `json:"codex_manager_share"`
 	CodexOperatorShare float64 `json:"codex_operator_share"`
+	// AgentAccounts is each agent kind's account order (store.AgentAccounts).
+	AgentAccounts map[string][]string `json:"agent_accounts,omitempty"`
 }
 
 func (s *Server) settingsRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/settings", s.auth(http.HandlerFunc(s.serveSettings)))
 	mux.Handle("POST /api/settings/runtime", s.auth(http.HandlerFunc(s.serveSettingsRuntime)))
+	mux.Handle("POST /api/settings/agent-accounts", s.auth(http.HandlerFunc(s.serveAgentAccounts)))
 	mux.Handle("POST /api/runtime/rebalance", s.auth(http.HandlerFunc(s.serveRebalance)))
 }
 
@@ -43,6 +47,11 @@ func (s *Server) readSettings() (Settings, error) {
 	st := Settings{UserName: config.UserName(cfg), Host: hostName(), Timezone: strings.TrimSpace(cfg.User.Timezone),
 		CodexManagerShare:  share(cfg.Runtime.CodexManagerShare, agentrt.DefaultCodexManagerShare),
 		CodexOperatorShare: share(cfg.Runtime.CodexOperatorShare, agentrt.DefaultCodexOperatorShare)}
+	if s.opts.StateStore != nil {
+		if st.AgentAccounts, err = s.opts.StateStore.AgentAccounts(context.Background()); err != nil {
+			return st, err
+		}
+	}
 	local, err := config.LoadLocal(s.opts.ConfigPath)
 	if err != nil {
 		return st, err
@@ -97,6 +106,33 @@ func (s *Server) serveSettingsRuntime(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "settings": st})
+}
+
+// serveAgentAccounts saves one agent kind's account order:
+// {"kind": "commander"|"agent", "accounts": ["claude", "codex"]}.
+func (s *Server) serveAgentAccounts(w http.ResponseWriter, r *http.Request) {
+	if s.opts.StateStore == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no state store"})
+		return
+	}
+	var req struct {
+		Kind     string   `json:"kind"`
+		Accounts []string `json:"accounts"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "bad JSON body: " + err.Error()})
+		return
+	}
+	if err := s.opts.StateStore.SetAgentAccounts(r.Context(), req.Kind, req.Accounts); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		return
+	}
+	order, err := s.opts.StateStore.AgentAccounts(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "agent_accounts": order})
 }
 
 // serveRebalance runs `cmdr runtime rebalance` ({"dry_run": true} adds

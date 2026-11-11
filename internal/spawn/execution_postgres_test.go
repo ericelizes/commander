@@ -58,9 +58,24 @@ func TestClaimedExecutionLaunchCarriesCanonicalContractAndIdentity(t *testing.T)
 	if len(scenario.Kinds) != 2 || len(scenario.Runtimes) != 2 || scenario.Commander == "" {
 		t.Fatal("executor runtime scenario missing")
 	}
-	for _, kind := range scenario.Kinds {
-		for _, runtime := range scenario.Runtimes {
-			t.Run(kind+"/"+runtime, func(t *testing.T) {
+	for _, kind := range scenario.Kinds { // "" leaves the choice to the saved account order (none saved: the
+		// default, Codex first, so Claude usage stays free for Commander).
+		for _, asked := range append(append([]string{}, scenario.Runtimes...), "") {
+			name := asked
+			if name == "" {
+				name = "share-default"
+			}
+			t.Run(kind+"/"+name, func(t *testing.T) {
+				runtime := asked
+				if asked == "" {
+					runtime = chat.RuntimeCodex
+					codexHome := t.TempDir()
+					t.Setenv("CODEX_HOME", codexHome)
+					if e := os.WriteFile(filepath.Join(codexHome, "auth.json"), []byte(`{"tokens":{"access_token":"test"}}`), 0o600); e != nil {
+						t.Fatal(e)
+					}
+				}
+
 				home := t.TempDir()
 				t.Setenv("HOME", home)
 				t.Setenv("COMMANDER_HOME", home)
@@ -125,7 +140,7 @@ exit 99
 				}
 				native := &recordingNativeRuntime{store: st, home: home}
 				sp := spawn.New(st, &opencode.MockClient{}, beads.New(), &agentmail.MockClient{}, dk, tx, t.TempDir()).WithNativeExecution(native)
-				adapter := &runtimeContractSpawner{inner: sp, runtime: runtime}
+				adapter := &runtimeContractSpawner{inner: sp, runtime: asked}
 				worker := execution.Worker{Store: st, Spawner: adapter, Capacity: 1}
 				if e = worker.PassSlot(ctx, "vm-test"); e != nil {
 					t.Fatal(e)

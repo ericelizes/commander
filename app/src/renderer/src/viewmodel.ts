@@ -228,10 +228,17 @@ export function deriveStep(s: SnapStep, agents: Record<string, SnapAgent> = {}):
 export function deriveSnapshot(s: Snapshot): Snapshot {
  s = normalizeOwnerSnapshot(s)
   const agents = s.agents ?? {}
+  const executionFacts = s.storage === 'postgres' && s.executions != null ? s.executions : undefined
+  const observedStep = (step: SnapStep, projectID: number | undefined): SnapStep => {
+    const children = (step.children ?? []).map((child) => observedStep(child, projectID))
+    const own = executionFacts?.some((run) => !!run.run_id && run.project_id === projectID && run.bead_id === step.bead_id && run.state === 'working') ?? false
+    return { ...step, children: step.children ? children : undefined, working: own || children.some((child) => child.working) }
+  }
   const workstreams = (s.workstreams ?? []).map((ws) => {
     const root = deriveStep({ ...(ws as unknown as SnapStep), children: ws.steps ?? [] }, agents)
-    const working = !!root.working || agents[ws.manager_role]?.state === 'working'
-    return { ...ws, state: root.state, working, steps: root.children ?? [] }
+    const observed = executionFacts ? observedStep(root, ws.project_id) : root
+    const working = executionFacts ? !!observed.working : !!root.working || agents[ws.manager_role]?.state === 'working'
+    return { ...ws, state: root.state, working, steps: observed.children ?? [] }
   })
   const warnings = new Map(s.display?.asks.map((a) => [a.key, a.stale_why]))
   return { ...s, workstreams, needs_you: (s.needs_you ?? []).map((a) => ({ ...a, stale_why: warnings.get(askKey(a)) })) }

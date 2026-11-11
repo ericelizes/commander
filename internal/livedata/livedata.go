@@ -27,20 +27,21 @@ import (
 // Partial loads are tolerated: any per-source error is captured in LoadErr
 // and whatever populated successfully is still returned.
 type Data struct {
-	workstreams []Workstream
-	Postgres    bool `json:"postgres,omitempty"`
-	Projects    []store.Project
-	Objectives  []ObjectiveRow
-	Operators   []OperatorRow
-	Ranks       map[store.WorkstreamKey]int // the user's priority order; see workstream_ranks
-	BeadRanks   map[store.WorkstreamKey]int `json:"-"` // each bead's priority among its siblings; see bead_ranks
-	Agents      map[string]store.AgentState // live state per agent mail role (hooks + scrape)
-	Checkins    map[string]store.Checkin    // each Manager's next check-in on its running Operators (and Commander's)
-	Finished    []store.CostEvent           // Operators whose process ended in the last FinishedFor
-	Issues      []store.WatchIssue          // what the minute watch finds wrong across workstreams
-	Metrics     FleetMetrics
-	LoadedAt    time.Time
-	LoadErr     error
+	workstreams        []Workstream
+	Postgres           bool                      `json:"postgres,omitempty"`
+	ObservedExecutions []store.ObservedExecution `json:"-"` // nil retains legacy projection; non-nil is current PG evidence
+	Projects           []store.Project
+	Objectives         []ObjectiveRow
+	Operators          []OperatorRow
+	Ranks              map[store.WorkstreamKey]int // the user's priority order; see workstream_ranks
+	BeadRanks          map[store.WorkstreamKey]int `json:"-"` // each bead's priority among its siblings; see bead_ranks
+	Agents             map[string]store.AgentState // live state per agent mail role (hooks + scrape)
+	Checkins           map[string]store.Checkin    // each Manager's next check-in on its running Operators (and Commander's)
+	Finished           []store.CostEvent           // Operators whose process ended in the last FinishedFor
+	Issues             []store.WatchIssue          // what the minute watch finds wrong across workstreams
+	Metrics            FleetMetrics
+	LoadedAt           time.Time
+	LoadErr            error
 	// ProjectTimes is how long each project's beads read took in this load.
 	ProjectTimes map[string]time.Duration `json:"-"`
 	// Phases is where this load's time went.
@@ -65,58 +66,58 @@ func (d Data) Parents() beads.Parents {
 // ObjectiveRow is a flattened cross-project objective (a workstream or one of
 // its steps). ProjectName is best-effort: the first linked project's name.
 type ObjectiveRow struct {
- QuestionWaiting bool
- HumanAnswerPending bool
- ExecutionMode string
-	PlanRevision int64
-	ExecutionEligible bool
- ExecutionReady,ExecutionReserved,ExecutionCapable bool
- ExecutionAttempts int64
- ExecutionError string
- PlanningCommander string
- JurisdictionRevision int64
-	WorkflowCheck *workflowtemplate.Node
-	GateChecks    []workflowtemplate.Node // open merge gates of this stage (gate beads are not rows)
-	BeadID        string
-	ParentBeadID  string
-	ID            int64
-	Title         string
-	ProjectName   string
-	ProjectID     int64
-	LinkedTasks   int
-	Status        string
-	Starred       bool
-	Hold          bool            // the hold label on this bead
-	HoldReason    string          // from its latest "hold by" comment
-	CreatedAt     string          // RFC3339, from the bead; orders workstreams fleet-wide
-	Ask           string          // needs-user steps: what the user must do, from the needs_you table
-	Note          string          // the full note behind the ask
-	Decision      *store.Decision // the decision card behind the ask, if any
-	AskSince      int64           // unix seconds the ask was raised (0 = no ask)
-	State         string          // beads.State*; see beads.StepState
-	Owner         string
-	OwnerState    string // OwnerWorking/OwnerFinished/OwnerDied for an Operator commander spawned; "" = not one
-	OwnerWhy      string // why the claim reads as it does when cmdrd corrected or settled it ("" = as recorded)
-	OwnerSince    int64  // unix s its Operator stopped, when known
-	Restarts      int    // automatic restarts cmdrd made of its Operator (auto-respawn / crash-respawn labels)
-	PRRepo        string
-	PR            []string     // PR numbers of its pr: labels
-	Tickets       []string     // Linear ids of its ticket:<ID> labels
-	Review        string       // "4159" when the step is in review as that PR ("" = not in review)
-	BlockedBy     []string     // bead IDs this step waits on ("blocks" dependencies)
-	Until         string       // owned job: the finish line its owner keeps at ("merged"), from the until:<x> label
-	Gate          bool         // a human approval gate (label gate)
-	Approvers     []string     // who approves a gate (approver:<who> labels)
-	AskAnswered   bool         // the last ask was answered; only an explicit re-flag raises another
-	GateNote      string       // a gate's write-up (the bead description)
-	ParkedUntil   int64        // unix s a parked (deferred) bead comes back (label parked-until:<unix>); 0 = none
-	Waits         []beads.Wait // what its owner is waiting on (waiting:<since>:<kind>... labels), oldest first
-	Gates         []store.Gate // checks the step must pass before it closes, in the order added
-	GateIDs       []string     // the gate bead behind each of Gates ("" for a row not yet migrated from the gates table)
-	GateViz       []int        // each gate bead's own viz:<n> label (0 = none), parallel to Gates
-	Viz           int          // the bead's own viz:<n> label (0 = none); see EffectiveViz
-	Task          bool         // an Operator task bead (kind:task, not an objective, gate or track): agent-internal, not a step the user plans
-	KindTask      bool         // labelled kind:task at all (also with kind:objective, e.g. converted then --no-workstream): never a workstream row, as wsmgr refuses to register one
+	QuestionWaiting                                     bool
+	HumanAnswerPending                                  bool
+	ExecutionMode                                       string
+	PlanRevision                                        int64
+	ExecutionEligible                                   bool
+	ExecutionReady, ExecutionReserved, ExecutionCapable bool
+	ExecutionAttempts                                   int64
+	ExecutionError                                      string
+	PlanningCommander                                   string
+	JurisdictionRevision                                int64
+	WorkflowCheck                                       *workflowtemplate.Node
+	GateChecks                                          []workflowtemplate.Node // open merge gates of this stage (gate beads are not rows)
+	BeadID                                              string
+	ParentBeadID                                        string
+	ID                                                  int64
+	Title                                               string
+	ProjectName                                         string
+	ProjectID                                           int64
+	LinkedTasks                                         int
+	Status                                              string
+	Starred                                             bool
+	Hold                                                bool            // the hold label on this bead
+	HoldReason                                          string          // from its latest "hold by" comment
+	CreatedAt                                           string          // RFC3339, from the bead; orders workstreams fleet-wide
+	Ask                                                 string          // needs-user steps: what the user must do, from the needs_you table
+	Note                                                string          // the full note behind the ask
+	Decision                                            *store.Decision // the decision card behind the ask, if any
+	AskSince                                            int64           // unix seconds the ask was raised (0 = no ask)
+	State                                               string          // beads.State*; see beads.StepState
+	Owner                                               string
+	OwnerState                                          string // OwnerWorking/OwnerFinished/OwnerDied for an Operator commander spawned; "" = not one
+	OwnerWhy                                            string // why the claim reads as it does when cmdrd corrected or settled it ("" = as recorded)
+	OwnerSince                                          int64  // unix s its Operator stopped, when known
+	Restarts                                            int    // automatic restarts cmdrd made of its Operator (auto-respawn / crash-respawn labels)
+	PRRepo                                              string
+	PR                                                  []string     // PR numbers of its pr: labels
+	Tickets                                             []string     // Linear ids of its ticket:<ID> labels
+	Review                                              string       // "4159" when the step is in review as that PR ("" = not in review)
+	BlockedBy                                           []string     // bead IDs this step waits on ("blocks" dependencies)
+	Until                                               string       // owned job: the finish line its owner keeps at ("merged"), from the until:<x> label
+	Gate                                                bool         // a human approval gate (label gate)
+	Approvers                                           []string     // who approves a gate (approver:<who> labels)
+	AskAnswered                                         bool         // the last ask was answered; only an explicit re-flag raises another
+	GateNote                                            string       // a gate's write-up (the bead description)
+	ParkedUntil                                         int64        // unix s a parked (deferred) bead comes back (label parked-until:<unix>); 0 = none
+	Waits                                               []beads.Wait // what its owner is waiting on (waiting:<since>:<kind>... labels), oldest first
+	Gates                                               []store.Gate // checks the step must pass before it closes, in the order added
+	GateIDs                                             []string     // the gate bead behind each of Gates ("" for a row not yet migrated from the gates table)
+	GateViz                                             []int        // each gate bead's own viz:<n> label (0 = none), parallel to Gates
+	Viz                                                 int          // the bead's own viz:<n> label (0 = none); see EffectiveViz
+	Task                                                bool         // an Operator task bead (kind:task, not an objective, gate or track): agent-internal, not a step the user plans
+	KindTask                                            bool         // labelled kind:task at all (also with kind:objective, e.g. converted then --no-workstream): never a workstream row, as wsmgr refuses to register one
 	// Owns: a nested workstream with a Manager of its own (an open kind:workstream
 	// bead under another, in a project whose nested Managers are on); see beads.Owner.
 	Owns        bool
@@ -293,7 +294,9 @@ func Load(ctx context.Context, deps Deps) Data {
 		}
 	}
 	lap(&out.Phases.Beads)
-	if e:=attachExecutionState(ctx,deps.Store,out.Objectives);e!=nil&&out.LoadErr==nil{out.LoadErr=e}
+	if e := attachExecutionState(ctx, deps.Store, out.Objectives); e != nil && out.LoadErr == nil {
+		out.LoadErr = e
+	}
 
 	out.Objectives = MarkOperatorOwners(ctx, deps.Store, out.Projects, out.Objectives)
 	if died, err := deps.Store.ListCostEventsSince(ctx, out.LoadedAt.Add(-diedFor).Unix(), store.EventOperatorDied); err == nil {
@@ -818,9 +821,9 @@ func projectObjectiveRows(ctx context.Context, bc beads.Client, project store.Pr
 			ownerState = OwnerDied // cmdrd cleared the dead Operator's claim
 		}
 		out = append(out, ObjectiveRow{
-			PlanRevision:objective.PlanRevision, ExecutionReady: objective.ExecutionReady, ExecutionReserved: objective.ExecutionReserved, ExecutionCapable: objective.ExecutionCapable, ExecutionAttempts: objective.ExecutionAttempts, ExecutionError: objective.ExecutionError,
- PlanningCommander: objective.PlanningCommander, JurisdictionRevision: objective.JurisdictionRevision,
- WorkflowCheck: workflowNode(objective, details[objective.ID], reviewBlocks),
+			PlanRevision: objective.PlanRevision, ExecutionReady: objective.ExecutionReady, ExecutionReserved: objective.ExecutionReserved, ExecutionCapable: objective.ExecutionCapable, ExecutionAttempts: objective.ExecutionAttempts, ExecutionError: objective.ExecutionError,
+			PlanningCommander: objective.PlanningCommander, JurisdictionRevision: objective.JurisdictionRevision,
+			WorkflowCheck: workflowNode(objective, details[objective.ID], reviewBlocks),
 			BeadID:        objective.ID,
 			ParentBeadID:  parent,
 			Title:         objective.Title,

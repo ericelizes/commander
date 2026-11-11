@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/example-user/commander/internal/beads"
+	"github.com/example-user/commander/internal/store"
 )
 
 // Presence reconciliation records process evidence in the canonical database.
@@ -32,13 +33,11 @@ func (d *Daemon) reconcilePostgresPresence(ctx context.Context) {
 				observations = nil
 			}
 		}
-		native := []string{}
+		native := []store.NativeRuntimeObservation{}
 		if d.chat != nil {
-			for role := range d.chat.Live() {
-				native = append(native, role)
-			}
+			native = d.chat.RuntimeObservations()
 		}
-		_ = d.store.RecordRuntimePresence(checkCtx, observations, at, native)
+		_ = d.store.RecordRuntimeEvidence(checkCtx, observations, at, native)
 		cancel()
 		select {
 		case <-ctx.Done():

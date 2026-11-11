@@ -99,7 +99,9 @@ func (s *Store) SupervisionFact(ctx context.Context, j SupervisionJob) (*Supervi
  EXISTS(SELECT 1 FROM bead_questions q WHERE q.project_id=b.project_id AND q.bead_id=b.id AND q.blocking AND q.kind='execution' AND q.state='pending'),commander_pending_human_answer(b.project_id,b.id),(SELECT name FROM projects WHERE id=b.project_id)
  FROM bead_tasks b LEFT JOIN agent_runs r ON r.id=b.active_run_id
  LEFT JOIN run_observations o ON o.run_id=r.id AND r.status='running' AND replace(r.agent_name,'.','-')=replace(b.responsible_agent_id,'.','-')
- LEFT JOIN native_presence n ON n.role=b.responsible_agent_id
+ LEFT JOIN native_presence n ON n.role=b.responsible_agent_id AND
+ ((replace(COALESCE(r.agent_name,''),'.','-')=replace(b.responsible_agent_id,'.','-') AND r.status='running' AND n.run_id=r.id AND n.session_id=r.opencode_session_id)
+ OR ((r.id IS NULL OR r.status<>'running' OR replace(r.agent_name,'.','-')<>replace(b.responsible_agent_id,'.','-')) AND n.run_id IS NULL))
  LEFT JOIN LATERAL(SELECT state FROM agent_state WHERE replace(role,'.','-')=replace(b.responsible_agent_id,'.','-') ORDER BY updated DESC LIMIT 1)a ON TRUE
  WHERE b.project_id=? AND b.id=?`, j.ProjectID, j.BeadID).Scan(&f.Title, &f.Status, &f.AgentID, &f.Epoch, &f.ProgressSeq, &f.ProgressAt, &f.CompletionAt, &f.RunID, &result, &f.ExecutorBound, &labels, &f.Deleted, &f.SupervisorID, &f.AgentState, &at, &observedAlive, &nativeAlive, &f.ChildCount, &f.OpenBlockers, &f.ExecutionReady, &f.ExecutionAttempts, &f.ExecutionError, &f.ExecutionReserved, &f.ExecutionCapable, &f.PendingQuestions, &f.QuestionWaiting, &f.PendingHumanAnswer, &f.ProjectName)
 	if e != nil {

@@ -2000,6 +2000,27 @@ without treating holds as failures or creating human decisions. Runtime/session
 reset cannot replace a live bound execution. Off mode may adopt a bound surviving
 host but refuses fresh process startup. The native-worker scenario uses actual
 Worker/Spawner/HTTP/PostgreSQL/worktree/native-host/fake-Claude processes,
-including adoption and one initial instruction. Native Worker-to-Codex, native
-checkpoint continuation and ceiling enforcement still require full-flow proof;
+including adoption and one initial instruction. Actual Worker-to-Codex and native checkpoint continuation now have full-flow
+proof below; ceiling enforcement remains to be verified;
 legacy attestation/drain, plan revocation and activation remain release work.
+
+
+Native checkpoint continuation now uses the DB source run binding through the
+real worker and spawner. GetAgentRun returns the immutable driver/provider/account/
+model fields; the worker pins those for continuation, and transaction binding
+rejects provider/account changes without a validated handoff. Native source SID
+comes from the source run, independently of derived role session files. The
+question CLI uses the same native binding and pure session-keyed Codex cursor;
+mutable role preferences cannot change its recorded checkpoint provider. Blocking
+native Codex questions need their current thread, while nonblocking questions do
+not require paused-context metadata.
+
+Code continuation reuses the guarded existing worktree/branch, preserving prepared
+files and commits. Claude requires a real transcript at engine launch. Codex may
+restore a missing derived cursor from the exact DB-saved thread, never overwrite
+a conflicting cursor, and must receive a successful same-thread resume from the
+provider. require-resume crosses the actual bridge child argv; error/missing/
+different-thread responses never silently call thread/start. The native-checkpoint
+scenario names real worker/host/PG/private fake Claude+Codex flows for both project
+kinds, plus missing-context/cursor/CLI/binding guards. Cross-provider translation,
+legacy attestation/drain and full sidebar/cutover verification remain required.
