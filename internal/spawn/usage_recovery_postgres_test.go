@@ -63,6 +63,14 @@ func TestExhaustedCapacityScenario(t *testing.T) {
 					t.Setenv("CMDR_FAKE_CODEX", "1")
 				}
 				dir := t.TempDir()
+				if kind == "code" {
+					if e = os.Mkdir(filepath.Join(dir, ".worktrees.noindex"), 0700); e != nil {
+						t.Fatal(e)
+					}
+					if e = os.Symlink(".worktrees.noindex", filepath.Join(dir, ".worktrees")); e != nil {
+						t.Fatal(e)
+					}
+				}
 				for _, args := range [][]string{{"init", "-b", "main"}, {"config", "user.email", "fixture@example.invalid"}, {"config", "user.name", "Fixture"}, {"commit", "--allow-empty", "-m", "fixture"}} {
 					cmd := exec.Command("git", args...)
 					cmd.Dir = dir

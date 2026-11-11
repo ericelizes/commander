@@ -32,6 +32,8 @@ Claude. Account preferences do not create another kind of account.
 - The shared worker retries through canonical admission, retaining the source
   branch and workspace. Provider recovery uses a fresh session and an attributed
   bounded handoff. It never borrows a foreign provider's native conversation ID.
+  Native admission records the physical workspace path, so a `.worktrees` alias
+  pointing to `.worktrees.noindex` remains the same workspace during takeover.
   Unanswered questions still block dispatch; saved answers are read from their
   exact source-run history. Attributed final reports retain review precedence.
 - Usage-only launch refusals retain their cause without consuming the five
@@ -54,7 +56,7 @@ Claude. Account preferences do not create another kind of account.
 
 | Boundary | Test |
 | --- | --- |
-| Actual worker/spawner/PG/native-host recovery, code and knowledge, another Claude account and Codex, all-out refusal, retained artifact, pause and pin | `TestExhaustedCapacityScenario` |
+| Actual worker/spawner/PG/native-host recovery, code and knowledge, another Claude account and Codex, all-out refusal, retained artifact, symlinked worktree, pause and pin | `TestExhaustedCapacityScenario` |
 | Repeated exhaustion cannot spend launch attempts | `TestUsageCapacityDoesNotSpendLaunchAttempts` |
 | Exact session, physical exit, original workspace, duplicate receipt | `TestPostgresUsageRecoveryFencesSessionWorkspaceAndTerminalEvidence` |
 | Pending and answered checkpoint ordering | `TestPostgresUsageRecoveryWaitsForSavedAnswerBeforeProviderHandoff`, `TestNativeCheckpointAnswerAndExitResumeThroughCanonicalCapacity` |
