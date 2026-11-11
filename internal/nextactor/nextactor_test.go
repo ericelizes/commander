@@ -1,0 +1,194 @@
+package nextactor
+
+import (
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/example-user/commander/internal/beads"
+)
+
+var now = time.Unix(1_800_000_000, 0)
+
+func ctxWith(busy bool, idleFor time.Duration, beadsByID map[string]Bead) Context {
+	c := Context{Now: now, Commander: func(string) (bool, int64) {
+		if busy {
+			return true, 0
+		}
+		return false, now.Add(-idleFor).Unix()
+	}}
+	if beadsByID != nil {
+		c.Lookup = func(id string) (Bead, bool) { b, ok := beadsByID[id]; return b, ok }
+	}
+	return c
+}
+
+func TestDecideCoversEveryFactCombination(t *testing.T) {
+	open := func(f func(*Bead)) Bead {
+		b := Bead{ID: "b", Title: "Ship the guard", Status: "open", PlanningCommander: "commander"}
+		f(&b)
+		return b
+	}
+	ago := func(d time.Duration) int64 { return now.Add(-d).Unix() }
+	ci := beads.Wait{Kind: beads.WaitCI, PR: 42, Since: now.Add(-3 * time.Minute)}
+	review := beads.Wait{Kind: beads.WaitReview, Ref: "alex"}
+	future := beads.Wait{Kind: beads.WaitUntil, Ref: "rollout window", Until: now.Add(time.Hour)}
+	past := beads.Wait{Kind: beads.WaitUntil, Ref: "rollout window", Until: now.Add(-time.Hour)}
+	handoff := beads.Wait{Kind: beads.WaitUntil, Ref: beads.ManagerPlanWait, Until: now.Add(time.Hour)}
+	cases := []struct {
+		name          string
+		bead          Bead
+		busy          bool
+		idle          time.Duration
+		actor         Actor
+		reason        string
+		textHasPrefix string
+	}{
+		{"closed is done", open(func(b *Bead) { b.Status = "closed" }), false, 0, None, "done", "Done"},
+		{"superseded", open(func(b *Bead) { b.Superseded = true }), false, 0, None, "withdrawn", "Withdrawn"},
+		{"withdrawn gate", open(func(b *Bead) { b.Withdrawn = true; b.NeedsUser = true }), false, 0, None, "withdrawn", "Withdrawn"},
+		{"held", open(func(b *Bead) { b.Held = true; b.HoldReason = "until the batch lands" }), false, 0, None, "paused", "Paused: until the batch lands"},
+		{"deferred", open(func(b *Bead) { b.Status = beads.StatusDeferred }), false, 0, None, "paused", "Paused"},
+		{"held beats a user ask", open(func(b *Bead) { b.Held = true; b.NeedsUser = true }), false, 0, None, "paused", "Paused"},
+		{"saved answer on held work goes to Commander", open(func(b *Bead) { b.Held = true; b.HumanAnswerPending = true }), true, 0, Commander, "apply_answer", "Commander: apply"},
+		{"user decision", open(func(b *Bead) { b.NeedsUser = true; b.UserAsk = "approve the refund guard" }), false, 0, User, "decision", "Needs you: approve the refund guard"},
+		{"user decision beats a running agent", open(func(b *Bead) { b.NeedsUser = true; b.Executing = true }), false, 0, User, "decision", "Needs you"},
+		{"waiting on the user", open(func(b *Bead) { b.Waits = []beads.Wait{{Kind: beads.WaitUser}} }), false, 0, User, "waiting_user", "Needs you"},
+		{"agent question, Commander busy", open(func(b *Bead) { b.PendingQuestions = 1 }), true, 0, Commander, "answer_question", "Commander: answer"},
+		{"agent question, Commander idle long", open(func(b *Bead) { b.QuestionWaiting = true }), false, time.Hour, Stuck, "commander_idle:answer_question", "Stuck: Commander"},
+		{"launch failed", open(func(b *Bead) { b.LaunchFailed = true; b.LaunchError = "no worktree" }), false, 0, Stuck, "launch_failed", "Stuck: the agent could not start (no worktree)"},
+		{"exited without report", open(func(b *Bead) { b.ExitedWithoutReport = true; b.ExitedAt = ago(time.Minute) }), false, 0, Stuck, "exited_without_report", "Stuck: the agent stopped"},
+		{"executing", open(func(b *Bead) { b.Executing = true; b.ExecRole = "operator-exec-1"; b.ExecSince = ago(5 * time.Minute) }), false, 0, Agent, "executing", "Working on"},
+		{"executing with recent progress", open(func(b *Bead) { b.Executing = true; b.ExecSince = ago(time.Hour); b.ProgressAt = ago(time.Minute) }), false, 0, Agent, "executing", "Working on"},
+		{"idle agent with no progress", open(func(b *Bead) { b.Executing = true; b.ExecSince = ago(time.Hour); b.ProgressAt = ago(30 * time.Minute) }), false, 0, Stuck, "no_progress", "Stuck: no progress for 30 minutes"},
+		{"agent mid-turn on a long run", open(func(b *Bead) { b.Executing = true; b.ExecWorking = true; b.ProgressAt = ago(40 * time.Minute) }), false, 0, Agent, "executing", "Working on"},
+		{"agent mid-turn far too long", open(func(b *Bead) { b.Executing = true; b.ExecWorking = true; b.ProgressAt = ago(2 * time.Hour) }), false, 0, Stuck, "no_progress", "Stuck: no progress for 2 hours"},
+		{"claim just made", open(func(b *Bead) { b.Unverified = true; b.UnverifiedSince = ago(time.Minute) }), false, 0, Agent, "starting", "Starting an agent"},
+		{"claim with no process", open(func(b *Bead) { b.Unverified = true; b.UnverifiedSince = ago(10 * time.Minute) }), false, 0, Stuck, "unverified", "Stuck: claimed"},
+		{"result to review, Commander busy", open(func(b *Bead) { b.ResultReady = true; b.ResultSince = ago(time.Minute) }), true, 0, Commander, "review_result", "Commander: review"},
+		{"result to review, Commander just idle", open(func(b *Bead) { b.ResultReady = true; b.ResultSince = ago(time.Minute) }), false, time.Minute, Commander, "review_result", "Commander to review"},
+		{"result unreviewed for long", open(func(b *Bead) { b.ResultReady = true; b.ResultSince = ago(time.Hour) }), false, time.Hour, Stuck, "commander_idle:review_result", "Stuck: Commander"},
+		{"waiting on CI", open(func(b *Bead) { b.Waits = []beads.Wait{ci} }), false, 0, External, "wait:ci", "Waiting on CI #42"},
+		{"waiting on a reviewer", open(func(b *Bead) { b.Waits = []beads.Wait{review} }), false, 0, External, "wait:review", "Waiting on review by alex"},
+		{"waiting for a date", open(func(b *Bead) { b.Waits = []beads.Wait{future} }), false, 0, External, "wait:until", "Waiting on rollout window"},
+		{"a date that passed is owed", open(func(b *Bead) { b.Waits = []beads.Wait{past} }), true, 0, Commander, "wait_over", "Commander: act on"},
+		{"legacy Manager handoff is Commander's", open(func(b *Bead) { b.Waits = []beads.Wait{handoff} }), true, 0, Commander, "wait_over", "Commander: act on"},
+		{"user wait beats CI", open(func(b *Bead) { b.Waits = []beads.Wait{ci, {Kind: beads.WaitUser}} }), false, 0, User, "waiting_user", "Needs you"},
+		{"queued for capacity", open(func(b *Bead) { b.ReadyQueued = true }), false, 0, Agent, "queued", "Queued"},
+		{"ready but nothing can run it", open(func(b *Bead) { b.ReadyQueued = true; b.NoCapableSlot = true }), false, 0, Stuck, "no_capable_slot", "Stuck: no agent slot"},
+		{"parent carried by children", open(func(b *Bead) { b.HasOpenChildren = true }), false, 0, None, "children", "Carried"},
+		{"parent with its own user ask", open(func(b *Bead) { b.HasOpenChildren = true; b.NeedsUser = true }), false, 0, User, "decision", "Needs you"},
+		{"nothing recorded, Commander busy", open(func(b *Bead) {}), true, 0, Commander, "plan", "Commander: plan"},
+		{"nothing recorded, Commander idle long", open(func(b *Bead) {}), false, time.Hour, Stuck, "commander_idle:plan", "Stuck: Commander has not started to plan"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			r := Decide(c.bead, ctxWith(c.busy, c.idle, nil))
+			if r.Actor != c.actor || r.Reason != c.reason || !strings.HasPrefix(r.Text, c.textHasPrefix) {
+				t.Fatalf("got %+v, want actor=%s reason=%s text^=%q", r, c.actor, c.reason, c.textHasPrefix)
+			}
+		})
+	}
+}
+
+func TestDependencyChainsResolveToTheirRoot(t *testing.T) {
+	graph := map[string]Bead{
+		"gate":   {ID: "gate", Title: "Greenlight the repair batch", Status: "open", NeedsUser: true},
+		"mac":    {ID: "mac", Title: "Mac execution", Status: "open", BlockedBy: []string{"gate"}},
+		"ci":     {ID: "ci", Title: "Merge the dashboard", Status: "open", Waits: []beads.Wait{{Kind: beads.WaitCI, PR: 7}}},
+		"done":   {ID: "done", Title: "Old step", Status: "closed"},
+		"run":    {ID: "run", Title: "Build it", Status: "open", Executing: true, ExecSince: now.Unix()},
+		"loop-a": {ID: "loop-a", Title: "A", Status: "open", BlockedBy: []string{"loop-b"}},
+		"loop-b": {ID: "loop-b", Title: "B", Status: "open", BlockedBy: []string{"loop-a"}},
+	}
+	ctx := ctxWith(true, 0, graph)
+	cases := []struct {
+		name      string
+		blockedBy []string
+		actor     Actor
+		root      string
+		via       string
+	}{
+		{"two links to the user", []string{"mac"}, User, "gate", "Mac execution"},
+		{"to CI", []string{"ci"}, External, "ci", "Merge the dashboard"},
+		{"the user outranks CI", []string{"ci", "mac"}, User, "gate", "Mac execution"},
+		{"finished blockers hold nothing", []string{"done"}, Commander, "dev", ""},
+		{"behind running work", []string{"run"}, Agent, "run", "Build it"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			r := Decide(Bead{ID: "dev", Title: "Repair dev3", Status: "open", BlockedBy: c.blockedBy}, ctx)
+			if r.Actor != c.actor || r.Bead != c.root || (c.via != "" && (len(r.Via) == 0 || r.Via[0] != c.via)) {
+				t.Fatalf("got %+v, want actor=%s root=%s via=%s", r, c.actor, c.root, c.via)
+			}
+		})
+	}
+	parent := map[string]Bead{
+		"mac":  {ID: "mac", Title: "Mac execution", Status: "open", HasOpenChildren: true, Children: []string{"run", "idle"}},
+		"run":  {ID: "run", Title: "Run the guard", Status: "open", Executing: true, ExecSince: now.Add(-time.Hour).Unix(), ProgressAt: now.Add(-time.Hour).Unix()},
+		"idle": {ID: "idle", Title: "Later step", Status: "open", Waits: []beads.Wait{{Kind: beads.WaitCI, PR: 3}}},
+		"gate": {ID: "gate", Title: "Greenlight", Status: "open", NeedsUser: true, UserAsk: "approve it"},
+		"mid":  {ID: "mid", Title: "Middle step", Status: "open", BlockedBy: []string{"gate"}},
+	}
+	pctx := ctxWith(true, 0, parent)
+	if r := Decide(Bead{ID: "dev", Title: "Repair dev3", Status: "open", BlockedBy: []string{"mac"}}, pctx); r.Actor != Stuck || r.Bead != "run" || r.Reason != "blocked:no_progress" {
+		t.Fatalf("a chain through a parent must reach its stuck child: %+v", r)
+	}
+	r := Decide(Bead{ID: "dev", Title: "Repair dev3", Status: "open", BlockedBy: []string{"mid"}}, pctx)
+	if r.Actor != User || r.Reason != "blocked:decision" || r.Text != "Needs you: approve it (blocking “Middle step”)" || strings.Count(r.Text, "blocking") != 1 {
+		t.Fatalf("chain text: %+v", r)
+	}
+	if r := Decide(graph["loop-a"], ctx); r.Actor == "" {
+		t.Fatal("a dependency cycle produced no decision")
+	}
+	if r := Decide(Bead{ID: "x", Status: "open", BlockedBy: []string{"gate"}}, Context{Now: now}); r.Actor != None || r.Reason != "dependency" {
+		t.Fatalf("without lookup a blocked bead is a dependency: %+v", r)
+	}
+}
+
+func TestRollupLeadsWithTheUserAndCountsTheRest(t *testing.T) {
+	row := Rollup([]Result{
+		{Actor: Agent, Reason: "executing", Who: "a", Since: 10},
+		{Actor: Agent, Reason: "executing", Who: "b", Since: 20},
+		{Actor: External, Reason: "wait:ci", Since: 5},
+		{Actor: User, Reason: "decision", Text: "Needs you: approve", Since: 30},
+		{Actor: None, Reason: "children"},
+	})
+	if row.Lead.Actor != User || row.Agents != 2 || row.Counts[External] != 1 || row.Counts[None] != 0 {
+		t.Fatalf("row %+v", row)
+	}
+	if got := row.Summary(); got != "Needs you: approve · 2 agents working · 1 waiting outside" {
+		t.Fatalf("summary %q", got)
+	}
+	stuck := Rollup([]Result{{Actor: Agent, Reason: "executing", Who: "a"}, {Actor: Stuck, Reason: "exited_without_report", Text: "Stuck: x"}})
+	if stuck.Lead.Actor != Stuck {
+		t.Fatalf("stuck work must lead over working: %+v", stuck)
+	}
+	if empty := Rollup(nil); empty.Lead.Actor != None {
+		t.Fatalf("empty %+v", empty)
+	}
+}
+
+func TestEveryDecisionHasAnActorAndText(t *testing.T) {
+	// Property: whatever facts are set, the decision is never blank.
+	flags := []func(*Bead){
+		func(b *Bead) { b.Held = true }, func(b *Bead) { b.NeedsUser = true }, func(b *Bead) { b.Executing = true },
+		func(b *Bead) { b.ResultReady = true }, func(b *Bead) { b.ReadyQueued = true }, func(b *Bead) { b.HasOpenChildren = true },
+		func(b *Bead) { b.Unverified = true }, func(b *Bead) { b.LaunchFailed = true }, func(b *Bead) { b.PendingQuestions = 1 },
+		func(b *Bead) { b.Waits = []beads.Wait{{Kind: beads.WaitCI, PR: 1}} }, func(b *Bead) { b.ExitedWithoutReport = true },
+	}
+	for mask := 0; mask < 1<<len(flags); mask++ {
+		b := Bead{ID: "b", Title: "T", Status: "open"}
+		for i, f := range flags {
+			if mask&(1<<i) != 0 {
+				f(&b)
+			}
+		}
+		for _, busy := range []bool{true, false} {
+			r := Decide(b, ctxWith(busy, time.Hour, nil))
+			if r.Actor == "" || strings.TrimSpace(r.Text) == "" || r.Reason == "" {
+				t.Fatalf("mask %b busy %v: blank decision %+v", mask, busy, r)
+			}
+		}
+	}
+}

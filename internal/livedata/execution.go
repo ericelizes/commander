@@ -165,7 +165,8 @@ func applyExecutionCounts(s *Snapshot, d *Display) {
 			continue
 		}
 		r.Working = executionCount(*s, ws.ProjectID, ws.BeadID, ws.Steps)
-		if s.Storage == "postgres" && r.Working == 0 && r.Kind == "working" {
+		// A next-actor decision already weighs executions and Commander's own work.
+		if s.Storage == "postgres" && r.Working == 0 && r.Kind == "working" && r.Actor == nil {
 			r.Kind = "waiting"
 			r.Text = waitingExecutionText(*s, ws.ProjectID, ws.BeadID, ws.Steps)
 		}
@@ -194,7 +195,7 @@ func updateTrackExecutions(s Snapshot, pid int64, steps []SnapStep, tracks []Boa
 	for i := range tracks {
 		st := byID[tracks[i].BeadID]
 		tracks[i].Working = executionCount(s, pid, tracks[i].BeadID, st.Children)
-		if s.Storage == "postgres" && tracks[i].Working == 0 && tracks[i].Kind == "working" {
+		if s.Storage == "postgres" && tracks[i].Working == 0 && tracks[i].Kind == "working" && tracks[i].Actor == nil {
 			tracks[i].Kind = "waiting"
 			tracks[i].Text = waitingExecutionText(s, pid, tracks[i].BeadID, st.Children)
 		}

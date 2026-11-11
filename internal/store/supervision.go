@@ -29,7 +29,11 @@ type SupervisionFact struct {
 	// Children are the open, non-deferred direct children, so the policy can
 	// tell legitimately waiting subordinates from stalled ones.
 	Children []SupervisionChild
-	Job      SupervisionJob
+	// CommanderState and CommanderSince are the planning Commander's chat state
+	// and when it last changed: the shared next-actor rule needs them.
+	CommanderState string
+	CommanderSince int64
+	Job            SupervisionJob
 }
 
 // SupervisionChild is what the policy needs to judge one open child.
@@ -118,6 +122,17 @@ func (s *Store) SupervisionFact(ctx context.Context, j SupervisionJob) (*Supervi
  WHERE b.project_id=? AND b.id=?`, j.ProjectID, j.BeadID).Scan(&f.Title, &f.Status, &f.AgentID, &f.Epoch, &f.ProgressSeq, &f.ProgressAt, &f.CompletionAt, &f.RunID, &result, &f.ExecutorBound, &labels, &f.Deleted, &f.SupervisorID, &f.AgentState, &at, &observedAlive, &nativeAlive, &f.ChildCount, &f.OpenBlockers, &f.ExecutionReady, &f.ExecutionAttempts, &f.ExecutionError, &f.ExecutionReserved, &f.ExecutionCapable, &f.PendingQuestions, &f.QuestionWaiting, &f.PendingHumanAnswer, &f.ProjectName)
 	if e == nil && f.ChildCount > 0 {
 		f.Children, e = s.supervisionChildren(ctx, j.ProjectID, j.BeadID)
+	}
+	if e == nil {
+		owner := f.PlanningCommander
+		if owner == "" {
+			owner = "commander"
+		}
+		var state sql.NullString
+		var since sql.NullInt64
+		if qe := s.db.QueryRowContext(ctx, `SELECT state,since FROM agent_state WHERE replace(role,'.','-')=replace(?,'.','-') ORDER BY updated DESC LIMIT 1`, owner).Scan(&state, &since); qe == nil {
+			f.CommanderState, f.CommanderSince = state.String, since.Int64
+		}
 	}
 	if e != nil {
 		return nil, e

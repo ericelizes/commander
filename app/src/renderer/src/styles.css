@@ -3343,13 +3343,16 @@ kbd {
   background: var(--dot, var(--text-3));
 }
 
-/* By who has to act, in the dot and the words: red the user, yellow someone
-   else, green agents have it (nothing to think about); muted stalled or idle. */
+/* By who has to act, in the dot and the words: red the user, orange an agent
+   owes the move and is not making it, yellow someone outside (CI, a review, a
+   date), green an agent or Commander has it; muted paused or done. */
 .ws-state.agent-needs { --dot: var(--err); }
+.ws-state.agent-stuck { --dot: var(--peach); }
 .ws-state.agent-waiting { --dot: var(--attn); }
 .ws-state.agent-working { --dot: var(--ok); }
 
 .ws-state.agent-needs .ws-state-text,
+.ws-state.agent-stuck .ws-state-text,
 .ws-state.agent-waiting .ws-state-text,
 .ws-state.agent-working .ws-state-text {
   color: var(--dot);

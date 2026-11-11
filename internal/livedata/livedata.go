@@ -68,6 +68,8 @@ func (d Data) Parents() beads.Parents {
 // ObjectiveRow is a flattened cross-project objective (a workstream or one of
 // its steps). ProjectName is best-effort: the first linked project's name.
 type ObjectiveRow struct {
+	Withdrawn                                           bool  // the withdrawn label: a cancelled request, never anyone's move
+	ProgressAt                                          int64 // last recorded progress (unix s)
 	PlanningPending                                     bool
 	ResultRunID, ResultReadyAt                          int64
 	QuestionWaiting                                     bool
@@ -840,6 +842,8 @@ func projectObjectiveRows(ctx context.Context, bc beads.Client, project store.Pr
 			Starred:       slices.Contains(objective.Labels, starLabel),
 			Hold:          hold,
 			HoldReason:    holdReason,
+			Withdrawn:     slices.Contains(objective.Labels, withdrawnLabel),
+			ProgressAt:    objective.ProgressAt,
 			CreatedAt:     objective.CreatedAt,
 			State:         stepState,
 			Owner:         stepOwner,

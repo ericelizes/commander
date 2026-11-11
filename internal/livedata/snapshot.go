@@ -145,6 +145,9 @@ type SnapProject struct {
 
 // SnapWorkstream is one workstream with its step tree.
 type SnapWorkstream struct {
+	Withdrawn            bool            `json:"withdrawn,omitempty"`   // a cancelled request
+	ProgressAt           int64           `json:"progress_at,omitempty"` // last recorded progress (unix s)
+	TypedWaits           []beads.Wait    `json:"-"`                     // the root's recorded waits
 	PlanningPending      bool            `json:"planning_pending,omitempty"`
 	ResultRunID          int64           `json:"result_run_id,omitempty"`
 	ResultReadyAt        int64           `json:"result_ready_at,omitempty"`
@@ -227,6 +230,11 @@ type SnapGate struct {
 
 // SnapStep is one step; phases carry their children and a one-line note.
 type SnapStep struct {
+	Hold                 bool                    `json:"hold,omitempty"`        // the hold label on this bead
+	HoldReason           string                  `json:"hold_reason,omitempty"` // from its latest "hold by" comment
+	Withdrawn            bool                    `json:"withdrawn,omitempty"`   // a cancelled request
+	ProgressAt           int64                   `json:"progress_at,omitempty"` // last recorded progress (unix s)
+	TypedWaits           []beads.Wait            `json:"-"`                     // the recorded waits behind Waiting
 	PlanningPending      bool                    `json:"planning_pending,omitempty"`
 	ResultRunID          int64                   `json:"result_run_id,omitempty"`
 	ResultReadyAt        int64                   `json:"result_ready_at,omitempty"`
@@ -483,6 +491,7 @@ func snapWorkstream(n int, ws Workstream, live LiveAgent) SnapWorkstream {
 		PlanningPending: r.PlanningPending, PlanningCommander: r.PlanningCommander, JurisdictionRevision: r.JurisdictionRevision,
 		BlockedBy: slices.Clone(r.BlockedBy), N: n, Project: ws.Project.Name, Repo: GitHubRepo(ws.Project.Path), ProjectID: ws.Project.ID, BeadID: r.BeadID, Title: r.Title, Tickets: r.Tickets,
 		State: state, Working: working, Status: r.Status, Owner: r.Owner, Starred: r.Starred, Hold: r.Hold, HoldReason: r.HoldReason, Review: r.Review,
+		Withdrawn: r.Withdrawn, ProgressAt: r.ProgressAt, TypedWaits: r.Waits,
 		Ask: r.Ask, Note: r.Note, Decision: r.Decision,
 		ManagerRole: store.WorkstreamManagerRole(r.BeadID), NowStep: now,
 		Total: len(ws.Steps), Steps: snapSteps(roots, now, live, true),
@@ -567,6 +576,7 @@ func snapSteps(nodes []*StepNode, now string, live LiveAgent, stage bool) []Snap
 	for _, n := range nodes {
 		o := n.Row
 		st := SnapStep{
+			Hold: o.Hold, HoldReason: o.HoldReason, Withdrawn: o.Withdrawn, ProgressAt: o.ProgressAt, TypedWaits: o.Waits,
 			ResultRunID: o.ResultRunID, ResultReadyAt: o.ResultReadyAt, QuestionWaiting: o.QuestionWaiting, HumanAnswerPending: o.HumanAnswerPending,
 			ExecutionMode: o.ExecutionMode, ExecutionEligible: o.ExecutionEligible, ExecutionReady: o.ExecutionReady, ExecutionReserved: o.ExecutionReserved, ExecutionCapable: o.ExecutionCapable, ExecutionAttempts: o.ExecutionAttempts, ExecutionError: o.ExecutionError,
 			PlanningPending: o.PlanningPending, PlanningCommander: o.PlanningCommander, JurisdictionRevision: o.JurisdictionRevision,
@@ -666,6 +676,8 @@ type Source struct {
 	Health func() []SnapHealth
 	// OnSnapshot sees every snapshot built (cmdrd checks each plan against the rules).
 	OnSnapshot func(snap *Snapshot)
+	// Describe writes each active-mode row's one-liner from its state (nil: none).
+	Describe DescribeFunc
 
 	mu        sync.Mutex // guards what follows, and s.Deps.projectRows; never held during Load
 	chatSince map[string]SnapAgent
@@ -951,6 +963,7 @@ func (s *Source) build(ctx context.Context, data Data) Snapshot {
 	if err := applyClassifications(ctx, s.Deps.Store, &snap, &d); err != nil {
 		log.Printf("status classifier: evidence read unavailable")
 	}
+	applyDescriptions(s.Describe, &snap, &d)
 	if err := s.since.fill(ctx, s.Deps.Store, &d, now, data.LoadErr != nil); err != nil {
 		log.Printf("livedata: %v", err)
 	}

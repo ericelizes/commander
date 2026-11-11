@@ -40,25 +40,48 @@ const instruction = "Classify the provided agent evidence only. Return the schem
 
 func (r CLIRunner) Run(ctx context.Context, a chat.AccountView, evidence string) (Answer, error) {
 	var answer Answer
-	dir, e := os.MkdirTemp("", "cmdr-status-")
+	if len(evidence) > 12000 {
+		evidence = evidence[len(evidence)-12000:]
+	}
+	usage, e := r.Ask(ctx, a, instruction, schema, "<evidence>\n"+evidence+"\n</evidence>", &answer)
+	answer.Input, answer.Output, answer.Cached = usage.Input, usage.Output, usage.Cached
 	if e != nil {
 		return answer, e
+	}
+	if !slices.Contains(kinds, answer.Kind) || len(answer.Description) > 240 || strings.TrimSpace(answer.Description) == "" {
+		return answer, errors.New("classification outside the supported schema")
+	}
+	return answer, nil
+}
+
+// Usage is one small-model call's token use.
+type Usage struct{ Input, Output, Cached int64 }
+
+// Asker runs one bounded prompt with a JSON schema on a subscription account.
+type Asker interface {
+	Ask(ctx context.Context, a chat.AccountView, instruction string, schema map[string]any, input string, out any) (Usage, error)
+}
+
+// Ask runs instruction over input on the account's small model (Codex Luna or
+// Claude Haiku, low effort, no tools) and decodes the schema answer into out.
+func (r CLIRunner) Ask(ctx context.Context, a chat.AccountView, instruction string, schema map[string]any, input string, out any) (Usage, error) {
+	var usage Usage
+	dir, e := os.MkdirTemp("", "cmdr-status-")
+	if e != nil {
+		return usage, e
 	}
 	defer os.RemoveAll(dir)
 	raw, _ := json.Marshal(schema)
 	schemaPath := filepath.Join(dir, "schema.json")
 	if e = os.WriteFile(schemaPath, raw, 0600); e != nil {
-		return answer, e
+		return usage, e
 	}
-	if len(evidence) > 12000 {
-		evidence = evidence[len(evidence)-12000:]
-	}
-	prompt := instruction + "\n<evidence>\n" + evidence + "\n</evidence>"
+	prompt := instruction + "\n" + input
 	var command string
 	var args []string
 	if a.Runtime == chat.RuntimeCodex {
 		if !SubscriptionCodex(a.Dir) {
-			return answer, errors.New("Codex subscription sign-in unavailable")
+			return usage, errors.New("Codex subscription sign-in unavailable")
 		}
 		command = r.CodexBinary
 		if command == "" {
@@ -76,7 +99,7 @@ func (r CLIRunner) Run(ctx context.Context, a chat.AccountView, evidence string)
 		}
 		args = []string{"-p", "--model", "haiku", "--effort", "low", "--tools", "", "--strict-mcp-config", "--mcp-config", "{\"mcpServers\":{}}", "--setting-sources", "", "--disable-slash-commands", "--no-session-persistence", "--json-schema", string(raw), "--output-format", "json", "--system-prompt", instruction}
 	} else {
-		return answer, errors.New("unsupported classifier provider")
+		return usage, errors.New("unsupported classifier provider")
 	}
 	cmd := exec.CommandContext(ctx, command, args...)
 	cmd.Dir = dir
@@ -86,9 +109,8 @@ func (r CLIRunner) Run(ctx context.Context, a chat.AccountView, evidence string)
 	cmd.Stderr = &stderr
 	var stdout cappedBuffer
 	cmd.Stdout = &stdout
-	e = cmd.Run()
-	if e != nil {
-		return answer, fmt.Errorf("%s classifier request failed: %w", a.Runtime, e)
+	if e = cmd.Run(); e != nil {
+		return usage, fmt.Errorf("%s classifier request failed: %w", a.Runtime, e)
 	}
 	if a.Runtime == chat.RuntimeCodex {
 		scan := bufio.NewScanner(bytes.NewReader(stdout.Bytes()))
@@ -114,51 +136,46 @@ func (r CLIRunner) Run(ctx context.Context, a chat.AccountView, evidence string)
 				result = ev.Item.Text
 			}
 			if ev.Type == "turn.completed" {
-				answer.Input, answer.Output, answer.Cached = ev.Usage.Input, ev.Usage.Output, ev.Usage.Cached
+				usage = Usage{Input: ev.Usage.Input, Output: ev.Usage.Output, Cached: ev.Usage.Cached}
 			}
 			if ev.Type == "turn.failed" || ev.Type == "error" {
-				return answer, errors.New("Codex classifier could not complete")
+				return usage, errors.New("Codex classifier could not complete")
 			}
 		}
 		if e = scan.Err(); e != nil {
-			return answer, e
+			return usage, e
 		}
-		if e = json.Unmarshal([]byte(result), &answer); e != nil {
-			return answer, errors.New("invalid Codex classification")
+		if e = json.Unmarshal([]byte(result), out); e != nil {
+			return usage, errors.New("invalid Codex classification")
 		}
-	} else {
-		var result struct {
-			IsError    bool            `json:"is_error"`
-			Structured json.RawMessage `json:"structured_output"`
-			Result     string          `json:"result"`
-			Usage      struct {
-				Input  int64 `json:"input_tokens"`
-				Output int64 `json:"output_tokens"`
-				Read   int64 `json:"cache_read_input_tokens"`
-				Write  int64 `json:"cache_creation_input_tokens"`
-			} `json:"usage"`
-		}
-		if json.Unmarshal(stdout.Bytes(), &result) != nil {
-			return answer, errors.New("invalid Claude classification response")
-		}
-		answer.Input = result.Usage.Input + result.Usage.Read + result.Usage.Write
-		answer.Output = result.Usage.Output
-		answer.Cached = result.Usage.Read
-		if result.IsError {
-			return answer, errors.New("Claude classifier could not complete")
-		}
-		data := result.Structured
-		if len(data) == 0 {
-			data = []byte(result.Result)
-		}
-		if json.Unmarshal(data, &answer) != nil {
-			return answer, errors.New("invalid Claude classification")
-		}
+		return usage, nil
 	}
-	if !slices.Contains(kinds, answer.Kind) || len(answer.Description) > 240 || strings.TrimSpace(answer.Description) == "" {
-		return answer, errors.New("classification outside the supported schema")
+	var result struct {
+		IsError    bool            `json:"is_error"`
+		Structured json.RawMessage `json:"structured_output"`
+		Result     string          `json:"result"`
+		Usage      struct {
+			Input  int64 `json:"input_tokens"`
+			Output int64 `json:"output_tokens"`
+			Read   int64 `json:"cache_read_input_tokens"`
+			Write  int64 `json:"cache_creation_input_tokens"`
+		} `json:"usage"`
 	}
-	return answer, nil
+	if json.Unmarshal(stdout.Bytes(), &result) != nil {
+		return usage, errors.New("invalid Claude classification response")
+	}
+	usage = Usage{Input: result.Usage.Input + result.Usage.Read + result.Usage.Write, Output: result.Usage.Output, Cached: result.Usage.Read}
+	if result.IsError {
+		return usage, errors.New("Claude classifier could not complete")
+	}
+	data := result.Structured
+	if len(data) == 0 {
+		data = []byte(result.Result)
+	}
+	if json.Unmarshal(data, out) != nil {
+		return usage, errors.New("invalid Claude classification")
+	}
+	return usage, nil
 }
 
 type cappedBuffer struct{ bytes.Buffer }

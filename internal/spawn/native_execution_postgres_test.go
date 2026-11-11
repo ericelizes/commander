@@ -412,7 +412,8 @@ func TestClaimedExecutionUsesRealNativeHostAndRecoversCommittedStartup(t *testin
 				t.Fatalf("terminal result missing from live board: %+v", reviewedSnapshot)
 			}
 			row := reviewedSnapshot.Display.Workstreams[0]
-			if row.Kind != "waiting" || row.Text != "Result ready for Commander review" || row.Working != 0 {
+			// A finished result is the planning Commander's move: review it.
+			if row.Kind != "working" || row.Text != "Commander to review the finished result" || row.Working != 0 || row.Actor == nil || row.Actor.Lead.Reason != "review_result" {
 				t.Fatalf("completed native turn has the wrong handoff: %+v", row)
 			}
 			steps := reviewedSnapshot.Workstreams[0].Steps

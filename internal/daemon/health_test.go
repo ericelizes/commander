@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/example-user/commander/internal/nextactor"
 	"log"
 	"strings"
 	"testing"
@@ -375,5 +376,31 @@ func TestSettleMailsNestedManager(t *testing.T) {
 	}
 	if got := runManager(context.Background(), nestedProject{dir}, tree, run); got != "manager-"+beads.NestedA1 {
 		t.Fatalf("switch on: %s, want the nested Manager", got)
+	}
+}
+
+func TestCheckStuckAlertsOnlyPastTheThreshold(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0)
+	clock := now
+	h := newHealthBoard(func() time.Time { return clock })
+	row := func(since int64) livedata.BoardRow {
+		return livedata.BoardRow{N: 1, Project: "p", BeadID: "ws", Title: "Goal", Actor: &nextactor.Row{Lead: nextactor.Result{Actor: nextactor.Stuck, Reason: "exited_without_report", Text: "Stuck: the agent stopped", Since: since}}}
+	}
+	snap := &livedata.Snapshot{Display: &livedata.Display{Workstreams: []livedata.BoardRow{row(now.Add(-5 * time.Minute).Unix())}}}
+	checkStuck(h, snap, now)
+	if len(h.list()) != 0 {
+		t.Fatal("a row stuck for 5 minutes raised an alert", h.list())
+	}
+	snap.Display.Workstreams[0] = row(now.Add(-time.Hour).Unix())
+	checkStuck(h, snap, now)
+	clock = now.Add(healthGrace + time.Second) // a failure is listed once it outlasts the grace
+	checkStuck(h, snap, clock)
+	if l := h.list(); len(l) != 1 || !strings.Contains(l[0].Detail, "Stuck: the agent stopped") {
+		t.Fatal("a row stuck for an hour did not alert", l)
+	}
+	snap.Display.Workstreams[0].Actor.Lead.Actor = nextactor.Agent
+	checkStuck(h, snap, clock)
+	if len(h.list()) != 0 {
+		t.Fatal("the alert did not clear once the row moved", h.list())
 	}
 }

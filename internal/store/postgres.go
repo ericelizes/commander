@@ -207,3 +207,11 @@ func maxInt64(a, b int64) int64 {
 	}
 	return b
 }
+
+// NotifyStateChanged wakes state watchers without recording an event: the
+// board rebuilds (a description is ready), nothing durable changed.
+func (s *Store) NotifyStateChanged(ctx context.Context) {
+	if s.postgres {
+		_, _ = s.db.ExecContext(ctx, `SELECT pg_notify('commander_state','changed')`)
+	}
+}

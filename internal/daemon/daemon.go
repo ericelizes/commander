@@ -310,7 +310,7 @@ func New() (*Daemon, error) {
 	health := newHealthBoard(time.Now)
 	live := &livedata.Source{
 		Health:      health.list,
-		OnSnapshot:  func(snap *livedata.Snapshot) { checkPlans(health, snap) },
+		OnSnapshot:  func(snap *livedata.Snapshot) { checkPlans(health, snap); checkStuck(health, snap, time.Now()) },
 		Deps:        livedata.Deps{Store: st, Beads: reads, Scrape: livedata.ScrapeAgentStates},
 		UnreadEvery: 5 * time.Second, // Unread is set below from the waker's inbox reads
 		WaitsChecked: func() time.Time {
@@ -525,6 +525,11 @@ func (d *Daemon) Run(ctx context.Context) error {
 			go d.store.MaintainEventHistory(ctx)
 			worker := &statusclassify.Worker{Store: d.store, Engine: d.chat, Home: d.home}
 			go worker.Run(ctx)
+			if d.live != nil && d.orchestrationMode == "active" {
+				describer := &statusclassify.Describer{Worker: worker, OnReady: func() { d.store.NotifyStateChanged(context.Background()) }}
+				d.live.Describe = describer.Describe
+				go describer.Run(ctx)
+			}
 		}
 		go chat.RunCaptureSweep(ctx, d.home, time.Hour)
 	}

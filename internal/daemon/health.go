@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"fmt"
+	"github.com/example-user/commander/internal/nextactor"
 	"log"
 	"sort"
 	"strings"
@@ -363,4 +364,29 @@ func healthMail(key, detail string, since time.Time) (to, subject, body string) 
 	head, _, _ := strings.Cut(detail, "\n")
 	return commanderRole, "[health] " + head,
 		detail + "\n\nFailing since " + at + " and still failing. The user's board is not moving for this; tell the user and fix the cause."
+}
+
+// stuckAlertAfter is how long a row may read stuck before it is a health
+// failure: supervision should have moved it by then.
+const stuckAlertAfter = 30 * time.Minute
+
+// checkStuck raises a health failure for every row that has read stuck past
+// stuckAlertAfter (at once when its start is unknown), and clears it after.
+func checkStuck(h *healthBoard, snap *livedata.Snapshot, now time.Time) {
+	if h == nil || snap.Display == nil || snap.Degraded != nil {
+		return
+	}
+	for _, row := range snap.Display.Workstreams {
+		key := "stuck:" + row.Project + ":" + row.BeadID
+		if row.Actor == nil || row.Actor.Lead.Actor != nextactor.Stuck {
+			h.ok(key)
+			continue
+		}
+		lead := row.Actor.Lead
+		if lead.Since > 0 && now.Unix()-lead.Since < int64(stuckAlertAfter/time.Second) {
+			h.ok(key)
+			continue
+		}
+		h.fail(key, fmt.Sprintf("#%d %s is stuck and supervision has not moved it: %s (%s)", row.N, row.Title, lead.Text, lead.Reason))
+	}
 }

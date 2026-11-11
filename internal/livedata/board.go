@@ -1,6 +1,7 @@
 package livedata
 
 import (
+	"github.com/example-user/commander/internal/nextactor"
 	"regexp"
 	"slices"
 	"sort"
@@ -65,6 +66,8 @@ type BoardGate struct {
 // waiting yellow, working green, the rest grey); Text never carries an age:
 // Since is when the state began (0 when unknown), and readers format the age.
 type BoardRow struct {
+	// Actor is who makes the next move, and why (active mode).
+	Actor                *nextactor.Row  `json:"actor,omitempty"`
 	PlanningCommander    string          `json:"planning_commander,omitempty"`
 	JurisdictionRevision int64           `json:"jurisdiction_revision,omitempty"`
 	Evidence             *StatusEvidence `json:"evidence,omitempty"`
@@ -97,6 +100,8 @@ type BoardRow struct {
 // row's ("#3" + ".1.2"). Like the row, one with a single open child shows that
 // child: its bead, title and children.
 type BoardTrack struct {
+	// Actor is who makes the next move, and why (active mode).
+	Actor                *nextactor.Row  `json:"actor,omitempty"`
 	PlanningCommander    string          `json:"planning_commander,omitempty"`
 	JurisdictionRevision int64           `json:"jurisdiction_revision,omitempty"`
 	Evidence             *StatusEvidence `json:"evidence,omitempty"`
@@ -155,6 +160,9 @@ func Board(s Snapshot, nowSec int64) Display {
 	s = b.s
 	d := Display{Asks: []BoardAsk{}, Workstreams: []BoardRow{}}
 	for _, ws := range s.Workstreams {
+		if s.OrchestrationMode == "active" && ws.Withdrawn {
+			continue // a cancelled request is nobody's move: not a sidebar row
+		}
 		d.Workstreams = append(d.Workstreams, b.row(ws))
 	}
 	wsKeys := map[string]string{}
@@ -196,7 +204,7 @@ func newBoard(s Snapshot, nowSec int64) board {
 			s.NeedsYou[i].StaleWhy = why
 		}
 	}
-	b := board{s: s, now: nowSec, loc: BoardZone(), needsIDs: map[string]bool{}, asks: map[string]int{}, trackAsks: map[string]int{}, noPitch: map[string]NoPitch{}, heldCard: map[string]string{}}
+	b := board{s: s, now: nowSec, loc: BoardZone(), needsIDs: map[string]bool{}, asks: map[string]int{}, trackAsks: map[string]int{}, noPitch: map[string]NoPitch{}, heldCard: map[string]string{}, actors: map[string]nextactor.Row{}}
 	for _, p := range s.NoPitch {
 		b.noPitch[p.Project+"\x00"+p.BeadID] = p
 	}
@@ -238,6 +246,7 @@ type board struct {
 	now             int64
 	loc             *time.Location
 	needsIDs        map[string]bool
+	actors          map[string]nextactor.Row // next-actor state per row and track, by project:bead
 	asks, trackAsks map[string]int
 	noPitch         map[string]NoPitch // project\x00bead: ready asks whose pitch the Manager has not written
 	heldCard        map[string]string  // project\x00gate: the ancestor whose open card is this gate's ask
@@ -322,6 +331,11 @@ func (b board) row(ws SnapWorkstream) BoardRow {
 	r := BoardRow{PlanningCommander: ws.PlanningCommander, JurisdictionRevision: ws.JurisdictionRevision, Key: ws.Project + ":" + ws.BeadID, N: ws.N, Title: title, Scope: scope, ScopeRole: scopeRole, Project: ws.Project, BeadID: ws.BeadID, ManagerRole: ws.ManagerRole, Starred: ws.Starred, Kind: l.kind, Text: l.text, Since: l.since, Why: l.why, AgeAs: l.ageAs,
 		Progress: progressOf(ws), Milestones: DeliveryMilestones(ws), Working: workingAgents(ws, manager, hasManager), Flag: asks, Unread: b.s.Unread[ws.ManagerRole], Tracks: tracks}
 	if b.s.OrchestrationMode == "active" {
+		if a, ok := b.actors[ws.Project+":"+ws.BeadID]; ok {
+			r.Actor = &a
+		}
+	}
+	if b.s.OrchestrationMode == "active" {
 		r.Working = executionCount(b.s, ws.ProjectID, ws.BeadID, ws.Steps)
 	}
 	r.Workflow, r.Diagram = b.workflow(ws, manager, hasManager, byTrack, pickingUp)
@@ -375,7 +389,7 @@ func (b board) trackLevel(ws SnapWorkstream, steps []SnapStep, prefix string, ma
 		}
 		out.rows = append(out.rows, BoardTrack{PlanningCommander: t.PlanningCommander, JurisdictionRevision: t.JurisdictionRevision, Key: ws.Project + ":" + t.BeadID, BeadID: t.BeadID, Letter: number, Title: trackTitle(t.Title), Children: kids.rows,
 			Kind: l.kind, Text: l.text, Since: l.since, Progress: progressOf(tws), Milestones: DeliveryMilestones(tws), Working: working, Why: l.why, AgeAs: l.ageAs,
-			ManagerRole: t.ManagerRole})
+			ManagerRole: t.ManagerRole, Actor: b.trackActor(ws.Project, t.BeadID)})
 	}
 	return out
 }
@@ -1373,6 +1387,7 @@ func trackWorkstream(ws SnapWorkstream, t SnapStep) SnapWorkstream {
 	ws.BeadID, ws.Title, ws.State, ws.Status, ws.Steps = t.BeadID, t.Title, t.State, t.Status, t.Children
 	ws.GateNodes, ws.NoGates, ws.Total, ws.Done = nil, t.NoGates, 0, 0
 	ws.Waiting, ws.WaitSince, ws.WaitUntil, ws.WaitUntilAs, ws.WaitUntils = t.Waiting, t.WaitSince, t.WaitUntil, t.WaitUntilAs, t.WaitUntils
+	ws.Hold, ws.HoldReason, ws.Withdrawn, ws.ProgressAt, ws.TypedWaits = t.Hold, t.HoldReason, t.Withdrawn, t.ProgressAt, t.TypedWaits
 	return ws
 }
 
@@ -2043,4 +2058,15 @@ func DeliveryMilestones(ws SnapWorkstream) Progress {
 	}
 	walk(ws.Steps)
 	return p
+}
+
+// trackActor is a track's next-actor state in active mode (nil otherwise).
+func (b board) trackActor(project, bead string) *nextactor.Row {
+	if b.s.OrchestrationMode != "active" {
+		return nil
+	}
+	if a, ok := b.actors[project+":"+bead]; ok {
+		return &a
+	}
+	return nil
 }

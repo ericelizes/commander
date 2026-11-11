@@ -109,7 +109,7 @@ func TestCommanderRuntimeContractInIsolatedPostgresCockpit(t *testing.T) {
 			}
 		}
 		text, e = script("text")
-		if e == nil && strings.Contains(text, "Runtime result") && strings.Contains(text, "Result ready for Commander review") {
+		if e == nil && strings.Contains(text, "Runtime result") && strings.Contains(text, "Commander to review the finished result") {
 			break
 		}
 		time.Sleep(100 * time.Millisecond)
@@ -117,7 +117,7 @@ func TestCommanderRuntimeContractInIsolatedPostgresCockpit(t *testing.T) {
 	if e != nil || !strings.Contains(text, "Runtime result") {
 		t.Fatalf("canonical workstream did not render: %v\n%s", e, text)
 	}
-	if !strings.Contains(text, "Result ready for Commander review") || strings.Contains(text, "Manager review overdue") {
+	if !strings.Contains(text, "Commander to review the finished result") || strings.Contains(text, "Manager review overdue") {
 		t.Fatalf("canonical pending result did not render honestly:\n%s", text)
 	}
 	if strings.Contains(text, "real claude is disabled") || strings.Contains(text, "real codex is disabled") {

@@ -67,6 +67,17 @@ func Decide(f store.SupervisionFact, now time.Time) Decision {
 		d.CheckAfter = 15 * time.Second
 		return d
 	}
+	// The shared next-actor decision (what the sidebar shows) gates every nudge:
+	// a move that is the user's, someone external's, nobody's, or already in an
+	// agent's hands is observed, never delivered. Only Commander-owed or stuck
+	// moves continue to the delivery rules below.
+	if actor, fromChildren := actorOf(f, now); observedActor(actor.Actor) {
+		d.Reason, d.Description = supervisionReason(actor, fromChildren), actor.Text
+		if d.Reason == "execution_queued" || d.Reason == "execution_starting" {
+			d.CheckAfter = 5 * time.Second
+		}
+		return d
+	}
 	if f.Held || f.Status == beads.StatusDeferred {
 		d.Reason = "held"
 		d.Description = "Paused by recorded direction"

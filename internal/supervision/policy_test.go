@@ -38,8 +38,18 @@ func TestResponsibilityPolicyAcrossAgentCapabilities(t *testing.T) {
 			f.Alive = true
 			f.ExecutorBound = true
 			f.AgentState = "working"
-			f.ProgressAt = now.Add(-time.Hour).Unix()
+			f.ProgressAt = now.Add(-2 * time.Hour).Unix()
 		}, "wake", "progress_check", "commander"},
+		{"working agent on a long run", func(f *store.SupervisionFact) {
+			f.Alive = true
+			f.ExecutorBound = true
+			f.AgentState = "working"
+			f.ProgressAt = now.Add(-40 * time.Minute).Unix()
+		}, "observe", "working", "workstream-qa"},
+		{"waiting on CI is never nudged", func(f *store.SupervisionFact) {
+			f.Labels = []string{"waiting:1700000000:ci:12"}
+		}, "observe", "dependency", "workstream-qa"},
+		{"withdrawn request is nobody's move", func(f *store.SupervisionFact) { f.Labels = []string{"withdrawn"} }, "observe", "withdrawn", "workstream-qa"},
 		{"review without progress", func(f *store.SupervisionFact) {
 			f.Alive = true
 			f.ResultReady = true
