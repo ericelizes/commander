@@ -72,6 +72,14 @@ func TestPostgresLiveStateScenario(t *testing.T) {
 	if e = s.RecordRuntimePresence(ctx, map[int64]bool{}, time.Now(), []string{parentRole, childRole}); e != nil {
 		t.Fatal(e)
 	}
+	watch := store.WatchIssue{Key: "fixture:watch", WS: root, Text: "Recorded watcher observation", Since: 1, Active: false, Told: true}
+	if e = s.SetWatchIssues(ctx, []store.WatchIssue{watch}); e != nil {
+		t.Fatal(e)
+	}
+	recorded, err := s.WatchIssues(ctx)
+	if err != nil || len(recorded) != 1 || recorded[0] != watch {
+		t.Fatal("watcher flags were not durable", recorded, err)
+	}
 	source := &livedata.Source{Deps: livedata.Deps{Store: s, Beads: beads.ExportReads(beads.NewCached(c))}, Chats: func() map[string]livedata.ChatState {
 		states, _ := s.ListAgentStates(context.Background())
 		out := map[string]livedata.ChatState{}

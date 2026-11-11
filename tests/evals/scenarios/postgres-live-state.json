@@ -4,9 +4,10 @@
   "nested": "Nested work",
   "steps": [
     "Read the real bead hierarchy from Postgres",
-    "Count an active nested Manager while its parent is idle",
+    "Do not count planning chat activity as execution",
     "Stream a committed runtime update without a polling tick",
     "Replay durable events from a saved cursor",
-    "Clear old rows on an unavailable read"
+    "Clear old rows on an unavailable read",
+    "Persist watcher alert flags in PostgreSQL without changing runtime counts"
   ]
 }

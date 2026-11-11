@@ -121,8 +121,17 @@ func (s *Store) SetWatchIssues(ctx context.Context, issues []WatchIssue) error {
 		return fmt.Errorf("set watch issues: %w", err)
 	}
 	for _, i := range issues {
+		// Both backends retain integer flags in this compatibility table.
+		// pgx cannot bind a Go bool to the existing BIGINT columns.
+		active, told := 0, 0
+		if i.Active {
+			active = 1
+		}
+		if i.Told {
+			told = 1
+		}
 		if _, err := tx.ExecContext(ctx, `INSERT INTO watch_issues(key, ws, text, since, active, told) VALUES (?, ?, ?, ?, ?, ?)`,
-			i.Key, i.WS, i.Text, i.Since, i.Active, i.Told); err != nil {
+			i.Key, i.WS, i.Text, i.Since, active, told); err != nil {
 			return fmt.Errorf("set watch issues: %w", err)
 		}
 	}
