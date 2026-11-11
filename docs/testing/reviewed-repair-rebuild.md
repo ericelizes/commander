@@ -14,7 +14,7 @@ its old install/rollback instructions do not authorize this candidate.
 
 | Change | Reviewed head | Replayed candidate range | Evidence |
 | --- | --- | --- | --- |
-| Repair batch: capacity recovery, red failure ownership, missing-custody projection, scoped own-run review bootstrap, inspector focus, withdrawal, private fixtures/backend CI | `7aa45369f9f5f258dc4ff86c24424b62349f3b75` | `64d90ffc..96a46703` | `batch.range-diff`; 97/125 touched files have identical final blobs; differing shared files retain newer main or the additional listed fixes |
+| Repair batch: capacity recovery, red failure ownership, missing-custody projection, scoped own-run review bootstrap, inspector focus, withdrawal, private fixtures/backend CI | `7aa45369f9f5f258dc4ff86c24424b62349f3b75` | `64d90ffc..96a46703` | `batch.range-diff`; 96/125 touched files have identical final blobs; differing shared files retain newer main or the additional listed fixes |
 | Fixture heredoc install guard plus ANSI-C escape bypass correction | `03f37c36ea9f2e120ab097fc1997321edad837f3` | `96a46703..5709ce0b` | `guard.range-diff`: both commits exact; no Mac transplant |
 | User-gate authority, unfinished-parent close refusal, pre-migration authorization, Manager guidance | `5bd34a9b197f5a205222b903642c9967ec01afbd` | `5709ce0b..46ac2a21` | `gates.range-diff`; tests/scenario/close helper exact; existing no-PR completion path preserved |
 | Ordinary parent placement and transitive descendant custody correction | `e83792239d98250cbac1a9e1b94821f2caf6addf` | `46ac2a21..40f61946` | `reparent.range-diff`: production/tests exact; only CLAUDE append context differs |
@@ -90,8 +90,12 @@ still absent from that main head; no duplicate landing was imported.
 
 ## Verification
 
-Final build/full-suite validation is pending; see the assigned bead for the
-final exact head and completed test summary. App source has passed typecheck,
+Build/full-suite commands are `go build ./...` and
+`go test -json -count=1 -p 2 -timeout 20m ./...`, run inside
+`cmdr internal-slot run` with a private HOME/state/cache and pinned private Rust
+beads backend. `.commander/rebuild129/final-{build,suite}.log` and the suite
+summary retain outcomes and every explicit skip. The assigned bead's Final report
+records the completed checks and exact deliverable SHA. App source passed typecheck,
 105 test files / 1,028 tests, and build. The earlier 21756bbe-base suite was
 intentionally stopped in its exact private eval scope after revision 8 required
 a new base and an independent integration check found the capacity overlay
