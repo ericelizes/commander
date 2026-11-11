@@ -8,7 +8,8 @@ import (
 
 // OrderAccounts expands an account order into providers, each at most once:
 // "claude" is every Claude account (default first), "codex" is Codex, and any
-// other entry names one account.
+// other entry names one account. Unlisted connected accounts remain fallback
+// candidates, after every listed preference (d82).
 func OrderAccounts(order []string, accounts []AccountView) []Provider {
 	var out []Provider
 	seen := map[Provider]bool{}
@@ -22,6 +23,8 @@ func OrderAccounts(order []string, accounts []AccountView) []Provider {
 			out = append(out, p)
 		}
 	}
+	// Saved order is a preference, never an account authorization boundary (d82).
+	order = append(append([]string{}, order...), RuntimeCodex, RuntimeClaude)
 	for _, entry := range order {
 		for _, a := range accounts {
 			if entry == a.Runtime && (entry == RuntimeClaude || entry == RuntimeCodex) || entry == a.Name {

@@ -156,6 +156,10 @@ func (s *UsageStore) MarkOut(runtime, account, role string, until int64, at time
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	u := s.m[key]
+	if u.At.After(at) {
+		return
+	} // A delayed native exit cannot overwrite newer provider evidence.
+
 	u.Runtime, u.Role, u.At, u.Status, u.OutUntil = runtime, role, at, UsageOut, until
 	if runtime != RuntimeCodex {
 		u.Account = accountName(account)

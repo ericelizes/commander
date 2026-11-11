@@ -58,8 +58,15 @@ func TestCommanderPlanSkipsDisconnectedAndExhaustedAccounts(t *testing.T) {
 		t.Fatal(err)
 	}
 	plan, err := planChatStart(h.home, "commander", false, usage, now, func() bool { return true }, commanderOrder)
-	if err != nil || plan.runtime != RuntimeCodex || plan.pin != RuntimeClaude {
-		t.Fatalf("Claude preference blocked fallback: %+v %v", plan, err)
+	if !errors.Is(err, ErrNoUsage) {
+		t.Fatalf("explicit Claude pin escaped: %+v %v", plan, err)
+	}
+	if err := WriteAutoRuntime(h.home, "commander", RuntimeClaude); err != nil {
+		t.Fatal(err)
+	}
+	plan, err = planChatStart(h.home, "commander", false, usage, now, func() bool { return true }, commanderOrder)
+	if err != nil || plan.runtime != RuntimeCodex {
+		t.Fatalf("unpinned fallback failed: %+v %v", plan, err)
 	}
 	usage[RuntimeCodex] = Usage{Status: UsageOut, OutUntil: now.Add(time.Hour).Unix()}
 	if _, err := planChatStart(h.home, "commander", false, usage, now, func() bool { return true }, commanderOrder); !errors.Is(err, ErrNoUsage) {
@@ -133,9 +140,11 @@ func TestCommanderFollowsSavedAccountOrder(t *testing.T) {
 	if err != nil || plan.runtime != RuntimeClaude || plan.account != "work" {
 		t.Fatalf("saved order naming one account: %+v %v", plan, err)
 	}
-	if _, err = planChatStart(h.home, "commander", false, map[string]Usage{UsageKey(RuntimeClaude, "work"): {Status: UsageOut, OutUntil: now.Add(time.Hour).Unix()}}, now, func() bool { return true }, []string{"work"}); !errors.Is(err, ErrNoUsage) {
-		t.Fatalf("an account outside the order was used: %v", err)
+	plan, err = planChatStart(h.home, "commander", false, map[string]Usage{UsageKey(RuntimeClaude, "work"): {Status: UsageOut, OutUntil: now.Add(time.Hour).Unix()}}, now, func() bool { return true }, []string{"work"})
+	if err != nil || plan.account == "work" {
+		t.Fatalf("saved preference blocked another account: %+v %v", plan, err)
 	}
+
 }
 
 func TestAccountOrderReadFailureCannotLaunchOnDefaults(t *testing.T) {

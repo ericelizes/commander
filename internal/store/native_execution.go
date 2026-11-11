@@ -11,7 +11,7 @@ type NativeExecution struct {
 	RunID, ProjectID, ResumeSourceRunID                                                           int64
 	BeadID, Agent, SessionID, ProjectPath, ProjectType, Worktree, Model, Driver, Runtime, Account string
 	Title, Description, Acceptance, PlanningCommander                                             string
-	CanRestart                                                                                    bool
+	UsageRecovery, CanRestart                                                                     bool
 }
 
 func (s *Store) NativeExecution(ctx context.Context, role string) (*NativeExecution, error) {
@@ -33,7 +33,17 @@ func (s *Store) NativeExecution(ctx context.Context, role string) (*NativeExecut
 			return nil, e
 		}
 	}
-	return out, rows.Err()
+	if e = rows.Err(); e != nil {
+		return nil, e
+	}
+	// Close the result before reading the source on the same bounded pool.
+	rows.Close()
+	if out != nil && out.ResumeSourceRunID > 0 {
+		if out.UsageRecovery, e = s.UsageRecoverySource(ctx, out.ResumeSourceRunID); e != nil {
+			return nil, e
+		}
+	}
+	return out, nil
 }
 func (s *Store) PlanningIdentityState(ctx context.Context, role string) (owns, retired bool, err error) {
 	err = s.db.QueryRowContext(ctx, `SELECT commander_identity_owns(?),EXISTS(SELECT 1 FROM jurisdiction_consolidations WHERE jsonb_exists(response->'retired_planning_candidates',?))`, role, role).Scan(&owns, &retired)
@@ -61,4 +71,13 @@ func (s *Store) NativeExecutionRoles(ctx context.Context, now int64) ([]string, 
 func (s *Store) RecordNativeStartupAttempt(ctx context.Context, role string, rid int64, session, detail string, now int64) error {
 	_, e := s.db.ExecContext(ctx, `UPDATE bead_tasks b SET execution_error=?,execution_attempts=CASE WHEN ?='' THEN 0 ELSE execution_attempts+1 END,execution_due_at=CASE WHEN ?='' THEN 0 ELSE ?+60 END FROM agent_runs r WHERE r.id=b.active_run_id AND r.id=? AND r.agent_name=? AND r.opencode_session_id=? AND r.status='running' AND r.execution_driver='native'`, truncateSupervision(detail, 1000), detail, detail, now, rid, role, session)
 	return e
+}
+
+// An unanswered planning checkpoint cannot become usage recovery. After its
+// answer, the typed physical usage exit can use an attributed fresh-session
+// handoff; the replacement instruction includes the exact question history.
+func (s *Store) UsageRecoverySource(ctx context.Context, rid int64) (bool, error) {
+	var yes bool
+	e := s.db.QueryRowContext(ctx, `SELECT status='native-error' AND EXISTS(SELECT 1 FROM bead_comments c WHERE c.project_id=r.project_id AND c.bead_id=r.task_bead_id AND c.run_id=r.id AND c.id='native-exit:'||r.id::text AND c.fact_kind='native-usage-limit') AND NOT EXISTS(SELECT 1 FROM bead_questions q JOIN bead_tasks b ON b.project_id=q.project_id AND b.id=q.bead_id WHERE q.run_id=r.id AND q.blocking AND q.state='pending' AND q.plan_revision=b.plan_revision) FROM agent_runs r WHERE r.id=?`, rid).Scan(&yes)
+	return yes, e
 }

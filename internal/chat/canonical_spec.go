@@ -91,9 +91,16 @@ func (r StoreResolver) resolveCanonical(ctx context.Context, role string) (Spec,
 			spec.Runtime = execution.Runtime
 			spec.Account = execution.Account
 			spec.Model = agentrt.ClaudeModel(model)
-			spec.ExecutionResume = execution.ResumeSourceRunID > 0
+			spec.ExecutionResume = execution.ResumeSourceRunID > 0 && !execution.UsageRecovery
 			spec.ExecutionInitialPrompt = fmt.Sprintf("Execute your assigned canonical bead %s. Read the current bead, goals, constraints and recorded decisions before acting. Work within the supplied acceptance criteria; record evidence and a final report. Ask the current planning Commander only for choices outside your authority. A process exit is not bead completion.", execution.BeadID)
-			if execution.ResumeSourceRunID > 0 {
+			if execution.UsageRecovery {
+				handoff, err := r.usageRecoveryHandoff(ctx, execution.ResumeSourceRunID, execution.ProjectID, execution.BeadID)
+				if err != nil {
+					return Spec{}, true, err
+				}
+				spec.ExecutionInitialPrompt += handoff
+				spec.ExecutionInitialPrompt += fmt.Sprintf("\nRead any saved answers using cmdr question history --project-id %d --bead %s --run-id %d. Saved answers do not waive release gates.", execution.ProjectID, quote(execution.BeadID), execution.ResumeSourceRunID)
+			} else if execution.ResumeSourceRunID > 0 {
 				spec.ExecutionInitialPrompt += fmt.Sprintf(" Continue the saved checkpoint from run %d and read its answer using cmdr question history --project-id %d --bead %s --run-id %d. Saved answers do not waive release gates.", execution.ResumeSourceRunID, execution.ProjectID, quote(execution.BeadID), execution.ResumeSourceRunID)
 			}
 		}

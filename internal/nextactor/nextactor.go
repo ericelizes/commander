@@ -73,6 +73,8 @@ type Bead struct {
 	PlanningPending     bool
 
 	PlanningCommander string
+	UsageCapacity     string // eligible queued execution exhausted connected accounts
+	PlanningUsage     string // recorded planner runtime cannot serve this move
 }
 
 // Context supplies what the decision needs beyond one bead.
@@ -205,6 +207,9 @@ func decide(b Bead, ctx Context, seen map[string]bool, depth int) Result {
 		return Result{Actor: None, Reason: "children", Text: "Carried by its steps", Bead: b.ID}
 	}
 	if b.ReadyQueued {
+		if b.UsageCapacity != "" {
+			return Result{Actor: Stuck, Reason: "usage_capacity", Text: b.UsageCapacity, Bead: b.ID}
+		}
 		if b.NoCapableSlot {
 			return Result{Actor: Stuck, Reason: "no_capable_slot", Text: "Stuck: no agent slot can run " + quoted(b.Title), Bead: b.ID}
 		}
@@ -336,6 +341,9 @@ func blockers(b Bead, ctx Context, seen map[string]bool, depth int) (Result, boo
 // commanderOwed is a move the planning Commander owes: its own while it is in a
 // turn or within the grace after going idle, stuck once it sits idle longer.
 func commanderOwed(b Bead, ctx Context, reason, what string, since int64) Result {
+	if b.PlanningUsage != "" {
+		return Result{Actor: Stuck, Reason: "planning_usage", Text: b.PlanningUsage, Bead: b.ID}
+	}
 	who := firstNonEmpty(b.PlanningCommander, "commander")
 	busy, idleSince := false, int64(0)
 	if ctx.Commander != nil {

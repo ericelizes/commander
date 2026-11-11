@@ -201,7 +201,18 @@ func (s *Store) ReapExecutionStartupClaims(ctx context.Context, now time.Time) e
 	return e
 }
 
+// UsageCapacityError is a cause marker, not a holder, deadline or launch failure.
+const UsageCapacityError = "Account usage unavailable: "
+
+func (s *Store) WaitExecutionUsage(ctx context.Context, c ExecutionClaim, detail string, now time.Time) error {
+	return s.releaseExecutionClaim(ctx, c, UsageCapacityError+detail, now, false)
+}
+
 func (s *Store) FailExecutionClaim(ctx context.Context, c ExecutionClaim, detail string, now time.Time) error {
+	return s.releaseExecutionClaim(ctx, c, detail, now, true)
+}
+
+func (s *Store) releaseExecutionClaim(ctx context.Context, c ExecutionClaim, detail string, now time.Time, failed bool) error {
 	return s.WithTx(ctx, func(q Querier) error {
 		var pid, revision, source int64
 		var bead string
@@ -222,7 +233,7 @@ func (s *Store) FailExecutionClaim(ctx context.Context, c ExecutionClaim, detail
 				return errors.New("cannot release a live execution after a launch error")
 			}
 		}
-		if _, e = q.ExecContext(ctx, `UPDATE bead_tasks SET execution_ready=TRUE,resume_run_id=NULLIF(?,0),resume_plan_revision=CASE WHEN ?::bigint>0 THEN plan_revision ELSE 0 END,execution_attempts=execution_attempts+1,execution_error=?,execution_due_at=? WHERE project_id=? AND id=? AND plan_revision=? AND status='open' AND result_run_id IS NULL`, source, source, truncateSupervision(detail, 1000), now.Add(time.Minute).Unix(), pid, bead, revision); e != nil {
+		if _, e = q.ExecContext(ctx, `UPDATE bead_tasks SET execution_ready=TRUE,resume_run_id=NULLIF(?,0),resume_plan_revision=CASE WHEN ?::bigint>0 THEN plan_revision ELSE 0 END,execution_attempts=execution_attempts+CASE WHEN ? THEN 1 ELSE 0 END,execution_error=?,execution_due_at=? WHERE project_id=? AND id=? AND plan_revision=? AND status='open' AND result_run_id IS NULL`, source, source, failed, truncateSupervision(detail, 1000), now.Add(time.Minute).Unix(), pid, bead, revision); e != nil {
 			return e
 		}
 		_, e = q.ExecContext(ctx, `UPDATE execution_slots SET project_id=NULL,bead_id=NULL,claim_token='',lease_until=0,run_id=NULL,resume_run_id=NULL WHERE agent_id=? AND claim_token=?`, c.AgentID, c.Token)

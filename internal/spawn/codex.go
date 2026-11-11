@@ -100,7 +100,7 @@ func pickOperatorRuntime(req SpawnRequest, agentName string) (rt, reason string,
 	if rt == "" && !req.Resume && needsBackgroundService(req.TaskText) {
 		rt, reason = chat.RuntimeClaude, ReasonClaudeServiceKeyword
 	}
-	if rt == "" && !req.Resume {
+	if rt == "" && (!req.Resume || req.UsageRecovery) {
 		if p, ok := firstAgentAccount(req); ok {
 			rt, reason = p.Runtime, ReasonAgentAccounts
 		}

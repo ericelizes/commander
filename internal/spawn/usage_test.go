@@ -536,7 +536,7 @@ func TestRefusedRestartWritesNothing(t *testing.T) {
 	}
 }
 
-func TestSavedAccountOrderCannotUseAnUnlistedProvider(t *testing.T) {
+func TestSavedAccountOrderFallsBackToAnyConnectedProvider(t *testing.T) {
 	home := usageHome(t)
 	t.Setenv("CODEX_HOME", t.TempDir())
 	old := codexHooksReady
@@ -544,18 +544,18 @@ func TestSavedAccountOrderCannotUseAnUnlistedProvider(t *testing.T) {
 	t.Cleanup(func() { codexHooksReady = old })
 	sp := &Spawner{}
 	_, err := sp.resolveProvider(context.Background(), SpawnRequest{AgentAccounts: []string{chat.RuntimeCodex}, TaskText: "bounded parser fix"}, "worker")
-	if err == nil {
-		t.Fatal("disconnected Codex order silently used unlisted Claude")
+	if err != nil {
+		t.Fatal("disconnected preferred Codex did not fall back to connected Claude", err)
 	}
 	codexSignedIn(t)
 	_, err = sp.resolveProvider(context.Background(), SpawnRequest{AgentAccounts: []string{chat.RuntimeCodex}, TaskText: "docker build the service"}, "worker")
-	if err == nil {
-		t.Fatal("task capability override silently used unlisted Claude")
+	if err != nil {
+		t.Fatal("task capability override did not fall back to connected Claude", err)
 	}
 	markOut(t, home, chat.RuntimeCodex, "")
 	_, err = sp.resolveProvider(context.Background(), SpawnRequest{AgentAccounts: []string{chat.RuntimeCodex}, TaskText: "bounded parser fix"}, "worker")
-	if err == nil {
-		t.Fatal("exhausted Codex order silently used unlisted Claude")
+	if err != nil {
+		t.Fatal("exhausted preferred Codex did not fall back to connected Claude", err)
 	}
 	req, err := sp.resolveProvider(context.Background(), SpawnRequest{AgentAccounts: []string{chat.RuntimeCodex, chat.RuntimeClaude}, TaskText: "bounded parser fix"}, "worker")
 	if err != nil || req.Runtime != chat.RuntimeClaude {

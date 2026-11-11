@@ -30,7 +30,7 @@ func (s *Spawner) spawnNativeClaim(ctx context.Context, req SpawnRequest, agent,
 		return nil, errors.New("claimed execution requires the run-bound native runtime")
 	}
 	sid := agentrt.NewClaudeSessionID()
-	if req.Resume {
+	if req.Resume && !req.UsageRecovery {
 		sid = checkpointSessionID(req, sessionFile)
 		if sid == "" {
 			return nil, errors.New("native execution checkpoint has no retained session")

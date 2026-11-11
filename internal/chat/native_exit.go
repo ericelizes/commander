@@ -12,14 +12,15 @@ import (
 )
 
 type nativeExitReceipt struct {
-	Summary    string `json:"summary,omitempty"`
-	Role       string `json:"role"`
-	RunID      int64  `json:"run_id"`
-	SessionID  string `json:"session_id"`
-	Status     string `json:"status"`
-	Code       int    `json:"code"`
-	Signal     string `json:"signal,omitempty"`
-	ObservedAt int64  `json:"observed_at"`
+	Limit      *UsageLimit `json:"usage_limit,omitempty"`
+	Summary    string      `json:"summary,omitempty"`
+	Role       string      `json:"role"`
+	RunID      int64       `json:"run_id"`
+	SessionID  string      `json:"session_id"`
+	Status     string      `json:"status"`
+	Code       int         `json:"code"`
+	Signal     string      `json:"signal,omitempty"`
+	ObservedAt int64       `json:"observed_at"`
 }
 
 func nativeExitPath(home, role string, rid int64) string {
@@ -78,7 +79,15 @@ func (h *host) persistNativeExit(exit *hostExit) {
 	if exit.Code != 0 || exit.Signal != "" || h.nativeResultError {
 		status = "native-error"
 	}
-	receipt := nativeExitReceipt{Summary: h.nativeResultSummary, Role: h.cfg.Info.Role, RunID: h.cfg.Info.ExecutionRunID, SessionID: h.cfg.Info.SessionID, Status: status, Code: exit.Code, Signal: exit.Signal, ObservedAt: time.Now().Unix()}
+	if h.nativeLimit != nil && (h.nativeLimit.fromText || h.nativeResultError) {
+		status = "usage-limited"
+		h.nativeLimit.Runtime = h.cfg.Info.Runtime
+		h.nativeLimit.Account = h.cfg.Info.Account
+		h.nativeLimit.At = time.Now()
+	} else {
+		h.nativeLimit = nil
+	}
+	receipt := nativeExitReceipt{Limit: h.nativeLimit, Summary: h.nativeResultSummary, Role: h.cfg.Info.Role, RunID: h.cfg.Info.ExecutionRunID, SessionID: h.cfg.Info.SessionID, Status: status, Code: exit.Code, Signal: exit.Signal, ObservedAt: time.Now().Unix()}
 	raw, e := json.Marshal(receipt)
 	if e == nil {
 		tmp := h.cfg.ExitReceiptPath + ".tmp"
@@ -169,12 +178,18 @@ func (e *Engine) flushNativeExits(ctx context.Context, role string) error {
 			continue
 		}
 		var receipt nativeExitReceipt
-		if err = json.Unmarshal(raw, &receipt); err != nil || !ValidRole(receipt.Role) || receipt.RunID <= 0 || receipt.SessionID == "" || receipt.ObservedAt <= 0 || receipt.Status != "exited" && receipt.Status != "native-error" || filepath.Clean(path) != nativeExitPath(e.opts.Home, receipt.Role, receipt.RunID) {
+		if err = json.Unmarshal(raw, &receipt); err != nil || !ValidRole(receipt.Role) || receipt.RunID <= 0 || receipt.SessionID == "" || receipt.ObservedAt <= 0 || receipt.Status != "exited" && receipt.Status != "native-error" && receipt.Status != "usage-limited" || filepath.Clean(path) != nativeExitPath(e.opts.Home, receipt.Role, receipt.RunID) {
 			e.opts.Logf("chat: invalid native exit receipt %s", filepath.Base(path))
 			if moveErr := os.Rename(path, fmt.Sprintf("%s.invalid-%d", path, time.Now().UnixNano())); moveErr != nil && firstErr == nil {
 				firstErr = moveErr
 			}
 			continue
+		}
+
+		// Persist capacity evidence before the exit transaction makes recovery claimable.
+		if receipt.Status == "usage-limited" && receipt.Limit != nil {
+			u := receipt.Limit
+			e.opts.Usage.MarkOut(u.Runtime, u.Account, receipt.Role, u.ResetsAt, u.At)
 		}
 		if reports, ok := e.opts.States.(interface {
 			FinishNativeExecutionReport(context.Context, string, int64, string, string, string) error
@@ -189,6 +204,7 @@ func (e *Engine) flushNativeExits(ctx context.Context, role string) error {
 			}
 			continue
 		}
+
 		c, err := e.chat(receipt.Role)
 		if err != nil {
 			if firstErr == nil {

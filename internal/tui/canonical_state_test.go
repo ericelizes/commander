@@ -15,6 +15,24 @@ import (
 	"time"
 )
 
+func TestCanonicalNestedUsageShowsCauseInsteadOfLegacyHolder(t *testing.T) {
+	cause := store.UsageCapacityError + "no connected account has usage left"
+	frame := &livedata.Snapshot{Projects: []livedata.SnapProject{{ID: 1, Name: "p"}}, Display: &livedata.Display{Workstreams: []livedata.BoardRow{{Project: "p", BeadID: "root", Kind: "stalled", Text: cause, Tracks: []livedata.BoardTrack{{BeadID: "leaf", Kind: "stalled", Text: cause}}}}}}
+	ws := workstream{project: store.Project{ID: 1, Name: "p"}, root: ObjectiveRow{ProjectID: 1, ProjectName: "p", BeadID: "root", Title: "Root", Status: "open"}, steps: []nestedObjective{{row: ObjectiveRow{ProjectID: 1, ProjectName: "p", BeadID: "leaf", Title: "Leaf", Status: "open", Owner: "manager-retired"}}}}
+	found := false
+	for _, row := range workstreamRows(1, ws, true, false, true, animState{truth: newCanonicalState(frame)}) {
+		if row.row.BeadID == "leaf" && row.kind == "objective" {
+			found = true
+			if text := stripANSI(row.node.Title); !strings.Contains(text, cause) || strings.Contains(text, "manager-retired") {
+				t.Fatal(text)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("nested row missing")
+	}
+}
+
 func TestCanonicalTerminalCountsAndSpinnersIgnoreLegacyManagerActivity(t *testing.T) {
 	frame := &livedata.Snapshot{Storage: "postgres", Projects: []livedata.SnapProject{{ID: 1, Name: "p"}}, Executions: []livedata.SnapExecution{}, Workstreams: []livedata.SnapWorkstream{{ProjectID: 1, Project: "p", BeadID: "root", Steps: []livedata.SnapStep{{BeadID: "leaf", State: "in-progress"}}}}, Display: &livedata.Display{Workstreams: []livedata.BoardRow{{Project: "p", BeadID: "root", Kind: "waiting", Text: "Result ready for Commander review"}}}}
 	ws := workstream{project: store.Project{ID: 1, Name: "p"}, root: ObjectiveRow{ProjectID: 1, ProjectName: "p", BeadID: "root", Title: "Root", Status: "open"}, steps: []nestedObjective{{row: ObjectiveRow{ProjectID: 1, ProjectName: "p", BeadID: "leaf", Title: "Leaf", Status: "open", State: beads.StateInProgress}}}}

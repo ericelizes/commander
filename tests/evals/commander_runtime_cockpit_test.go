@@ -16,6 +16,18 @@ import (
 // exercises the actual startup/text interface without touching the user's
 // monitor, tmux server, state, accounts or model subscriptions.
 func TestCommanderRuntimeContractInIsolatedPostgresCockpit(t *testing.T) {
+	verifyRuntimeCockpit(t, false)
+}
+
+func TestExhaustedCapacityInIsolatedCockpit(t *testing.T) {
+	verifyRuntimeCockpit(t, true)
+}
+
+func verifyRuntimeCockpit(t *testing.T, capacity bool) {
+	expected := "Commander to review the finished result"
+	if capacity {
+		expected = "Account usage unavailable: no connected account has usage left"
+	}
 	r := newBareCmdrRig(t)
 	st, dsn := pgtest.Open(t)
 	ctx := context.Background()
@@ -39,12 +51,23 @@ func TestCommanderRuntimeContractInIsolatedPostgresCockpit(t *testing.T) {
 	if _, e = st.DB().ExecContext(ctx, `INSERT INTO bead_tasks(project_id,id,parent_id,title,description,acceptance_criteria,labels,execution_ready,created_at,updated_at) VALUES(?,'root',NULL,'Runtime result','','','["kind:objective","kind:workstream"]',FALSE,'now','now'),(?,'task','root','Bounded execution','Use the assigned scope','Record evidence','["kind:objective"]',TRUE,'now','now')`, pid, pid); e != nil {
 		t.Fatal(e)
 	}
-	rid, e := st.InsertAgentRun(ctx, store.AgentRun{ProjectID: pid, TaskBeadID: "task", AgentName: "operator-cockpit-finished", OpencodeSessionID: "private-cockpit-session", SpawnTime: time.Now().Unix()})
-	if e != nil {
-		t.Fatal(e)
-	}
-	if e = st.FinishNativeExecutionReport(ctx, "operator-cockpit-finished", rid, "private-cockpit-session", "exited", "Prepared isolated result; awaiting planning review"); e != nil {
-		t.Fatal(e)
+	if capacity {
+		if _, e = st.DB().ExecContext(ctx, `UPDATE bead_tasks SET execution_error=? WHERE project_id=? AND id='task'`, expected, pid); e != nil {
+			t.Fatal(e)
+		}
+		for _, id := range []string{"alpha", "beta"} {
+			if _, e = st.DB().ExecContext(ctx, `INSERT INTO bead_tasks(project_id,id,parent_id,title,description,acceptance_criteria,labels,execution_ready,execution_error,created_at,updated_at) VALUES(?,?,'root',?,'Bounded work','Recorded evidence','["kind:objective","kind:workstream"]',TRUE,?,'now','now')`, pid, id, "Usage "+id, expected); e != nil {
+				t.Fatal(e)
+			}
+		}
+	} else {
+		rid, e := st.InsertAgentRun(ctx, store.AgentRun{ProjectID: pid, TaskBeadID: "task", AgentName: "operator-cockpit-finished", OpencodeSessionID: "private-cockpit-session", SpawnTime: time.Now().Unix()})
+		if e != nil {
+			t.Fatal(e)
+		}
+		if e = st.FinishNativeExecutionReport(ctx, "operator-cockpit-finished", rid, "private-cockpit-session", "exited", "Prepared isolated result; awaiting planning review"); e != nil {
+			t.Fatal(e)
+		}
 	}
 	if _, e = st.SetOrchestrationControl(ctx, 1, "active", "isolated runtime cockpit"); e != nil {
 		t.Fatal(e)
@@ -97,6 +120,12 @@ func TestCommanderRuntimeContractInIsolatedPostgresCockpit(t *testing.T) {
 	if !zoomed {
 		t.Fatal("isolated objectives pane missing")
 	}
+	if capacity {
+		out, err := exec.CommandContext(ctx, r.tmux, "-S", filepath.Join(socket, "cockpit.sock"), "set-option", "-t", "commander", "@cmdr_expanded", "1").CombinedOutput()
+		if err != nil {
+			t.Fatalf("private sidebar expansion: %v %s", err, out)
+		}
+	}
 
 	var text string
 	deadline := time.Now().Add(evalTimeout(t, 20*time.Second))
@@ -109,7 +138,7 @@ func TestCommanderRuntimeContractInIsolatedPostgresCockpit(t *testing.T) {
 			}
 		}
 		text, e = script("text")
-		if e == nil && strings.Contains(text, "Runtime result") && strings.Contains(text, "Commander to review the finished result") {
+		if e == nil && strings.Contains(text, "Runtime result") && strings.Contains(text, expected) && (!capacity || strings.Count(text, expected) >= 3) {
 			break
 		}
 		time.Sleep(100 * time.Millisecond)
@@ -117,8 +146,11 @@ func TestCommanderRuntimeContractInIsolatedPostgresCockpit(t *testing.T) {
 	if e != nil || !strings.Contains(text, "Runtime result") {
 		t.Fatalf("canonical workstream did not render: %v\n%s", e, text)
 	}
-	if !strings.Contains(text, "Commander to review the finished result") || strings.Contains(text, "Manager review overdue") {
+	if !strings.Contains(text, expected) || strings.Contains(text, "Manager review overdue") {
 		t.Fatalf("canonical pending result did not render honestly:\n%s", text)
+	}
+	if capacity && (!strings.Contains(text, "Usage alpha") || !strings.Contains(text, "Usage beta") || strings.Count(text, expected) < 3) {
+		t.Fatalf("usage exhaustion missing from affected root/nested rows:\n%s", text)
 	}
 	if strings.Contains(text, "real claude is disabled") || strings.Contains(text, "real codex is disabled") {
 		t.Fatalf("cockpit attempted a real subscription runtime:\n%s", text)

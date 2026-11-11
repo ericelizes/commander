@@ -194,7 +194,7 @@ not enough — this is an interactive cockpit; prove it works *in the cockpit*.
   Agents may carry out that choice with `cmdr runtime <role> codex`,
   `internal-spawn-operator --runtime codex`, `internal-operator-provider --runtime codex`,
   or an authorized rebalance; these commands do not refuse agent callers.
-  Commander uses a preferred account of either provider and automatically falls back to any connected account with usage left (supersedes d38).
+  Commander account ordering is preference: automatically fall back to any connected account with usage left, while an explicit runtime pin (including Commander on Claude) constrains the provider.
   The share env overrides count only in a process with no agent role (`agentrt.share`), so an agent cannot draw
   Codex by prefixing its own command; `testguard.Isolate` unsets both role variables so a suite an Operator runs
   is nobody's agent.
@@ -1773,7 +1773,7 @@ refuse instead. Tests: `TestCapacityFailure*`, `TestRouteManagerRecipients*`,
 
 ## Unified Commander accounts
 
-Commander starts and handles usage limits through `planChatStart`: prefer the chosen account, then the current account, then another connected Claude or Codex account with usage left. Provider choices are preferences for Commander, so a Claude choice still falls back to Codex. Runtime/account intent and the shared conversation log survive the move; a continuation reads the handover and mail. Managers retain their existing policy. `cmdr account use <role> codex` and the chat account endpoint accept Codex alongside named Claude profiles. `AutoSwitch` is always on for Commander and Managers.
+Commander starts and handles usage limits through `planChatStart`: prefer the chosen account, then the current account, then another connected Claude or Codex account with usage left. Account choices and saved account lists are preferences; an explicit runtime pin constrains fallback to that provider (including Commander on Claude). Runtime/account intent and the shared conversation log survive the move; a continuation reads the handover and mail. Managers retain their existing policy. `cmdr account use <role> codex` and the chat account endpoint accept Codex alongside named Claude profiles. `AutoSwitch` is always on for Commander and Managers.
 
 Only `claudeAiOauth.accessToken` counts as a Claude file login: `.credentials.json` may contain MCP logins after Claude has signed out. Codex requires actual auth fields, not merely an auth file. No credentials are changed by listing accounts. The UI names a profile whose email is unavailable, offers either provider under Add account, and hides signed-out empty profiles. TopBar shows the reported model beside the chat title as regular muted text (Sol 6.1, Opus 5.5); the provider bubble is removed.
 
@@ -2229,3 +2229,43 @@ incompatible placement, dependency cycles and newly unheld work; evidence failur
 refuse. No wrappers, Manager changes, gate/card/journal or run-provenance edits.
 See `docs/cli/ordinary-place.md` for limits and coverage (`TestOrdinaryPlace*`,
 private-handler eval `scenarios/ordinary-place.json`).
+
+Exhausted capacity after cutover (d82/d83): `OrderAccounts` tries saved
+preferences, then unlisted connected accounts. Native hosts preserve a usage
+limit in their durable exit receipt; the store records `native-usage-limit` in
+the existing typed comment facts while retaining `native-error` terminal status.
+Only physical exit of the current admitted plan can requeue work. The normal
+worker reclaims capacity, preserves the existing workspace/branch, respects
+runtime pins and inherited pauses, and starts a fresh provider session with an
+attributed bounded conversation tail. It does not claim a cross-provider native
+thread resume. Unanswered planning checkpoints still block dispatch. Answered usage-limited
+checkpoints carry the exact question-history instruction into the handoff;
+ordinary checkpoints retain their native provider/session contract. Attributed final reports
+retain review precedence instead of triggering automatic duplicate work.
+
+Usage-only launch refusals retain their cause without spending the five-attempt
+startup failure budget. The real one-minute scheduler backoff is internal; it
+is never presented as a provider reset. Unknown provider reset remains unknown.
+The active sidebar projects shared exhaustion onto every eligible queued row
+and pinned-planner exhaustion onto rows whose next recorded action is planning;
+real approvals, questions and pauses keep priority. Active operator mail for an
+ancestral retired Manager routes to the current planning Commander without a
+copy or a Manager startup; failed ownership reads refuse the send.
+
+Verification: `TestExhaustedCapacityScenario` (actual private PG/worker/spawner/
+fake native host, code and knowledge, another Claude account and Codex),
+`TestUsageCapacityDoesNotSpendLaunchAttempts`,
+`TestPostgresUsageRecoveryFencesSessionWorkspaceAndTerminalEvidence`,
+`TestUnknownUsageResetRemainsUnknownAndAvailableAccountsClearCause`,
+`TestPinnedPlanningUsageDoesNotBorrowAnotherRuntime`,
+`TestUsageCapacityAppearsOnEveryAffectedRow`,
+`TestPinnedPlannerUsageAppearsOnEveryDependentRow`,
+`TestActiveExecutionMailRetiredManagerFollowsPlanningOwner`, and scenario
+`tests/evals/scenarios/exhausted-capacity.json`.
+`TestExhaustedCapacityInIsolatedCockpit` drives the real detached cockpit script
+with private PostgreSQL, fake model binaries and populated ancestor/nested rows.
+Recovery context is limited to the last 256 KiB of the role log, filtered to
+32 KiB of matching source-run/session events plus its exit report. Agents must
+inspect the retained workspace and current bead; this does not establish full
+conversation translation or production subscription behavior. No schema migration,
+installation, restart or release is implied by these source changes.
