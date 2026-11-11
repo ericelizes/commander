@@ -21,9 +21,11 @@ import (
 	"github.com/example-user/commander/internal/chat/chattest"
 	"github.com/example-user/commander/internal/docker"
 	"github.com/example-user/commander/internal/execution"
+	"github.com/example-user/commander/internal/livedata"
 	"github.com/example-user/commander/internal/opencode"
 	"github.com/example-user/commander/internal/pgtest"
 	"github.com/example-user/commander/internal/spawn"
+	"github.com/example-user/commander/internal/statusclassify"
 	"github.com/example-user/commander/internal/store"
 	"github.com/example-user/commander/internal/tmuxctl"
 )
@@ -43,6 +45,12 @@ type unavailableNativeRuntime struct{}
 
 func (unavailableNativeRuntime) Start(context.Context, string, chat.StartOptions) (chat.Status, error) {
 	return chat.Status{}, errors.New("private native runtime temporarily unavailable")
+}
+
+type fixtureStatusRunner struct{}
+
+func (fixtureStatusRunner) Run(context.Context, chat.AccountView, string) (statusclassify.Answer, error) {
+	return statusclassify.Answer{Kind: "working", Description: "Private native tool is preparing its bounded result", Input: 32, Output: 8}, nil
 }
 
 func TestClaimedExecutionUsesRealNativeHostAndRecoversCommittedStartup(t *testing.T) {
@@ -91,7 +99,10 @@ func TestClaimedExecutionUsesRealNativeHostAndRecoversCommittedStartup(t *testin
 			if e != nil {
 				t.Fatal(e)
 			}
-			if _, e = st.DB().Exec(`INSERT INTO bead_tasks(project_id,id,title,description,acceptance_criteria,created_at,updated_at) VALUES(?,'assigned','Bounded work','Implement the exact bounded change','Record verifiable evidence','now','now')`, pid); e != nil {
+			if _, e = st.DB().Exec(`INSERT INTO bead_tasks(project_id,id,title,labels,created_at,updated_at) VALUES(?,'goal','Native workstream','["kind:objective","kind:workstream"]','now','now')`, pid); e != nil {
+				t.Fatal(e)
+			}
+			if _, e = st.DB().Exec(`INSERT INTO bead_tasks(project_id,id,title,description,acceptance_criteria,parent_id,labels,created_at,updated_at) VALUES(?,'assigned','Bounded work','Implement the exact bounded change','Record verifiable evidence','goal','["kind:objective"]','now','now')`, pid); e != nil {
 				t.Fatal(e)
 			}
 			if _, e = st.SetOrchestrationControl(ctx, 1, "active", "private native worker flow"); e != nil {
@@ -142,6 +153,11 @@ func TestClaimedExecutionUsesRealNativeHostAndRecoversCommittedStartup(t *testin
 			if e = st.DB().QueryRow(`SELECT execution_attempts,execution_due_at,execution_error FROM bead_tasks WHERE project_id=? AND id='assigned'`, pid).Scan(&attempts, &due, &detail); e != nil || attempts != 1 || due <= time.Now().Unix() || detail == "" {
 				t.Fatal("startup recovery not bounded/durable", attempts, due, detail, e)
 			}
+			// A committed startup intent alone must never produce a live count.
+			facts, e := st.ObservedExecutions(ctx)
+			if e != nil || len(facts) != 1 || facts[0].Known {
+				t.Fatalf("startup claim invented process evidence: %+v %v", facts, e)
+			}
 			roles, e := st.NativeExecutionRoles(ctx, time.Now().Unix())
 			if e != nil || len(roles) != 0 {
 				t.Fatal("startup retry ignored backoff", roles, e)
@@ -160,6 +176,22 @@ func TestClaimedExecutionUsesRealNativeHostAndRecoversCommittedStartup(t *testin
 				t.Fatal(e)
 			}
 			awaitNative(t, "native first instruction and fake permission", func() bool { s, _ := engine.Status(result.AgentName); return len(s.Pending) > 0 })
+			observations := engine.RuntimeObservations()
+			if len(observations) != 1 || observations[0].RunID != result.RunID || observations[0].SessionID != result.SessionID || observations[0].PID != status.PID {
+				t.Fatalf("host observation lost its identity: %+v", observations)
+			}
+			if e = st.RecordRuntimeEvidence(ctx, nil, time.Now(), observations); e != nil {
+				t.Fatal(e)
+			}
+			// Exercise the same run-fenced activity write used by native tools.
+			if e = st.SetAgentStateForRun(ctx, result.AgentName, result.RunID, result.SessionID, store.AgentWorking, "private fixture tool"); e != nil {
+				t.Fatal(e)
+			}
+			source := &livedata.Source{Deps: livedata.Deps{Store: st, Beads: beads.New()}}
+			liveSnapshot := source.Snapshot(ctx)
+			if liveSnapshot.Degraded != nil || len(liveSnapshot.Executions) != 1 || liveSnapshot.Executions[0].RunID != result.RunID || liveSnapshot.Executions[0].State != store.AgentWorking {
+				t.Fatalf("real host missing from snapshot: %+v degraded=%+v", liveSnapshot.Executions, liveSnapshot.Degraded)
+			}
 			recordRaw, e := os.ReadFile(filepath.Join(fakeDir, "argv-"+result.SessionID+".json"))
 			if e != nil {
 				t.Fatal(e)
@@ -171,6 +203,44 @@ func TestClaimedExecutionUsesRealNativeHostAndRecoversCommittedStartup(t *testin
 			if record["run_id"] != strconv.FormatInt(result.RunID, 10) || record["run_session"] != result.SessionID || record["role"] != result.AgentName || record["manager_role"] != "" {
 				t.Fatal("provider did not inherit immutable run context", record)
 			}
+			// A normal connected-account worker consumes actual native event
+			// history, but its model runner is a private deterministic fake.
+			if e = os.MkdirAll(filepath.Join(home, ".claude"), 0700); e != nil {
+				t.Fatal(e)
+			}
+			if e = os.WriteFile(filepath.Join(home, ".claude", ".credentials.json"), []byte(`{"claudeAiOauth":{"accessToken":"private-fixture-token"}}`), 0600); e != nil {
+				t.Fatal(e)
+			}
+			t.Cleanup(func() {
+				if !t.Failed() {
+					return
+				}
+				var cursors, jobs, usage int
+				_ = st.DB().QueryRow(`SELECT COUNT(*) FROM agent_sessions`).Scan(&cursors)
+				_ = st.DB().QueryRow(`SELECT COUNT(*) FROM classification_jobs`).Scan(&jobs)
+				_ = st.DB().QueryRow(`SELECT COUNT(*) FROM classification_usage`).Scan(&usage)
+				t.Logf("private classifier evidence: cursors=%d jobs=%d usage=%d accounts=%d", cursors, jobs, usage, len(chat.Accounts(home, chat.ReadUsage(home), time.Now())))
+				events, sub, err := engine.Subscribe(result.AgentName, 0)
+				if err == nil {
+					sub.Close()
+					for _, ev := range events {
+						t.Logf("private native event kind=%s run=%d sid=%s seq=%d", ev.Kind, ev.RunID, ev.SessionID, ev.Seq)
+					}
+				}
+			})
+			classifierCtx, stopClassifier := context.WithCancel(ctx)
+			classifierDone := make(chan struct{})
+			classifier := &statusclassify.Worker{Store: st, Engine: engine, Home: home, Runner: fixtureStatusRunner{}, MonthlyTokens: 100000}
+			go func() { defer close(classifierDone); classifier.Run(classifierCtx) }()
+			t.Cleanup(func() { stopClassifier(); <-classifierDone })
+			awaitNative(t, "native event description reaches its exact bead", func() bool {
+				var text string
+				var rid int64
+				err := st.DB().QueryRow(`SELECT b.status_text,a.run_id FROM bead_tasks b JOIN agent_sessions a ON a.role=b.status_role WHERE b.project_id=? AND b.id='assigned'`, pid).Scan(&text, &rid)
+				return err == nil && rid == result.RunID && text == "Private native tool is preparing its bounded result"
+			})
+			stopClassifier()
+			<-classifierDone
 			before, e := resolver.Resolve(ctx, result.AgentName)
 			if e != nil {
 				t.Fatal(e)
@@ -246,6 +316,10 @@ func TestClaimedExecutionUsesRealNativeHostAndRecoversCommittedStartup(t *testin
 				r, e := st.GetAgentRun(ctx, result.RunID)
 				return e == nil && r.Status == "exited" && !engine.Running(result.AgentName)
 			})
+			exitedSnapshot := source.Snapshot(ctx)
+			if exitedSnapshot.Degraded != nil || len(exitedSnapshot.Executions) != 0 {
+				t.Fatalf("exited host still counted: %+v degraded=%+v", exitedSnapshot.Executions, exitedSnapshot.Degraded)
+			}
 			events, sub, e := engine.Subscribe(result.AgentName, 0)
 			if e != nil {
 				t.Fatal(e)
@@ -254,6 +328,9 @@ func TestClaimedExecutionUsesRealNativeHostAndRecoversCommittedStartup(t *testin
 			starts := 0
 			for _, event := range events {
 				if event.Kind == chat.KindUser && event.Origin == "execution" {
+					if event.RunID != result.RunID {
+						t.Fatalf("journal event lost run identity: %+v", event)
+					}
 					starts++
 				}
 			}
@@ -330,6 +407,18 @@ func TestClaimedExecutionUsesRealNativeHostAndRecoversCommittedStartup(t *testin
 
 			// The next ready bead uses the same capacity through the actual worker and
 			// native spawner, proving capacity reuse on this complete process path.
+			reviewedSnapshot := source.Snapshot(ctx)
+			if reviewedSnapshot.Degraded != nil || len(reviewedSnapshot.Executions) != 0 || len(reviewedSnapshot.Workstreams) != 1 || reviewedSnapshot.Display == nil || len(reviewedSnapshot.Display.Workstreams) != 1 {
+				t.Fatalf("terminal result missing from live board: %+v", reviewedSnapshot)
+			}
+			row := reviewedSnapshot.Display.Workstreams[0]
+			if row.Kind != "waiting" || row.Text != "Result ready for Commander review" || row.Working != 0 {
+				t.Fatalf("completed native turn has the wrong handoff: %+v", row)
+			}
+			steps := reviewedSnapshot.Workstreams[0].Steps
+			if len(steps) != 1 || steps[0].ResultRunID != resumed.RunID || steps[0].ResultReadyAt == 0 || steps[0].Broken {
+				t.Fatalf("result is not a held review obligation: %+v", steps)
+			}
 			if _, e = st.DB().Exec(`INSERT INTO bead_tasks(project_id,id,title,description,acceptance_criteria,created_at,updated_at) VALUES(?,'next','Next work','Fresh bounded work','Recorded evidence','now','now')`, pid); e != nil {
 				t.Fatal(e)
 			}

@@ -38,13 +38,15 @@ func (w *Worker) Run(ctx context.Context) {
 		}
 	}
 	w.cooldown = map[string]time.Time{}
-	go w.watchChats(ctx)
+	watchDone := make(chan struct{})
+	go func() { defer close(watchDone); w.watchChats(ctx) }()
 	var wg sync.WaitGroup
 	for i := 0; i < 2; i++ {
 		wg.Add(1)
 		go func() { defer wg.Done(); w.work(ctx) }()
 	}
 	wg.Wait()
+	<-watchDone
 }
 
 func (w *Worker) watchChats(ctx context.Context) {
@@ -56,7 +58,7 @@ func (w *Worker) watchChats(ctx context.Context) {
 	defer ticker.Stop()
 	for ctx.Err() == nil {
 		for _, status := range w.Engine.List() {
-			if !status.Running || strings.HasPrefix(status.Role, "operator-") {
+			if !status.Running {
 				continue
 			}
 			role := status.Role
@@ -113,6 +115,10 @@ func (w *Worker) watchRole(ctx context.Context, role string, lastSeq uint64) {
 		case chat.KindText:
 			text = "Agent message: " + ev.Text
 			enqueue = true
+		case chat.KindPermission, chat.KindQuestion, chat.KindPlan:
+			raw, _ := json.Marshal(ev.Request)
+			text = "Recorded runtime request: " + string(raw)
+			enqueue = true
 		case chat.KindToolResult:
 			raw, _ := json.Marshal(ev.Tool)
 			text = "Tool evidence: " + string(raw)
@@ -129,7 +135,7 @@ func (w *Worker) watchRole(ctx context.Context, role string, lastSeq uint64) {
 		}
 		writeCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
-		if e := w.Store.ObserveClassification(writeCtx, ev.Role, ev.SessionID, int64(ev.Seq), text, enqueue); e != nil {
+		if e := w.Store.ObserveClassificationForRun(writeCtx, ev.Role, ev.RunID, ev.SessionID, int64(ev.Seq), text, enqueue); e != nil {
 			log.Printf("status classifier: evidence persistence unavailable for %s", role)
 			return false
 		}
@@ -140,10 +146,16 @@ func (w *Worker) watchRole(ctx context.Context, role string, lastSeq uint64) {
 			return
 		}
 	}
+	cleanup := time.NewTicker(5 * time.Second)
+	defer cleanup.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
+		case <-cleanup.C:
+			if !w.Engine.Running(role) {
+				return
+			}
 		case ev, ok := <-sub.C:
 			if !ok {
 				return

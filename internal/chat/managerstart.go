@@ -155,7 +155,11 @@ func removeFallback(home, role string) error {
 // runs it: EnsureNative, Open, mail delivery, the app's Start, restarts.
 func (e *Engine) steerManager(role string, fresh bool) (moved string, changed bool, err error) {
 	home, now := e.opts.Home, e.opts.Now()
-	plan, err := planChatStart(home, role, fresh, e.opts.Usage.All(now), now, e.hooksReady(), e.accountOrder(store.AgentKindCommander))
+	order, err := e.accountOrder(store.AgentKindCommander)
+	if err != nil {
+		return "", false, err
+	}
+	plan, err := planChatStart(home, role, fresh, e.opts.Usage.All(now), now, e.hooksReady(), order)
 	if err != nil {
 		return "", false, err
 	}
@@ -207,13 +211,18 @@ func (e *Engine) steerManager(role string, fresh bool) (moved string, changed bo
 }
 
 // accountOrder is kind's saved account order, else its default.
-func (e *Engine) accountOrder(kind string) []string {
+func (e *Engine) accountOrder(kind string) ([]string, error) {
 	if e.opts.AccountOrder != nil {
-		if order, err := e.opts.AccountOrder(context.Background(), kind); err == nil && len(order) > 0 {
-			return order
+		order, err := e.opts.AccountOrder(context.Background(), kind)
+		if err != nil {
+			return nil, fmt.Errorf("read saved account order: %w", err)
 		}
+		if len(order) == 0 {
+			return nil, errors.New("saved account order is empty")
+		}
+		return order, nil
 	}
-	return store.DefaultAgentAccounts[kind]
+	return store.DefaultAgentAccounts[kind], nil
 }
 
 func (e *Engine) hooksReady() func() bool {
@@ -238,7 +247,12 @@ func (e *Engine) moveManager(c *chatRole) {
 		return
 	}
 	now := e.opts.Now()
-	plan, err := planChatStart(e.opts.Home, c.role, false, e.opts.Usage.All(now), now, e.hooksReady(), e.accountOrder(store.AgentKindCommander))
+	order, err := e.accountOrder(store.AgentKindCommander)
+	if err != nil {
+		notice("Not moved: " + err.Error())
+		return
+	}
+	plan, err := planChatStart(e.opts.Home, c.role, false, e.opts.Usage.All(now), now, e.hooksReady(), order)
 	if err != nil {
 		notice("Not moved: " + err.Error())
 		return

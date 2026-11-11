@@ -137,3 +137,17 @@ func TestCommanderFollowsSavedAccountOrder(t *testing.T) {
 		t.Fatalf("an account outside the order was used: %v", err)
 	}
 }
+
+func TestAccountOrderReadFailureCannotLaunchOnDefaults(t *testing.T) {
+	h := accountHarness(t)
+	h.role("commander")
+	h.e.opts.AccountOrder = func(context.Context, string) ([]string, error) {
+		return nil, errors.New("private account store unavailable")
+	}
+	if _, err := h.e.Start(context.Background(), "commander", StartOptions{}); err == nil || !strings.Contains(err.Error(), "account store unavailable") {
+		t.Fatalf("failed account read fell back to defaults: %v", err)
+	}
+	if h.e.Running("commander") {
+		t.Fatal("started an account without its saved preferences")
+	}
+}

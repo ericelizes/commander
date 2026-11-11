@@ -27,9 +27,11 @@ var (
 // animState drives the two restrained animations: a spinner on in-progress steps
 // and a short pulse on a ⚑ the first time it appears. The zero value is "still".
 type animState struct {
-	frame int
-	on    bool           // motion enabled (CMDR_MOTION != off)
-	pulse map[string]int // bead id -> frames of pulse left
+	truth  *canonicalState
+	motion bool
+	frame  int
+	on     bool           // motion enabled (CMDR_MOTION != off)
+	pulse  map[string]int // bead id -> frames of pulse left
 
 	// agents is the live hook state per Manager role; nowTime dates it. Without
 	// an entry the workstream's agent is shown as not started.
@@ -150,11 +152,19 @@ func workstreamRows(rank int, ws workstream, expanded, tagProject, showSteps boo
 		header.RightTag = ws.project.Name
 	}
 	needs, running, blockedN, open, doneN := stepCounts(ws)
+	if anim.truth != nil {
+		current := anim.truth.scope(store.WorkstreamKey{ProjectID: ws.project.ID, BeadID: root.BeadID})
+		open += running
+		running = current.working
+	}
 	if !tagProject {
 		header.TagParts = countParts(needs, running, blockedN, open)
 	}
 	rows := []panelRow{{node: header, kind: "objective", row: root}}
 	nowText, working := agentNow(store.WorkstreamManagerRole(root.BeadID), anim)
+	if anim.truth != nil {
+		nowText, working = canonicalNow(anim.truth.scope(store.WorkstreamKey{ProjectID: ws.project.ID, BeadID: root.BeadID}), anim.frame, anim.on)
+	}
 	rows = append(rows, panelRow{kind: "now", row: root, node: widgets.TreeNode{
 		ID: "now:" + root.ProjectName + ":" + root.BeadID, Title: nowText, Columnar: true, Indent: 2,
 		Skip: true, TitleStyle: &lipgloss.Style{},

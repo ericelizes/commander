@@ -100,21 +100,22 @@ type host struct {
 	stdin    io.WriteCloser
 	wmu      sync.Mutex // stdin writes
 
-	mu                sync.Mutex
-	cond              *sync.Cond
-	journal           []journalLine
-	bytes             int
-	next              int64 // idx of the next stdout line
-	acked             int64
-	turnStart         int64 // idx after the last result line: the journal keeps the current turn
-	done              map[string]bool
-	exited            *hostExit
-	quit              bool
-	nativeEndOnce     sync.Once
-	nativeResultError bool
-	client            *hostClientConn
-	stderr            tailBuffer
-	lock              *os.File // the session lock, dropped when claude is gone
+	mu                  sync.Mutex
+	cond                *sync.Cond
+	journal             []journalLine
+	bytes               int
+	next                int64 // idx of the next stdout line
+	acked               int64
+	turnStart           int64 // idx after the last result line: the journal keeps the current turn
+	done                map[string]bool
+	exited              *hostExit
+	quit                bool
+	nativeEndOnce       sync.Once
+	nativeResultError   bool
+	nativeResultSummary string
+	client              *hostClientConn
+	stderr              tailBuffer
+	lock                *os.File // the session lock, dropped when claude is gone
 }
 
 type hostClientConn struct {

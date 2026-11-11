@@ -73,7 +73,7 @@ func (s *Store) SetExecutionReady(ctx context.Context, pid int64, bead, actor st
 			return errors.New("execution is already claimed; change direction through the current run")
 		}
 		if ready && (strings.TrimSpace(description) == "" || strings.TrimSpace(acceptance) == "") {
-			return errors.New("ready work requires a brief and acceptance criteria")
+			return errors.New("ready work requires a brief and acceptance criteria; the owning Commander can add both with cmdr plan apply --file PATH using an update operation with --description and --acceptance, then reread execution status and mark the new revision ready")
 		}
 		return q.QueryRowContext(ctx, `UPDATE bead_tasks SET plan_revision=plan_revision+1,execution_ready=?,execution_capabilities=?::jsonb,execution_attempts=0,execution_due_at=0,execution_error='',result_run_id=CASE WHEN ? THEN NULL ELSE result_run_id END,result_ready_at=CASE WHEN ? THEN 0 ELSE result_ready_at END,result_summary=CASE WHEN ? THEN '' ELSE result_summary END WHERE project_id=? AND id=? RETURNING plan_revision`, ready, string(raw), ready, ready, ready, pid, bead).Scan(&next)
 	})

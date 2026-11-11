@@ -110,13 +110,7 @@ func (s *Source) Last() (Data, bool) {
 	if s.Deps.Store != nil && s.Deps.Store.IsPostgres() {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
-		s.mu.Lock()
-		deps := s.Deps
-		s.mu.Unlock()
-		data := Load(ctx, deps)
-		if ctx.Err() != nil {
-			data.LoadErr = ctx.Err()
-		}
+		data, _ := s.Current(ctx)
 		return data, true
 	}
 

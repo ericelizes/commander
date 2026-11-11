@@ -45,6 +45,11 @@ type providerPick struct {
 // spawn's own refusals (lock, branch, stop) are behind it, so a refused spawn
 // leaves the role's runtime, account and intent as they were.
 func (s *Spawner) resolveProvider(ctx context.Context, req SpawnRequest, agentName string) (SpawnRequest, error) {
+	if !req.Resume && len(req.AgentAccounts) > 0 && req.Runtime == "" && req.Account == "" {
+		if _, ok := firstAgentAccount(req); !ok {
+			return req, fmt.Errorf("spawn: %w in the saved execution account order", chat.ErrNoUsage)
+		}
+	}
 	asked := req
 	pick := &providerPick{asked: asked, wasCodex: wasOnCodex(req, agentName)}
 	pick.runtime, pick.reason, pick.pinned = pickOperatorRuntime(req, agentName)

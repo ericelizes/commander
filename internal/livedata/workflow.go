@@ -145,7 +145,7 @@ func (f flow) container(s SnapStep) bool {
 
 func (f flow) asksUnder(s SnapStep) int {
 	n := 0
-	for _, c := range flattenSteps(s.Children) {
+	for c := range stepValues(s.Children) {
 		if f.b.needsIDs[c.BeadID] {
 			n++
 		}
@@ -276,12 +276,12 @@ func (f flow) current(ws SnapWorkstream) string {
 		return ok && !stepClosed(s) && !parked(s)
 	}
 	in := func(id string) bool {
-		return id == ws.BeadID || slices.ContainsFunc(flattenSteps(ws.Steps), func(s SnapStep) bool { return s.BeadID == id })
+		return id == ws.BeadID || findSnapStep(ws.Steps, id) != nil
 	}
 	if ws.NowStep != "" && open(ws.NowStep) && in(ws.NowStep) {
 		return ws.NowStep
 	}
-	for _, s := range flattenSteps(ws.Steps) {
+	for s := range stepValues(ws.Steps) {
 		if !stepClosed(s) && !parked(s) && !s.Superseded && !f.container(s) && (s.State == "in-progress" || (s.Status == "in_progress" && !s.Gate) || liveTask(s) || (strings.HasPrefix(s.Owner, "operator-") && stepAlive(s))) {
 			return s.BeadID
 		}

@@ -30,4 +30,4 @@ jobs:
             -e COMMANDER_POSTGRES_TEST_DSN='postgres://postgres:disposable-test-password@127.0.0.1:5432/commander_trial?sslmode=disable' \
             -e GOMAXPROCS=2 -e GOFLAGS='-p=2' \
             -v "$PWD:/src:ro" -w /src golang:1.25 \
-            go test -count=1 -run Postgres ./internal/store ./internal/beads ./internal/api ./internal/livedata ./tests/evals
+            go test -p 2 -count=1 -timeout=10m ./...

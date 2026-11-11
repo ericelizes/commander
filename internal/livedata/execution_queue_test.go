@@ -69,3 +69,33 @@ func TestBoardSavedHumanAnswerIsInternalWorkNotAnotherUserAsk(t *testing.T) {
 		t.Fatalf("durable answer application was treated as unowned: %+v", problems)
 	}
 }
+
+func TestBoardCanonicalResultWaitHasNoFalseSpinnerOrOverdueState(t *testing.T) {
+	step := SnapStep{BeadID: "result", Title: "Prepared result", Status: "open", State: "review", PlanningCommander: "commander-urgent", ResultRunID: 17, ResultReadyAt: 1}
+	snapshot := Snapshot{Storage: "postgres", Executions: []SnapExecution{}, Workstreams: []SnapWorkstream{{N: 1, Project: "p", ProjectID: 1, BeadID: "goal", Title: "Goal", Status: "open", PlanningCommander: "commander-urgent", Steps: []SnapStep{step}}}}
+	for _, now := range []int64{2, 86400} {
+		board := Board(snapshot, now)
+		applyExecutionCounts(&snapshot, &board)
+		row := board.Workstreams[0]
+		if row.Kind != "waiting" || row.Text != canonicalResultReviewText || row.Working != 0 || row.Since != 1 {
+			t.Fatalf("recorded result became stopped/overdue/working: %+v", row)
+		}
+		if problems := SnapshotViolations(snapshot); len(problems) != 0 {
+			t.Fatalf("result review is not held: %+v", problems)
+		}
+	}
+	snapshot.Workstreams[0].HumanAnswerPending = true
+	if row := Board(snapshot, 86400).Workstreams[0]; row.Text != "Applying your recorded answer" {
+		t.Fatalf("terminal report concealed a genuine saved answer: %+v", row)
+	}
+	snapshot.Workstreams[0].HumanAnswerPending = false
+	snapshot.Workstreams[0].QuestionWaiting = true
+	if row := Board(snapshot, 86400).Workstreams[0]; row.Text != "Waiting for the responsible Commander's decision" {
+		t.Fatalf("terminal report concealed a planning checkpoint: %+v", row)
+	}
+	snapshot.Workstreams[0].QuestionWaiting = false
+	snapshot.Workstreams[0].Hold = true
+	if _, ok := recordedResultLine(snapshot.Workstreams[0]); ok {
+		t.Fatal("held scope was presented as ready for review")
+	}
+}

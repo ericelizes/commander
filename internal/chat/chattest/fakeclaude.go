@@ -220,6 +220,10 @@ func (f *fake) turn(text string) int {
 	result := "success"
 	reason := "completed"
 	switch {
+	case strings.Contains(text, "native-report"):
+		f.cost += 0.01
+		f.emit(map[string]any{"type": "result", "subtype": "success", "is_error": false, "result": "Prepared changes; tests passed. Commander review is required.", "total_cost_usd": f.cost, "num_turns": 1, "duration_ms": 5})
+		return -1
 	case strings.Contains(text, "crash"):
 		f.textBlock("", "about to crash", 0, true)
 		return 3

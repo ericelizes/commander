@@ -136,7 +136,7 @@ func workflowInput(ws SnapWorkstream) []workflowtemplate.Node {
 			}
 		}
 	}
-	for _, s := range flattenSteps(ws.Steps) {
+	for s := range stepValues(ws.Steps) {
 		nodes = append(nodes, s.GateChecks...)
 		for _, g := range s.GateChecks {
 			addFolded(g)

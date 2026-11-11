@@ -63,6 +63,7 @@ func (d *Daemon) recoverNativeExecutions(ctx context.Context) {
 	if e != nil || !active {
 		return
 	}
+	d.retireObsoletePlanningHosts(ctx)
 	roles, e := d.store.NativeExecutionRoles(ctx, time.Now().Unix())
 	if e != nil {
 		log.Printf("execution recovery: %v", e)

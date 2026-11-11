@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 )
 
@@ -17,6 +16,15 @@ type ClassificationJob struct {
 // ObserveClassification records bounded new evidence and coalesces one pending
 // job per role. The source cursor makes event replay harmless.
 func (s *Store) ObserveClassification(ctx context.Context, role, session string, seq int64, text string, enqueue bool) error {
+	return s.observeClassification(ctx, role, nil, session, seq, text, enqueue)
+}
+
+// ObserveClassificationForRun consumes a chat event with its captured origin.
+// Session reuse and role spelling never confer a replacement run's authority.
+func (s *Store) ObserveClassificationForRun(ctx context.Context, role string, runID int64, session string, seq int64, text string, enqueue bool) error {
+	return s.observeClassification(ctx, role, &runID, session, seq, text, enqueue)
+}
+func (s *Store) observeClassification(ctx context.Context, role string, expectedRun *int64, session string, seq int64, text string, enqueue bool) error {
 	if !s.postgres || session == "" {
 		return nil
 	}
@@ -25,7 +33,33 @@ func (s *Store) ObserveClassification(ctx context.Context, role, session string,
 	}
 	now := time.Now().Unix()
 	return s.WithTx(ctx, func(q Querier) error {
-		res, e := q.ExecContext(ctx, `INSERT INTO agent_sessions(role,session_id,source_seq,evidence,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(role) DO UPDATE SET session_id=excluded.session_id,source_seq=excluded.source_seq,evidence=RIGHT(CASE WHEN agent_sessions.session_id=excluded.session_id THEN agent_sessions.evidence ELSE '' END || E'\n' || excluded.evidence,12000),updated_at=excluded.updated_at WHERE excluded.source_seq>agent_sessions.source_seq`, role, session, seq, text, now)
+		var pid, runID int64
+		var bead string
+		e := q.QueryRowContext(ctx, `SELECT r.project_id,r.task_bead_id,r.id FROM agent_runs r JOIN bead_tasks b ON b.active_run_id=r.id AND b.project_id=r.project_id AND b.id=r.task_bead_id WHERE replace(r.agent_name,'.','-')=replace(?::text,'.','-') AND r.opencode_session_id=? AND b.deleted_at IS NULL ORDER BY r.id DESC LIMIT 1 FOR UPDATE OF b`, role, session).Scan(&pid, &bead, &runID)
+		if e != nil && !errors.Is(e, sql.ErrNoRows) {
+			return e
+		}
+		if expectedRun != nil {
+			if *expectedRun > 0 && (errors.Is(e, sql.ErrNoRows) || runID != *expectedRun) {
+				return nil
+			}
+			if *expectedRun == 0 {
+				var execution bool
+				if err := q.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM agent_runs r JOIN bead_tasks b ON b.active_run_id=r.id WHERE replace(r.agent_name,'.','-')=replace(?::text,'.','-'))`, role).Scan(&execution); err != nil {
+					return err
+				}
+				if execution {
+					return nil
+				}
+			}
+		}
+		if runID == 0 {
+			e = q.QueryRowContext(ctx, `SELECT project_id,workstream_bead_id FROM workstream_managers WHERE am_role=?`, role).Scan(&pid, &bead)
+			if e != nil && !errors.Is(e, sql.ErrNoRows) {
+				return e
+			}
+		}
+		res, e := q.ExecContext(ctx, `INSERT INTO agent_sessions(role,session_id,source_seq,evidence,updated_at,run_id) VALUES(?,?,?,?,?,?) ON CONFLICT(role) DO UPDATE SET session_id=excluded.session_id,source_seq=excluded.source_seq,evidence=RIGHT(CASE WHEN agent_sessions.session_id=excluded.session_id AND agent_sessions.run_id=excluded.run_id THEN agent_sessions.evidence || E'\n' ELSE '' END || excluded.evidence,12000),updated_at=excluded.updated_at,run_id=excluded.run_id WHERE excluded.source_seq>agent_sessions.source_seq`, role, session, seq, text, now, runID)
 		if e != nil {
 			return e
 		}
@@ -36,17 +70,8 @@ func (s *Store) ObserveClassification(ctx context.Context, role, session string,
 		if !enqueue {
 			return nil
 		}
-		var pid, runID int64
-		var bead string
-		e = q.QueryRowContext(ctx, `SELECT project_id,workstream_bead_id FROM workstream_managers WHERE am_role=?`, role).Scan(&pid, &bead)
-		if errors.Is(e, sql.ErrNoRows) {
-			e = q.QueryRowContext(ctx, `SELECT r.project_id,r.task_bead_id,r.id FROM agent_runs r JOIN bead_tasks b ON b.active_run_id=r.id WHERE (r.agent_name=? OR replace(r.agent_name,'.','-')=replace(?::text,'.','-')) AND r.opencode_session_id=? ORDER BY r.spawn_time DESC,r.id DESC LIMIT 1`, role, role, session).Scan(&pid, &bead, &runID)
-		}
-		if errors.Is(e, sql.ErrNoRows) {
+		if bead == "" {
 			return nil
-		}
-		if e != nil {
-			return e
 		}
 		_, e = q.ExecContext(ctx, `INSERT INTO classification_jobs(role,session_id,source_seq,project_id,bead_id,run_id,evidence,state,updated_at) SELECT role,session_id,source_seq,?,?,?,evidence,'pending',? FROM agent_sessions WHERE role=? ON CONFLICT(role) DO UPDATE SET session_id=excluded.session_id,source_seq=excluded.source_seq,project_id=excluded.project_id,bead_id=excluded.bead_id,run_id=excluded.run_id,evidence=excluded.evidence,state='pending',lease_until=0,attempts=0,updated_at=excluded.updated_at`, pid, bead, runID, now, role)
 		return e
@@ -114,29 +139,36 @@ func (s *Store) SettleClassificationUsage(ctx context.Context, key string, input
 
 func (s *Store) CompleteClassification(ctx context.Context, j ClassificationJob, kind, text string) error {
 	return s.WithTx(ctx, func(q Querier) error {
-		var seq int64
+		if j.RunID == 0 {
+			var owner bool
+			if e := q.QueryRowContext(ctx, `SELECT commander_planning_owner(project_id,id)=? FROM bead_tasks WHERE project_id=? AND id=? AND deleted_at IS NULL FOR UPDATE`, j.Role, j.ProjectID, j.BeadID).Scan(&owner); errors.Is(e, sql.ErrNoRows) {
+				return nil
+			} else if e != nil {
+				return e
+			} else if !owner {
+				return nil
+			}
+		}
+		if j.RunID > 0 {
+			var valid bool
+			if e := q.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM agent_runs r WHERE r.id=? AND r.project_id=? AND r.task_bead_id=? AND r.opencode_session_id=? AND replace(r.agent_name,'.','-')=replace(?::text,'.','-')) FROM bead_tasks b WHERE b.project_id=? AND b.id=? AND b.active_run_id=? AND b.deleted_at IS NULL FOR UPDATE OF b`, j.RunID, j.ProjectID, j.BeadID, j.SessionID, j.Role, j.ProjectID, j.BeadID, j.RunID).Scan(&valid); errors.Is(e, sql.ErrNoRows) {
+				return nil
+			} else if e != nil {
+				return e
+			} else if !valid {
+				return nil
+			}
+		}
+		var seq, runID int64
 		var session string
-		e := q.QueryRowContext(ctx, `SELECT source_seq,session_id FROM classification_jobs WHERE role=? FOR UPDATE`, j.Role).Scan(&seq, &session)
+		e := q.QueryRowContext(ctx, `SELECT source_seq,session_id,run_id FROM classification_jobs WHERE role=? FOR UPDATE`, j.Role).Scan(&seq, &session, &runID)
 		if e != nil {
 			return e
 		}
-		if seq != j.SourceSeq || session != j.SessionID {
+		if seq != j.SourceSeq || session != j.SessionID || runID != j.RunID {
 			return nil
 		}
-		if kind != "" && strings.HasPrefix(j.Role, "operator-") {
-			var currentID int64
-			e = q.QueryRowContext(ctx, `SELECT active_run_id FROM bead_tasks WHERE project_id=? AND id=? FOR UPDATE`, j.ProjectID, j.BeadID).Scan(&currentID)
-			if errors.Is(e, sql.ErrNoRows) {
-				return nil
-			}
-			if e != nil {
-				return e
-			}
-			if currentID != j.RunID {
-				_, e = q.ExecContext(ctx, `UPDATE classification_jobs SET state='done',lease_until=0 WHERE role=?`, j.Role)
-				return e
-			}
-		}
+
 		if kind != "" {
 			_, e = q.ExecContext(ctx, `UPDATE bead_tasks SET status_kind=?,status_text=?,status_role=?,status_session=?,status_seq=?,status_observed_at=? WHERE project_id=? AND id=? AND deleted_at IS NULL AND EXISTS(SELECT 1 FROM agent_sessions a WHERE a.role=? AND a.session_id=? AND a.source_seq=?)`, kind, text, j.Role, j.SessionID, j.SourceSeq, time.Now().Unix(), j.ProjectID, j.BeadID, j.Role, j.SessionID, j.SourceSeq)
 			if e != nil {

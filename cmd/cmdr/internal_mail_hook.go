@@ -142,6 +142,11 @@ func runInternalMailHook(args []string, stdin io.Reader, stdout io.Writer) int {
 		return 0
 	}
 	hadMail := text != ""
+	if ev == hookUserPromptSubmit {
+		if protocol := planningContext(*role); protocol != "" {
+			text = strings.TrimLeft(text+"\n\n"+protocol, "\n")
+		}
+	}
 	board, seen := boardturn.Deliver(home, *role, time.Now())
 	if board != "" {
 		text = strings.TrimLeft(text+"\n\n"+board, "\n")

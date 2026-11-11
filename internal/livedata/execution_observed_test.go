@@ -26,3 +26,16 @@ func TestObservedExecutionCountsIgnorePlanningAndUnverifiedClaims(t *testing.T) 
 		t.Fatal("stale claim or planning chat kept spinner active")
 	}
 }
+
+func TestClassifiedActivityRequiresTheObservedExecutionIdentity(t *testing.T) {
+	run := SnapExecution{Role: "executor.task", RunID: 19, SessionID: "current", State: store.AgentWorking}
+	proof := StatusEvidence{Role: "executor-task", RunID: 19, SessionID: "current", Kind: "working"}
+	if !classificationCompatible(proof, "working", []SnapExecution{run}) {
+		t.Fatal("current run summary lost")
+	}
+	for _, bad := range []StatusEvidence{{Role: proof.Role, RunID: 18, SessionID: "current", Kind: "working"}, {Role: proof.Role, RunID: 19, SessionID: "old", Kind: "working"}, {Role: proof.Role, Kind: "working"}} {
+		if classificationCompatible(bad, "working", []SnapExecution{run}) {
+			t.Fatalf("wrong execution summary accepted: %+v", bad)
+		}
+	}
+}

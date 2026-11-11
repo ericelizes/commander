@@ -29,7 +29,10 @@ var executionSchema string
 //go:embed bead_questions_schema.sql
 var beadQuestionsSchema string
 
-const PostgresSchemaVersion = 2
+//go:embed runtime_integrity_schema.sql
+var runtimeIntegritySchema string
+
+const PostgresSchemaVersion = 3
 
 // PostgresDSN selects the database explicitly beside state.db. A configured but
 // invalid/unreachable Postgres never falls back to the old SQLite database.
@@ -87,19 +90,16 @@ func OpenPostgres(dsn string) (*Store, error) {
 		return nil, errors.New("store: Postgres connection unavailable; SQLite fallback is disabled")
 	}
 	s := &Store{db: db, postgres: true, postgresDSN: dsn}
-	// A schema migration rewrites every bead on a populated database: it gets
-	// its own bound, not the connection check's.
-	migrateCtx, migrateCancel := context.WithTimeout(context.Background(), postgresMigrateTimeout)
-	defer migrateCancel()
-	if err := s.migratePostgres(migrateCtx); err != nil {
+	// Schema migration has its own bounded budget. Reusing the connection
+	// probe deadline made populated installations fail partway through upgrade.
+	migrationCtx, migrationCancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer migrationCancel()
+	if err := s.migratePostgres(migrationCtx); err != nil {
 		db.Close()
 		return nil, err
 	}
 	return s, nil
 }
-
-// postgresMigrateTimeout bounds one schema migration transaction.
-const postgresMigrateTimeout = 15 * time.Minute
 
 func (s *Store) IsPostgres() bool { return s.postgres }
 
@@ -109,7 +109,7 @@ func (s *Store) migratePostgres(ctx context.Context) error {
 		if ready == PostgresSchemaVersion {
 			return nil
 		}
-		if ready == 1 {
+		if ready > 0 && ready < PostgresSchemaVersion {
 			if home, e := os.UserHomeDir(); e == nil {
 				if raw, e := os.ReadFile(filepath.Join(home, ".commander/state.postgres")); e == nil && strings.TrimSpace(string(raw)) == s.postgresDSN {
 					if e = checkMigrateAllowed(filepath.Join(home, ".commander/state.db"), ready); e != nil {
@@ -118,7 +118,7 @@ func (s *Store) migratePostgres(ctx context.Context) error {
 				}
 			}
 		}
-		if ready != 1 {
+		if ready != 1 && ready != 2 {
 			return fmt.Errorf("store: unsupported Postgres schema %d", ready)
 		}
 	}
@@ -141,7 +141,7 @@ func (s *Store) migratePostgres(ctx context.Context) error {
 		}
 		_, err = tx.ExecContext(ctx, `INSERT INTO commander_schema(id,version) VALUES(1,1)`)
 		version = 1
-	} else if err == nil && version != 1 && version != PostgresSchemaVersion {
+	} else if err == nil && version != 1 && version != 2 && version != PostgresSchemaVersion {
 		return fmt.Errorf("store: unsupported Postgres schema %d", version)
 	}
 	if err != nil {
@@ -161,6 +161,15 @@ func (s *Store) migratePostgres(ctx context.Context) error {
 			return fmt.Errorf("store: migrate PostgreSQL supervision: %w", err)
 		}
 		if _, err = tx.ExecContext(ctx, `UPDATE commander_schema SET version=2 WHERE id=1`); err != nil {
+			return err
+		}
+		version = 2
+	}
+	if version == 2 {
+		if _, err = tx.ExecContext(ctx, runtimeIntegritySchema); err != nil {
+			return fmt.Errorf("store: migrate PostgreSQL runtime integrity: %w", err)
+		}
+		if _, err = tx.ExecContext(ctx, `UPDATE commander_schema SET version=3 WHERE id=1`); err != nil {
 			return err
 		}
 	}

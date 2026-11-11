@@ -63,6 +63,9 @@ func stepRows(ws workstream, expanded bool, anim animState, working bool) []pane
 		}
 		spin := anim
 		spin.on = isNow && working && !n.Done() // the spinner marks the one step an agent is on
+		if anim.truth != nil {
+			spin.on = anim.motion && anim.truth.working[store.WorkstreamKey{ProjectID: ws.project.ID, BeadID: o.BeadID}] && !n.Done()
+		}
 		return panelRow{kind: "objective", row: o, node: widgets.TreeNode{
 			ID: objectiveNodeID(o), Title: text, Columnar: true,
 			Marker: stepMarker(o, spin), Indent: indent + 2, Inline: true, TitleStyle: style,

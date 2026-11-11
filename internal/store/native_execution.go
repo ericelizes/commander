@@ -36,7 +36,7 @@ func (s *Store) NativeExecution(ctx context.Context, role string) (*NativeExecut
 	return out, rows.Err()
 }
 func (s *Store) PlanningIdentityState(ctx context.Context, role string) (owns, retired bool, err error) {
-	err = s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM jurisdiction_projects WHERE default_commander=?) OR EXISTS(SELECT 1 FROM commander_jurisdictions WHERE commander_id=?),EXISTS(SELECT 1 FROM jurisdiction_consolidations WHERE jsonb_exists(response->'retired_planning_candidates',?))`, role, role, role).Scan(&owns, &retired)
+	err = s.db.QueryRowContext(ctx, `SELECT commander_identity_owns(?),EXISTS(SELECT 1 FROM jurisdiction_consolidations WHERE jsonb_exists(response->'retired_planning_candidates',?))`, role, role).Scan(&owns, &retired)
 	return
 }
 

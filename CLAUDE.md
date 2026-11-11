@@ -2024,3 +2024,111 @@ different-thread responses never silently call thread/start. The native-checkpoi
 scenario names real worker/host/PG/private fake Claude+Codex flows for both project
 kinds, plus missing-context/cursor/CLI/binding guards. Cross-provider translation,
 legacy attestation/drain and full sidebar/cutover verification remain required.
+
+
+Runtime presence and execution activity now use the same current-run evidence.
+The daemon observes native role/run/session/PID identity, validates it against the
+current bead claim, and records positive custody in PostgreSQL. A logical planning
+chat, a newly inserted claim, stale role activity and an older session cannot
+count as an executing agent. Evidence expires after 45 seconds; losing a local
+engine connection leaves custody unknown rather than inventing process death.
+A physical exit invalidates only its exact run/session. Both fleet/row counts and
+nested frontend spinners use this verified execution set; unverified claims have
+a separate checking state. Presence does not advance work progress.
+
+The native-worker scenario now covers actual private Worker/Spawner/native-host
+process evidence entering Source.Snapshot and disappearing on physical exit for
+both code and knowledge tasks. Replacement-identity tests reject old observations
+and exit receipts. Frontend tests reject stale nested working flags, planning
+chat activity and wrong-project/non-run entries. New shared account ordering is
+wired through PostgreSQL, settings, planning engine and fresh execution worker;
+bound checkpoint continuations retain their recorded provider. Fresh executions
+cannot escape a saved order to an unlisted account when its preferred provider is
+unavailable or cannot support the task.
+
+This is not cutover proof. The detached cockpit smoke renders an isolated empty
+fleet; full populated PostgreSQL cockpit validation, old-process attestation and
+retirement, run revocation/result delivery, migration rehearsal, release-wide
+checks and the single authorized PR/install cutover still remain.
+
+
+Native chat events now journal their captured immutable run ID. The status worker
+consumes generic executions, including runtime permission/question/plan requests,
+with the existing two-worker/token-reservation budget and normal account runner.
+Classification validates current bead/run/session before updating its evidence
+cursor, clears evidence across run changes, and validates the same identity before
+publishing. Logical planning summaries require the current planning owner. The
+UI accepts activity descriptions only for the matching observed run/session;
+interpretation cannot turn a planning chat into an execution or advance progress.
+Subscriptions retire after executions stop and are joined on worker shutdown.
+
+The native-worker scenario drives this full path through the actual fake native
+host and a deterministic classifier runner for code and knowledge work. Dedicated
+store/UI tests cover late reused-session events, generic roles, old job results,
+role-only observations and unchanged progress. Account-preference read failures
+refuse a new planning launch rather than silently using default accounts.
+
+
+Load verification now uses 1,000 synthetic native executions with explicit
+bead/run bindings and run-fenced state updates, rather than legacy role-only
+presence. It sustains the existing 100-updates/second workload while repeatedly
+reading Source.Snapshot. A diagnosed recursive SQL plan rescanned project rows
+for each ancestor edge. Current identity and the compact parent graph now come
+from one read-only repeatable-read transaction, with ancestry resolved in linear
+walks. Normalized agent-state masking uses a map, and read-only diagram/workflow
+walks avoid temporary copies of the entire step tree.
+
+The unchanged acceptance gate passed with 1,984 committed updates over 20 seconds,
+124 reads, median 134.6 ms, p95 158.9 ms and maximum 179.9 ms on the private VM test
+database. This verifies database/snapshot throughput with simulated processes;
+it does not claim the VM can run 1,000 model processes. Optional test-only CPU
+profiling and query-plan diagnostics are available for investigating regressions.
+
+
+Native exit receipts now preserve the bounded terminal report together with the
+physical run/session exit. A single database transaction closes the execution,
+retains an attributed unaccepted exit note in bead history, and records a result
+for the current planning Commander. Explicit attributed final-report comments
+remain preferred evidence. Missing reports produce an explicit inspection
+obligation. No exit report closes a bead or grants approval. Current blocking
+questions instead preserve their checkpoint/resume source across answer/exit
+ordering. Failed commits retain receipts for replay; duplicate exits cannot
+replace the first terminal outcome or another run's custody.
+
+The API projection reads current result/run/time facts in a batch and shows
+“Result ready for Commander review” with zero execution spinners. Result waits
+remain held work rather than stopped/overdue work; saved human answers and
+planning checkpoints keep priority. Actual private Claude host/worker tests for
+code and knowledge cover this projection, report recovery across a jurisdiction
+transfer, history surviving a new work intent, and question continuations.
+
+The populated detached PostgreSQL cockpit now renders the same canonical result
+state, with no legacy Manager window. Source.Current supplies a load and its
+canonical snapshot together; the live-data wire carries that frame for terminal
+consumers. PostgreSQL terminal readers use this projection for scope status,
+execution counts, spinners and fleet metrics. Database failures return an explicit
+unavailable frame and clear the sidebar instead of retaining a healthy-looking
+saved frame. Legacy SQLite fixtures retain their existing presentation behavior.
+Dedicated tests cover wire transport, ignored stale Manager activity, verified
+execution spinners and database failure after a successful read. This live check
+and the private fake-host flows establish this interaction, not production
+migration, retirement or cutover readiness.
+
+
+Runtime integrity now upgrades shipped PostgreSQL schema 2 through additive
+schema 3; never edit an applied migration to install missing fields. The upgrade
+preserves work, claims, human decisions and progress; runtime retirement is
+attested and fenced against all-project ownership and execution changes.
+Active sidebar status and direct Board formatting use verified executions plus
+recorded planning obligations, rather than permanent Manager presence. Pending
+planning is not activity or progress. Existing planning chats receive current
+interface guidance through their normal prompt hook, while run-bound/execution
+contexts cannot borrow planning instructions.
+
+Verification includes runtime_integrity_migration_test.go, active_board_test.go,
+planning_retirement tests, ready_plan_test.go and planning_context_test.go. The
+ordinary-leaf CLI test proves a missing brief/criteria refusal can be repaired
+through cmdr plan apply, then claimed by the generic scheduler, preserving holds.
+Use the explicit restored-production rehearsal against a private trial copy
+before the final installed-state check. A merged PR or installed binary alone
+does not establish active orchestration, successful retirement or accurate UI.

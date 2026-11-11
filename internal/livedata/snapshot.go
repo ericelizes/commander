@@ -19,11 +19,12 @@ import (
 // Snapshot is the JSON view of the cockpit served by cmdrd's /api/snapshot
 // and /api/events: what the TUI sidebar and title bar show, as data.
 type Snapshot struct {
-	Storage         string            `json:"storage,omitempty"`
-	Executions      []SnapExecution   `json:"executions"`
-	ExecutionChecks []SnapExecution   `json:"execution_checks,omitempty"` // recorded claims without current positive process evidence
-	PRStates        map[string]string `json:"pr_states,omitempty"`
-	Answers         map[string]int    `json:"answers,omitempty"`
+	OrchestrationMode string            `json:"orchestration_mode,omitempty"`
+	Storage           string            `json:"storage,omitempty"`
+	Executions        []SnapExecution   `json:"executions"`
+	ExecutionChecks   []SnapExecution   `json:"execution_checks,omitempty"` // recorded claims without current positive process evidence
+	PRStates          map[string]string `json:"pr_states,omitempty"`
+	Answers           map[string]int    `json:"answers,omitempty"`
 	// PreserveVersion marks a failed project read served from last-good rows.
 	PreserveVersion bool `json:"-"`
 	// KeptLastGood marks a read that overlapped writes, served quietly from last-good
@@ -144,6 +145,9 @@ type SnapProject struct {
 
 // SnapWorkstream is one workstream with its step tree.
 type SnapWorkstream struct {
+	PlanningPending      bool            `json:"planning_pending,omitempty"`
+	ResultRunID          int64           `json:"result_run_id,omitempty"`
+	ResultReadyAt        int64           `json:"result_ready_at,omitempty"`
 	BlockedBy            []string        `json:"blocked_by,omitempty"`
 	QuestionWaiting      bool            `json:"question_waiting,omitempty"`
 	HumanAnswerPending   bool            `json:"human_answer_pending,omitempty"`
@@ -223,6 +227,9 @@ type SnapGate struct {
 
 // SnapStep is one step; phases carry their children and a one-line note.
 type SnapStep struct {
+	PlanningPending      bool                    `json:"planning_pending,omitempty"`
+	ResultRunID          int64                   `json:"result_run_id,omitempty"`
+	ResultReadyAt        int64                   `json:"result_ready_at,omitempty"`
 	QuestionWaiting      bool                    `json:"question_waiting,omitempty"`
 	HumanAnswerPending   bool                    `json:"human_answer_pending,omitempty"`
 	ExecutionMode        string                  `json:"execution_mode,omitempty"`
@@ -341,13 +348,14 @@ func BuildSnapshot(data Data, unread map[string]int) Snapshot {
 	}
 	asks, noPitch := askLists(data)
 	s := Snapshot{
-		GeneratedAt: data.LoadedAt,
-		Projects:    []SnapProject{},
-		Workstreams: []SnapWorkstream{},
-		NeedsYou:    asks,
-		NoPitch:     noPitch,
-		Agents:      map[string]SnapAgent{},
-		Unread:      map[string]int{},
+		OrchestrationMode: data.OrchestrationMode,
+		GeneratedAt:       data.LoadedAt,
+		Projects:          []SnapProject{},
+		Workstreams:       []SnapWorkstream{},
+		NeedsYou:          asks,
+		NoPitch:           noPitch,
+		Agents:            map[string]SnapAgent{},
+		Unread:            map[string]int{},
 		Fleet: SnapFleet{
 			CostUSD24h: data.Metrics.TotalCostUSD24h, CostUSD7d: data.Metrics.TotalCostUSD7d,
 			CostSeries24h: data.Metrics.CostSeries24h, Agents: data.Metrics.AgentCount,
@@ -470,9 +478,9 @@ func snapWorkstream(n int, ws Workstream, live LiveAgent) SnapWorkstream {
 		working = true
 	}
 	out := SnapWorkstream{
-		QuestionWaiting: r.QuestionWaiting, HumanAnswerPending: r.HumanAnswerPending,
+		ResultRunID: r.ResultRunID, ResultReadyAt: r.ResultReadyAt, QuestionWaiting: r.QuestionWaiting, HumanAnswerPending: r.HumanAnswerPending,
 		ExecutionMode: r.ExecutionMode, ExecutionReady: r.ExecutionReady, ExecutionEligible: r.ExecutionEligible, ExecutionReserved: r.ExecutionReserved, ExecutionCapable: r.ExecutionCapable, ExecutionAttempts: r.ExecutionAttempts, ExecutionError: r.ExecutionError,
-		PlanningCommander: r.PlanningCommander, JurisdictionRevision: r.JurisdictionRevision,
+		PlanningPending: r.PlanningPending, PlanningCommander: r.PlanningCommander, JurisdictionRevision: r.JurisdictionRevision,
 		BlockedBy: slices.Clone(r.BlockedBy), N: n, Project: ws.Project.Name, Repo: GitHubRepo(ws.Project.Path), ProjectID: ws.Project.ID, BeadID: r.BeadID, Title: r.Title, Tickets: r.Tickets,
 		State: state, Working: working, Status: r.Status, Owner: r.Owner, Starred: r.Starred, Hold: r.Hold, HoldReason: r.HoldReason, Review: r.Review,
 		Ask: r.Ask, Note: r.Note, Decision: r.Decision,
@@ -559,9 +567,9 @@ func snapSteps(nodes []*StepNode, now string, live LiveAgent, stage bool) []Snap
 	for _, n := range nodes {
 		o := n.Row
 		st := SnapStep{
-			QuestionWaiting: o.QuestionWaiting, HumanAnswerPending: o.HumanAnswerPending,
+			ResultRunID: o.ResultRunID, ResultReadyAt: o.ResultReadyAt, QuestionWaiting: o.QuestionWaiting, HumanAnswerPending: o.HumanAnswerPending,
 			ExecutionMode: o.ExecutionMode, ExecutionEligible: o.ExecutionEligible, ExecutionReady: o.ExecutionReady, ExecutionReserved: o.ExecutionReserved, ExecutionCapable: o.ExecutionCapable, ExecutionAttempts: o.ExecutionAttempts, ExecutionError: o.ExecutionError,
-			PlanningCommander: o.PlanningCommander, JurisdictionRevision: o.JurisdictionRevision,
+			PlanningPending: o.PlanningPending, PlanningCommander: o.PlanningCommander, JurisdictionRevision: o.JurisdictionRevision,
 			WorkflowCheck: o.WorkflowCheck, BeadID: o.BeadID, Title: o.Title, State: o.State, Status: o.Status, Owner: o.Owner, OwnerState: o.OwnerState,
 			OwnerWhy: o.OwnerWhy, OwnerSince: o.OwnerSince, Restarts: o.Restarts,
 			Starred: o.Starred, Review: o.Review, PR: o.PR, Tickets: o.Tickets, PRRepo: o.PRRepo, Ask: o.Ask, Note: o.Note, Decision: o.Decision, SpecHash: o.SpecHash, Basis: o.Basis, PushCount: o.PushCount, PushFirst: o.PushFirst,
@@ -689,6 +697,13 @@ const unreadTimeout = 2 * time.Second
 
 // Snapshot loads the fleet and builds a Snapshot (Version left at 0).
 func (s *Source) Snapshot(ctx context.Context) Snapshot {
+	_, snapshot := s.Current(ctx)
+	return snapshot
+}
+
+// Current returns one load and its canonical projection for presentation
+// adapters. Terminal columns must not infer a second set of runtime states.
+func (s *Source) Current(ctx context.Context) (Data, Snapshot) {
 	start := time.Now()
 	s.mu.Lock()
 	lock := time.Since(start)
@@ -699,7 +714,30 @@ func (s *Source) Snapshot(ctx context.Context) Snapshot {
 	s.mu.Unlock()
 	data := Load(ctx, deps)
 	data.Phases.Lock = lock
-	return s.build(ctx, data)
+	snapshot := s.build(ctx, data)
+	if data.Postgres {
+		frame := snapshot
+		if data.LoadErr != nil || ctx.Err() != nil || frame.Degraded != nil {
+			reason := "Current state is unavailable"
+			if frame.Degraded != nil {
+				reason = frame.Degraded.Reason
+			}
+			if data.LoadErr == nil {
+				data.LoadErr = errors.New(reason)
+			}
+			frame = Snapshot{Storage: "postgres", Executions: []SnapExecution{}, Degraded: &SnapDegraded{Reason: reason}}
+			data.Projects = nil
+			data.Objectives = nil
+			data.Operators = nil
+			data.Agents = map[string]store.AgentState{}
+		}
+		data.CanonicalSnapshot = &frame
+		data.Metrics.AgentCount = frame.Fleet.Agents
+		data.Metrics.ActiveCount = frame.Fleet.Active
+		data.Metrics.BlockedCount = frame.Fleet.Blocked
+		data.Metrics.IdleRatio = frame.Fleet.IdleRatio
+	}
+	return data, snapshot
 }
 
 // build turns a load into a Snapshot.

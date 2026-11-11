@@ -116,13 +116,16 @@ func rowBead(r ObjectiveRow, now time.Time) holding.Bead {
 		labels = slices.Clone(r.WorkflowCheck.Bead.Labels)
 	}
 	waits := 0
+	if r.ResultRunID > 0 && r.ResultReadyAt > 0 {
+		waits++
+	}
 	for _, w := range r.Waits {
 		if now.IsZero() || beads.WaitHolds(w, now) {
 			waits++
 		}
 	}
 	return holding.Bead{
-		Labels: labels, Queued: r.ExecutionReady && r.PlanningCommander != "", QuestionWaiting: r.QuestionWaiting, HumanAnswerPending: r.HumanAnswerPending,
+		PlanningPending: r.PlanningPending, Labels: labels, Queued: r.ExecutionReady && r.PlanningCommander != "", QuestionWaiting: r.QuestionWaiting, HumanAnswerPending: r.HumanAnswerPending,
 		ID: r.BeadID, Parent: r.ParentBeadID, Status: r.Status, Gate: r.Gate,
 		NeedsUser: r.State == beads.StateNeedsUser, Superseded: r.Superseded,
 		Owner: r.Owner, OwnerState: r.OwnerState, Waits: waits, Untyped: untypedWait(r),
@@ -137,7 +140,7 @@ func rowBead(r ObjectiveRow, now time.Time) holding.Bead {
 func SnapshotViolations(s Snapshot) []Violation {
 	var rows []ObjectiveRow
 	for _, ws := range s.Workstreams {
-		rows = append(rows, ObjectiveRow{QuestionWaiting: ws.QuestionWaiting, HumanAnswerPending: ws.HumanAnswerPending, ExecutionReady: ws.ExecutionReady, PlanningCommander: ws.PlanningCommander, BlockedBy: ws.BlockedBy, BeadID: ws.BeadID, Title: ws.Title, ProjectName: ws.Project, Status: ws.Status, State: ws.State, Owner: ws.Owner})
+		rows = append(rows, ObjectiveRow{PlanningPending: ws.PlanningPending, ResultRunID: ws.ResultRunID, ResultReadyAt: ws.ResultReadyAt, QuestionWaiting: ws.QuestionWaiting, HumanAnswerPending: ws.HumanAnswerPending, ExecutionReady: ws.ExecutionReady, PlanningCommander: ws.PlanningCommander, BlockedBy: ws.BlockedBy, BeadID: ws.BeadID, Title: ws.Title, ProjectName: ws.Project, Status: ws.Status, State: ws.State, Owner: ws.Owner})
 		rows = append(rows, workstreamRows(ws)...)
 	}
 	return OpenBeadInvariant(rows, func(owner string) string { return s.Agents[owner].State })
@@ -160,7 +163,7 @@ func workstreamRows(ws SnapWorkstream) []ObjectiveRow {
 	walk = func(parent string, steps []SnapStep) {
 		for _, st := range steps {
 			row := ObjectiveRow{
-				QuestionWaiting: st.QuestionWaiting, HumanAnswerPending: st.HumanAnswerPending, ExecutionReady: st.ExecutionReady, PlanningCommander: st.PlanningCommander,
+				PlanningPending: st.PlanningPending, ResultRunID: st.ResultRunID, ResultReadyAt: st.ResultReadyAt, QuestionWaiting: st.QuestionWaiting, HumanAnswerPending: st.HumanAnswerPending, ExecutionReady: st.ExecutionReady, PlanningCommander: st.PlanningCommander,
 				BeadID: st.BeadID, ParentBeadID: parent, Title: st.Title, ProjectName: ws.Project, Status: st.Status,
 				WorkflowCheck: st.WorkflowCheck, State: st.State, Owner: st.Owner, OwnerState: st.OwnerState, BlockedBy: st.BlockedBy, Until: st.Until, Gate: st.Gate, Superseded: st.Superseded,
 				Owns: st.ManagerRole != "",

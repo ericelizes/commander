@@ -27,6 +27,8 @@ import (
 // Partial loads are tolerated: any per-source error is captured in LoadErr
 // and whatever populated successfully is still returned.
 type Data struct {
+	OrchestrationMode  string
+	CanonicalSnapshot  *Snapshot `json:"canonical_snapshot,omitempty"` // shared projection for terminal consumers
 	workstreams        []Workstream
 	Postgres           bool                      `json:"postgres,omitempty"`
 	ObservedExecutions []store.ObservedExecution `json:"-"` // nil retains legacy projection; non-nil is current PG evidence
@@ -66,6 +68,8 @@ func (d Data) Parents() beads.Parents {
 // ObjectiveRow is a flattened cross-project objective (a workstream or one of
 // its steps). ProjectName is best-effort: the first linked project's name.
 type ObjectiveRow struct {
+	PlanningPending                                     bool
+	ResultRunID, ResultReadyAt                          int64
 	QuestionWaiting                                     bool
 	HumanAnswerPending                                  bool
 	ExecutionMode                                       string
@@ -294,8 +298,10 @@ func Load(ctx context.Context, deps Deps) Data {
 		}
 	}
 	lap(&out.Phases.Beads)
-	if e := attachExecutionState(ctx, deps.Store, out.Objectives); e != nil && out.LoadErr == nil {
-		out.LoadErr = e
+	mode, executionErr := attachExecutionState(ctx, deps.Store, out.Objectives)
+	out.OrchestrationMode = mode
+	if executionErr != nil && out.LoadErr == nil {
+		out.LoadErr = executionErr
 	}
 
 	out.Objectives = MarkOperatorOwners(ctx, deps.Store, out.Projects, out.Objectives)

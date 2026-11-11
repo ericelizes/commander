@@ -10,7 +10,9 @@
     "internal/chat:TestNativeReceiptFailureDoesNotStarveOtherRecordedExits",
     "internal/chat:TestNativeConnectionLossDoesNotReleaseAStillLiveExecution",
     "internal/chat:TestNativeCodexCheckpointSelectsOnlyMatchingHostRunThread",
-    "internal/chat:TestNativeCodexExecutionFinishesAndReplacementStartsItsOwnThread"
+    "internal/chat:TestNativeCodexExecutionFinishesAndReplacementStartsItsOwnThread",
+    "internal/chat:TestNativeTerminalReportSurvivesFailedCommitAndFollowsJurisdiction",
+    "tests/evals:TestCommanderRuntimeContractInIsolatedPostgresCockpit"
   ],
   "invariants": [
     "A bound execution host ends after one result while planning chats stay persistent",
@@ -22,6 +24,11 @@
     "An unrelated bad receipt cannot stop other exit reconciliation",
     "Socket loss preserves live custody and permits adoption of the same process",
     "Native checkpoints do not borrow another run's Codex thread",
-    "Actual fake Codex hosts end their runs and fresh replacements start independent threads"
+    "Actual fake Codex hosts end their runs and fresh replacements start independent threads",
+    "A durable physical-exit receipt carries the unaccepted terminal report to the current planning Commander",
+    "Missing final reports become explicit review obligations, not silent work completion or human decisions",
+    "Blocking question checkpoints preserve their exact resume source instead of becoming deliverable results",
+    "The actual detached PostgreSQL cockpit renders the canonical Commander review wait with no legacy Manager window",
+    "Terminal columns consume the canonical snapshot for execution counts, spinners and scope status; a database error clears the healthy saved frame"
   ]
 }

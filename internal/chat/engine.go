@@ -40,16 +40,15 @@ type TmuxRunner interface {
 
 // Options configures an Engine.
 type Options struct {
-	Home     string   // COMMANDER_HOME: logs in <Home>/chat, locks in <Home>/chat-locks
-	Binary   string   // claude binary; default "claude"
-	Resolver Resolver // role -> Spec
-	States   StateSink
-	Costs    CostSink // optional: per-turn cost of each role
+	// AccountOrder reads the shared account preferences for new planning turns.
+	AccountOrder func(context.Context, string) ([]string, error)
+	Home         string   // COMMANDER_HOME: logs in <Home>/chat, locks in <Home>/chat-locks
+	Binary       string   // claude binary; default "claude"
+	Resolver     Resolver // role -> Spec
+	States       StateSink
+	Costs        CostSink // optional: per-turn cost of each role
 	// OnUsageMove, when set, is told of every move a usage limit made (role, text).
 	OnUsageMove func(role, text string)
-	// AccountOrder is a kind's saved account order (store.AgentAccounts);
-	// nil or empty = store.DefaultAgentAccounts.
-	AccountOrder func(ctx context.Context, kind string) ([]string, error)
 	// CodexHooksReady gates a Manager's move onto Codex; default CodexHooksReady.
 	CodexHooksReady func() bool
 	// Usage keeps the latest plan usage per account; default OpenUsage(Home).
@@ -266,12 +265,13 @@ func (c *chatRole) publishBound(origin *process, exited bool, events ...Event) b
 	}
 	var changed *State
 	for _, ev := range events {
+		ev.RunID = spec.ExecutionRunID
 		c.emitLocked(ev)
 		if st := c.tracker.state(); st != c.lastState {
 			c.lastState = st
 			s := st
 			changed = &s
-			c.emitLocked(Event{Kind: KindState, Source: SourceEngine, Time: c.e.opts.Now(), State: &s})
+			c.emitLocked(Event{RunID: spec.ExecutionRunID, Kind: KindState, Source: SourceEngine, Time: c.e.opts.Now(), State: &s})
 		}
 	}
 	c.mu.Unlock()
@@ -1609,7 +1609,7 @@ func (e *Engine) resumeRole(ctx context.Context, role string, firstDone func()) 
 			// orphan of a previous cmdrd (its stdin pipe is gone): after a
 			// grace period for a turn to finish, end it so the chat can
 			// resume instead of staying detached from the app.
-			if !orphanKilled && e.opts.Now().Sub(started) >= e.opts.OrphanGrace {
+			if !orphanKilled && e.opts.Now().Sub(started) >= e.opts.OrphanGrace && !e.preserveRuntime(ctx, role) {
 				orphanKilled = true
 				e.opts.Logf("chat: ending orphan claude pid %d on %s's session", owned.PID, role)
 				_ = syscall.Kill(owned.PID, syscall.SIGTERM)
@@ -2011,11 +2011,18 @@ func (e *Engine) endOrphanHosts() {
 			continue
 		}
 		sock := hostSock(e.opts.Home, role)
-		hc, _, err := dialHost(sock)
+		hc, hello, err := dialHost(sock)
 		if err != nil {
 			if errors.Is(err, syscall.ECONNREFUSED) {
 				_ = os.Remove(sock)
 			}
+			continue
+		}
+		check, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		keep := hello.Info.ExecutionRunID > 0 || e.preserveRuntime(check, role)
+		cancel()
+		if keep {
+			hc.close()
 			continue
 		}
 		e.opts.Logf("chat: ending orphan chat host of %s", role)

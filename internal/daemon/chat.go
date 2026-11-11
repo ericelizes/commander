@@ -23,14 +23,14 @@ const HandoverEnvVar = "COMMANDER_CHAT_HANDOVER"
 
 func newChatEngine(home string, st *store.Store) *chat.Engine {
 	return chat.New(chat.Options{
-		Home:     home,
-		Resolver: chat.StoreResolver{Store: st, Home: home},
-		States:   st,
-		Costs:    chat.StoreCosts{Store: st},
+		Home: home,
 		AccountOrder: func(ctx context.Context, kind string) ([]string, error) {
-			order, err := st.AgentAccounts(ctx)
-			return order[kind], err
+			orders, err := st.AgentAccounts(ctx)
+			return orders[kind], err
 		},
+		Resolver:      chat.StoreResolver{Store: st, Home: home},
+		States:        st,
+		Costs:         chat.StoreCosts{Store: st},
 		Tmux:          layout.DefaultRunner{},
 		AllowHandover: os.Getenv(HandoverEnvVar) == "1",
 		CrashRestart:  restartsOnCrash,

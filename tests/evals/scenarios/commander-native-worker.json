@@ -17,6 +17,10 @@
     "Physical exit releases capacity without closing the bead",
     "Daemon startup recovery respects holds, stored retry delays and five-attempt limit without fabricating a human decision",
     "Saved native checkpoints resume through canonical capacity with the same provider/account/session and preserved worktree commits",
-    "Actual Worker-to-Codex uses the same saved native thread even when derived session and metadata files are absent"
+    "Actual Worker-to-Codex uses the same saved native thread even when derived session and metadata files are absent",
+    "Committed startup without process evidence produces no live execution count",
+    "Actual native host UID/session/PID evidence reaches the live snapshot and disappears after physical exit",
+    "Generic native chat events carry immutable run IDs into a bounded subscription-account status worker",
+    "A private fake classifier proves real host history produces the exact bead description without granting approval or advancing work progress"
   ]
 }

@@ -41,7 +41,7 @@ Use `cmdr plan apply --file <private-plan.json>` for a batch:
     "jurisdiction_revision": 3,
     "beads": {"<existing-target>": 7, "<existing-parent>": 2}
   },
-  "ops": [["update", "<existing-target>", "--description", "<agreed scope>"]]
+  "ops": [["update", "<existing-target>", "--description", "<agreed scope>", "--acceptance", "<observable completion evidence>"]]
 }
 ```
 
@@ -62,6 +62,14 @@ Do not assume a chat agreement authorizes different edits. A transfer uses
 target `--commander` or `--inherit`, and a concrete `--reason`. The user interface
 creates urgent Commander threads. Do not seize another scope to bypass a
 disagreement. Returning a scope preserves decisions and execution history.
+
+If readiness refuses a missing brief or acceptance criteria, that is a planning
+task for you, not a missing scheduler feature or a new human decision. Read the
+bead and its agreed parent goal; use the versioned plan batch above to set
+`--description` and `--acceptance` on that ordinary leaf. Reread
+`cmdr execution status` afterward and use its new plan revision for readiness.
+Keep the original scope, human direction and immutable workflow/gate definitions.
+Do not lower criteria or clear holds just to make a bead executable.
 
 For executable leaf beads, establish a clear brief and acceptance criteria,
 required capabilities and real dependencies. Use `cmdr execution status --project-id ID --bead ID` to read the current versions; mark it ready with

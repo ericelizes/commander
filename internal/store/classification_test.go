@@ -147,3 +147,79 @@ func TestPostgresReplacementRunInvalidatesActivityAndSummaryEvenWhenSessionIsRes
 		t.Fatal(e)
 	}
 }
+
+func TestClassificationCapturedRunRejectsReusedSessionAndGenericRole(t *testing.T) {
+	for _, role := range []string{"executor-generic", "manager-task"} {
+		t.Run(role, func(t *testing.T) {
+			s := postgresTestStore(t)
+			ctx := context.Background()
+			pid, e := s.InsertProject(ctx, Project{Name: "captured", Type: "code", Path: t.TempDir(), Status: "active"})
+			if e != nil {
+				t.Fatal(e)
+			}
+			if _, e = s.DB().Exec(`INSERT INTO bead_tasks(project_id,id,title,created_at,updated_at) VALUES(?,'task','Task','now','now')`, pid); e != nil {
+				t.Fatal(e)
+			}
+			r := AgentRun{ProjectID: pid, TaskBeadID: "task", AgentName: role, OpencodeSessionID: "resumed", SpawnTime: 1}
+			first, e := s.InsertAgentRun(ctx, r)
+			if e != nil {
+				t.Fatal(e)
+			}
+			if e = s.ObserveClassificationForRun(ctx, role, first, "resumed", 10, "First run evidence", true); e != nil {
+				t.Fatal(e)
+			}
+			if _, e = s.DB().Exec(`UPDATE classification_jobs SET updated_at=0`); e != nil {
+				t.Fatal(e)
+			}
+			old, e := s.LeaseClassification(ctx)
+			if e != nil || old == nil || old.RunID != first {
+				t.Fatalf("lost execution origin: %+v %v", old, e)
+			}
+			if e = s.MarkClosed(ctx, first, "exited"); e != nil {
+				t.Fatal(e)
+			}
+			r.SpawnTime = 2
+			second, e := s.InsertAgentRun(ctx, r)
+			if e != nil {
+				t.Fatal(e)
+			}
+			if e = s.ObserveClassificationForRun(ctx, role, second, "resumed", 20, "New run evidence", true); e != nil {
+				t.Fatal(e)
+			}
+			if e = s.ObserveClassificationForRun(ctx, role, first, "resumed", 1000, "Late old evidence", true); e != nil {
+				t.Fatal(e)
+			}
+			if e = s.ObserveClassificationForRun(ctx, role, 0, "resumed", 1001, "Role-only evidence", true); e != nil {
+				t.Fatal(e)
+			}
+			if e = s.CompleteClassification(ctx, *old, "working", "Late old summary"); e != nil {
+				t.Fatal(e)
+			}
+			var rid, seq int64
+			var evidence, summary string
+			if e = s.DB().QueryRow(`SELECT run_id,source_seq,evidence FROM agent_sessions WHERE role=?`, role).Scan(&rid, &seq, &evidence); e != nil || rid != second || seq != 20 || evidence != "New run evidence" {
+				t.Fatalf("late event corrupted cursor: %d %d %q %v", rid, seq, evidence, e)
+			}
+			if e = s.DB().QueryRow(`SELECT status_text FROM bead_tasks WHERE project_id=? AND id='task'`, pid).Scan(&summary); e != nil || summary != "" {
+				t.Fatalf("old result published: %q %v", summary, e)
+			}
+			if _, e = s.DB().Exec(`UPDATE classification_jobs SET updated_at=0`); e != nil {
+				t.Fatal(e)
+			}
+			current, e := s.LeaseClassification(ctx)
+			if e != nil || current == nil || current.RunID != second {
+				t.Fatal("new job vanished", current, e)
+			}
+			var before, after int64
+			if e = s.DB().QueryRow(`SELECT progress_seq FROM bead_tasks WHERE project_id=? AND id='task'`, pid).Scan(&before); e != nil {
+				t.Fatal(e)
+			}
+			if e = s.CompleteClassification(ctx, *current, "working", "Current run summary"); e != nil {
+				t.Fatal(e)
+			}
+			if e = s.DB().QueryRow(`SELECT progress_seq,status_text FROM bead_tasks WHERE project_id=? AND id='task'`, pid).Scan(&after, &summary); e != nil || before != after || summary != "Current run summary" {
+				t.Fatalf("interpretation changed progress or lost current summary: %d %d %q %v", before, after, summary, e)
+			}
+		})
+	}
+}

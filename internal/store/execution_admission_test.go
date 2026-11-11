@@ -185,7 +185,7 @@ func TestPostgresNativeCheckpointBindingCannotChangeProviderOrAccount(t *testing
 	if e != nil {
 		t.Fatal(e)
 	}
-	if e = st.FinishNativeExecution(ctx, first.AgentName, rid, first.OpencodeSessionID, "exited"); e != nil {
+	if e = st.FinishNativeExecutionReport(ctx, first.AgentName, rid, first.OpencodeSessionID, "exited", "Paused with prepared work for a planning answer"); e != nil {
 		t.Fatal(e)
 	}
 	if _, e = st.AnswerQuestion(ctx, question, "commander", "Continue the prepared work", true); e != nil {

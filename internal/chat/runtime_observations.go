@@ -20,6 +20,12 @@ func (e *Engine) RuntimeObservations() []store.NativeRuntimeObservation {
 		c.mu.Lock()
 		p := c.proc
 		if p != nil && !p.detached && p.pid > 0 {
+			select {
+			case <-p.done:
+				c.mu.Unlock()
+				continue
+			default:
+			}
 			if err := syscall.Kill(p.pid, 0); err == nil || err == syscall.EPERM {
 				out = append(out, store.NativeRuntimeObservation{Role: c.role, RunID: p.spec.ExecutionRunID, SessionID: p.spec.SessionID, PID: p.pid})
 			}

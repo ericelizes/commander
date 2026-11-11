@@ -41,6 +41,7 @@ const (
 
 // Bead is the part of a bead Held reads.
 type Bead struct {
+	PlanningPending    bool // a recorded obligation for the current planning owner, never execution evidence
 	Queued             bool
 	QuestionWaiting    bool
 	HumanAnswerPending bool
@@ -146,6 +147,8 @@ func own(b Bead, w World) (Holder, bool, Why) {
 		return Holder{Kind: Children}, true, WhyNone
 	case b.Queued:
 		return Holder{Kind: Queue}, true, WhyNone
+	case b.PlanningPending:
+		return Holder{Kind: PlanningDecision}, true, WhyNone
 	case b.QuestionWaiting:
 		return Holder{Kind: PlanningDecision}, true, WhyNone
 	case b.OwnerState == OwnerDied || b.OwnerState == OwnerFinished:

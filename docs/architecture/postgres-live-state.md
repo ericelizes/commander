@@ -128,3 +128,18 @@ fixtures start no paid agents. The explicit load scenario uses 1,000 synthetic
 executions and targets 100 runtime writes/second with p95 reads below 200 ms.
 It does not claim 1,000 model processes fit on the VM. Run the isolated cockpit
 script and UI checks as well as the Go suite before shipping.
+
+## Runtime integrity upgrade
+
+Schema 3 upgrades existing schema 2 in place; fresh installations traverse the
+same numbered migrations. Shipped SQL remains frozen. The new version adds
+run-bound classification evidence and attested planning-runtime retirement
+receipts, preserves task/decision/run history and progress, and resolves only
+historical supervision jobs without pending saved answers. An installed schema
+is never repaired by silently skipping required columns or falling back to files.
+
+The explicit restored-production rehearsal accepts only a dedicated
+commander_rehearsal_* database on the separate localhost trial server (55432).
+It fingerprints pre-existing durable facts before/after migration and checks
+consolidation separately, allowing only its intended planning-owner/epoch changes.
+No model runtime starts during this rehearsal.

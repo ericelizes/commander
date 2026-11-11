@@ -48,7 +48,7 @@ func AuditSnapshot(s Snapshot, nowSec int64, opt AuditOptions) []Suspect {
 	owner := map[string]string{} // bead -> Manager role
 	for _, ws := range s.Workstreams {
 		owner[ws.BeadID] = ws.ManagerRole
-		for _, st := range flattenSteps(ws.Steps) {
+		for st := range stepValues(ws.Steps) {
 			byBead[st.BeadID] = st
 			owner[st.BeadID] = ws.ManagerRole
 		}
@@ -182,7 +182,7 @@ func roleOfWorkstream(s Snapshot, project, title string) string {
 }
 
 func hasOpenGate(ws SnapWorkstream) bool {
-	for _, st := range flattenSteps(ws.Steps) {
+	for st := range stepValues(ws.Steps) {
 		if st.Gate && !stepClosed(st) && st.Status != statusDeferred {
 			return true
 		}
@@ -237,7 +237,7 @@ func earlierOpenGate(ws SnapWorkstream, id string, byBead map[string]SnapStep) s
 func openWithoutOwner(ws SnapWorkstream) []SnapStep {
 	w := newRowWorld(workstreamRows(ws), nil)
 	var out []SnapStep
-	for _, st := range flattenSteps(ws.Steps) {
+	for st := range stepValues(ws.Steps) {
 		if st.Status == "closed" || st.Status == statusDeferred {
 			continue
 		}

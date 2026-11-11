@@ -1,0 +1,29 @@
+{
+  "role": "commander",
+  "goal": "Retire obsolete imported planning hosts while preserving every live execution and conversation",
+  "runners": [
+    "internal/store:TestPlanningRetirementRequiresConsolidationAndNoGlobalCustody",
+    "internal/store:TestPlanningRetirementIsBoundedIdempotentAndKeepsWork",
+    "internal/store:TestPlanningRetirementFencesConcurrentExecutionAndJurisdiction",
+    "internal/chat:TestPlanningHostRetirementStopsOnlyAttestedLogicalHost",
+    "internal/chat:TestPlanningRetirementRefusesUnattestedSessionAndExecution",
+    "internal/chat:TestOrphanMetadataCannotStopCustodiedOrUncertainHost",
+    "internal/chat:TestOrphanGraceCannotKillRecordedExecution",
+    "internal/chat:TestStoreCustodyIncludesRawRunsAndDatabaseFailure",
+    "tests/evals:TestCommanderRuntimeContractInIsolatedPostgresCockpit",
+    "internal/store:TestSchemaTwoUpgradePreservesLiveCustodyAndHumanDirection",
+    "internal/store:TestConsolidationOwnerTraversalMatchesCanonicalDatabase",
+    "internal/livedata:TestActiveBoardPlanningObligationDoesNotInventAgentActivity",
+    "internal/livedata:TestActiveBoardPreservesWaitsHoldsAndRealDecisionPriority",
+    "internal/livedata:TestActiveBoardCountsOnlyCurrentExecutionAndChecksUnknownCustody"
+  ],
+  "invariants": [
+    "Only an explicit consolidation receipt nominates a planning identity",
+    "Any current ownership in any project or any running execution blocks retirement",
+    "Ownership and execution writes remain fenced until the attested logical host exits",
+    "An unknown host, execution host or uncertain custody read cannot be killed by cleanup",
+    "Retirement preserves sessions and chat history without closing a bead, advancing progress or granting approval",
+    "A completed retirement is recorded once and is not repeated",
+    "The active detached cockpit contains Commander without a permanent Manager window"
+  ]
+}

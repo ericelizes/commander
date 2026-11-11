@@ -88,6 +88,7 @@ const (
 // restarts; there are gaps where live-only kinds (deltas, status) were not
 // persisted. Only the fields relevant to Kind are set.
 type Event struct {
+	RunID     int64     `json:"run_id,omitempty"` // immutable native execution origin; zero is a planning chat
 	Seq       uint64    `json:"seq"`
 	Role      string    `json:"role"`
 	SessionID string    `json:"session_id,omitempty"`

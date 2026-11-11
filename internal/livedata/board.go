@@ -295,7 +295,7 @@ func (b board) row(ws SnapWorkstream) BoardRow {
 	manager, hasManager := b.s.Agents[ws.ManagerRole]
 	reacting := managerReacting(b.s, ws.ManagerRole)
 	pickingUp := func(l line) line {
-		if l.kind == "stalled" && reacting {
+		if b.s.OrchestrationMode != "active" && l.kind == "stalled" && reacting {
 			l = line{kind: "working", text: "Manager picking it up", why: l.why, ageAs: l.ageAs}
 		}
 		return humanWait(l, b.tasks)
@@ -303,7 +303,7 @@ func (b board) row(ws SnapWorkstream) BoardRow {
 	byTrack := map[string]line{}
 	level := b.trackLevel(ws, ws.Steps, "", manager, hasManager, pickingUp, byTrack)
 	l := pickingUp(b.workstreamLine(ws, manager, hasManager, asks))
-	if l.kind == "quiet" || l.kind == "stalled" || l.kind == "idle" {
+	if b.s.OrchestrationMode != "active" && (l.kind == "quiet" || l.kind == "stalled" || l.kind == "idle") {
 		if hidden, ok := b.hiddenOperator(ws); ok {
 			l = line{kind: "working", text: "Operator working", why: "Its step was closed while it still runs (" + hidden + ")"}
 		}
@@ -321,6 +321,9 @@ func (b board) row(ws SnapWorkstream) BoardRow {
 	}
 	r := BoardRow{PlanningCommander: ws.PlanningCommander, JurisdictionRevision: ws.JurisdictionRevision, Key: ws.Project + ":" + ws.BeadID, N: ws.N, Title: title, Scope: scope, ScopeRole: scopeRole, Project: ws.Project, BeadID: ws.BeadID, ManagerRole: ws.ManagerRole, Starred: ws.Starred, Kind: l.kind, Text: l.text, Since: l.since, Why: l.why, AgeAs: l.ageAs,
 		Progress: progressOf(ws), Milestones: DeliveryMilestones(ws), Working: workingAgents(ws, manager, hasManager), Flag: asks, Unread: b.s.Unread[ws.ManagerRole], Tracks: tracks}
+	if b.s.OrchestrationMode == "active" {
+		r.Working = executionCount(b.s, ws.ProjectID, ws.BeadID, ws.Steps)
+	}
 	r.Workflow, r.Diagram = b.workflow(ws, manager, hasManager, byTrack, pickingUp)
 	b.addNeedsYouLane(ws, &r)
 	if g := gateVMOf(ws, b.needsIDs, asks); g != nil {
@@ -366,8 +369,12 @@ func (b board) trackLevel(ws SnapWorkstream, steps []SnapStep, prefix string, ma
 		out.lines = append(out.lines, l)
 		out.names = append(out.names, clip(strings.Join(strings.Fields(plainTitle(trackTitle(t.Title))), " "), needsTitleMax))
 		out.live = append(out.live, own.kind == "working" && workingOperators(tws) > 0) // before pickingUp: the Manager's turn does not make a stalled track live
+		working := workingOperators(tws)
+		if b.s.OrchestrationMode == "active" {
+			working = executionCount(b.s, ws.ProjectID, tws.BeadID, tws.Steps)
+		}
 		out.rows = append(out.rows, BoardTrack{PlanningCommander: t.PlanningCommander, JurisdictionRevision: t.JurisdictionRevision, Key: ws.Project + ":" + t.BeadID, BeadID: t.BeadID, Letter: number, Title: trackTitle(t.Title), Children: kids.rows,
-			Kind: l.kind, Text: l.text, Since: l.since, Progress: progressOf(tws), Milestones: DeliveryMilestones(tws), Working: workingOperators(tws), Why: l.why, AgeAs: l.ageAs,
+			Kind: l.kind, Text: l.text, Since: l.since, Progress: progressOf(tws), Milestones: DeliveryMilestones(tws), Working: working, Why: l.why, AgeAs: l.ageAs,
 			ManagerRole: t.ManagerRole})
 	}
 	return out
@@ -440,10 +447,15 @@ func holds(s SnapStep, id string) bool {
 
 // workstreamLine is the status line with respect to the next approval gate; without gates it is managerLine.
 func (b board) workstreamLine(ws SnapWorkstream, agent SnapAgent, hasAgent bool, asks int) line {
+	if b.s.OrchestrationMode == "active" {
+		return b.activeWorkstreamLine(ws, asks)
+	}
 	l := b.workstreamBaseLine(ws, agent, hasAgent, asks)
 	if asks == 0 && l.kind != "needs" && workingOperators(ws) == 0 {
 		if question, ok := planningQuestionLine(ws); ok {
 			l = question
+		} else if result, ok := recordedResultLine(ws); ok {
+			l = result
 		} else if required, ok := b.requiredCheckLine(ws); ok {
 			l = required
 		} else if queued, ok := executionQueueLine(ws); ok {
@@ -1352,6 +1364,8 @@ func trackTitle(t string) string { return typedLetter.ReplaceAllString(t, "") }
 // trackWorkstream views one track as a workstream of its own, so its line is derived exactly as a row's.
 func trackWorkstream(ws SnapWorkstream, t SnapStep) SnapWorkstream {
 	ws.BlockedBy = slices.Clone(t.BlockedBy)
+	ws.PlanningPending = t.PlanningPending
+	ws.ResultRunID, ws.ResultReadyAt = t.ResultRunID, t.ResultReadyAt
 	ws.QuestionWaiting = t.QuestionWaiting
 	ws.HumanAnswerPending = t.HumanAnswerPending
 	ws.ExecutionMode = t.ExecutionMode

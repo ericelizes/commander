@@ -8,27 +8,30 @@ import (
 	"time"
 )
 
-// Commander runs on the first account in its order (store.AgentAccounts) that
-// has usage left. A person's explicit choice in the chat comes first while it
-// has usage, and is kept across a move.
+// Commander treats a chosen account as a preference. At a limit it can use
+// any connected account, regardless of provider, and retains that preference.
 func planChatStart(home, role string, fresh bool, usage map[string]Usage, now time.Time, hooksReady func() bool, order []string) (managerPlan, error) {
 	if !IsCommanderRole(role) {
 		return planManagerStart(home, role, fresh, usage, now, hooksReady)
 	}
+	cur := ProviderOf(home, role)
 	pin := ManagerPin(home, role)
 	want := ReadAccountIntent(home, role)
 	if want == "" {
 		want = ReadAccount(home, role)
 	}
-	accounts := Accounts(home, usage, now)
-	var candidates []Provider
-	switch {
-	case pin == RuntimeCodex:
-		candidates = append(candidates, Provider{Runtime: RuntimeCodex})
-	case pin == RuntimeClaude || fileExists(AccountFile(home, role)):
-		candidates = append(candidates, Provider{Runtime: RuntimeClaude, Account: want})
+	preferred := cur
+	if pin != "" {
+		preferred.Runtime = pin
 	}
-	candidates = append(candidates, OrderAccounts(order, accounts)...)
+	preferred.Account = want
+	accounts := Accounts(home, usage, now)
+	candidates := OrderAccounts(order, accounts)
+	// Explicit runtime choices remain preferences; automatic fallback is retried
+	// in the saved order when that preferred account becomes available again.
+	if pin != "" || (cur.Runtime == RuntimeClaude && want != "default") {
+		candidates = append([]Provider{preferred}, candidates...)
+	}
 	for _, p := range candidates {
 		if !AccountAvailable(p, accounts, now, hooksReady) {
 			continue

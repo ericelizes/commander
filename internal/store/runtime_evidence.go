@@ -2,7 +2,9 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"time"
 )
 
@@ -71,29 +73,80 @@ type ObservedExecution struct {
 	Path                                   []string
 }
 
-// ObservedExecutions is the authoritative execution set for counts and
-// spinners. Chat activity and a newly inserted claim alone are not evidence.
+const observedExecutionSQL = `SELECT r.id,r.project_id,r.agent_name,r.opencode_session_id,r.task_bead_id,
+ COALESCE(o.checked_at,0)>=?,COALESCE(o.alive,FALSE),COALESCE(a.state,'unknown'),COALESCE(a.detail,''),COALESCE(a.since,0),b.project_id,b.id
+ FROM agent_runs r JOIN bead_tasks b ON b.active_run_id=r.id
+ LEFT JOIN run_observations o ON o.run_id=r.id
+ LEFT JOIN LATERAL(SELECT state,detail,since FROM agent_state a WHERE replace(a.role,'.','-')=replace(r.agent_name,'.','-') ORDER BY updated DESC LIMIT 1)a ON TRUE
+ WHERE r.status='running' AND b.deleted_at IS NULL ORDER BY r.id`
+
+// ObservedExecutions reads current identities and the compact parent graph in
+// one read-only snapshot. Each ancestor edge is visited once per execution,
+// avoiding a recursive SQL join that could rescan a project for every edge.
 func (s *Store) ObservedExecutions(ctx context.Context) ([]ObservedExecution, error) {
-	rows, e := s.db.QueryContext(ctx, `WITH RECURSIVE path(run_id,id,parent_id,depth,seen) AS (
- SELECT r.id,b.id,b.parent_id,0,ARRAY[b.id] FROM bead_tasks b JOIN agent_runs r ON r.id=b.active_run_id WHERE r.status='running' AND b.deleted_at IS NULL
- UNION ALL SELECT path.run_id,b.id,b.parent_id,path.depth+1,path.seen||b.id FROM path JOIN agent_runs r ON r.id=path.run_id JOIN bead_tasks b ON b.project_id=r.project_id AND b.id=path.parent_id WHERE NOT b.id=ANY(path.seen))
- SELECT r.id,r.project_id,r.agent_name,r.opencode_session_id,r.task_bead_id,COALESCE(o.checked_at,0)>=?,COALESCE(o.alive,FALSE),COALESCE(a.state,'unknown'),COALESCE(a.detail,''),COALESCE(a.since,0),COALESCE((SELECT jsonb_agg(p.id ORDER BY p.depth) FROM path p WHERE p.run_id=r.id),'[]'::jsonb)
- FROM agent_runs r JOIN bead_tasks b ON b.active_run_id=r.id AND b.project_id=r.project_id AND b.id=r.task_bead_id LEFT JOIN run_observations o ON o.run_id=r.id LEFT JOIN LATERAL(SELECT state,detail,since FROM agent_state a WHERE replace(a.role,'.','-')=replace(r.agent_name,'.','-') ORDER BY updated DESC LIMIT 1)a ON TRUE WHERE r.status='running' AND b.deleted_at IS NULL ORDER BY r.id`, time.Now().Add(-45*time.Second).Unix())
+	tx, e := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
 	if e != nil {
 		return nil, e
 	}
-	defer rows.Close()
+	defer tx.Rollback()
+	rows, e := tx.QueryContext(ctx, observedExecutionSQL, time.Now().Add(-45*time.Second).Unix())
+	if e != nil {
+		return nil, e
+	}
 	out := []ObservedExecution{}
 	for rows.Next() {
 		var x ObservedExecution
-		var path []byte
-		if e = rows.Scan(&x.RunID, &x.ProjectID, &x.Role, &x.SessionID, &x.BeadID, &x.Known, &x.Alive, &x.State, &x.Detail, &x.Since, &path); e != nil {
+		var pid int64
+		var bead string
+		if e = rows.Scan(&x.RunID, &x.ProjectID, &x.Role, &x.SessionID, &x.BeadID, &x.Known, &x.Alive, &x.State, &x.Detail, &x.Since, &pid, &bead); e != nil {
+			rows.Close()
 			return nil, e
 		}
-		if e = json.Unmarshal(path, &x.Path); e != nil {
-			return nil, e
+		if pid != x.ProjectID || bead != x.BeadID {
+			rows.Close()
+			return nil, errors.New("current execution bead does not match its run")
 		}
 		out = append(out, x)
 	}
-	return out, rows.Err()
+	e = rows.Err()
+	rows.Close()
+	if e != nil {
+		return nil, e
+	}
+	if len(out) > 0 {
+		type key struct {
+			project int64
+			bead    string
+		}
+		parents := map[key]string{}
+		rows, e = tx.QueryContext(ctx, `SELECT project_id,id,COALESCE(parent_id,'') FROM bead_tasks WHERE project_id IN (SELECT DISTINCT project_id FROM agent_runs WHERE status='running')`)
+		if e != nil {
+			return nil, e
+		}
+		for rows.Next() {
+			var k key
+			var parent string
+			if e = rows.Scan(&k.project, &k.bead, &parent); e != nil {
+				rows.Close()
+				return nil, e
+			}
+			parents[k] = parent
+		}
+		e = rows.Err()
+		rows.Close()
+		if e != nil {
+			return nil, e
+		}
+		for i := range out {
+			seen := map[string]bool{}
+			for bead := out[i].BeadID; bead != "" && !seen[bead]; bead = parents[key{out[i].ProjectID, bead}] {
+				seen[bead] = true
+				out[i].Path = append(out[i].Path, bead)
+			}
+		}
+	}
+	if e = tx.Commit(); e != nil {
+		return nil, e
+	}
+	return out, nil
 }

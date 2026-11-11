@@ -145,7 +145,12 @@ func (w *Worker) PassSlot(ctx context.Context, slot string) error {
 		brief := fmt.Sprintf("%s\n\nGoal and brief:\n%s\n\nAcceptance criteria:\n%s\n\nPlanning owner: %s. Read the current bead and its ancestors before work. Ordinary implementation decisions are yours. Record a result with evidence; ask the planning owner only when a decision exceeds your authority. Do not infer release permission, clear holds, or change other workstreams.\n", claim.Title, claim.Description, claim.Acceptance, claim.PlanningCommander)
 		var result *spawn.SpawnResult
 		request := spawn.SpawnRequest{ExecutionClaimToken: claim.Token, ProjectID: claim.Project.ID, ProjectName: claim.Project.Name, ProjectPath: claim.Project.Path, ProjectType: claim.Project.Type, RepoPath: claim.Project.RepoPath, TaskBeadID: claim.BeadID, Branch: "work/" + name, Name: name, TaskText: brief}
-		e = w.resumeQuestionCheckpoint(launchCtx, *claim, &request)
+		orders, orderErr := w.Store.AgentAccounts(launchCtx)
+		e = orderErr
+		request.AgentAccounts = orders[store.AgentKindAgent]
+		if e == nil {
+			e = w.resumeQuestionCheckpoint(launchCtx, *claim, &request)
+		}
 		if e == nil {
 			result, e = w.Spawner.Spawn(launchCtx, request)
 		}

@@ -157,3 +157,31 @@ func TestSupervisionOldChildProgressCannotMoveCompletionClockBackwards(t *testin
 		t.Fatal("a real new completion did not advance its parent", recent, completion, e)
 	}
 }
+
+func TestNativeExitPreservesAttributedFinalReportOverChatSummary(t *testing.T) {
+	s := postgresTestStore(t)
+	ctx := context.Background()
+	pid, e := s.InsertProject(ctx, Project{Name: "native-report", Path: t.TempDir(), Type: "code", Status: "active"})
+	if e != nil {
+		t.Fatal(e)
+	}
+	if _, e = s.DB().Exec(`INSERT INTO bead_tasks(project_id,id,title,created_at,updated_at) VALUES(?,'task','Task','now','now')`, pid); e != nil {
+		t.Fatal(e)
+	}
+	rid, e := s.InsertAgentRun(ctx, AgentRun{ProjectID: pid, TaskBeadID: "task", AgentName: "operator-task", OpencodeSessionID: "session", SpawnTime: time.Now().Unix()})
+	if e != nil {
+		t.Fatal(e)
+	}
+	report := "Final report: exact artifact and independent test evidence require Commander review"
+	if _, e = s.DB().Exec(`INSERT INTO bead_comments(project_id,bead_id,id,author,text,created_at,run_id) VALUES(?,'task','report','operator-task',?,?,?)`, pid, report, time.Now().UTC().Format(time.RFC3339Nano), rid); e != nil {
+		t.Fatal(e)
+	}
+	if e = s.FinishNativeExecutionReport(ctx, "operator-task", rid, "session", "exited", "Short model chat summary"); e != nil {
+		t.Fatal(e)
+	}
+	var summary, status string
+	var result int64
+	if e = s.DB().QueryRow(`SELECT result_summary,status,result_run_id FROM bead_tasks WHERE project_id=? AND id='task'`, pid).Scan(&summary, &status, &result); e != nil || summary != report || status != "open" || result != rid {
+		t.Fatal("native chat summary displaced formal evidence or closed work", summary, status, result, e)
+	}
+}

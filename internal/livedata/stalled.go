@@ -26,7 +26,7 @@ func (b board) stalledPlaces(ws SnapWorkstream, stalledTrack map[string]bool) []
 		return nil
 	}
 	b.steps = map[string]SnapStep{}
-	for _, s := range flattenSteps(ws.Steps) {
+	for s := range stepValues(ws.Steps) {
 		b.steps[s.BeadID] = s
 	}
 	b.openGates = map[string]SnapGateNode{}
@@ -172,7 +172,7 @@ func hasOpen(steps []SnapStep) bool {
 // is judged on its own, and holds nothing if it waits on these steps itself.
 func (b board) heldFromOutside(steps []SnapStep) []SnapStep {
 	inside := map[string]bool{}
-	for _, s := range flattenSteps(steps) {
+	for s := range stepValues(steps) {
 		inside[s.BeadID] = true
 	}
 	var mark func([]SnapStep) []SnapStep

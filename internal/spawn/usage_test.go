@@ -255,6 +255,7 @@ func TestUsageMoveKeepsTheChosenAccount(t *testing.T) {
 // respawn on the role's or Manager's out account with no other account left;
 // a new run whose share draw could still land on Codex with usage passes.
 func TestCheckUsage(t *testing.T) {
+	useAgentOrder(t, chat.RuntimeClaude)
 	old := codexHooksReady
 	codexHooksReady = func() bool { return true }
 	t.Cleanup(func() { codexHooksReady = old })
@@ -527,5 +528,32 @@ func TestRefusedRestartWritesNothing(t *testing.T) {
 		if strings.HasPrefix(c, "AddComment") {
 			t.Fatalf("a refused restart wrote on the bead: %v", bd.Calls)
 		}
+	}
+}
+
+func TestSavedAccountOrderCannotUseAnUnlistedProvider(t *testing.T) {
+	home := usageHome(t)
+	t.Setenv("CODEX_HOME", t.TempDir())
+	old := codexHooksReady
+	codexHooksReady = func() bool { return true }
+	t.Cleanup(func() { codexHooksReady = old })
+	sp := &Spawner{}
+	_, err := sp.resolveProvider(context.Background(), SpawnRequest{AgentAccounts: []string{chat.RuntimeCodex}, TaskText: "bounded parser fix"}, "worker")
+	if err == nil {
+		t.Fatal("disconnected Codex order silently used unlisted Claude")
+	}
+	codexSignedIn(t)
+	_, err = sp.resolveProvider(context.Background(), SpawnRequest{AgentAccounts: []string{chat.RuntimeCodex}, TaskText: "docker build the service"}, "worker")
+	if err == nil {
+		t.Fatal("task capability override silently used unlisted Claude")
+	}
+	markOut(t, home, chat.RuntimeCodex, "")
+	_, err = sp.resolveProvider(context.Background(), SpawnRequest{AgentAccounts: []string{chat.RuntimeCodex}, TaskText: "bounded parser fix"}, "worker")
+	if err == nil {
+		t.Fatal("exhausted Codex order silently used unlisted Claude")
+	}
+	req, err := sp.resolveProvider(context.Background(), SpawnRequest{AgentAccounts: []string{chat.RuntimeCodex, chat.RuntimeClaude}, TaskText: "bounded parser fix"}, "worker")
+	if err != nil || req.Runtime != chat.RuntimeClaude {
+		t.Fatalf("authorized fallback failed: %+v %v", req, err)
 	}
 }

@@ -338,13 +338,13 @@ func levelAfter(steps []SnapStep) ([]SnapStep, map[string]string, map[string][]s
 			continue
 		}
 		live = append(live, s)
-		for _, x := range flattenSteps([]SnapStep{s}) {
+		for x := range stepValues([]SnapStep{s}) {
 			top[x.BeadID] = s.BeadID
 		}
 	}
 	works := map[string]string{} // Operator -> the step of this level it works under
 	for _, s := range live {
-		for _, x := range flattenSteps([]SnapStep{s}) {
+		for x := range stepValues([]SnapStep{s}) {
 			if strings.HasPrefix(x.Owner, "operator-") && !stepClosed(x) {
 				works[x.Owner] = s.BeadID
 			}
@@ -357,7 +357,7 @@ func levelAfter(steps []SnapStep) ([]SnapStep, map[string]string, map[string][]s
 		}
 	}
 	for _, s := range live {
-		for _, x := range flattenSteps([]SnapStep{s}) {
+		for x := range stepValues([]SnapStep{s}) {
 			for _, b := range x.BlockedBy {
 				edge(s.BeadID, top[b])
 			}
@@ -866,7 +866,7 @@ var settledWords = []string{"done", "built", "run", "met", "green", "live", "rea
 // blockCycles are the loops in the blocks edges among the beads under steps.
 func blockCycles(steps []SnapStep) [][]string {
 	in := map[string][]string{}
-	for _, s := range flattenSteps(steps) {
+	for s := range stepValues(steps) {
 		in[s.BeadID] = s.BlockedBy
 	}
 	return cycles(in)

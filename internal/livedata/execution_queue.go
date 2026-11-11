@@ -10,9 +10,13 @@ import (
 // Runtime slot state is read in one batch independently of the cached task
 // graph. A lease heartbeat never needs to invalidate the whole bead tree.
 // Matching plan revisions prevent slot facts from attaching to an older plan.
-func attachExecutionState(ctx context.Context, st *store.Store, rows []ObjectiveRow) error {
+func attachExecutionState(ctx context.Context, st *store.Store, rows []ObjectiveRow) (string, error) {
 	if !st.IsPostgres() {
-		return nil
+		return "", nil
+	}
+	control, controlErr := st.OrchestrationControl(ctx)
+	if controlErr != nil {
+		return "", controlErr
 	}
 	type key struct {
 		project int64
@@ -24,28 +28,29 @@ func attachExecutionState(ctx context.Context, st *store.Store, rows []Objective
 		detail, mode                string
 	}
 	states := map[key]view{}
-	result, e := st.DB().QueryContext(ctx, `SELECT b.project_id,b.id,b.plan_revision,b.execution_attempts,b.execution_error,c.mode,
+	result, e := st.DB().QueryContext(ctx, `SELECT b.project_id,b.id,b.plan_revision,b.execution_attempts,b.execution_error,?::text,
  EXISTS(SELECT 1 FROM execution_slots x WHERE x.project_id=b.project_id AND x.bead_id=b.id AND x.run_id IS NULL AND x.lease_until>EXTRACT(EPOCH FROM clock_timestamp())::bigint),
  EXISTS(SELECT 1 FROM execution_slots x JOIN projects p ON p.id=b.project_id WHERE x.enabled AND jsonb_exists(x.capabilities,p.type) AND b.execution_capabilities <@ x.capabilities),
  commander_execution_allowed(b.project_id,b.id) AND NOT EXISTS(SELECT 1 FROM bead_tasks child WHERE child.project_id=b.project_id AND child.parent_id=b.id AND child.status NOT IN('closed','deferred') AND child.deleted_at IS NULL)
- FROM bead_tasks b JOIN projects p ON p.id=b.project_id CROSS JOIN orchestration_control c WHERE c.id=1 AND b.execution_ready AND b.deleted_at IS NULL AND p.status='active'`)
+ FROM bead_tasks b JOIN projects p ON p.id=b.project_id WHERE b.execution_ready AND b.deleted_at IS NULL AND p.status='active'`, control.Mode)
 	if e != nil {
-		return e
+		return "", e
 	}
 	defer result.Close()
 	for result.Next() {
 		var k key
 		var v view
 		if e = result.Scan(&k.project, &k.bead, &v.revision, &v.attempts, &v.detail, &v.mode, &v.reserved, &v.capable, &v.eligible); e != nil {
-			return e
+			return "", e
 		}
 		states[k] = v
 	}
 	if e = result.Err(); e != nil {
-		return e
+		return "", e
 	}
 	for i := range rows {
 		r := &rows[i]
+		r.ExecutionMode = control.Mode
 		r.ExecutionReady = false
 		r.ExecutionEligible = false
 		if v, ok := states[key{r.ProjectID, r.BeadID}]; ok && v.revision == r.PlanRevision {
@@ -60,38 +65,38 @@ func attachExecutionState(ctx context.Context, st *store.Store, rows []Objective
 	}
 	questions, e := st.DB().QueryContext(ctx, `SELECT DISTINCT project_id,bead_id FROM bead_questions WHERE blocking AND state='pending'`)
 	if e != nil {
-		return e
+		return "", e
 	}
 	defer questions.Close()
 	waiting := map[key]bool{}
 	for questions.Next() {
 		var k key
 		if e = questions.Scan(&k.project, &k.bead); e != nil {
-			return e
+			return "", e
 		}
 		waiting[k] = true
 	}
 	if e = questions.Err(); e != nil {
-		return e
+		return "", e
 	}
 	for i := range rows {
 		rows[i].QuestionWaiting = waiting[key{rows[i].ProjectID, rows[i].BeadID}]
 	}
 	answers, e := st.DB().QueryContext(ctx, `SELECT b.project_id,b.id FROM bead_tasks b WHERE b.deleted_at IS NULL AND commander_pending_human_answer(b.project_id,b.id)`)
 	if e != nil {
-		return e
+		return "", e
 	}
 	defer answers.Close()
 	pending := map[key]bool{}
 	for answers.Next() {
 		var k key
 		if e = answers.Scan(&k.project, &k.bead); e != nil {
-			return e
+			return "", e
 		}
 		pending[k] = true
 	}
 	if e = answers.Err(); e != nil {
-		return e
+		return "", e
 	}
 	for i := range rows {
 		r := &rows[i]
@@ -100,7 +105,44 @@ func attachExecutionState(ctx context.Context, st *store.Store, rows []Objective
 			r.State = beads.StateReview
 		}
 	}
-	return nil
+	type report struct {
+		revision, run, at int64
+		responsible       string
+		live              bool
+	}
+	reports := map[key]report{}
+	resultRows, err := st.DB().QueryContext(ctx, `SELECT b.project_id,b.id,b.plan_revision,CASE WHEN b.result_run_id=b.active_run_id THEN b.result_run_id ELSE 0 END,b.result_ready_at,b.responsible_agent_id,EXISTS(SELECT 1 FROM agent_runs r WHERE r.id=b.active_run_id AND r.status='running') FROM bead_tasks b WHERE b.deleted_at IS NULL`)
+	if err != nil {
+		return "", err
+	}
+	for resultRows.Next() {
+		var k key
+		var v report
+		if err = resultRows.Scan(&k.project, &k.bead, &v.revision, &v.run, &v.at, &v.responsible, &v.live); err != nil {
+			resultRows.Close()
+			return "", err
+		}
+		reports[k] = v
+	}
+	err = resultRows.Err()
+	resultRows.Close()
+	if err != nil {
+		return "", err
+	}
+	for i := range rows {
+		row := &rows[i]
+		row.ResultRunID, row.ResultReadyAt = 0, 0
+		row.PlanningPending = false
+		if v, ok := reports[key{row.ProjectID, row.BeadID}]; ok && v.revision == row.PlanRevision {
+			row.ResultRunID, row.ResultReadyAt = v.run, v.at
+			row.PlanningPending = control.Mode == "active" && row.PlanningCommander != "" && v.responsible == row.PlanningCommander && !v.live
+			if v.run > 0 && row.Status != "closed" {
+				row.State = beads.StateReview
+			}
+		}
+	}
+
+	return control.Mode, nil
 }
 
 func executionQueueLine(ws SnapWorkstream) (line, bool) {
@@ -153,4 +195,43 @@ func planningQuestionLine(ws SnapWorkstream) (line, bool) {
 		}
 	}
 	return line{}, false
+}
+
+const canonicalResultReviewText = "Result ready for Commander review"
+
+func recordedResultLine(ws SnapWorkstream) (line, bool) {
+	if ws.Status == "closed" || ws.Status == beads.StatusDeferred || ws.Hold {
+		return line{}, false
+	}
+	if ws.ResultRunID > 0 && ws.ResultReadyAt > 0 {
+		return line{kind: "waiting", text: canonicalResultReviewText, since: ws.ResultReadyAt}, true
+	}
+	var find func([]SnapStep) (line, bool)
+	find = func(steps []SnapStep) (line, bool) {
+		for _, s := range steps {
+			if stepClosed(s) || parked(s) || s.Superseded {
+				continue
+			}
+			if s.WorkflowCheck != nil {
+				held := false
+				for _, label := range s.WorkflowCheck.Bead.Labels {
+					if label == beads.HoldLabel {
+						held = true
+						break
+					}
+				}
+				if held {
+					continue
+				}
+			}
+			if s.ResultRunID > 0 && s.ResultReadyAt > 0 {
+				return line{kind: "waiting", text: canonicalResultReviewText, since: s.ResultReadyAt}, true
+			}
+			if result, ok := find(s.Children); ok {
+				return result, true
+			}
+		}
+		return line{}, false
+	}
+	return find(ws.Steps)
 }

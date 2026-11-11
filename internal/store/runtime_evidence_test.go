@@ -13,7 +13,10 @@ func TestPostgresNativeEvidenceRequiresCurrentRunAndSession(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	if _, e = s.DB().Exec(`INSERT INTO bead_tasks(project_id,id,title,created_at,updated_at) VALUES(?,'task','Task','now','now')`, pid); e != nil {
+	if _, e = s.DB().Exec(`INSERT INTO bead_tasks(project_id,id,title,parent_id,created_at,updated_at) VALUES(?,'root','Root',NULL,'now','now'),(?,'branch','Branch','root','now','now')`, pid, pid); e != nil {
+		t.Fatal(e)
+	}
+	if _, e = s.DB().Exec(`INSERT INTO bead_tasks(project_id,id,title,parent_id,created_at,updated_at) VALUES(?,'task','Task','branch','now','now')`, pid); e != nil {
 		t.Fatal(e)
 	}
 	id, e := s.InsertAgentRun(ctx, AgentRun{ProjectID: pid, TaskBeadID: "task", AgentName: "executor.task", OpencodeSessionID: "session", SpawnTime: 1})
@@ -28,6 +31,9 @@ func TestPostgresNativeEvidenceRequiresCurrentRunAndSession(t *testing.T) {
 		rows, e := s.ObservedExecutions(ctx)
 		if e != nil || len(rows) != 1 {
 			t.Fatalf("observations: %+v %v", rows, e)
+		}
+		if len(rows[0].Path) != 3 || rows[0].Path[0] != "task" || rows[0].Path[1] != "branch" || rows[0].Path[2] != "root" {
+			t.Fatalf("wrong canonical ancestry: %+v", rows[0].Path)
 		}
 		if rows[0].Known != known || (known && !rows[0].Alive) {
 			t.Fatalf("wrong evidence: %+v", rows[0])
@@ -62,4 +68,31 @@ func TestPostgresNativeEvidenceRequiresCurrentRunAndSession(t *testing.T) {
 		t.Fatal(e)
 	}
 	check(false)
+	old := id
+	if e = s.FinishNativeExecution(ctx, "executor-task", old, "session", "exited"); e != nil {
+		t.Fatal(e)
+	}
+	id, e = s.InsertAgentRun(ctx, AgentRun{ProjectID: pid, TaskBeadID: "task", AgentName: "executor.task", OpencodeSessionID: "replacement", SpawnTime: 2})
+	if e != nil {
+		t.Fatal(e)
+	}
+	if _, e = s.DB().Exec(`UPDATE agent_runs SET execution_driver='native' WHERE id=?`, id); e != nil {
+		t.Fatal(e)
+	}
+	record(NativeRuntimeObservation{Role: "executor-task", RunID: old, SessionID: "session", PID: 123})
+	check(false)
+	record(NativeRuntimeObservation{Role: "executor-task", RunID: id, SessionID: "replacement", PID: 456})
+	check(true)
+	// Replayed old exit and a draining engine's empty inventory cannot erase a
+	// replacement execution even though its human-facing role is unchanged.
+	if e = s.FinishNativeExecution(ctx, "executor-task", old, "session", "exited"); e != nil {
+		t.Fatal(e)
+	}
+	record()
+	check(true)
+	var current int64
+	if e = s.DB().QueryRow(`SELECT run_id FROM native_presence WHERE role='executor.task'`).Scan(&current); e != nil || current != id {
+		t.Fatalf("old evidence replaced current custody: %d %v", current, e)
+	}
+
 }

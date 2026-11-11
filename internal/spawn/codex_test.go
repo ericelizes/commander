@@ -51,6 +51,7 @@ func TestSpawnCodeHost_CodexRuntimeRunsTheBridge(t *testing.T) {
 // A Manager on Codex, even one a person pinned there, passes nothing to its
 // Operators: they run on Claude unless asked otherwise.
 func TestOperatorRuntimeNeverInheritsAManagersCodex(t *testing.T) {
+	useAgentOrder(t, chat.RuntimeClaude)
 	t.Setenv("COMMANDER_HOME", t.TempDir())
 	home := os.Getenv("COMMANDER_HOME")
 	req := SpawnRequest{TaskBeadID: "bd-1.1", managerRole: "manager-bd-1"}
@@ -129,6 +130,7 @@ func TestOperatorRespawnOffCodexCommentsOnTheBead(t *testing.T) {
 // Operators inherit only a runtime a person chose for their Manager, not one
 // a share drew: else the Operator share would never apply under such Managers.
 func TestOperatorRuntimeIgnoresAManagersDrawnRuntime(t *testing.T) {
+	useAgentOrder(t, chat.RuntimeClaude)
 	t.Setenv("COMMANDER_HOME", t.TempDir())
 	home := os.Getenv("COMMANDER_HOME")
 	if err := chat.WriteAutoRuntime(home, "manager-bd-1", chat.RuntimeCodex); err != nil {

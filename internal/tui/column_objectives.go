@@ -608,7 +608,7 @@ func (c *ObjectivesColumn) upsertCreatedObjective(projectID int64, created Objec
 func (c *ObjectivesColumn) applyLiveData(d CommanderLiveData) {
 	// A failed read (db or beads busy, daemon restarting) must not wipe the
 	// panel: keep the last good data and say so.
-	if d.LoadErr != nil && c.liveLoaded && len(c.live.Projects) > 0 &&
+	if !d.Postgres && d.LoadErr != nil && c.liveLoaded && len(c.live.Projects) > 0 &&
 		(len(d.Projects) == 0 || (len(d.Objectives) == 0 && len(c.live.Objectives) > 0)) {
 		log.Printf("sidebar: live data load failed, keeping the last good frame: %v", d.LoadErr)
 		c.reconnecting = true
@@ -1080,6 +1080,10 @@ func (c *ObjectivesColumn) rebuildTree() {
 		_, r, _, _, _ := stepCounts(ws)
 		runningTotal += r
 	}
+	truth := newCanonicalState(c.live.CanonicalSnapshot)
+	if truth != nil {
+		runningTotal = c.live.CanonicalSnapshot.Fleet.Active
+	}
 	needsTotal = c.needsYouCount()
 	nodes = append(nodes, widgets.TreeNode{ID: "header:commander", Title: "COMMANDER", Header: true, NoRule: true, Skip: true})
 	nodes = append(nodes, widgets.TreeNode{
@@ -1090,6 +1094,9 @@ func (c *ObjectivesColumn) rebuildTree() {
 	meta[commanderRowID] = objectiveNodeMeta{kind: "commander"}
 	// Row 0's own live state: the Commander chat in window 0, nothing else.
 	cmdrNow, _ := agentNow("commander", animState{frame: c.frame, on: c.motion, agents: c.liveAgents(), nowTime: time.Now()})
+	if truth != nil {
+		cmdrNow, _ = canonicalNow(truth.commander, c.frame, c.motion)
+	}
 	nodes = append(nodes, widgets.TreeNode{
 		ID: "now:commander", Title: cmdrNow, Columnar: true, Indent: 2, Skip: true, TitleStyle: &lipgloss.Style{},
 	})
@@ -1119,7 +1126,7 @@ func (c *ObjectivesColumn) rebuildTree() {
 	emit := func(i int, tagProject bool) {
 		ws := order[i]
 		expanded := c.expanded[wsKey(ws)]
-		for n, r := range workstreamRows(i+1, ws, expanded, tagProject, wsKey(ws) == focusKey, animState{frame: c.frame, on: c.motion, pulse: c.pulse, agents: c.liveAgents(), waits: waits, nowTime: time.Now()}) {
+		for n, r := range workstreamRows(i+1, ws, expanded, tagProject, wsKey(ws) == focusKey, animState{frame: c.frame, on: c.motion, pulse: c.pulse, agents: c.liveAgents(), waits: waits, nowTime: time.Now(), truth: truth, motion: c.motion}) {
 			node := r.node
 			node.Skip = n != 0 // only the workstream header is selectable
 			if n == 0 && !c.ownCommander && c.ownWS != "" && ws.root.BeadID == c.ownWS {

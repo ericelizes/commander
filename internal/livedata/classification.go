@@ -7,6 +7,7 @@ import (
 )
 
 type StatusEvidence struct {
+	RunID      int64  `json:"run_id,omitempty"`
 	Kind       string `json:"kind"`
 	Text       string `json:"text"`
 	Role       string `json:"role"`
@@ -19,7 +20,7 @@ func applyClassifications(ctx context.Context, st *store.Store, s *Snapshot, d *
 	if st == nil || !st.IsPostgres() {
 		return nil
 	}
-	rows, e := st.DB().QueryContext(ctx, `SELECT b.project_id,b.id,b.status_kind,b.status_text,b.status_role,b.status_session,b.status_seq,b.status_observed_at FROM bead_tasks b JOIN agent_sessions a ON a.role=b.status_role AND a.session_id=b.status_session AND a.source_seq=b.status_seq WHERE b.deleted_at IS NULL AND b.status<>'closed' AND b.status_text<>''`)
+	rows, e := st.DB().QueryContext(ctx, `SELECT b.project_id,b.id,b.status_kind,b.status_text,b.status_role,b.status_session,b.status_seq,b.status_observed_at,a.run_id FROM bead_tasks b JOIN agent_sessions a ON a.role=b.status_role AND a.session_id=b.status_session AND a.source_seq=b.status_seq WHERE b.deleted_at IS NULL AND b.status<>'closed' AND b.status_text<>'' AND ((a.run_id>0 AND b.active_run_id=a.run_id) OR (a.run_id=0 AND commander_planning_owner(b.project_id,b.id)=b.status_role))`)
 	if e != nil {
 		return e
 	}
@@ -32,7 +33,7 @@ func applyClassifications(ctx context.Context, st *store.Store, s *Snapshot, d *
 	for rows.Next() {
 		var k key
 		var v StatusEvidence
-		if e = rows.Scan(&k.project, &k.bead, &v.Kind, &v.Text, &v.Role, &v.SessionID, &v.Seq, &v.ObservedAt); e != nil {
+		if e = rows.Scan(&k.project, &k.bead, &v.Kind, &v.Text, &v.Role, &v.SessionID, &v.Seq, &v.ObservedAt, &v.RunID); e != nil {
 			return e
 		}
 		evidence[k] = v
@@ -91,6 +92,9 @@ func classificationCompatible(v StatusEvidence, kind string, runs []SnapExecutio
 	}
 	for _, run := range runs {
 		if beads.OwnerLabelName(run.Role) == beads.OwnerLabelName(v.Role) {
+			if run.RunID != v.RunID || (v.RunID > 0 && run.SessionID != v.SessionID) {
+				continue
+			}
 			if kind == "working" {
 				return run.State == store.AgentWorking && v.Kind == "working"
 			}

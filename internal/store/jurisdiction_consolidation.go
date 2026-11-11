@@ -96,14 +96,14 @@ func legacyPlanningInventory(ctx context.Context, q Querier, pid int64, lock boo
 	if lock {
 		beadTail = " FOR UPDATE OF b"
 	}
-	rows, e = q.QueryContext(ctx, `SELECT b.id,COALESCE(b.parent_id,''),b.plan_revision,b.deleted_at,commander_planning_owner(b.project_id,b.id) FROM bead_tasks b WHERE b.project_id=? ORDER BY b.id`+beadTail, pid)
+	rows, e = q.QueryContext(ctx, `SELECT b.id,COALESCE(b.parent_id,''),b.plan_revision,b.deleted_at FROM bead_tasks b WHERE b.project_id=? ORDER BY b.id`+beadTail, pid)
 	if e != nil {
 		return out, nil, e
 	}
 	beads := []consolidationBead{}
 	for rows.Next() {
 		var b consolidationBead
-		if e = rows.Scan(&b.ID, &b.Parent, &b.PlanRevision, &b.Deleted, &b.Owner); e != nil {
+		if e = rows.Scan(&b.ID, &b.Parent, &b.PlanRevision, &b.Deleted); e != nil {
 			rows.Close()
 			return out, nil, e
 		}
@@ -113,6 +113,14 @@ func legacyPlanningInventory(ctx context.Context, q Querier, pid int64, lock boo
 	rows.Close()
 	if e != nil {
 		return out, nil, e
+	}
+	boundaries := map[string]string{}
+	for _, b := range all {
+		boundaries[b.BeadID] = b.Owner
+	}
+	owners := resolveConsolidationOwners(beads, out.DefaultCommander, boundaries)
+	for i := range beads {
+		beads[i].Owner = owners[beads[i].ID]
 	}
 	raw, _ := json.Marshal(struct {
 		Inventory  LegacyPlanningInventory
@@ -208,20 +216,41 @@ func (s *Store) ConsolidateLegacyPlanning(ctx context.Context, actor string, r J
 		if _, e = q.ExecContext(ctx, `UPDATE jurisdiction_projects SET revision=? WHERE project_id=?`, revision, r.ProjectID); e != nil {
 			return e
 		}
+		remaining := map[string]string{}
+		rows, e := q.QueryContext(ctx, `SELECT bead_id,commander_id FROM commander_jurisdictions WHERE project_id=?`, r.ProjectID)
+		if e != nil {
+			return e
+		}
+		for rows.Next() {
+			var bead, owner string
+			if e = rows.Scan(&bead, &owner); e != nil {
+				rows.Close()
+				return e
+			}
+			remaining[bead] = owner
+		}
+		e = rows.Err()
+		rows.Close()
+		if e != nil {
+			return e
+		}
+		nextOwners := resolveConsolidationOwners(beads, current.DefaultCommander, remaining)
 		type oldOwner struct {
 			ID    string `json:"id"`
 			Owner string `json:"owner"`
+			Next  string `json:"next"`
 		}
 		old := make([]oldOwner, 0, len(beads))
 		for _, b := range beads {
-			old = append(old, oldOwner{b.ID, b.Owner})
+			old = append(old, oldOwner{b.ID, b.Owner, nextOwners[b.ID]})
 		}
 		oldJSON, _ := json.Marshal(old)
-		// Resolve and update the whole affected set in one statement rather than a
-		// database round trip per bead. A planner executing work keeps run custody.
-		if _, e = q.ExecContext(ctx, `WITH new_owners AS MATERIALIZED (SELECT b.project_id,b.id,o.owner AS previous,commander_planning_owner(b.project_id,b.id) AS next FROM bead_tasks b JOIN jsonb_to_recordset(?::jsonb) AS o(id TEXT,owner TEXT) ON o.id=b.id WHERE b.project_id=?) UPDATE bead_tasks b SET responsible_agent_id=CASE WHEN b.responsible_agent_id=n.previous AND NOT EXISTS(SELECT 1 FROM agent_runs a WHERE a.id=b.active_run_id AND a.status='running') THEN n.next ELSE b.responsible_agent_id END,responsibility_epoch=b.responsibility_epoch+1 FROM new_owners n WHERE b.project_id=n.project_id AND b.id=n.id AND n.previous<>n.next`, string(oldJSON), r.ProjectID); e != nil {
+		// Both owner maps derive from the same locked tree and explicit boundaries.
+		// A row update must not recursively rescan ancestry for each historical bead.
+		if _, e = q.ExecContext(ctx, `UPDATE bead_tasks b SET responsible_agent_id=CASE WHEN b.responsible_agent_id=n.owner AND NOT EXISTS(SELECT 1 FROM agent_runs a WHERE a.id=b.active_run_id AND a.status='running') THEN n.next ELSE b.responsible_agent_id END,responsibility_epoch=b.responsibility_epoch+1 FROM jsonb_to_recordset(?::jsonb) AS n(id TEXT,owner TEXT,next TEXT) WHERE b.project_id=? AND b.id=n.id AND n.owner<>n.next`, string(oldJSON), r.ProjectID); e != nil {
 			return e
 		}
+
 		out.Revision = revision
 		out.Removed = current.Boundaries
 		out.RetiredPlanningCandidates = []string{}
@@ -247,4 +276,45 @@ func (s *Store) ConsolidateLegacyPlanning(ctx context.Context, actor string, r J
 		return JurisdictionConsolidationResult{}, fmt.Errorf("planning consolidation: %w", e)
 	}
 	return out, nil
+}
+
+// resolveConsolidationOwners follows actual parent edges with the same deleted,
+// missing-parent and cycle semantics as commander_planning_owner. Memoization
+// keeps a large imported project from doing an SQL ancestry scan for every bead.
+func resolveConsolidationOwners(beads []consolidationBead, defaultOwner string, boundaries map[string]string) map[string]string {
+	byID := make(map[string]consolidationBead, len(beads))
+	for _, b := range beads {
+		byID[b.ID] = b
+	}
+	owners := make(map[string]string, len(beads))
+	for _, start := range beads {
+		if _, ok := owners[start.ID]; ok {
+			continue
+		}
+		path := []string{}
+		seen := map[string]bool{}
+		owner := defaultOwner
+		for id := start.ID; id != "" && !seen[id]; {
+			b, ok := byID[id]
+			if !ok || b.Deleted.Valid {
+				break
+			}
+			if known, ok := owners[id]; ok {
+				owner = known
+				break
+			}
+			if direct, ok := boundaries[id]; ok {
+				owner = direct
+				break
+			}
+			seen[id] = true
+			path = append(path, id)
+			id = b.Parent
+		}
+		owners[start.ID] = owner
+		for _, id := range path {
+			owners[id] = owner
+		}
+	}
+	return owners
 }

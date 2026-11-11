@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime/pprof"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -55,7 +56,7 @@ func TestPostgresThousandAgentLoad(t *testing.T) {
 			if _, e := q.ExecContext(ctx, `INSERT INTO bead_dependencies(project_id,issue_id,depends_on_id,type) VALUES(?,?,?,'parent-child')`, pid, id, root); e != nil {
 				return e
 			}
-			if _, e := q.ExecContext(ctx, `INSERT INTO agent_runs(project_id,task_bead_id,agent_name,opencode_session_id,spawn_time,status) VALUES(?,?,?,?,?,'running')`, pid, id, role, fmt.Sprintf("session-%d", i), time.Now().Unix()); e != nil {
+			if _, e := q.ExecContext(ctx, `INSERT INTO agent_runs(project_id,task_bead_id,agent_name,opencode_session_id,spawn_time,status,execution_driver) VALUES(?,?,?,?,?,'running','native')`, pid, id, role, fmt.Sprintf("session-%d", i), time.Now().Unix()); e != nil {
 				return e
 			}
 			if _, e := q.ExecContext(ctx, `INSERT INTO agent_state(role,state,detail,since,updated) VALUES(?,'working','',?,?)`, role, time.Now().Unix(), time.Now().Unix()); e != nil {
@@ -67,18 +68,48 @@ func TestPostgresThousandAgentLoad(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
+	// Synthetic processes still need the canonical bead-to-run binding. A
+	// role-only fixture would exercise the retired inference path instead.
+	if _, e = s.DB().ExecContext(ctx, `UPDATE bead_tasks b SET active_run_id=r.id,responsible_agent_id=r.agent_name FROM agent_runs r WHERE b.project_id=r.project_id AND b.id=r.task_bead_id AND r.project_id=?`, pid); e != nil {
+		t.Fatal(e)
+	}
 	runs, e := s.ListRunningRuns(ctx)
 	if e != nil {
 		t.Fatal(e)
 	}
-	observations := map[int64]bool{}
-	for _, run := range runs {
-		observations[run.ID] = true
+	observations := []store.NativeRuntimeObservation{}
+	for i, run := range runs {
+		observations = append(observations, store.NativeRuntimeObservation{Role: run.AgentName, RunID: run.ID, SessionID: run.OpencodeSessionID, PID: i + 1000})
 	}
-	if e = s.RecordRuntimePresence(ctx, observations, time.Now(), []string{}); e != nil {
+	if e = s.RecordRuntimeEvidence(ctx, nil, time.Now(), observations); e != nil {
 		t.Fatal(e)
 	}
 	source := &livedata.Source{Deps: livedata.Deps{Store: s, Beads: beads.New()}, Live: func() ([]string, time.Time, bool) { return alive, time.Now(), true }}
+	if profile := os.Getenv("COMMANDER_POSTGRES_LOAD_PROFILE"); profile != "" {
+		start := time.Now()
+		_, _, _, err := s.RuntimePresence(ctx)
+		t.Logf("presence read=%s err=%v", time.Since(start), err)
+		start = time.Now()
+		facts, err := s.ObservedExecutions(ctx)
+		t.Logf("execution read=%s count=%d err=%v", time.Since(start), len(facts), err)
+		_ = source.Snapshot(ctx)
+		file, err := os.Create(profile)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err = pprof.StartCPUProfile(file); err != nil {
+			t.Fatal(err)
+		}
+		start = time.Now()
+		var snapshot livedata.Snapshot
+		for i := 0; i < 20; i++ {
+			snapshot = source.Snapshot(ctx)
+		}
+		pprof.StopCPUProfile()
+		file.Close()
+		t.Logf("profiled snapshot=%s executions=%d phases=%s", time.Since(start), len(snapshot.Executions), snapshot.Phases.String())
+		return
+	}
 	warm := source.Snapshot(ctx)
 	if warm.Degraded != nil || len(warm.Executions) != 1000 {
 		t.Fatalf("fixture: executions=%d degraded=%#v", len(warm.Executions), warm.Degraded)
@@ -99,7 +130,8 @@ func TestPostgresThousandAgentLoad(t *testing.T) {
 			case <-runCtx.Done():
 				return
 			case <-tick.C:
-				if e := s.SetAgentState(runCtx, alive[i%1000], store.AgentWorking, fmt.Sprintf("event %d", i)); e != nil {
+				run := runs[i%len(runs)]
+				if e := s.SetAgentStateForRun(runCtx, run.AgentName, run.ID, run.OpencodeSessionID, store.AgentWorking, fmt.Sprintf("event %d", i)); e != nil {
 					if runCtx.Err() == nil {
 						writeErrors <- e
 					}

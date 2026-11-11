@@ -80,24 +80,27 @@ func maskObservedAgentStates(data *Data) {
 	if data.Agents == nil {
 		data.Agents = map[string]store.AgentState{}
 	}
+	byRole := make(map[string]store.ObservedExecution, len(data.ObservedExecutions))
 	for _, fact := range data.ObservedExecutions {
-		state := fact.State
+		byRole[beads.OwnerLabelName(fact.Role)] = fact
+	}
+	apply := func(old store.AgentState, fact store.ObservedExecution) store.AgentState {
+		old.State = fact.State
 		if !fact.Known || !fact.Alive {
-			state = "unknown"
+			old.State = "unknown"
 		}
-		for role, old := range data.Agents {
-			if beads.OwnerLabelName(role) == beads.OwnerLabelName(fact.Role) {
-				old.State = state
-				old.Detail = fact.Detail
-				old.Since = fact.Since
-				data.Agents[role] = old
-			}
-		}
-		old := data.Agents[fact.Role]
-		old.Role = fact.Role
-		old.State = state
 		old.Detail = fact.Detail
 		old.Since = fact.Since
+		return old
+	}
+	for role, old := range data.Agents {
+		if fact, ok := byRole[beads.OwnerLabelName(role)]; ok {
+			data.Agents[role] = apply(old, fact)
+		}
+	}
+	for _, fact := range data.ObservedExecutions {
+		old := apply(data.Agents[fact.Role], fact)
+		old.Role = fact.Role
 		data.Agents[fact.Role] = old
 	}
 }

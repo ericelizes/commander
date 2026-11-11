@@ -6,6 +6,7 @@ import type { WebviewBridge } from '../features/inspector/types'
 export interface SnapExecution { role: string; state: string; project_id: number; bead_id: string; run_id?: number; session_id?: string }
 
 export interface Snapshot {
+  orchestration_mode?: 'off' | 'shadow' | 'active'
   storage?: string
   executions?: SnapExecution[] | null
   pr_states?: Record<string, string>
@@ -221,6 +222,9 @@ export interface Decision {
 export type StepState = 'not-started' | 'in-progress' | 'review' | 'needs-user' | 'blocked' | 'done' | string
 
 export interface SnapStep {
+  planning_pending?: boolean
+ result_run_id?: number
+ result_ready_at?: number
   question_waiting?: boolean
  human_answer_pending?: boolean
   execution_mode?: string
@@ -297,6 +301,9 @@ export interface CardBasis {
 export type GraphLevel = 1 | 2 | 3
 
 export interface SnapWorkstream {
+  planning_pending?: boolean
+ result_run_id?: number
+ result_ready_at?: number
   question_waiting?: boolean
  human_answer_pending?: boolean
   execution_mode?: string

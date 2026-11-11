@@ -85,7 +85,8 @@ type Spawner struct {
 
 // SpawnRequest is the user-supplied intent.
 type SpawnRequest struct {
-	ExecutionClaimToken         string // generic scheduler's durable startup reservation
+	AgentAccounts               []string // saved order for a fresh execution; bound resumes use their recorded provider
+	ExecutionClaimToken         string   // generic scheduler's durable startup reservation
 	ResumeSourceRunID           int64
 	ResumeDriver, ResumeAccount string
 	ResumeSessionID             string
@@ -136,9 +137,6 @@ type SpawnRequest struct {
 	// TaskText is the task bead's title and brief; a Codex draw is overridden to
 	// Claude when it names a local background service (needsBackgroundService).
 	TaskText string
-	// AgentAccounts is the account order of a new execution agent
-	// (store.AgentAccounts); nil = read from the store, else the default.
-	AgentAccounts []string
 
 	// Account is the Claude account (claudeacct) of a host Operator; "" = its
 	// Manager's (resolveOperatorAccount).
@@ -235,13 +233,15 @@ func (s *Spawner) Spawn(ctx context.Context, req SpawnRequest) (result *SpawnRes
 		}
 	}
 
-	if req.AgentAccounts == nil {
+	if req.AgentAccounts == nil && req.ResumeSourceRunID == 0 {
 		if src, ok := s.store.(interface {
 			AgentAccounts(context.Context) (map[string][]string, error)
 		}); ok {
-			if order, e := src.AgentAccounts(ctx); e == nil {
-				req.AgentAccounts = order[store.AgentKindAgent]
+			order, err := src.AgentAccounts(ctx)
+			if err != nil {
+				return nil, fmt.Errorf("read saved execution account order: %w", err)
 			}
+			req.AgentAccounts = order[store.AgentKindAgent]
 		}
 	}
 	// The ready-bead scheduler delegates provider/model choice to the runtime.

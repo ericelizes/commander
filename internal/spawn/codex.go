@@ -131,6 +131,9 @@ func firstAgentAccount(req SpawnRequest) (chat.Provider, bool) {
 	home, now := agentrt.CommanderHome(), usageNow()
 	accounts := chat.Accounts(home, readUsage(home), now)
 	for _, p := range chat.OrderAccounts(agentOrder(req), accounts) {
+		if p.Runtime == chat.RuntimeCodex && needsBackgroundService(req.TaskText) {
+			continue
+		}
 		if chat.AccountAvailable(p, accounts, now, codexHooksReady) {
 			return p, true
 		}

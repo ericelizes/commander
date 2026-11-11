@@ -236,6 +236,27 @@ describe('deriveStep', () => {
   })
 })
 
+describe('PostgreSQL observed execution spinners', () => {
+  const tree = () => ws([step('nested', 'in-progress', { working: true, owner: 'manager-p-1', children: [step('leaf', 'in-progress', { working: true })] })], { working: true })
+  const base = () => ({ ...fixture, storage: 'postgres', agents: { 'manager-p-1': { state: 'working', since: 1 } }, workstreams: [tree()] })
+  it('clears stale nested spinners when there is no verified execution, even with a working planning chat', () => {
+    const out = deriveSnapshot({ ...base(), executions: [] })
+    expect(out.workstreams[0].working).toBe(false)
+    expect(out.workstreams[0].steps[0].working).toBe(false)
+    expect(out.workstreams[0].steps[0].children![0].working).toBe(false)
+  })
+  it('propagates only a verified active run through its ancestors', () => {
+    const run = { role: 'worker', state: 'working', project_id: 1, bead_id: 'leaf', run_id: 17, session_id: 'exact-session' }
+    const out = deriveSnapshot({ ...base(), executions: [run] })
+    expect(out.workstreams[0].working).toBe(true)
+    expect(out.workstreams[0].steps[0].working).toBe(true)
+    expect(out.workstreams[0].steps[0].children![0].working).toBe(true)
+    for (const candidate of [{ ...run, state: 'unknown' }, { ...run, run_id: 0 }, { ...run, project_id: 2 }]) {
+      expect(deriveSnapshot({ ...base(), executions: [candidate] }).workstreams[0].working).toBe(false)
+    }
+  })
+})
+
 describe('chat role spend', () => {
   const fleet = {
     ...fixture.fleet,

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 )
@@ -11,18 +12,25 @@ import (
 // closeSupervisedRun closes execution and transfers the next move in one
 // transaction. Lock order is bead, then run, matching claims and state hooks.
 func (s *Store) closeSupervisedRun(ctx context.Context, rid int64, status string) error {
-	return s.closeSupervisedRunIdentity(ctx, rid, status, "", "")
+	return s.closeSupervisedRunIdentity(ctx, rid, status, "", "", "")
 }
 
 // FinishNativeExecution consumes a host-observed exit, never a model's claim
 // of completion. An old receipt cannot alter a replacement run or its custody.
 func (s *Store) FinishNativeExecution(ctx context.Context, role string, rid int64, session, status string) error {
+	return s.FinishNativeExecutionReport(ctx, role, rid, session, status, "")
+}
+
+// FinishNativeExecutionReport records a physical exit and its unaccepted model
+// report atomically. It never closes work or substitutes for review/approval.
+func (s *Store) FinishNativeExecutionReport(ctx context.Context, role string, rid int64, session, status, report string) error {
 	if !s.postgres || rid <= 0 || role == "" || session == "" || (status != "exited" && status != "native-error") {
 		return errors.New("invalid native execution exit identity")
 	}
-	return s.closeSupervisedRunIdentity(ctx, rid, status, role, session)
+	return s.closeSupervisedRunIdentity(ctx, rid, status, role, session, truncateSupervision(report, 6000))
 }
-func (s *Store) closeSupervisedRunIdentity(ctx context.Context, rid int64, status, expectedRole, expectedSession string) error {
+
+func (s *Store) closeSupervisedRunIdentity(ctx context.Context, rid int64, status, expectedRole, expectedSession, nativeReport string) error {
 	return s.WithTx(ctx, func(q Querier) error {
 		var pid int64
 		var bead, session, actor string
@@ -67,6 +75,34 @@ func (s *Store) closeSupervisedRunIdentity(ctx context.Context, rid int64, statu
 		if !current.Valid || current.Int64 != rid {
 			return nil
 		}
+		if expectedRole != "" {
+			history := "Native execution exited; its report has not been accepted."
+			if status == "native-error" {
+				history = "Native execution ended with an error; its report has not been accepted."
+			}
+			body := strings.TrimSpace(nativeReport)
+			if body == "" {
+				body = "No terminal report was returned. Inspect the chat and artifacts before deciding the next action."
+			}
+			if _, e = q.ExecContext(ctx, `INSERT INTO bead_comments(project_id,bead_id,id,author,text,created_at,run_id) VALUES(?,?,?,'cmdrd',?,?,?)`, pid, bead, "native-exit:"+fmt.Sprint(rid), history+"\n"+body, time.Now().UTC().Format(time.RFC3339Nano), rid); e != nil {
+				return e
+			}
+		}
+		// A blocking question is a checkpoint, not a completed deliverable.
+		// Preserve its exact resume source regardless of answer/exit ordering.
+		if expectedRole != "" {
+			var checkpoint bool
+			if e = q.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM bead_questions q JOIN bead_tasks b ON b.project_id=q.project_id AND b.id=q.bead_id WHERE q.run_id=? AND q.project_id=? AND q.bead_id=? AND q.blocking AND q.state IN('pending','answered') AND q.plan_revision=b.plan_revision)`, rid, pid, bead).Scan(&checkpoint); e != nil {
+				return e
+			}
+			if checkpoint {
+				if _, e = q.ExecContext(ctx, `UPDATE bead_tasks SET responsible_agent_id=commander_supervisor(project_id,id) WHERE project_id=? AND id=? AND active_run_id=?`, pid, bead, rid); e != nil {
+					return e
+				}
+				_, e = q.ExecContext(ctx, `SELECT commander_resume_question_run(?,?)`, pid, bead)
+				return e
+			}
+		}
 		rows, e := q.QueryContext(ctx, `SELECT text,created_at FROM bead_comments WHERE project_id=? AND bead_id=? AND run_id=? AND replace(author,'.','-')=replace(?::text,'.','-') AND lower(ltrim(text)) LIKE 'final report%' ORDER BY created_at DESC,id DESC LIMIT 32`, pid, bead, rid, actor)
 		if e != nil {
 			return e
@@ -88,6 +124,15 @@ func (s *Store) closeSupervisedRunIdentity(ctx context.Context, rid int64, statu
 		rows.Close()
 		if e != nil {
 			return e
+		}
+		if expectedRole != "" && summary == "" {
+			summary = strings.TrimSpace(nativeReport)
+			if summary == "" {
+				summary = "Execution exited without a recorded final report. Inspect its chat and artifacts before deciding the next action."
+			}
+			if status == "native-error" {
+				summary = "Execution ended with an error. " + summary
+			}
 		}
 		if summary != "" {
 			var accepted bool

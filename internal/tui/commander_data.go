@@ -32,6 +32,9 @@ type (
 // LoadCommanderData loads the cross-fleet snapshot, scraping the chat panes
 // for agent state when running inside a cockpit pane.
 func LoadCommanderData(ctx context.Context, deps CommanderDataDeps) CommanderLiveData {
+	if deps.Store != nil && deps.Store.IsPostgres() {
+		return LoadCommanderDataLocal(ctx, deps)
+	}
 	// One shared reader: cmdrd polls br/state.db once for every column. Fall back
 	// to loading locally only when the daemon cannot be reached.
 	if d, ok := daemonLiveData(ctx); ok {
@@ -43,6 +46,11 @@ func LoadCommanderData(ctx context.Context, deps CommanderDataDeps) CommanderLiv
 // LoadCommanderDataLocal reads br and state.db itself, bypassing cmdrd's
 // snapshot, which lags a bead created moments ago.
 func LoadCommanderDataLocal(ctx context.Context, deps CommanderDataDeps) CommanderLiveData {
+	if deps.Store != nil && deps.Store.IsPostgres() {
+		source := &livedata.Source{Deps: deps}
+		data, _ := source.Current(ctx)
+		return data
+	}
 	if deps.Scrape == nil {
 		deps.Scrape = scrapeAgentStates
 	}

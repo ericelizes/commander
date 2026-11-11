@@ -12,6 +12,7 @@ import (
 )
 
 type nativeExitReceipt struct {
+	Summary    string `json:"summary,omitempty"`
 	Role       string `json:"role"`
 	RunID      int64  `json:"run_id"`
 	SessionID  string `json:"session_id"`
@@ -30,10 +31,15 @@ func nativeExitPath(home, role string, rid int64) string {
 func (h *host) finishNativeTurn(raw []byte) {
 	h.nativeEndOnce.Do(func() {
 		var result struct {
-			IsError bool `json:"is_error"`
+			IsError bool   `json:"is_error"`
+			Summary string `json:"result"`
 		}
 		_ = json.Unmarshal(raw, &result)
 		h.nativeResultError = result.IsError
+		h.nativeResultSummary = result.Summary
+		if len(h.nativeResultSummary) > 6000 {
+			h.nativeResultSummary = h.nativeResultSummary[:6000]
+		}
 		go func() {
 			if h.stdin != nil {
 				h.wmu.Lock()
@@ -72,7 +78,7 @@ func (h *host) persistNativeExit(exit *hostExit) {
 	if exit.Code != 0 || exit.Signal != "" || h.nativeResultError {
 		status = "native-error"
 	}
-	receipt := nativeExitReceipt{Role: h.cfg.Info.Role, RunID: h.cfg.Info.ExecutionRunID, SessionID: h.cfg.Info.SessionID, Status: status, Code: exit.Code, Signal: exit.Signal, ObservedAt: time.Now().Unix()}
+	receipt := nativeExitReceipt{Summary: h.nativeResultSummary, Role: h.cfg.Info.Role, RunID: h.cfg.Info.ExecutionRunID, SessionID: h.cfg.Info.SessionID, Status: status, Code: exit.Code, Signal: exit.Signal, ObservedAt: time.Now().Unix()}
 	raw, e := json.Marshal(receipt)
 	if e == nil {
 		tmp := h.cfg.ExitReceiptPath + ".tmp"
@@ -170,7 +176,14 @@ func (e *Engine) flushNativeExits(ctx context.Context, role string) error {
 			}
 			continue
 		}
-		if err = sink.FinishNativeExecution(ctx, receipt.Role, receipt.RunID, receipt.SessionID, receipt.Status); err != nil {
+		if reports, ok := e.opts.States.(interface {
+			FinishNativeExecutionReport(context.Context, string, int64, string, string, string) error
+		}); ok {
+			err = reports.FinishNativeExecutionReport(ctx, receipt.Role, receipt.RunID, receipt.SessionID, receipt.Status, receipt.Summary)
+		} else {
+			err = sink.FinishNativeExecution(ctx, receipt.Role, receipt.RunID, receipt.SessionID, receipt.Status)
+		}
+		if err != nil {
 			if firstErr == nil {
 				firstErr = err
 			}
