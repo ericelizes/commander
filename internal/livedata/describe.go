@@ -141,8 +141,11 @@ func rowFacts(snap Snapshot, workstream, track string, steps []SnapStep, row nex
 			fmt.Fprintf(&b, "Asked: %s\n", a.Ask)
 		}
 	}
-	if lead.Actor == nextactor.None && strings.HasPrefix(lead.Text, "Paused: ") {
-		fmt.Fprintf(&b, "Hold reason: %s\n", strings.TrimPrefix(lead.Text, "Paused: "))
+	// The rule-based line carries hold reasons, asks and waits through a chain.
+	// Stuck, agent and Commander lines hold ticking durations: left out, so a
+	// minute passing does not rewrite the row.
+	if lead.Actor == nextactor.User || lead.Actor == nextactor.External || lead.Actor == nextactor.None {
+		fmt.Fprintf(&b, "Rule-based line: %s\n", lead.Text)
 	}
 	n := 0
 	for s := range stepValues(steps) {

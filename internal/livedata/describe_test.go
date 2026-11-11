@@ -39,6 +39,18 @@ func TestDescriptionsReplaceTheDeterministicLineOnlyWhenReady(t *testing.T) {
 	}
 }
 
+func TestPausedChainGivesTheDescriberItsHoldReason(t *testing.T) {
+	row := nextactor.Row{Lead: nextactor.Result{Actor: nextactor.None, Reason: "blocked:paused", Text: "After “Send the note”: paused: wait for the user to greenlight 6.2", Via: []string{"Send the note"}}}
+	facts := rowFacts(Snapshot{}, "Claims", "", nil, row)
+	if !strings.Contains(facts, "wait for the user to greenlight 6.2") {
+		t.Fatalf("hold reason missing from facts:\n%s", facts)
+	}
+	stuck := nextactor.Row{Lead: nextactor.Result{Actor: nextactor.Stuck, Reason: "no_progress", Text: "Stuck: no progress for 25 minutes"}}
+	if strings.Contains(rowFacts(Snapshot{}, "W", "", nil, stuck), "25 minutes") {
+		t.Fatal("a ticking duration reached the describer's facts")
+	}
+}
+
 func TestOpenerIsFixedByState(t *testing.T) {
 	cases := map[string]nextactor.Result{
 		"Needs you:":        {Actor: nextactor.User},
