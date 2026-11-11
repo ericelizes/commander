@@ -87,12 +87,19 @@ func OpenPostgres(dsn string) (*Store, error) {
 		return nil, errors.New("store: Postgres connection unavailable; SQLite fallback is disabled")
 	}
 	s := &Store{db: db, postgres: true, postgresDSN: dsn}
-	if err := s.migratePostgres(ctx); err != nil {
+	// A schema migration rewrites every bead on a populated database: it gets
+	// its own bound, not the connection check's.
+	migrateCtx, migrateCancel := context.WithTimeout(context.Background(), postgresMigrateTimeout)
+	defer migrateCancel()
+	if err := s.migratePostgres(migrateCtx); err != nil {
 		db.Close()
 		return nil, err
 	}
 	return s, nil
 }
+
+// postgresMigrateTimeout bounds one schema migration transaction.
+const postgresMigrateTimeout = 15 * time.Minute
 
 func (s *Store) IsPostgres() bool { return s.postgres }
 
