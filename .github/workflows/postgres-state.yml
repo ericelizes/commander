@@ -47,17 +47,17 @@ jobs:
           echo "XDG_RUNTIME_DIR=/run/user/$ci_uid" >> "$GITHUB_ENV"
           echo "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$ci_uid/bus" >> "$GITHUB_ENV"
           XDG_RUNTIME_DIR="/run/user/$ci_uid"             DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$ci_uid/bus"             systemd-run --user --scope --quiet --property=TasksMax=32 /usr/bin/true
+      - name: Configure the disposable runner commit identity
+        run: |
+          git config --global user.name "Commander CI"
+          git config --global user.email commander-ci@example.invalid
       - name: Full Go suite with PostgreSQL and bounded process cleanup
         env:
           COMMANDER_POSTGRES_TEST_DSN: postgres://postgres:disposable-test-password@127.0.0.1:5432/commander_trial?sslmode=disable
           GOMAXPROCS: 2
           GOFLAGS: -p=2
-          GIT_AUTHOR_NAME: Commander CI
-          GIT_AUTHOR_EMAIL: commander-ci@example.invalid
-          GIT_COMMITTER_NAME: Commander CI
-          GIT_COMMITTER_EMAIL: commander-ci@example.invalid
         run: |
-          systemd-run --user --wait --collect --pipe             --unit="commander-ci-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"             --property=TasksMax=256 --property=KillMode=control-group             --property=RuntimeMaxSec=1200 --working-directory="$PWD"             --setenv="PATH=$PATH" --setenv="HOME=$HOME"             --setenv="XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR"             --setenv="DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS"             --setenv="GIT_AUTHOR_NAME=$GIT_AUTHOR_NAME" --setenv="GIT_AUTHOR_EMAIL=$GIT_AUTHOR_EMAIL" --setenv="GIT_COMMITTER_NAME=$GIT_COMMITTER_NAME" --setenv="GIT_COMMITTER_EMAIL=$GIT_COMMITTER_EMAIL" --setenv="GOMAXPROCS=$GOMAXPROCS" --setenv="GOFLAGS=$GOFLAGS"             --setenv="COMMANDER_POSTGRES_TEST_DSN=$COMMANDER_POSTGRES_TEST_DSN"             "$(command -v go)" test -p 2 -count=1 -timeout=10m ./...
+          systemd-run --user --wait --collect --pipe             --unit="commander-ci-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"             --property=TasksMax=256 --property=KillMode=control-group             --property=RuntimeMaxSec=1200 --working-directory="$PWD"             --setenv="PATH=$PATH" --setenv="HOME=$HOME"             --setenv="XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR"             --setenv="DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS"             --setenv="GOMAXPROCS=$GOMAXPROCS" --setenv="GOFLAGS=$GOFLAGS"             --setenv="COMMANDER_POSTGRES_TEST_DSN=$COMMANDER_POSTGRES_TEST_DSN"             "$(command -v go)" test -p 2 -count=1 -timeout=10m ./...
       - name: Stop the exact CI process scope
         if: always()
         run: |
