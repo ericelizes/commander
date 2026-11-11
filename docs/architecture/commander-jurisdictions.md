@@ -696,6 +696,12 @@ identity. The actual Worker-to-Codex and checkpoint paths are now exercised belo
 Release verification still includes legacy process attestation/drain,
 verification of configured protections, plan revocation, activation preflight and sidebar behavior.
 
+Redirecting a running agent goes through its bead. When a bead's plan revision
+moves past the one its running native execution claimed, cmdrd sends one
+message into that agent's session (re-read the bead and change course; stop
+and report if the bead is closed or deferred) and records an
+`execution-redirect` fact on the bead, so each revision is told once.
+
 Accounts are generic Claude or Codex logins. store.AgentAccounts maps each agent
 kind to an ordered account list, editable in Settings. Defaults prefer Claude
 for Commanders and Codex for execution agents, with the other provider as fallback.
