@@ -7,6 +7,7 @@ permissions:
 jobs:
   postgres-integration:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     services:
       postgres:
         image: postgres:17
@@ -24,10 +25,36 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Native Postgres interactions in a bounded test container
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Install the test CLI dependencies
         run: |
-          docker run --rm --pids-limit 256 --network host \
-            -e COMMANDER_POSTGRES_TEST_DSN='postgres://postgres:disposable-test-password@127.0.0.1:5432/commander_trial?sslmode=disable' \
-            -e GOMAXPROCS=2 -e GOFLAGS='-p=2' \
-            -v "$PWD:/src:ro" -w /src golang:1.25 \
-            go test -p 2 -count=1 -timeout=10m ./...
+          sudo apt-get update
+          sudo apt-get install -y tmux
+          archive="$RUNNER_TEMP/br-0.7.6-linux_musl_amd64.tar.gz"
+          curl --fail --location --retry 3 --output "$archive"             https://github.com/Dicklesworthstone/beads_rust/releases/download/v0.7.6/br-0.7.6-linux_musl_amd64.tar.gz
+          printf '%s  %s\n' 28b89f8f26540a4c9e6242b3c9fc93bcdd89f4ec0b9c9792895028c53f5bf2bd "$archive" | sha256sum --check
+          mkdir -p "$RUNNER_TEMP/commander-ci-bin"
+          tar -xzf "$archive" -C "$RUNNER_TEMP/commander-ci-bin" br
+          "$RUNNER_TEMP/commander-ci-bin/br" --version
+          echo "$RUNNER_TEMP/commander-ci-bin" >> "$GITHUB_PATH"
+      - name: Enable bounded user process scopes
+        run: |
+          ci_uid="$(id -u)"
+          sudo loginctl enable-linger "$(id -un)"
+          sudo systemctl start "user@${ci_uid}.service"
+          echo "XDG_RUNTIME_DIR=/run/user/$ci_uid" >> "$GITHUB_ENV"
+          echo "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$ci_uid/bus" >> "$GITHUB_ENV"
+          XDG_RUNTIME_DIR="/run/user/$ci_uid"             DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$ci_uid/bus"             systemd-run --user --scope --quiet --property=TasksMax=32 /usr/bin/true
+      - name: Full Go suite with PostgreSQL and bounded process cleanup
+        env:
+          COMMANDER_POSTGRES_TEST_DSN: postgres://postgres:disposable-test-password@127.0.0.1:5432/commander_trial?sslmode=disable
+          GOMAXPROCS: 2
+          GOFLAGS: -p=2
+        run: |
+          systemd-run --user --wait --collect --pipe             --unit="commander-ci-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"             --property=TasksMax=256 --property=KillMode=control-group             --property=RuntimeMaxSec=1200 --working-directory="$PWD"             --setenv="PATH=$PATH" --setenv="HOME=$HOME"             --setenv="XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR"             --setenv="DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS"             --setenv="GOMAXPROCS=$GOMAXPROCS" --setenv="GOFLAGS=$GOFLAGS"             --setenv="COMMANDER_POSTGRES_TEST_DSN=$COMMANDER_POSTGRES_TEST_DSN"             "$(command -v go)" test -p 2 -count=1 -timeout=10m ./...
+      - name: Stop the exact CI process scope
+        if: always()
+        run: |
+          systemctl --user stop "commander-ci-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT.service" || true
