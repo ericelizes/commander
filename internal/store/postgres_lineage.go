@@ -55,7 +55,10 @@ func normalizePostgresDefinition(kind, definition, quotedSchema string) string {
 	switch kind {
 	case "function":
 		return strings.Replace(definition, "FUNCTION "+quotedSchema+".", "FUNCTION fixture.", 1)
-	case "index", "trigger":
+	case "trigger":
+		definition = normalizeTriggerPredicate(definition)
+		fallthrough
+	case "index":
 		return strings.Replace(definition, " ON "+quotedSchema+".", " ON fixture.", 1)
 	}
 	return definition
