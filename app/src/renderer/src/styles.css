@@ -7599,3 +7599,12 @@ button.xf-step.xf-open:hover {
 .ws-state.agent-stuck,
 .xf-state.agent-stalled,
 .xf-state.agent-stuck { --dot: var(--err); }
+
+.activity-freshness {
+  margin: 8px 12px;
+  padding: 8px;
+  color: var(--text);
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  font-size: 12px;
+}

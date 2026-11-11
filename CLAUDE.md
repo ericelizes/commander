@@ -1083,6 +1083,19 @@ add|rm|focus|move|ls`; anything else is 403. Live-test it on a private home:
 `COMMANDER_HOME=/tmp/cl.x/ch TMUX_TMPDIR=/tmp/cl.x AM_HTTP_URL=http://127.0.0.1:1
 cmdrd --notifications=false` (short path: the unix socket must stay under ~104 chars).
 
+The API publishes `load_completed_at` independently of content version and
+`generated_at`, only after a complete successful source read. Failed, canceled,
+partial and last-good reads set `load_error` without renewing that heartbeat.
+Unchanged content sends a small `freshness` WebSocket frame. Navigator and
+Overview share a warning after 45 seconds without successful evidence (checked
+by the existing 15-second client clock), or immediately on load/connection
+errors. Existing rows and decision cards remain visible; freshness is not a
+process-death verdict. Older servers without the heartbeat remain unverified.
+Regression: `TestCompleteLoadHeartbeat`, `TestFreshnessWebSocket` and
+`app/test/activity-freshness.test.tsx` (reads the activity-freshness eval JSON).
+After building the renderer, run `bash scripts/activity-freshness-test.sh` in a
+build slot for the headless fake-server cockpit sequence (no real agents).
+
 ## Desktop app (`app/`, Electron + electron-vite + React, a thin client over cmdrd)
 
 The renderer is a plain web page: it reads host features only through the

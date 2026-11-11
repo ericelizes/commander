@@ -363,7 +363,11 @@ export function connect(onFirstRender?: (ok: boolean, detail: string) => void): 
     }
     sock.onmessage = (ev) => {
       try {
-        const msg = JSON.parse(String(ev.data)) as { type: string; snapshot?: Snapshot }
+        const msg = JSON.parse(String(ev.data)) as { type: string; snapshot?: Snapshot; load_completed_at?: string; load_error?: boolean }
+        if (msg.type === 'freshness') {
+          const current = useStore.getState().snapshot
+          if (current) useStore.setState({ snapshot: { ...current, load_completed_at: msg.load_completed_at, load_error: msg.load_error } })
+        }
         if (msg.type === 'snapshot' && msg.snapshot) {
           delay = 500
           useStore.getState().setSnapshot(msg.snapshot)

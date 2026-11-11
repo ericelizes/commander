@@ -21,6 +21,8 @@ export interface Snapshot {
   pr_states?: Record<string, string>
   answers?: Record<string, number>
   version: number
+  load_completed_at?: string
+  load_error?: boolean
   generated_at: string
   projects: SnapProject[]
   workstreams: SnapWorkstream[] // the user's rank order; n is the sidebar number

@@ -21,6 +21,9 @@ import (
 type Snapshot struct {
 	PlanningUsage map[string]string `json:"planning_usage,omitempty"`
 
+	// LoadCompletedAt advances only after a complete successful API source read.
+	LoadCompletedAt   time.Time         `json:"load_completed_at"`
+	LoadError         bool              `json:"load_error,omitempty"`
 	OrchestrationMode string            `json:"orchestration_mode,omitempty"`
 	Storage           string            `json:"storage,omitempty"`
 	Executions        []SnapExecution   `json:"executions"`
