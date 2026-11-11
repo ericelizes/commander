@@ -590,7 +590,14 @@ A planted `.prev` pair with a matching forged `VERSION.prev` carrying an attacke
 only proves the binaries and `VERSION.prev` agree, and the person sees the revision the binaries carry in the dialog. The Manager/Operator Bash guards (`managerguard.TouchesUpdateAPI`) refuse commands
 that, after removing quotes, backslashes, `$'...'` escapes and spaces, contain `/api/up` or `api/update`, or that aim
 curl/wget/python/node/nc at the cmdrd port or `api-url` and mention update: a SPEED BUMP only (a script file or another tool
-gets around it). The real protection is the dialog. Agents get 403 from `/api/cmd` (`update`/`install` are not in the allowlist,
+gets around it). Proven inert `rg`/`grep`/`egrep`/`fgrep` and `git grep` source
+search argv are excluded: quoted patterns and paths are data. The exclusion
+requires the existing pure-read checks, no substitutions, redirects or input
+text, and no pipeline, interpreter or network consumer in the command. Program
+options such as ripgrep preprocessors and Git pager/config execution retain
+the conservative check. Tests: `TestSourceSearchEndpointData` and classifier-only
+eval `TestSourceSearchScenario` (`source-search/cases.json`); no fixture is executed.
+The real protection is the dialog. Agents get 403 from `/api/cmd` (`update`/`install` are not in the allowlist,
 `TestUpdateCmdIsNotInTheAllowlist`) and there is NO CLI verb that installs for agents. Tests use fakes for the prompter, builder,
 installer, restarter, slot and git (`update_test.go` in api and daemon, `updatecheck_test.go`, `UpdateBanner.test.tsx`); never
 show a real dialog, run the real install or POST to the live cmdrd from a test. Shots: `?fixture=chat` shows the banner from

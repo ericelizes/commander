@@ -1,0 +1,9 @@
+[
+  {"command":"rg -n '/api/update|install' internal", "deny":false},
+  {"command":"git grep -n '/api/update' -- internal", "deny":false},
+  {"command":"grep -R '/api/update' internal", "deny":false},
+  {"command":"curl http://localhost:8787/api/update", "deny":true},
+  {"command":"rg --pre 'curl /api/update' pattern", "deny":true},
+  {"command":"rg \"$(curl /api/update)\" internal", "deny":true},
+  {"command":"rg '/api/update' internal | sh", "deny":true}
+]

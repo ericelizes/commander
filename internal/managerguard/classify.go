@@ -71,13 +71,18 @@ func touchesUpdateAPI(command string, depth int) bool {
 	// those delimiters, after which their escapes cannot be recognized.
 	segs := parse(decodeANSIC(command))
 	interpreter := false
+	pipeline := false
 	for _, seg := range segs {
+		pipeline = pipeline || seg.piped
 		words := unwrap(stripGroup(seg.words), false)
 		if len(words) > 0 && (tmuxSinks[baseName(words[0])] || networkTool.MatchString(baseName(words[0]))) {
 			interpreter = true
 		}
 	}
 	for _, seg := range segs {
+		if !interpreter && !pipeline && inertSourceSearch(seg) {
+			continue
+		}
 		executable.WriteString(strings.Join(seg.words, " "))
 		executable.WriteByte('\n')
 		for _, sub := range seg.subs {
@@ -98,6 +103,39 @@ func touchesUpdateAPI(command string, depth int) bool {
 		return true
 	}
 	return networkTool.MatchString(flat) && cmdrdTarget.MatchString(flat) && strings.Contains(squashed, "update")
+}
+
+// Search patterns and paths are argv data, not shell programs. Only omit a
+// proven search with no executable expansion, output redirection or pipeline;
+// consumers of search output retain the conservative endpoint heuristic.
+func inertSourceSearch(seg segment) bool {
+	if seg.piped || len(seg.subs) != 0 || len(seg.redirects) != 0 || seg.inputText != "" || !pureSegment(seg.words, false) {
+		return false
+	}
+	words := unwrap(seg.words, true)
+	if len(words) == 0 {
+		return false
+	}
+	switch baseName(words[0]) {
+	case "rg", "grep", "egrep", "fgrep":
+		return true
+	case "git":
+		args := words[1:]
+		for len(args) > 0 {
+			switch args[0] {
+			case "-C", "--git-dir", "--work-tree":
+				if len(args) < 2 {
+					return false
+				}
+				args = args[2:]
+			case "--no-pager":
+				args = args[1:]
+			default:
+				return args[0] == "grep"
+			}
+		}
+	}
+	return false
 }
 
 var (
