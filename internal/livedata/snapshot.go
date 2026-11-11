@@ -722,6 +722,7 @@ func (s *Source) Current(ctx context.Context) (Data, Snapshot) {
 			if frame.Degraded != nil {
 				reason = frame.Degraded.Reason
 			}
+			log.Printf("livedata: live state read failed: load=%v ctx=%v degraded=%q (%s)", data.LoadErr, ctx.Err(), reason, data.Phases)
 			if data.LoadErr == nil {
 				data.LoadErr = errors.New(reason)
 			}

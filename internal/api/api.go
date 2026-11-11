@@ -205,6 +205,14 @@ func (s *Server) refreshLocked(ctx context.Context) bool {
 
 const defaultSlowLoad = livedata.SlowLoad
 
+// liveReadTimeout bounds one live-state build; changeBatch gathers a burst of
+// database changes into one rebuild.
+const (
+	liveReadTimeout = 8 * time.Second
+	changeBatch     = 500 * time.Millisecond
+	minRebuildGap   = 2 * time.Second
+)
+
 // unavailableGrace is how long live-state reads may keep failing before the
 // app is told the state is unavailable.
 const unavailableGrace = 10 * time.Second
@@ -276,10 +284,11 @@ func (s *Server) Poll(ctx context.Context) {
 	t := time.NewTicker(s.opts.Interval)
 	defer t.Stop()
 	for {
+		lastRefresh := time.Now()
 		readCtx := ctx
 		cancel := func() {}
 		if s.opts.StateStore != nil {
-			readCtx, cancel = context.WithTimeout(ctx, 3*time.Second)
+			readCtx, cancel = context.WithTimeout(ctx, liveReadTimeout)
 		}
 		s.Refresh(readCtx)
 		cancel()
@@ -291,7 +300,10 @@ func (s *Server) Poll(ctx context.Context) {
 			if !ok {
 				changes = nil
 			} else {
-				timer := time.NewTimer(100 * time.Millisecond)
+				// Gather the burst, and leave at least minRebuildGap between
+				// rebuilds: changes arrive several times a second.
+				wait := max(changeBatch, minRebuildGap-time.Since(lastRefresh))
+				timer := time.NewTimer(wait)
 				select {
 				case <-timer.C:
 				case <-ctx.Done():
