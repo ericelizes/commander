@@ -125,13 +125,18 @@ func TestPostgresComposedConvergence(t *testing.T) {
 				if e := s.AddPlace(ctx, Place{Name: "mac:fixture", Kind: "mac", PublicKey: "fixture-key", PairedAt: 1, PairedBy: "user"}); e != nil {
 					t.Fatal(e)
 				}
-				// An active offer and canonical claim must survive the actual 2->3 opener.
+				// Retain an authorized accepted offer, not a blocked launch. The
+				// delayed-acceptance fence now rechecks this dependency too.
+				if _, e := s.DB().Exec(`UPDATE bead_tasks SET status='closed' WHERE project_id=? AND id='fixture-2'`, pid); e != nil {
+					t.Fatal(e)
+				}
+				// An active offer and canonical claim must survive the 4->5 opener.
 				id, e := s.InsertPlaceOffer(ctx, AgentRun{ProjectID: pid, TaskBeadID: "fixture-1", AgentName: "operator-fixture", SpawnTime: 1}, PlaceRun{Place: "mac:fixture", StepID: "fixture-step", ManagerRole: "manager-fixture", BriefSHA: "fixture", OfferedAt: 1})
 				if e != nil {
 					t.Fatal(e)
 				}
-				if _, e = s.AcceptPlaceRun(ctx, id, "fixture-hash", time.Now().Unix()); e != nil {
-					t.Fatal(e)
+				if ok, e := s.AcceptPlaceRun(ctx, id, "fixture-hash", time.Now().Unix()); e != nil || !ok {
+					t.Fatalf("authorized fixture acceptance=%v error=%v", ok, e)
 				}
 				if _, e = s.RecordPlaceComment(ctx, id, "fixture-comment", 1); e != nil {
 					t.Fatal(e)
