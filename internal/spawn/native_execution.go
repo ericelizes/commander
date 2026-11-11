@@ -43,7 +43,12 @@ func (s *Spawner) spawnNativeClaim(ctx context.Context, req SpawnRequest, agent,
 		return nil, e
 	}
 	at := s.now()
-	rid, e := s.store.InsertAgentRun(ctx, store.AgentRun{ExecutionClaimToken: req.ExecutionClaimToken, ResumeSourceRunID: req.ResumeSourceRunID, ExecutionDriver: "native", ExecutionRuntime: req.Runtime, ExecutionAccount: req.Account, ExecutionModel: req.Model, ProjectID: req.ProjectID, TaskBeadID: req.TaskBeadID, AgentName: agent, OpencodeSessionID: sid, SpawnTime: at.Unix(), WorktreePath: sql.NullString{String: workspace, Valid: workspace != ""}})
+	// Record the model the run actually uses: a Codex run maps a Claude default to Codex's.
+	model := req.Model
+	if req.Runtime == chat.RuntimeCodex {
+		model = chat.CodexModel(model)
+	}
+	rid, e := s.store.InsertAgentRun(ctx, store.AgentRun{ExecutionClaimToken: req.ExecutionClaimToken, ResumeSourceRunID: req.ResumeSourceRunID, ExecutionDriver: "native", ExecutionRuntime: req.Runtime, ExecutionAccount: req.Account, ExecutionModel: model, ProjectID: req.ProjectID, TaskBeadID: req.TaskBeadID, AgentName: agent, OpencodeSessionID: sid, SpawnTime: at.Unix(), WorktreePath: sql.NullString{String: workspace, Valid: workspace != ""}})
 	if e != nil {
 		return nil, e
 	}

@@ -173,7 +173,7 @@ exit 99
 					t.Fatal("native execution lost its canonical identity", native.spec)
 				}
 				var driver, recordedRuntime, recordedAccount, model string
-				if e = st.DB().QueryRow(`SELECT execution_driver,execution_runtime,execution_account,execution_model FROM agent_runs WHERE id=?`, result.RunID).Scan(&driver, &recordedRuntime, &recordedAccount, &model); e != nil || driver != "native" || recordedRuntime != runtime || model == "" {
+				if e = st.DB().QueryRow(`SELECT execution_driver,execution_runtime,execution_account,execution_model FROM agent_runs WHERE id=?`, result.RunID).Scan(&driver, &recordedRuntime, &recordedAccount, &model); e != nil || driver != "native" || recordedRuntime != runtime || model == "" || (runtime == chat.RuntimeCodex && model != chat.CodexModel(model)) || (runtime == chat.RuntimeCodex && strings.Contains(model, "claude")) {
 					t.Fatal("provider selection was not bound with the run", driver, recordedRuntime, recordedAccount, model, e)
 				}
 				if _, e = os.Stat(filepath.Join(dir, ".commander", "operators", result.AgentName+".sh")); !os.IsNotExist(e) {
