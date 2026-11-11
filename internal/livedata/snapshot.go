@@ -682,8 +682,10 @@ type Source struct {
 	recentAt   time.Time
 }
 
-// recentFresh is how old a build Last may reuse: about one rebuild interval.
-const recentFresh = 2 * time.Second
+// recentFresh is how old a build Last may reuse. The API rebuilds within a
+// second of any change the board reads, and at least every 30s, so a newer
+// build exists whenever the board could have changed.
+const recentFresh = 35 * time.Second
 
 // Recent returns the latest clean PostgreSQL build if it is at most maxAge old.
 // Callers must treat the returned Data as read-only: it is shared.
