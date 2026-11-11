@@ -2330,3 +2330,11 @@ refuses. Withdrawn never grants workflow/production approval, including after a
 later close. Fresh checks are not backend CAS. See `docs/cli/gate-withdrawal.md`;
 `TestGateWithdraw*`, private-handler `TestGateWithdrawalScenario`
 (`scenarios/gate-withdrawal.json`).
+
+Populated PostgreSQL upgrades to schema 5 drain deferred constraint events before
+qualified-custody DDL and check its dependency backfill immediately within the
+same locked transaction. Shipped migration SQL remains frozen. Lineage attestation
+also refuses extra columns, constraints and triggers on managed tables while
+allowing unrelated tables. `postgres_populated_upgrade_test.go` covers populated
+schema 3→5, preserved custody/progress and these addition boundaries; its mutation
+matrix lives in `tests/evals/scenarios/postgres-migration/populated-upgrade.json`.

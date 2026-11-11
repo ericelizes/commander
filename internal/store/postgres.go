@@ -194,10 +194,17 @@ func (s *Store) migratePostgres(ctx context.Context) error {
 		version = 4
 	}
 	if version == 4 {
+		// Earlier migrations and the qualified dependency backfill can queue
+		// deferred FK events on tables whose triggers/constraints we alter.
+		// Drain them and check the backfill immediately, retaining one atomic
+		// migration transaction and the advisory lock throughout.
+		if _, err = tx.ExecContext(ctx, `SET CONSTRAINTS ALL IMMEDIATE`); err != nil {
+			return fmt.Errorf("store: drain PostgreSQL migration constraints: %w", err)
+		}
 		if _, err = tx.ExecContext(ctx, postgresQualifiedSchema); err != nil {
 			return fmt.Errorf("store: migrate PostgreSQL 5 qualified custody: %w", err)
 		}
-		if _, err = tx.ExecContext(ctx, `UPDATE commander_schema SET version=5 WHERE id=1`); err != nil {
+		if _, err = tx.ExecContext(ctx, `SET CONSTRAINTS ALL DEFERRED; UPDATE commander_schema SET version=5 WHERE id=1`); err != nil {
 			return err
 		}
 	}

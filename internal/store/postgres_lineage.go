@@ -90,6 +90,27 @@ func validatePostgresLineage(ctx context.Context, q Querier, version int) error 
 			return fmt.Errorf("store: PostgreSQL schema %d shape mismatch at %s; recorded version alone is insufficient; explicit recovery required", version, key)
 		}
 	}
-	// Extra unrelated objects may coexist; known definitions must match exactly.
+	// Derive managed tables from the attested columns. Extra objects on other
+	// tables may coexist, but additions to a managed table change its shape.
+	managed := map[string]bool{}
+	for key := range expected {
+		if strings.HasPrefix(key, "column:") {
+			table, _, _ := strings.Cut(strings.TrimPrefix(key, "column:"), ".")
+			managed[table] = true
+		}
+	}
+	for key := range actual {
+		if _, ok := expected[key]; ok {
+			continue
+		}
+		kind, identity, _ := strings.Cut(key, ":")
+		table, _, _ := strings.Cut(identity, ".")
+		switch kind {
+		case "column", "generation", "constraint", "trigger", "trigger-state":
+			if managed[table] {
+				return fmt.Errorf("store: PostgreSQL schema %d shape mismatch at unexpected %s; explicit recovery required", version, key)
+			}
+		}
+	}
 	return nil
 }
