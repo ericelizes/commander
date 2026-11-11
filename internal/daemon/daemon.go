@@ -358,6 +358,11 @@ func New() (*Daemon, error) {
 	}
 
 	watch := opWatch{store: st, issues: st, activeAt: transcriptActiveAt, now: time.Now, latest: func() (livedata.Snapshot, bool) {
+		if st.IsPostgres() {
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
+			return live.WatchSnapshot(ctx), true
+		}
 		data, ok := live.Last()
 		if !ok {
 			if err := live.LastLoadErr(); err != nil {

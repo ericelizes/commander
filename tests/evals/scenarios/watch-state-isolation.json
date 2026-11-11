@@ -1,0 +1,5 @@
+{
+  "name": "watch-state-isolation",
+  "description": "TestPostgresWatchReadsDuringSnapshotPresentation holds an API snapshot presentation callback past the watch budget in a private PostgreSQL schema. A concurrent watch must read healthy current state, remain healthy immediately after the snapshot, and report degraded when the database is closed. No model processes or live writes.",
+  "hold_ms": 4000
+}

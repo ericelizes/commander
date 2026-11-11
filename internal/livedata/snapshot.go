@@ -681,7 +681,9 @@ type Source struct {
 	// Describe writes each active-mode row's one-liner from its state (nil: none).
 	Describe DescribeFunc
 
-	mu        sync.Mutex // guards what follows, and s.Deps.projectRows; never held during Load
+	depsMu    sync.Mutex // guards initialization/copying of Deps.projectRows
+	stateOnly bool       // fresh reader: omit optional presentation I/O and writes
+	mu        sync.Mutex // guards presentation state; never held during Load
 	chatSince map[string]SnapAgent
 	since     sinceTracker
 
@@ -740,16 +742,8 @@ func (s *Source) Snapshot(ctx context.Context) Snapshot {
 // Current returns one load and its canonical projection for presentation
 // adapters. Terminal columns must not infer a second set of runtime states.
 func (s *Source) Current(ctx context.Context) (Data, Snapshot) {
-	start := time.Now()
-	s.mu.Lock()
-	lock := time.Since(start)
-	if s.Deps.projectRows == nil {
-		s.Deps.projectRows = &projectRowsCache{rows: map[projectRowsKey][]ObjectiveRow{}}
-	}
-	deps := s.Deps
-	s.mu.Unlock()
+	deps := s.loadDeps()
 	data := Load(ctx, deps)
-	data.Phases.Lock = lock
 	snapshot := s.build(ctx, data)
 	if data.Postgres {
 		frame := snapshot
@@ -780,6 +774,29 @@ func (s *Source) Current(ctx context.Context) (Data, Snapshot) {
 		data.Metrics.IdleRatio = frame.Fleet.IdleRatio
 	}
 	return data, snapshot
+}
+
+// WatchSnapshot reads required state independently of an API presentation build.
+// Mail, classification text and persisted display clocks cannot establish state
+// availability, and must not spend the watch's bounded database-read budget.
+func (s *Source) WatchSnapshot(ctx context.Context) Snapshot {
+	reader := Source{Deps: s.loadDeps(), stateOnly: true}
+	data, snapshot := reader.Current(ctx)
+	if data.CanonicalSnapshot != nil {
+		return *data.CanonicalSnapshot
+	}
+	return snapshot
+}
+
+// loadDeps shares only the independently synchronized graph cache. A state
+// reader must never queue behind presentation callbacks or enrichment I/O.
+func (s *Source) loadDeps() Deps {
+	s.depsMu.Lock()
+	defer s.depsMu.Unlock()
+	if s.Deps.projectRows == nil {
+		s.Deps.projectRows = &projectRowsCache{rows: map[projectRowsKey][]ObjectiveRow{}}
+	}
+	return s.Deps
 }
 
 // build turns a load into a Snapshot.
@@ -965,12 +982,14 @@ func (s *Source) build(ctx context.Context, data Data) Snapshot {
 	}
 	d := Board(snap, now)
 	applyExecutionCounts(&snap, &d)
-	if err := applyClassifications(ctx, s.Deps.Store, &snap, &d); err != nil {
-		log.Printf("status classifier: evidence read unavailable")
-	}
-	applyDescriptions(s.Describe, &snap, &d)
-	if err := s.since.fill(ctx, s.Deps.Store, &d, now, data.LoadErr != nil); err != nil {
-		log.Printf("livedata: %v", err)
+	if !s.stateOnly {
+		if err := applyClassifications(ctx, s.Deps.Store, &snap, &d); err != nil {
+			log.Printf("status classifier: evidence read unavailable")
+		}
+		applyDescriptions(s.Describe, &snap, &d)
+		if err := s.since.fill(ctx, s.Deps.Store, &d, now, data.LoadErr != nil); err != nil {
+			log.Printf("livedata: %v", err)
+		}
 	}
 	for i := range snap.NeedsYou {
 		snap.NeedsYou[i].TrackLetter = d.Asks[i].TrackLetter
