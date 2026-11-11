@@ -20,6 +20,16 @@ func TestResponsibilityPolicyAcrossAgentCapabilities(t *testing.T) {
 		{"paused", func(f *store.SupervisionFact) { f.Held = true }, "observe", "held", "workstream-qa"},
 		{"blocked dependency", func(f *store.SupervisionFact) { f.OpenBlockers = 1 }, "observe", "dependency", "workstream-qa"},
 		{"subordinates working", func(f *store.SupervisionFact) { f.ChildCount = 2 }, "observe", "subordinates", "workstream-qa"},
+		{"stalled subordinates all legitimately waiting", func(f *store.SupervisionFact) {
+			f.ChildCount = 4
+			f.ProgressAt = now.Add(-time.Hour).Unix()
+			f.Children = []store.SupervisionChild{{Status: "open", Labels: []string{"needs-user"}}, {Status: "open", ExecutionReady: true}, {Status: "open", Labels: []string{"hold"}}, {Status: "open", HasOpenChildren: true}}
+		}, "observe", "subordinates_waiting", "workstream-qa"},
+		{"stalled subordinate with a next step", func(f *store.SupervisionFact) {
+			f.ChildCount = 2
+			f.ProgressAt = now.Add(-time.Hour).Unix()
+			f.Children = []store.SupervisionChild{{Status: "open", Labels: []string{"needs-user"}}, {Status: "open"}}
+		}, "wake", "subordinate_progress", "workstream-qa"},
 		{"result delivered", func(f *store.SupervisionFact) { f.ResultReady = true }, "wake", "result_pending", "workstream-qa"},
 		{"reviewer busy", func(f *store.SupervisionFact) { f.ResultReady = true; f.AgentState = "working"; f.Alive = true }, "defer", "result_pending", "workstream-qa"},
 		{"unknown runtime", func(f *store.SupervisionFact) { f.PresenceKnown = false }, "observe", "runtime_unknown", "workstream-qa"},
@@ -103,6 +113,15 @@ func TestIncompleteRequiredRetirementIsReconciledByCurrentCommander(t *testing.T
 		got = Decide(fact, time.Now())
 		if got.Action == "wake" || got.Action == "resume" {
 			t.Fatalf("intentional parking was treated as abandoned execution: %+v", got)
+		}
+	}
+}
+
+func TestRepeatBackoffSpacesOutUnchangedObligations(t *testing.T) {
+	want := []time.Duration{time.Minute, time.Minute, time.Minute, 5 * time.Minute, 15 * time.Minute, time.Hour, 4 * time.Hour, 4 * time.Hour}
+	for attempts, d := range want {
+		if got := repeatBackoff(int64(attempts)); got != d {
+			t.Fatalf("attempts %d: %s, want %s", attempts, got, d)
 		}
 	}
 }

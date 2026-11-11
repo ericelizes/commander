@@ -26,7 +26,19 @@ type SupervisionFact struct {
 	PendingQuestions                                                int
 	QuestionWaiting                                                 bool
 	ChildCount, OpenBlockers                                        int
-	Job                                                             SupervisionJob
+	// Children are the open, non-deferred direct children, so the policy can
+	// tell legitimately waiting subordinates from stalled ones.
+	Children []SupervisionChild
+	Job      SupervisionJob
+}
+
+// SupervisionChild is what the policy needs to judge one open child.
+type SupervisionChild struct {
+	ID, Status                       string
+	Labels                           []string
+	ExecutionReady, Running          bool
+	QuestionWaiting, HasOpenChildren bool
+	OpenBlockers                     int
 }
 type SupervisionJob struct {
 	ProjectID                                                                           int64
@@ -104,6 +116,9 @@ func (s *Store) SupervisionFact(ctx context.Context, j SupervisionJob) (*Supervi
  OR ((r.id IS NULL OR r.status<>'running' OR replace(r.agent_name,'.','-')<>replace(b.responsible_agent_id,'.','-')) AND n.run_id IS NULL))
  LEFT JOIN LATERAL(SELECT state FROM agent_state WHERE replace(role,'.','-')=replace(b.responsible_agent_id,'.','-') ORDER BY updated DESC LIMIT 1)a ON TRUE
  WHERE b.project_id=? AND b.id=?`, j.ProjectID, j.BeadID).Scan(&f.Title, &f.Status, &f.AgentID, &f.Epoch, &f.ProgressSeq, &f.ProgressAt, &f.CompletionAt, &f.RunID, &result, &f.ExecutorBound, &labels, &f.Deleted, &f.SupervisorID, &f.AgentState, &at, &observedAlive, &nativeAlive, &f.ChildCount, &f.OpenBlockers, &f.ExecutionReady, &f.ExecutionAttempts, &f.ExecutionError, &f.ExecutionReserved, &f.ExecutionCapable, &f.PendingQuestions, &f.QuestionWaiting, &f.PendingHumanAnswer, &f.ProjectName)
+	if e == nil && f.ChildCount > 0 {
+		f.Children, e = s.supervisionChildren(ctx, j.ProjectID, j.BeadID)
+	}
 	if e != nil {
 		return nil, e
 	}
@@ -280,4 +295,28 @@ func (s *Store) PrepareSupervisionDelivery(ctx context.Context, f SupervisionFac
 		return nil
 	})
 	return f, prepared, e
+}
+
+func (s *Store) supervisionChildren(ctx context.Context, pid int64, id string) ([]SupervisionChild, error) {
+	rows, e := s.db.QueryContext(ctx, `SELECT c.id,c.status,c.labels,c.execution_ready,
+ COALESCE((SELECT r.status='running' FROM agent_runs r WHERE r.id=c.active_run_id),FALSE),
+ EXISTS(SELECT 1 FROM bead_questions q WHERE q.project_id=c.project_id AND q.bead_id=c.id AND q.blocking AND q.kind='execution' AND q.state='pending'),
+ EXISTS(SELECT 1 FROM bead_tasks g WHERE g.project_id=c.project_id AND g.parent_id=c.id AND g.status NOT IN ('closed','deferred') AND g.deleted_at IS NULL),
+ (SELECT COUNT(*) FROM bead_dependencies d JOIN bead_tasks t ON t.project_id=d.project_id AND t.id=d.depends_on_id WHERE d.project_id=c.project_id AND d.issue_id=c.id AND d.type='blocks' AND (NOT commander_dependency_complete(t.status,t.labels) OR commander_pending_human_answer(t.project_id,t.id)) AND t.deleted_at IS NULL)
+ FROM bead_tasks c WHERE c.project_id=? AND c.parent_id=? AND c.status NOT IN ('closed','deferred') AND c.deleted_at IS NULL ORDER BY c.id`, pid, id)
+	if e != nil {
+		return nil, e
+	}
+	defer rows.Close()
+	var out []SupervisionChild
+	for rows.Next() {
+		var c SupervisionChild
+		var raw []byte
+		if e := rows.Scan(&c.ID, &c.Status, &raw, &c.ExecutionReady, &c.Running, &c.QuestionWaiting, &c.HasOpenChildren, &c.OpenBlockers); e != nil {
+			return nil, e
+		}
+		_ = json.Unmarshal(raw, &c.Labels)
+		out = append(out, c)
+	}
+	return out, rows.Err()
 }
