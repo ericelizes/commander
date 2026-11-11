@@ -51,6 +51,7 @@ type API struct {
 // MaxOperatorsPerProject and MaxOperatorsGlobal are no longer enforced; they
 // still parse so existing config files keep loading.
 type Concurrency struct {
+	ExecutionSlots int `toml:"execution_slots"` // generic execution capacity; zero uses eight local slots
 	MaxOperatorsPerWorkstream int `toml:"max_operators_per_workstream"`
 	// BuildSlots is how many full builds/suites run at once (internal/slot);
 	// 0 = max(2, cores/2). $COMMANDER_BUILD_SLOTS overrides it.

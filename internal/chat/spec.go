@@ -20,12 +20,16 @@ var errNoSession = errors.New("no session")
 
 // Spec is everything needed to run one role's Claude session.
 type Spec struct {
-	Role       string
-	Agent      string // -n name and prompt file base (usually the role)
-	SessionID  string
-	Cwd        string
-	Model      string // Claude --model value; "" = Claude's default
-	PromptPath string // --append-system-prompt-file; "" = none
+	ExecutionRunID         int64  // immutable canonical run; zero is a logical conversation
+	ExecutionResume        bool   // saved checkpoint must retain its actual conversation
+	ExecutionInitialPrompt string // host-owned first turn for newly admitted native runs
+	ExecutionBlocked       bool   // may adopt its live host but cannot start new work
+	Role                   string
+	Agent                  string // -n name and prompt file base (usually the role)
+	SessionID              string
+	Cwd                    string
+	Model                  string // Claude --model value; "" = Claude's default
+	PromptPath             string // --append-system-prompt-file; "" = none
 	// Settings is the inline --settings JSON (the mail hooks); "" = none.
 	Settings string
 	// SkipPermissions runs with --dangerously-skip-permissions (as the tmux
@@ -88,11 +92,17 @@ type ResolverFunc func(ctx context.Context, role string) (Spec, error)
 // Resolve calls f.
 func (f ResolverFunc) Resolve(ctx context.Context, role string) (Spec, error) { return f(ctx, role) }
 
-var roleRe = regexp.MustCompile(`^(commander|(manager|operator)-[A-Za-z0-9][A-Za-z0-9._-]{0,120})$`)
+var roleRe = regexp.MustCompile(`^(commander|(commander|manager|operator)-[A-Za-z0-9][A-Za-z0-9._-]{0,120})$`)
 
 // ValidRole reports whether role is a chat role: commander, manager-<bead> or
 // operator-<flat-branch>. It also keeps roles safe as file names.
 func ValidRole(role string) bool { return roleRe.MatchString(role) && !strings.Contains(role, "..") }
+
+// IsCommanderRole identifies a planning conversation, independent of its scope.
+// Resolve additionally requires scoped conversations to exist in PostgreSQL.
+func IsCommanderRole(role string) bool {
+	return role == "commander" || strings.HasPrefix(role, "commander-") && ValidRole(role)
+}
 
 // RequiredCapabilities are init.capabilities the engine relies on; a missing
 // one is reported as a notice (the protocol may have drifted).
@@ -155,18 +165,43 @@ func (r StoreResolver) Resolve(ctx context.Context, role string) (Spec, error) {
 	if !ValidRole(role) {
 		return Spec{}, fmt.Errorf("chat: invalid role %q", role)
 	}
+	if spec, handled, err := r.resolveCanonical(ctx, role); handled {
+		return spec, err
+	}
 	// the user's setting (same as the tmux cockpit's --dangerously-skip-permissions): no
 	// approval prompts. COMMANDER_CHAT_PERMISSIONS=prompt makes native chats ask
 	// again (the UI answers permission_request events).
 	spec := Spec{Role: role, Agent: role, AllowedTools: agentrt.ClaudeAllowedTools,
 		SkipPermissions: os.Getenv("COMMANDER_CHAT_PERMISSIONS") != "prompt"}
 	switch {
-	case role == "commander":
+	case IsCommanderRole(role):
 		spec.Agent = promptassets.CommanderAgentName
 		spec.Tier = agentrt.TierCommander
-		id, err := readSessionFile(filepath.Join(r.Home, agentrt.SessionFileName("commander", agentrt.Claude)))
+		if role != "commander" {
+			if r.Store == nil {
+				return Spec{}, fmt.Errorf("chat: no store to resolve %s", role)
+			}
+			row, err := r.Store.GetCommander(ctx, role)
+			if err != nil {
+				return Spec{}, err
+			}
+			if row == nil {
+				return Spec{}, fmt.Errorf("chat: no Commander conversation %s: %w", role, errNoSession)
+			}
+			spec.Agent = role
+		}
+		id, err := readSessionFile(filepath.Join(r.Home, agentrt.SessionFileName(role, agentrt.Claude)))
 		if err != nil {
 			return Spec{}, err
+		}
+		if id == "" && role != "commander" {
+			if err = r.NewSession(ctx, role); err != nil {
+				return Spec{}, err
+			}
+			id, err = readSessionFile(filepath.Join(r.Home, agentrt.SessionFileName(role, agentrt.Claude)))
+			if err != nil {
+				return Spec{}, err
+			}
 		}
 		if id == "" {
 			return Spec{}, fmt.Errorf("chat: no Claude commander session yet (start the cockpit once)")
@@ -225,8 +260,16 @@ func (r StoreResolver) Resolve(ctx context.Context, role string) (Spec, error) {
 	}
 	// A chat loads its prompt once, at start: write today's first.
 	switch {
-	case role == "commander":
-		if err := promptassets.RefreshClaudeAgent(promptassets.RoleCommander, spec.Agent); err != nil {
+	case IsCommanderRole(role):
+		template := promptassets.RoleCommander
+		if r.Store != nil && r.Store.IsPostgres() {
+			active, e := r.Store.ActiveOrchestration(ctx)
+			if e != nil {
+				return Spec{}, e
+			}
+			template = promptassets.CommanderTemplate(role, active)
+		}
+		if err := promptassets.RefreshClaudeAgent(template, spec.Agent); err != nil {
 			return Spec{}, err
 		}
 	case strings.HasPrefix(role, "manager-"):
@@ -249,8 +292,20 @@ func (r StoreResolver) Resolve(ctx context.Context, role string) (Spec, error) {
 func (r StoreResolver) NewSession(ctx context.Context, role string) error {
 	path := ""
 	switch {
-	case role == "commander":
-		path = filepath.Join(r.Home, agentrt.SessionFileName("commander", agentrt.Claude))
+	case IsCommanderRole(role):
+		if role != "commander" {
+			if r.Store == nil {
+				return fmt.Errorf("chat: no store to resolve %s", role)
+			}
+			row, err := r.Store.GetCommander(ctx, role)
+			if err != nil {
+				return err
+			}
+			if row == nil {
+				return fmt.Errorf("chat: no Commander conversation %s", role)
+			}
+		}
+		path = filepath.Join(r.Home, agentrt.SessionFileName(role, agentrt.Claude))
 	case strings.HasPrefix(role, "manager-") && r.Store != nil:
 		row, err := r.Store.GetWorkstreamManagerByRole(ctx, role)
 		if err != nil {

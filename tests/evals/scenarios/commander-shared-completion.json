@@ -1,0 +1,20 @@
+{
+  "name": "A planning batch must satisfy the same fresh completion checks as the typed CLI",
+  "pr": "https://github.com/example/commander/pull/42",
+  "head": "tested-ci-head",
+  "updated": "CI verified and next work planned",
+  "expectations": [
+    "failed CI refuses raw close",
+    "changed head refuses closure",
+    "later failure rolls back generated proof",
+    "verified closure and plan commit together",
+    "receipt replay does not rerun verification",
+    "raw retirement and gate identity removal refuse before hiding checks",
+    "workflow snapshots and generated identities cannot be erased",
+    "unlinking or parking unfinished review never releases execution",
+    "stage closure waits for its own gates",
+    "explicit no-PR waiver is tied to current definition",
+    "no-PR waiver cannot waive a gate that names a PR",
+    "typed no-PR pass/remove/replacement preserve parked work"
+  ]
+}

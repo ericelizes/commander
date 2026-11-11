@@ -99,10 +99,11 @@ func summarizeLog(path string) (logSummary, error) {
 
 // meta is the small per-role state kept beside the log.
 type meta struct {
-	SessionID    string  `json:"session_id,omitempty"`
-	TotalCostUSD float64 `json:"total_cost_usd"`
-	CostKnown    bool    `json:"cost_known"`
-	CLIVersion   string  `json:"cli_version,omitempty"`
+	ExecutionRunID int64   `json:"execution_run_id,omitempty"`
+	SessionID      string  `json:"session_id,omitempty"`
+	TotalCostUSD   float64 `json:"total_cost_usd"`
+	CostKnown      bool    `json:"cost_known"`
+	CLIVersion     string  `json:"cli_version,omitempty"`
 	// Running is true while the engine wants the process up: an explicit Stop
 	// clears it; a cmdrd shutdown keeps it so the next cmdrd resumes the chat.
 	Running bool `json:"running"`

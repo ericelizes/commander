@@ -1746,6 +1746,15 @@ Verification: `TestCommanderFallsBackAcrossProviders`, `TestCommanderPlanSkipsDi
 
 ## PostgreSQL-selected live state
 
+The pending orchestration replacement is defined in
+[docs/architecture/commander-jurisdictions.md](docs/architecture/commander-jurisdictions.md).
+Planning jurisdiction belongs to logical Commander conversations and inherits
+through the shared bead tree. Generic execution responsibility is separate.
+Workstream grouping does not require a permanent Manager process. Scope
+handoffs preserve nested overrides, execution claims, holds and decisions;
+planning writes and handoffs serialize through the same project graph lock.
+Do not use a role-name guess or a stale registration to override jurisdiction.
+
 See [docs/architecture/postgres-live-state.md](docs/architecture/postgres-live-state.md)
 for the canonical bead/runtime schema, guarded interfaces, event stream,
 subscription-backed classifier, migration verification and cutover/rollback
@@ -1756,3 +1765,241 @@ Never test against the configured live database; integration fixtures use
 `commander_trial` with isolated schemas. New Postgres Operators use the host
 runtime and immutable run-aware state hooks. Old SQLite/Dolt remain legacy mode
 only when the explicit Postgres selector is absent.
+
+Versioned planning batches use `cmdr plan apply --file plan.json` through the
+guarded `/api/plan` route backed by the existing write door. Include the read jurisdiction revision and
+plan revision for every existing bead/parent/dependency endpoint; checks and
+edits share one project graph lock and transaction. Missing service, stale
+basis or foreign jurisdiction refuses the whole batch. Runtime executors cannot
+submit planning batches. Dependency changes version both endpoints; child
+structure changes version parents. See the architecture document above for the
+JSON contract and remaining cutover requirements.
+
+Planning batches support `create ... --ref name` followed by `$name` in bead
+identity positions. References do not expand inside briefs or evidence. The
+`created` response map and commit receipt preserve IDs on replay. Supply a
+stable `basis.request_id` when retrying a request; identical retries return the
+original result, while changed content under that key refuses. Without an
+explicit key, the exact basis/operations/holding intent determine it. Guards
+re-run against resolved beads inside the write transaction.
+
+Cross-jurisdiction changes use `cmdr plan propose --file plan.json`, the durable
+question inbox, then `cmdr plan apply --proposal ID`. Owners inspect the saved
+payload with `cmdr plan get --id ID` before answering. Agreement is exact-payload,
+requester, ownership and revision bound; it never substitutes for release gates.
+In active mode, non-planning agents may only report current-run execution
+phases/status/comments on their claimed bead; the shared PostgreSQL write path
+refuses tree/planning/hold/gate/closure changes, including through legacy doors.
+
+Active PG human-direction invariants live at the shared mutation boundary:
+only a current typed human decision can release a hold or finish its gate.
+Question scope and restriction epochs prevent stale answers or replayed journals
+from approving changed work. UI decisions carry their displayed plan revision.
+A deferred/retired approval remains an unpassed dependency; park abandoned work
+instead of reporting it complete. Finish legacy saved answers in shadow and
+audit historical unanswered cards before active cutover; do not synthesize scope
+proof for an old answer. The shared `internal/workflowclose` engine now verifies active API closes inside
+the same PostgreSQL transaction as their evidence and state writes. Typed CLI
+checks use the same engine. Direct active closes without a verifier fail closed.
+Typed no-PR pass/remove/replacement carry a definition-bound request; the
+service verifies it under the write lock and never trusts an arbitrary waiver
+comment. Workflow identity/snapshots cannot be erased, retirement verifies the
+old requirement first, and parked workflows remain unpassed dependencies.
+Ordinary automatic checks use the service-owned `/api/gate/check` path: evaluate
+outside the graph lock, then compare definition and recorded versions before an
+atomic result commit. CLI and background checks delegate once; unchanged
+observations do not renew progress. Typed automatic facts cannot be forged via
+comments, status writes or failure labels. Optional mail/display availability
+cannot disable canonical checking. Before cutover, finish runtime integration and cutover recovery;
+the shared engine does not by itself prove those remaining paths are integrated.
+
+PostgreSQL review addendum recording uses current planning jurisdiction rather
+than permanent Manager registration. The service stamps the recorder/revision
+in existing bead-comment metadata inside the write transaction. Historical
+resolution requires that exact stamp for Commander records and preserves the
+legacy Manager path for older history; a handoff does not discard the record.
+Original source bytes, artifact and independence checks still run at completion.
+The sidebar preserves deferred/retired required checks as explicit blockers,
+using a project-scoped dependency index and retained workflow-step metadata.
+See `TestPostgresPlanReviewAddendumSurvivesCommanderHandoff` and
+`TestRequiredWorkflowStepSurvivesDisplayProjection`.
+
+Execution activity hooks are fenced by recorded run/session identity for generic
+executor and Commander-named executions as well as historical Operator roles.
+Logical planning chats without execution history retain their chat-presence
+path; that is not a bead execution claim or work progress. Native starts now
+require existing custody and fresh execution uses canonical capacity admission;
+validated cross-provider checkpoint resumption remains cutover work.
+`TestPostgresRunHooksFenceGenericAndCommanderExecutions` covers replacement on a
+resumed native session, foreign sessions and late closed-run hooks.
+
+Claimed execution now uses `prompts/executor.md` via the spawn request's claim
+identity, including initial/resume goal and checkpoint context. It teaches local
+implementation, assigned-bead evidence and durable questions; no executor tree
+editing or permanent Manager delegation. A missing model on a scheduler request
+resolves the configured execution default before launch validation. PostgreSQL
+owner read failures refuse launch without historical Manager fallback.
+Native scoped Commanders and active default Commander use
+`prompts/planning-commander.md`; legacy default off/shadow recovery is retained.
+Native resolver and cockpit refresh existing prompt files from canonical mode
+without changing session identity. Active cockpit startup skips legacy Manager
+creation. `TestClaimedExecutionLaunchCarriesCanonicalContractAndIdentity` uses
+private PG, actual Worker/Spawner/HTTP and mocked detached tmux for code/knowledge
+and Claude/Codex; `TestCommanderPromptMatchesActiveJurisdictionModel` and
+`TestCommanderSessionRefreshesPlanningPromptAfterActivation` cover planning
+entry points. No real model process starts in these tests; final live cockpit,
+raw scheduler/native custody integration and validated cross-provider recovery
+remain unverified.
+
+`TestCommanderRuntimeContractInIsolatedPostgresCockpit` now verifies the rebuilt
+CLI with `scripts/cockpit-test.sh up/text/down` on a private tmux server and
+private PostgreSQL, real model binaries disabled. It proves canonical workstream
+rendering, active planning prompt installation and no legacy Manager windows.
+It does not prove the full live execution/UI flow. The text capture still shows
+older cockpit status wording (`no agent yet`, no-gates hint and Managers tab
+help), which remains part of the final active-UI audit.
+
+Canonical publication and redundant-ancestor repair now delegate once through
+`/api/gate/publish`. The service checks fresh planning versions/ownership under
+the project lock; the gate library validates leaf coverage/cycles before private
+exact edge/placement/audit authority is activated. Human approval, protected leaf
+waits, criteria, prerequisites and history remain intact. Original/completion
+audit, edges, parent and receipt commit together; late failure rolls all back.
+Same request receipts replay without progress, dry run writes nothing, saved
+human answers require their recovery first. Ordinary publication uses the same
+path; scoped Commanders no longer hit a legacy Manager-only CLI precheck.
+Cross-owner action coordination uses an exact typed publication proposal and
+cannot borrow an unrelated plan grant. The existing planning receipt table is used with a typed
+action hash namespace. `TestPostgresPlanPublicationRepairIsAtomicAndRetainsApproval`,
+`TestPostgresPlanPublicationRepairRefusesUnsafeOrForeignState` and
+`TestPostgresPlanPublicationCLIUsesCanonicalServiceOnce` cover real PG/HTTP/CLI.
+A raw relationship-removal bug also fixed: --type only deletes that relationship,
+so discovered-from cannot skip gate guards then delete a blocks edge. Parent
+relationship removal is refused in favor of guarded SetParent.
+
+Planning coordination uses its actual versioned bead dependencies, including
+closed records, and an explicit project scope for top-level creation. It never
+creates a placeholder task to hold a project decision. Planning questions have a
+separate kind and do not advance execution progress or queue an execution resume.
+Pending proposals are superseded by jurisdiction changes; execution questions
+instead follow their current owner. Scopes are bounded by MaxQuestionScopes.
+Durable planning delivery shares supervision's per-recipient dispatch fence and
+combines execution obligations with planning notices. Shadow mode does not wake
+agents. Notice delivery is neither an answer nor an approval; leases, current
+ownership, retry backoff and answer checks survive worker restart. Repeated
+failure routes a delivery-repair request to Commander without granting authority
+to answer outside its scope. Exact cross-owner publication-action proposals use a separately namespaced hash
+and the typed endpoint, shared durable questions, and current-owner agreement.
+Use cmdr plan propose/apply with an exclusive publication object; never mix it
+with ops or holding intent. All original approval and publication guards remain.
+
+Obsolete saved human decisions now have a typed reconciliation interface:
+`cmdr decision inspect --project-id ID --bead ID`, then (only when the recorded
+scope cannot authorize current work) `cmdr decision reconcile --file PATH` via
+`/api/decision/reconcile`. Current Commander, exact source answer/generation and
+read versions are fenced under the graph lock. The service preserves original
+payload/history, supersedes only the obsolete unapplied journal, records a fresh
+unanswered question, and saves a replay receipt in
+`human_decision_reconciliations`. It never edits holds, gates or execution facts,
+renews approval, or counts administrative retirement as progress. Current valid
+answers must resume; applied answers and answered historical pitches missing a
+journal refuse replacement. Historical unanswered questions without scope proof
+can be re-raised explicitly with current proof, never rebound to an old answer.
+The planning prompt and supervisor name the actual tool. Populated migration,
+shadow draining and live verification are still release requirements.
+
+Imported planning boundaries now carry origin=legacy; all explicit transfers,
+including same-owner ones, set origin=explicit. `cmdr jurisdiction inventory
+--project-id ID` reads the exact imported boundaries and planning snapshot.
+`cmdr jurisdiction consolidate --file PATH` delegates once to
+`/api/jurisdiction/consolidate`: shadow-only, user/default-Commander authority,
+exact jurisdiction/control/snapshot basis, atomic imported-boundary removal,
+inheritance history, responsibility fencing and replay receipt. Explicit scopes,
+claims, run/session identity, work, human direction and execution progress stay
+intact. Set-based writes avoid per-bead database round trips. A returned retired
+planning identity is only a cleanup candidate: runtime retirement still needs
+cross-project ownership and execution checks. This transition does not stop
+models or erase legacy sessions. Safe runtime cleanup and final activation
+preflight remain required before live cutover.
+
+Execution attribution now outranks planning registration. In active mode, any
+run/session/inherited-Manager caller must prove its exact current run to report
+phases/status/comments, even if its role is a registered Commander or imported
+Manager. It cannot borrow planning authority, including through plan receipts,
+proposals, typed publication/check/waiver/addendum routes or direct CLI readiness,
+question-answer, human-decision, jurisdiction and orchestration commands. Normal
+logical planning contexts keep their own scopes. DoorEnvKeep preserves Manager
+attribution; explicit WithDoorEnv contexts (even empty) clear ambient attribution.
+`commander-execution-context.json` drives actual PG/HTTP tests, including live
+custody across handoff and registered/imported/dotted role spellings. Foreground
+claims and safe retirement remain pending; do not infer them from these guards.
+
+Active native StoreResolver now binds existing canonical execution runs before
+legacy role-prefix resolution. Spec.ExecutionRunID, exact session/workspace,
+execution prompt/current task, stamped host handshake and immutable child env
+flow into native state writes via SetAgentStateForRun. Claims are rechecked
+before process launch; held/blocked executions cannot start fresh processes but
+can adopt their stamped surviving host. Late process frames/exits cannot update
+a replacement chat/run. History without a live spec does not persist activity.
+Execution Codex thread files use immutable-session keys, without role-level old
+handoff reuse. Imported planning identities use planning-commander; unowned
+consolidation-retired planners cannot restart. Fake native hosts + PG tests cover
+these paths; legacy unstamped host migration, live retirement and complete
+UI/provider flow remain pending. The reservation predicate's optional resume_existing defaults false;
+only native existing-run resume permits in_progress, preserving dispatch checks.
+
+
+Native bound executions now finish one turn, then close stdin and bound physical
+process shutdown independently of the chat daemon. The host durably records the
+actual exit with role/run/session identity before exposing it. Run-aware receipt
+reconciliation releases canonical capacity under the graph lock, preserves the
+first terminal verdict, and never closes the bead or invents a human decision.
+Failed database commits retain receipts and prevent a fresh restart; heartbeat
+and daemon recovery retry them. Invalid receipts are quarantined and an unrelated
+unverifiable receipt does not prevent other commits. Socket disconnection alone
+keeps the execution claim and permits adoption of the same surviving process.
+Saved checkpoint answers resume only after the original process exit through
+normal capacity claims. Native usage limits do not trigger legacy Manager-name
+inline restart; native Codex checkpoint lookup follows its exact recorded run
+and session thread. Scenario commander-native-exit-lifecycle.json drives real
+fake-model host / isolated PostgreSQL tests, including daemon absence, failed
+commit recovery, capacity reuse, checkpoint resume and live socket reconnection.
+The actual fake Codex host lifecycle is also tested, including physical exit,
+capacity closure and replacement-session fresh thread/start without thread/resume.
+This does not establish raw scheduler/native process custody migration, validated
+cross-provider recovery, or the complete UI flow.
+
+
+Fresh PostgreSQL execution admission is now fenced installation-wide. In active
+mode, InsertAgentRun requires the canonical startup claim; role names, registered
+planning identities and absence of a competing reservation do not grant a bypass.
+The mode row is held FOR SHARE through run binding and reservation, serializing
+with disable/cutover updates. Off mode refuses fresh launches. Shadow retains
+legacy preparation for migration; already-recorded runs remain readable and can
+finish after activation. Spawner checks mode and matching enabled, unbound,
+unexpired reservation before workspace/provider preparation; binding revalidates
+current plan, authority, capabilities, readiness, holds and capacity atomically.
+Native role-only start resumes an existing canonical run; it does not manufacture
+ready intent or a new claim. New execution is admitted by the ready-bead worker.
+The commander-execution-admission scenario covers the role matrix, actual mode
+lock contention, preserved imported custody, capacity and pre-launch refusal.
+This admission fence does not establish controlled legacy-host drain, native/raw
+custody migration, activation readiness preflight or complete sidebar behavior.
+
+
+Claimed execution now enters the daemon's run-bound native chat Engine after
+normal guarded workspace preparation (Spawner.WithNativeExecution). Neither
+claimed code nor knowledge work creates a tmux/container shell execution path.
+Native-driver runs persist provider/account/model selection in PostgreSQL;
+NativeExecution resolution ignores later role preference and usage-model changes.
+The host owns and journals its initial instruction before delivering it, closing
+the bind/start/send crash gap. Physical one-turn exit uses the existing durable
+native receipt. Startup failure retains custody and workspace for same-identity
+daemon recovery; canonical retry fields bound retries at one minute/five attempts,
+without treating holds as failures or creating human decisions. Runtime/session
+reset cannot replace a live bound execution. Off mode may adopt a bound surviving
+host but refuses fresh process startup. The native-worker scenario uses actual
+Worker/Spawner/HTTP/PostgreSQL/worktree/native-host/fake-Claude processes,
+including adoption and one initial instruction. Native Worker-to-Codex, native
+checkpoint continuation and ceiling enforcement still require full-flow proof;
+legacy attestation/drain, plan revocation and activation remain release work.

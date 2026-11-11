@@ -14,19 +14,22 @@ import (
 // Either ContainerID (code-type) or TmuxPaneID (knowledge-type) is populated;
 // the other stays NULL. The orphan reaper keys off ContainerID.
 type AgentRun struct {
-	ID                  int64
-	ProjectID           int64
-	TaskBeadID          string
-	AgentName           string
-	OpencodeSessionID   string
-	ContainerID         sql.NullString
-	TmuxPaneID          sql.NullString
-	SpawnTime           int64
-	TokensUsed          int64
-	UsdUsed             float64
-	ConsecutiveFailures int64
-	Status              string         // 'running' | 'killed-ceiling' | 'closed' | 'exited'
-	WorktreePath        sql.NullString // NULL = recorded before the column; see spawn.RunWorktree
+	ExecutionDriver, ExecutionRuntime, ExecutionAccount, ExecutionModel string // immutable launch adapter selection (Postgres)
+	ExecutionClaimToken                                                 string // transient launch authority; never a second execution identity
+	ResumeSourceRunID                                                   int64  // transient checkpoint source, verified against the reservation
+	ID                                                                  int64
+	ProjectID                                                           int64
+	TaskBeadID                                                          string
+	AgentName                                                           string
+	OpencodeSessionID                                                   string
+	ContainerID                                                         sql.NullString
+	TmuxPaneID                                                          sql.NullString
+	SpawnTime                                                           int64
+	TokensUsed                                                          int64
+	UsdUsed                                                             float64
+	ConsecutiveFailures                                                 int64
+	Status                                                              string         // 'running' | 'killed-ceiling' | 'closed' | 'exited'
+	WorktreePath                                                        sql.NullString // NULL = recorded before the column; see spawn.RunWorktree
 }
 
 // InsertAgentRun records a fresh operator. tokens_used and usd_used start at
@@ -62,7 +65,12 @@ func (s *Store) GetAgentRun(ctx context.Context, id int64) (*AgentRun, error) {
 		       tokens_used, usd_used, consecutive_failures, status, worktree_path
 		FROM agent_runs WHERE id = ?
 	`, id)
-	return scanAgentRun(row)
+	run, err := scanAgentRun(row)
+	if err != nil || run == nil || !s.postgres {
+		return run, err
+	}
+	err = s.db.QueryRowContext(ctx, `SELECT execution_driver,execution_runtime,execution_account,execution_model FROM agent_runs WHERE id=?`, id).Scan(&run.ExecutionDriver, &run.ExecutionRuntime, &run.ExecutionAccount, &run.ExecutionModel)
+	return run, err
 }
 
 // GetAgentRunByContainer is the orphan-reaper lookup path.
@@ -161,6 +169,9 @@ func (s *Store) IncrementFailures(ctx context.Context, runID int64) (int64, erro
 func (s *Store) MarkClosed(ctx context.Context, runID int64, status string) error {
 	if status == "running" {
 		return fmt.Errorf("store: MarkClosed: status %q is not terminal", status)
+	}
+	if s.postgres {
+		return s.closeSupervisedRun(ctx, runID, status)
 	}
 	res, err := s.db.ExecContext(ctx, `
 		UPDATE agent_runs SET status = ? WHERE id = ?

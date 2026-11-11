@@ -14,9 +14,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/example-user/commander/internal/agentrt"
 	"github.com/example-user/commander/internal/beads"
 	"github.com/example-user/commander/internal/spawn"
 	"github.com/example-user/commander/internal/store"
+	"github.com/example-user/commander/internal/workflowclose"
 	"github.com/example-user/commander/internal/workflowtemplate"
 )
 
@@ -41,10 +43,10 @@ func addendumComment(ctx context.Context, bc beads.Client, dir string, ref workf
 	return *found, nil
 }
 
-func authorizeAddendum(ctx context.Context, project string, owners []string) (string, error) {
+func authorizeAddendum(ctx context.Context, project, block string, owners []string) (string, error) {
 	actor := spawn.CanonicalRole(os.Getenv("COMMANDER_ROLE"))
 	owner := ownerBeadOf(actor, owners)
-	if callerIsOperator("") || owner == "" {
+	if callerIsOperator("") {
 		return "", fmt.Errorf("only the registered owning Manager may record a review addendum")
 	}
 	st, done, err := needsYouStoreFn()
@@ -58,6 +60,21 @@ func authorizeAddendum(ctx context.Context, project string, owners []string) (st
 	}
 	if p == nil {
 		return "", fmt.Errorf("unknown project")
+	}
+	if st.IsPostgres() {
+		var current string
+		var registered bool
+		err = st.DB().QueryRowContext(ctx, `SELECT commander_planning_owner(?,?),EXISTS(SELECT 1 FROM commander_sessions WHERE agent_id=?)`, p.ID, block, actor).Scan(&current, &registered)
+		if err != nil {
+			return "", err
+		}
+		if !registered || current != actor {
+			return "", fmt.Errorf("only the current planning Commander may record a review addendum")
+		}
+		return actor, nil
+	}
+	if owner == "" {
+		return "", fmt.Errorf("only the registered owning Manager may record a review addendum")
 	}
 	row, err := st.GetWorkstreamManager(ctx, p.ID, owner)
 	if err != nil {
@@ -114,155 +131,32 @@ func ownerBeadOf(actor string, owners []string) string {
 }
 
 func validateWorkflowAddendum(ctx context.Context, bc beads.Client, dir, project string, block beads.Bead, stepID string, binding workflowtemplate.WriterBinding, r workflowtemplate.AddendumRecord, h workflowtemplate.Head, review workflowtemplate.Review) error {
-	if r.ID == "" || r.Project != project || r.Block != block.ID || r.Step != stepID || r.Binding != binding.Revision || r.Assessment.Head != h.SHA || r.Assessment.Base != h.Base || binding.Head != h.SHA || r.Assessment.Original.Bead != review.ID {
-		return fmt.Errorf("addendum identity, head, base or writer revision differs")
-	}
-	root, err := workflowRoot(ctx, bc, dir, block.ID)
-	if err != nil {
-		return err
-	}
-	// A recorded addendum is judged against every workstream that could have
-	// owned the block when it was recorded, not today's owner chain alone: a
-	// later --undo, or its nested workstream closing, does not void it. The
-	// registration check below still binds the actor to that workstream.
-	owners, err := recordedOwnerRoles(ctx, bc, dir, block.ID, root)
-	if err != nil {
-		return err
-	}
-	owner := ownerBeadOf(r.Actor, owners)
-	if owner == "" {
-		return fmt.Errorf("addendum recording principal is not owning registered Manager")
-	}
-	// Recording attribution is checked against the current registration, within
-	// Commander's documented local advisory role/hook trust boundary.
 	st, done, err := needsYouStoreFn()
 	if err != nil {
 		return err
 	}
 	defer done()
-	proj, err := st.GetProjectByName(ctx, project)
-	if err != nil {
-		return err
-	}
-	if proj == nil {
-		return fmt.Errorf("unknown project")
-	}
-	mgr, err := st.GetWorkstreamManager(ctx, proj.ID, owner)
-	if err != nil {
-		return err
-	}
-	if mgr == nil || mgr.AmRole != store.WorkstreamManagerRole(owner) || spawn.CanonicalRole(r.Actor) != spawn.CanonicalRole(mgr.AmRole) {
-		return fmt.Errorf("addendum recording principal is not owning registered Manager")
-	}
-	if _, err = time.Parse(time.RFC3339Nano, r.RecordedAt); err != nil {
-		return fmt.Errorf("invalid recording time")
-	}
-	original, err := addendumComment(ctx, bc, dir, r.Assessment.Original)
-	if err != nil {
-		return err
-	}
-	assessor, err := bc.Show(ctx, dir, r.AssessmentComment.Bead)
-	if err != nil {
-		return err
-	}
-	if assessor == nil || assessor.Status != "closed" || assessor.ID == review.ID {
-		return fmt.Errorf("closed independent assessor required")
-	}
-	assessment, err := addendumComment(ctx, bc, dir, r.AssessmentComment)
-	if err != nil {
-		return err
-	}
-	if original.Author != r.OriginalAuthor || original.CreatedAt != r.OriginalCreatedAt || assessment.Author != r.AssessmentAuthor || assessment.CreatedAt != r.AssessmentCreatedAt {
-		return fmt.Errorf("original or assessment attribution changed")
-	}
-	var a workflowtemplate.AddendumAssessment
-	switch r.Representation {
-	case "":
-		a, err = workflowtemplate.ParseAssessment(assessment.Text)
-	case workflowtemplate.ManagerTranscription:
-		// Validate bounded claims without attributing their serialization to the
-		// original assessor. Exact source identity/bytes and attribution were
-		// checked above; actor/time belong to this current Manager record.
-		if strings.Contains(assessment.Text, workflowtemplate.AssessmentPrefix) || strings.TrimSpace(assessment.Text) == "" {
-			return fmt.Errorf("Manager transcription requires retained prose assessment")
-		}
-		raw, _ := json.Marshal(r.Assessment)
-		a, err = workflowtemplate.ParseAssessment(workflowtemplate.AssessmentPrefix + string(raw))
-	default:
-		return fmt.Errorf("unsupported assessment representation")
-	}
-	if err != nil {
-		return err
-	}
-	ab, _ := json.Marshal(a)
-	rb, _ := json.Marshal(r.Assessment)
-	if string(ab) != string(rb) {
-		return fmt.Errorf("assessment attestation differs")
-	}
-	// This existing policy comment is evidence of the clause; the current door
-	// records the owning Manager's withdrawal and links it to that exact comment.
-	if _, err = addendumComment(ctx, bc, dir, r.PolicyComment); err != nil {
-		return err
-	}
-	if other, err := workflowRoot(ctx, bc, dir, r.PolicyComment.Bead); err != nil || other != root {
-		return fmt.Errorf("policy comment outside workstream")
-	}
-	roles, err := workflowRolesInScope(ctx, bc, dir, project, root, review.ID)
-	if err != nil {
-		return err
-	}
-	assessRoles, err := workflowRolesInScope(ctx, bc, dir, project, root, assessor.ID)
-	if err != nil {
-		return err
-	}
-	if !slices.Equal(roles, r.OriginalRoles) || !slices.Equal(assessRoles, r.AssessorRoles) || roleOverlap(roles, assessRoles) {
-		return fmt.Errorf("original/assessor task-run identity differs or overlaps")
-	}
-	for _, task := range binding.Tasks {
-		writers, e := workflowRolesInScope(ctx, bc, dir, project, root, task)
-		if e != nil {
-			return e
-		}
-		if roleOverlap(roles, writers) || roleOverlap(assessRoles, writers) {
-			return fmt.Errorf("original or assessor overlaps writer")
-		}
-	}
-	if err = workflowtemplate.AddendumVerdict(review, h.SHA, original.Text); err != nil {
-		return err
-	}
-	return workflowtemplate.VerifyAddendumArtifacts(a, original.Text)
+	checks := workflowVerifier()
+	return (workflowclose.Provenance{Canonical: st.IsPostgres(), Q: st.DB(), Home: agentrt.CommanderHome(), Checks: &checks}).ValidateAddendum(ctx, bc, dir, project, block, stepID, binding, r, h, review)
 }
-
+func validateNewWorkflowAddendum(ctx context.Context, bc beads.Client, dir, project string, block beads.Bead, stepID string, binding workflowtemplate.WriterBinding, r workflowtemplate.AddendumRecord, h workflowtemplate.Head, review workflowtemplate.Review) error {
+	st, done, err := needsYouStoreFn()
+	if err != nil {
+		return err
+	}
+	defer done()
+	checks := workflowVerifier()
+	return (workflowclose.Provenance{Canonical: st.IsPostgres(), Q: st.DB(), Home: agentrt.CommanderHome(), Checks: &checks}).ValidateNewAddendum(ctx, bc, dir, project, block, stepID, binding, r, h, review)
+}
 func resolveWorkflowAddendum(ctx context.Context, bc beads.Client, dir, project string, block beads.Bead, stepID string, binding workflowtemplate.WriterBinding, h workflowtemplate.Head, p *workflowtemplate.Proof, review workflowtemplate.Review) error {
-	cs, err := bc.Comments(ctx, dir, block.ID)
+	st, done, err := needsYouStoreFn()
 	if err != nil {
 		return err
 	}
-	matches := 0
-	var record workflowtemplate.AddendumRecord
-	for _, c := range cs {
-		raw, ok := strings.CutPrefix(c.Text, workflowtemplate.AddendumPrefix)
-		if !ok {
-			continue
-		}
-		var candidate workflowtemplate.AddendumRecord
-		if json.Unmarshal([]byte(raw), &candidate) != nil || candidate.ID != p.Addendum.ID {
-			continue
-		}
-		matches++
-		if err = workflowtemplate.DecodeAddendumPayload(raw, *p.Addendum, &record); err != nil {
-			return err
-		}
-	}
-	if matches != 1 {
-		return fmt.Errorf("exactly one supported addendum record required")
-	}
-	if record.Assessment.Original.Bead != p.ReviewBead {
-		return fmt.Errorf("original review attribution differs")
-	}
-	return validateWorkflowAddendum(ctx, bc, dir, project, block, stepID, binding, record, h, review)
+	defer done()
+	checks := workflowVerifier()
+	return (workflowclose.Provenance{Canonical: st.IsPostgres(), Q: st.DB(), Home: agentrt.CommanderHome(), Checks: &checks}).ResolveAddendum(ctx, bc, dir, project, block, stepID, binding, h, p, review)
 }
-
 func runWorkflowAddendum(args []string, stdout, stderr *os.File) int {
 	fs := flag.NewFlagSet("workflow add-review-addendum", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -302,7 +196,7 @@ func runWorkflowAddendum(args []string, stdout, stderr *os.File) int {
 	if err != nil {
 		return fail(err)
 	}
-	actor, err := authorizeAddendum(ctx, *project, owners)
+	actor, err := authorizeAddendum(ctx, *project, *blockID, owners)
 	if err != nil {
 		return fail(err)
 	}
@@ -436,7 +330,7 @@ func runWorkflowAddendum(args []string, stdout, stderr *os.File) int {
 	if err != nil {
 		return fail(err)
 	}
-	if err = validateWorkflowAddendum(ctx, bc, proj.Path, *project, block.Bead, *stepID, binding, r, h, review); err != nil {
+	if err = validateNewWorkflowAddendum(ctx, bc, proj.Path, *project, block.Bead, *stepID, binding, r, h, review); err != nil {
 		return fail(err)
 	}
 	after, err := workflowtemplate.ReadHead(ctx, workflowGH, binding.PR)

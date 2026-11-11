@@ -13,7 +13,7 @@ import (
 // Commander treats a chosen account as a preference. At a limit it can use
 // any connected account, regardless of provider, and retains that preference.
 func planChatStart(home, role string, fresh bool, usage map[string]Usage, now time.Time, hooksReady func() bool) (managerPlan, error) {
-	if role != "commander" {
+	if !IsCommanderRole(role) {
 		return planManagerStart(home, role, fresh, usage, now, hooksReady)
 	}
 	cur := ProviderOf(home, role)

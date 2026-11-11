@@ -126,7 +126,11 @@ func gateApply(ctx context.Context, st *store.Store, projectName, beadID, templa
 			if err := requireGateClosesHeld(ctx, bc, p.Path, e.ID, "internal-gate apply (it retires "+e.Gate.Name+")"); err != nil {
 				return nil, err
 			}
-			if err := gates.Remove(ctx, bc, p.Path, p.ID, beadID, e.Gate.Name); err != nil {
+			retireCtx, ctxErr := noPRCompletionContext(ctx, bc, p.Path, e.ID, waiver)
+			if ctxErr != nil {
+				return nil, ctxErr
+			}
+			if err := gates.Remove(retireCtx, bc, p.Path, p.ID, beadID, e.Gate.Name); err != nil {
 				return nil, err
 			}
 			dropped = append(dropped, e.Gate.Name)

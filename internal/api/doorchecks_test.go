@@ -210,8 +210,10 @@ func TestDoorFailOpenLogIsRateLimited(t *testing.T) {
 func TestExecRunner_DropsCommanderRole(t *testing.T) {
 	t.Setenv("COMMANDER_ROLE", "manager-x")
 	t.Setenv("COMMANDER_MANAGER_ROLE", "manager-y")
+	t.Setenv("COMMANDER_RUN_ID", "999")
+	t.Setenv("COMMANDER_RUN_SESSION", "old-agent-session")
 	script := filepath.Join(t.TempDir(), "cmdr")
-	if err := os.WriteFile(script, []byte("#!/bin/sh\nprintf 'role=%s%s' \"$COMMANDER_ROLE\" \"$COMMANDER_MANAGER_ROLE\"\n"), 0o755); err != nil {
+	if err := os.WriteFile(script, []byte("#!/bin/sh\nprintf 'role=%s%s%s%s' \"$COMMANDER_ROLE\" \"$COMMANDER_MANAGER_ROLE\" \"$COMMANDER_RUN_ID\" \"$COMMANDER_RUN_SESSION\"\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if res := ExecRunner(script)(context.Background(), []string{"x"}); res.Stdout != "role=" {

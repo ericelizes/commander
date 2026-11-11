@@ -14,6 +14,7 @@ import (
 
 	"github.com/example-user/commander/internal/agentmail"
 	"github.com/example-user/commander/internal/beads"
+	"github.com/example-user/commander/internal/livedata"
 	"github.com/example-user/commander/internal/ownercompat"
 	"github.com/example-user/commander/internal/store"
 	"github.com/example-user/commander/internal/wsmgr"
@@ -30,18 +31,23 @@ func runInternalResolveNeeds(args []string, stdout, stderr *os.File) int {
 	bead := fs.String("bead", "", "the flagged step")
 	action := fs.String("action", "", "approve, defer or decide")
 	choice := fs.String("choice", "", "with --action decide: the option the user picked")
+	revision := fs.Int64("revision", 0, "the displayed planning revision being answered")
 	resume := fs.Bool("resume-only", false, "only finish an already saved answer")
 	text := fs.String("text", "", "with --action decide: the user's free-text answer")
 	if err := fs.Parse(args); err != nil {
 		emitErr(stderr, fmt.Sprintf("parse flags: %v", err))
 		return 1
 	}
-	if *action == "decide" && strings.TrimSpace(*choice) == "" && strings.TrimSpace(*text) == "" {
+	if *action == "decide" && !*resume && strings.TrimSpace(*choice) == "" && strings.TrimSpace(*text) == "" {
 		emitErr(stderr, "--action decide needs --choice and/or --text")
 		return 1
 	}
 	if *project == "" || *bead == "" || (*action != "approve" && *action != "defer" && *action != "decide") {
 		emitErr(stderr, "need --project, --bead and --action approve|defer|decide")
+		return 1
+	}
+	if beads.HasExecutionAttribution(os.Environ()) {
+		emitErr(stderr, "execution sessions cannot record or apply human decisions")
 		return 1
 	}
 	return editObjective(*project, stdout, stderr, func(ctx context.Context, dir string) (internalObjectiveEditResult, error) {
@@ -62,6 +68,21 @@ func runInternalResolveNeeds(args []string, stdout, stderr *os.File) int {
 		}
 		if p == nil {
 			return result, fmt.Errorf("unknown project %q", *project)
+		}
+		if st.IsPostgres() && os.Getenv("COMMANDER_ROLE") != "" {
+			active, e := st.ActiveOrchestration(ctx)
+			if e != nil {
+				return result, e
+			}
+			if active {
+				owner, e := st.Jurisdiction(ctx, p.ID, *bead)
+				if e != nil {
+					return result, e
+				}
+				if owner.CommanderID != os.Getenv("COMMANDER_ROLE") {
+					return result, fmt.Errorf("a human answer is recorded by the user or this bead's current planning Commander; execution agents and other scopes cannot answer it")
+				}
+			}
 		}
 		saved, err := st.GetNeedsResolution(ctx, p.ID, *bead)
 		if err != nil {
@@ -94,6 +115,34 @@ func runInternalResolveNeeds(args []string, stdout, stderr *os.File) int {
 		b, err := bc.Show(ctx, dir, *bead)
 		if err != nil {
 			return result, err
+		}
+		if !*resume && *revision > 0 && (b == nil || b.PlanRevision != *revision) {
+			return result, fmt.Errorf("this work changed after the decision was displayed; refresh it before answering")
+		}
+		if st.IsPostgres() && !*resume && b != nil && b.Status != "closed" && !slices.Contains(b.Labels, beads.DecisionAnsweredLabel) {
+			card, e := st.GetNeedsYou(ctx, p.ID, *bead)
+			if e != nil {
+				return result, e
+			}
+			if card == nil || card.Decision == "" {
+				context := strings.TrimSpace(b.Description)
+				ask := b.Title
+				if card != nil {
+					if card.Ask != "" {
+						ask = card.Ask
+					}
+					if card.Note != "" {
+						context = card.Note
+					}
+				}
+				d := &store.Decision{Question: ask, Context: context, Options: []store.DecisionOption{{Label: "Approve", Approves: true}, {Label: "Defer"}}}
+				if beads.HumanApprovalGate(*b) {
+					d = livedata.GateDecision(b.Title, context)
+				}
+				if err := st.RecordPitch(ctx, p.ID, *bead, d.Question, d.JSON(), &store.Basis{Spec: beads.SpecHash(*b)}); err != nil {
+					return result, err
+				}
+			}
 		}
 		answered := b != nil && slices.Contains(b.Labels, beads.DecisionAnsweredLabel)
 		generation, err := st.NeedsGeneration(ctx, p.ID, *bead)
@@ -136,8 +185,19 @@ func runInternalResolveNeeds(args []string, stdout, stderr *os.File) int {
 				ask = n.Ask
 			}
 			r = &store.NeedsResolution{ProjectID: p.ID, BeadID: *bead, Generation: generation, AnswerID: rand.Text(), Action: *action, Choice: *choice, Text: *text, Ask: ask,
+				InputPlanRevision: func() int64 {
+					if b != nil {
+						return b.PlanRevision
+					}
+					return 0
+				}(),
 				Manager: wsmgr.Role(wsmgr.Owner(ctx, bc, dir, *bead))}
-			if *action == "decide" && b != nil && slices.Contains(b.Labels, beads.GateLabel) {
+			r.Manager, err = currentNeedsPlanner(ctx, st, p.ID, *bead, r.Manager)
+			if err != nil {
+				return result, err
+			}
+			r.Approved = *action == "approve" || *action == "decide" && approvingChoice(*choice, n)
+			if *action == "decide" && b != nil && beads.HumanApprovalGate(*b) {
 				for _, c := range []string{beads.GateApprove, beads.GateChange, beads.GateDrop} {
 					if strings.EqualFold(strings.TrimSpace(*choice), c) {
 						r.GateChoice = c
@@ -170,6 +230,10 @@ func runInternalResolveNeeds(args []string, stdout, stderr *os.File) int {
 				return result, err
 			}
 		}
+		applyingManager, err := currentNeedsPlanner(ctx, st, p.ID, *bead, r.Manager)
+		if err != nil {
+			return result, err
+		}
 		if r.State < store.ResolutionBeadWritten {
 			// Collect every read and assignment before persisting or mutating beads.
 			writes := beads.NewStateWrite(bc)
@@ -195,18 +259,18 @@ func runInternalResolveNeeds(args []string, stdout, stderr *os.File) int {
 					}
 					result.State = beads.StateNotStarted
 				} else if r.Action == "decide" {
-					if err := applyStepOwner(ctx, writes, dir, *bead, r.Manager); err != nil {
+					if err := applyStepOwner(ctx, writes, dir, *bead, applyingManager); err != nil {
 						return result, err
 					}
-					result.Owner = r.Manager
+					result.Owner = applyingManager
 				}
 				// The Manager's name is accountability, not a holder: the answered step waits on its dispatch.
-				if (r.Action == "decide" || r.Action == "defer") && r.GateChoice != beads.GateDrop && r.Manager != "" && b != nil && !slices.Contains(b.Labels, beads.GateLabel) && !hasHoldingWait(b) {
+				if (r.Action == "decide" || r.Action == "defer") && r.GateChoice != beads.GateDrop && applyingManager != "" && b != nil && !beads.HumanApprovalGate(*b) && !hasHoldingWait(b) {
 					if r.Action == "defer" {
-						if err := applyStepOwner(ctx, writes, dir, *bead, r.Manager); err != nil {
+						if err := applyStepOwner(ctx, writes, dir, *bead, applyingManager); err != nil {
 							return result, err
 						}
-						result.Owner = r.Manager
+						result.Owner = applyingManager
 					}
 					w := beads.Wait{Kind: beads.WaitUntil, Since: time.Now(), Until: time.Now().Add(2 * time.Minute), Ref: beads.ManagerDispatchWait}
 					if err := writes.SetLabel(ctx, dir, *bead, w.Label(), true); err != nil {
@@ -348,7 +412,7 @@ func repairApprovedGate(ctx context.Context, st *store.Store, bc beads.Client, d
 		return err
 	}
 	b, err := bc.Show(ctx, dir, r.BeadID)
-	if err != nil || b == nil || b.Status == "closed" || !slices.Contains(b.Labels, beads.GateLabel) || !slices.Contains(b.Labels, beads.DecisionAnsweredLabel) {
+	if err != nil || b == nil || b.Status == "closed" || !beads.HumanApprovalGate(*b) || !slices.Contains(b.Labels, beads.DecisionAnsweredLabel) {
 		return err
 	}
 	p, err := st.GetProject(ctx, projectID)
@@ -392,7 +456,17 @@ func mailNeedsResolution(ctx context.Context, r store.NeedsResolution) error {
 		return err
 	}
 	defer cleanup()
-	return sendRoleMail(ctx, st, client, key, "commander", []string{r.Manager}, subject, body, agentmail.SendOptions{Importance: "normal"})
+	target := r.Manager
+	state, closeState, err := needsYouStoreFn()
+	if err != nil {
+		return err
+	}
+	defer closeState()
+	target, err = currentNeedsPlanner(ctx, state, r.ProjectID, r.BeadID, target)
+	if err != nil {
+		return err
+	}
+	return sendRoleMail(ctx, st, client, key, "commander", []string{target}, subject, body, agentmail.SendOptions{Importance: "normal"})
 }
 
 // needsResolutionMail is the answer's mail. Every subject here must pass
@@ -423,7 +497,7 @@ func workflowGateMail(bead, ask, choice, text string) (subject, body string) {
 	case beads.GateChange:
 		body = fmt.Sprintf("the user wants the workflow %q (gate %s) changed. It stays unapproved and is now owned by the Manager. Rewrite it on the gate bead, then explicitly re-flag with --state needs-user --decision to ask again.", ask, bead)
 	default:
-		body = fmt.Sprintf("the user dropped the workflow %q (gate %s). The gate is parked. Do not start it: stop and close the track.", ask, bead)
+		body = fmt.Sprintf("the user dropped the workflow %q (gate %s). The gate is parked. Do not start the work: park the affected workstream and preserve its unpassed approval.", ask, bead)
 	}
 	if c := strings.TrimSpace(choice); c != "" && c != beads.GateApprove {
 		body += "\n\nHe picked: " + c
@@ -456,4 +530,24 @@ func hasHoldingWait(b *beads.Bead) bool {
 		}
 	}
 	return false
+}
+
+// Journal provenance stays immutable; delivery and new custody follow current
+// jurisdiction so a handoff cannot resurrect a permanent Manager role.
+func currentNeedsPlanner(ctx context.Context, st *store.Store, pid int64, bead, legacy string) (string, error) {
+	if !st.IsPostgres() {
+		return legacy, nil
+	}
+	active, e := st.ActiveOrchestration(ctx)
+	if e != nil {
+		return "", e
+	}
+	if !active {
+		return legacy, nil
+	}
+	owner, e := st.Jurisdiction(ctx, pid, bead)
+	if e != nil {
+		return "", e
+	}
+	return owner.CommanderID, nil
 }

@@ -20,6 +20,7 @@ export interface Decision {
 
 // One open needs-the user step (livedata.NeedsYou).
 export interface NeedsYouItem {
+ plan_revision?: number
   stale_why?: string // the server-derived reason this card needs another look
   project: string
   bead_id: string

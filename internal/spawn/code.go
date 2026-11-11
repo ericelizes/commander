@@ -95,7 +95,7 @@ func (s *Spawner) spawnCode(ctx context.Context, req SpawnRequest) (*SpawnResult
 	if err := os.MkdirAll(operatorsDir, 0o755); err != nil {
 		return bail(fmt.Errorf("spawn: create operators dir: %w", err))
 	}
-	if err := promptassets.EnsureAgentFor(kind, promptassets.RoleOperatorCode, agentName); err != nil {
+	if err := promptassets.EnsureAgentFor(kind, req.promptRole(promptassets.RoleOperatorCode), agentName); err != nil {
 		return bail(fmt.Errorf("spawn: ensure operator agent prompt: %w", err))
 	}
 
@@ -376,6 +376,9 @@ func useClaudeInContainer(opts *docker.SpawnOptions, req SpawnRequest, agentName
 // bootstrapPrompt is the seed message the operator sees on first invocation.
 // Kept terse — operator behavior lives in prompts/operator-code.md.
 func bootstrapPrompt(req SpawnRequest) string {
+	if req.ExecutionClaimToken != "" {
+		return executionBootstrapPrompt(req, fmt.Sprintf("Your code workspace is mounted at /worktree on branch %s.", req.Branch))
+	}
 	return fmt.Sprintf(
 		"You are the Operator for task %s in project %q. "+
 			"Worktree mounted at /worktree, branch %s. "+

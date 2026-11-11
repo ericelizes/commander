@@ -22,7 +22,7 @@ func workflowNode(b beads.Bead, d beads.Detail, reviewBlocks map[string]bool) *w
 		}
 	}
 	guarded := workflowtemplate.Guardable(b) && slices.ContainsFunc(n.Waits, func(id string) bool { return reviewBlocks[id] })
-	if workflowtemplate.Label(b, workflowtemplate.LabelTemplate) == "" && !workflowtemplate.MergeTarget(n) && !guarded {
+	if workflowtemplate.Label(b, workflowtemplate.LabelTemplate) == "" && workflowtemplate.Label(b, workflowtemplate.LabelStep) == "" && !workflowtemplate.MergeTarget(n) && !guarded {
 		return nil
 	}
 	for _, c := range d.Comments {

@@ -1,0 +1,28 @@
+{
+  "name": "Claimed code and knowledge agents carry canonical execution authority through both subscription runtimes",
+  "kinds": [
+    "code",
+    "knowledge"
+  ],
+  "runtimes": [
+    "claude",
+    "codex"
+  ],
+  "commander": "commander-urgent",
+  "expectations": [
+    "claim and native launcher share immutable run and session",
+    "installed prompt does not grant tree editing",
+    "canonical owner is read before launch",
+    "code stays in its assigned worktree",
+    "knowledge follows project artifact policy",
+    "question follows a live ownership handoff",
+    "no model process starts during this fixture",
+    "active default Commander plans directly with atomic edits",
+    "scoped Commander uses jurisdiction contract before generic execution activation",
+    "shadow default Commander retains legacy recovery contract"
+  ],
+  "planners": [
+    "commander",
+    "commander-urgent"
+  ]
+}

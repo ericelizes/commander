@@ -1,11 +1,11 @@
 package gates
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"os/exec"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -32,7 +32,7 @@ func RunShell(ctx context.Context, dir, command string) (string, error) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
 	cmd.WaitDelay = 2 * time.Second
-	var out bytes.Buffer
+	var out checkOutputTail
 	cmd.Stdout, cmd.Stderr = &out, &out
 	err := cmd.Run()
 	if ctx.Err() == context.DeadlineExceeded {
@@ -63,3 +63,29 @@ func EvalAuto(ctx context.Context, run RunFn, dir, command string) (status, evid
 	}
 	return status, evidence
 }
+
+// Check commands may be noisy; retained output must not grow with their logs.
+// Sixteen KiB always covers the final maxEvidence Unicode code points.
+const checkOutputBytes = 16 * 1024
+
+type checkOutputTail struct {
+	mu   sync.Mutex
+	data []byte
+}
+
+func (t *checkOutputTail) Write(p []byte) (int, error) {
+	n := len(p)
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if len(p) >= checkOutputBytes {
+		t.data = append(t.data[:0], p[len(p)-checkOutputBytes:]...)
+		return n, nil
+	}
+	if drop := len(t.data) + len(p) - checkOutputBytes; drop > 0 {
+		copy(t.data, t.data[drop:])
+		t.data = t.data[:len(t.data)-drop]
+	}
+	t.data = append(t.data, p...)
+	return n, nil
+}
+func (t *checkOutputTail) String() string { t.mu.Lock(); defer t.mu.Unlock(); return string(t.data) }

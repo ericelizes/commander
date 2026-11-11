@@ -1,0 +1,7 @@
+{
+  "name": "Competing Commander plans commit once without partial evidence",
+  "titles": ["Implement urgent integration", "Keep the current integration"],
+  "evidence": "The complete planning batch committed",
+  "expected_winners": 1,
+  "expected_comments": 1
+}

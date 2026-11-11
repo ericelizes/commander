@@ -1,0 +1,22 @@
+{
+  "role": "operator-native-claim",
+  "goal": "Bind native processes to canonical execution custody and fence late state updates",
+  "runners": [
+    "internal/chat:TestCanonicalNativeExecutionResolvesClaimWorkspaceAndContract",
+    "internal/chat:TestNativeChatProcessStateAndEnvironmentRetainImmutableExecutionIdentity",
+    "internal/chat:TestCanonicalNativeImportedPlannerUsesPlanningContractAndRetiredScopeCannotRestart",
+    "internal/chat:TestCanonicalNativeExecutionBlocksFreshHeldProcessAndAmbiguousIdentity",
+    "internal/chat:TestNativeExecutionRechecksClaimBeforeLaunchingAProcess",
+    "internal/chat:TestNativeExecutionRejectsDifferentOrUnstampedHostWithoutKillingIt"
+  ],
+  "invariants": [
+    "Execution prompt, workspace and session come from the current canonical run",
+    "Inherited run and Manager environment cannot replace immutable custody",
+    "A late old process cannot write the replacement run's state",
+    "Restart adoption retains the same stamped run and process",
+    "Different execution sessions do not reuse Codex threads or old role handoffs",
+    "A held execution may be adopted but cannot start a fresh process",
+    "Retired planning registrations cannot restart as permanent Managers",
+    "Unproven or differently bound hosts remain alive when execution adoption is refused"
+  ]
+}

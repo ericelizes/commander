@@ -1,0 +1,7 @@
+{
+ "name": "A saved user answer follows ownership after interruption without another ask",
+ "answer_id": "saved-user-approval",
+ "choice": "Approve",
+ "next_owner": "commander-urgent",
+ "expected_prompt": "--action decide --resume-only"
+}

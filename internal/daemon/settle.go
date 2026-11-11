@@ -106,6 +106,12 @@ func (s runSettler) exited(ctx context.Context, run store.AgentRun) error {
 	manager := s.managerOf(ctx, run)
 	report := s.finalReport(ctx, run)
 	if report == "" {
+		if waiting, e := s.questionWait(ctx, run); e != nil {
+			return e
+		} else if waiting {
+			s.freeze(ctx, run)
+			return nil
+		}
 		return s.diedBecause(ctx, run, false, "exited without writing a final report on the bead")
 	}
 	s.reported.settling(run, s.clock())
@@ -264,6 +270,12 @@ func (s runSettler) stoppedOnRequest(ctx context.Context, stop spawn.StoppedRun)
 // (restart: killed by a cmdrd restart or a sleep; else a crash, restarted
 // once); otherwise, or when that fails, the step goes back to the Manager.
 func (s runSettler) diedWith(ctx context.Context, run store.AgentRun, restart bool, why, subject, body string) error {
+	if waiting, e := s.questionWait(ctx, run); e != nil {
+		return e
+	} else if waiting {
+		s.freeze(ctx, run)
+		return nil
+	}
 	manager := s.managerOf(ctx, run)
 	// Make before break: the Manager to recover wait (and the Manager's name) replaces the dead
 	// claim in the same write; a respawn replaces both with the new run.

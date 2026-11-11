@@ -35,7 +35,7 @@ func RepairPublication(ctx context.Context, bc beads.Client, dir, id, parent str
 		actor = "user"
 	}
 	// The CLI also rejects Operators (including legacy inherited-role callers).
-	if actor != "user" && actor != "commander" && !strings.HasPrefix(actor, "manager-") {
+	if !beads.CanonicalPublication(ctx) && actor != "user" && actor != "commander" && !strings.HasPrefix(actor, "manager-") {
 		return fmt.Errorf("publication repair: unauthorized caller %s", actor)
 	}
 	validate := func(full bool) (map[string]beads.Detail, string, error) {
@@ -158,7 +158,7 @@ func RepairPublication(ctx context.Context, bc beads.Client, dir, id, parent str
 		// A nested owner repairs only inside its own subtree: no waiter above
 		// its workstream bead.
 		below := map[string]bool{}
-		if actor != "user" && actor != "commander" && actor != store.WorkstreamManagerRole(root) {
+		if !beads.CanonicalPublication(ctx) && actor != "user" && actor != "commander" && actor != store.WorkstreamManagerRole(root) {
 			own := nestedOwnerOf(ctx, bc, dir, upward, actor)
 			if own == "" {
 				return nil, "", fmt.Errorf("publication repair: only owning Manager %s may repair", store.WorkstreamManagerRole(root))
@@ -261,6 +261,10 @@ func RepairPublication(ctx context.Context, bc beads.Client, dir, id, parent str
 	}
 	graph, intent, err := validate(true)
 	if err != nil || dry {
+		return err
+	}
+	ctx, err = beads.ActivatePublicationRepair(ctx, id, parent, waiters, intent)
+	if err != nil {
 		return err
 	}
 	noted := false

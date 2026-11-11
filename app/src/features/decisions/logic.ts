@@ -37,6 +37,7 @@ export function validationHint(d: Decision): string {
 // The argv for POST /api/cmd that resolves a flag.
 export function resolveArgv(item: NeedsYouItem, action: ResolveAction, choice?: string, note?: string): string[] {
   const argv = ['internal-resolve-needs', '--project', item.project, '--bead', item.bead_id, '--action', action]
+ if (item.plan_revision) argv.push('--revision', String(item.plan_revision))
   if (action === 'decide') {
     if (choice) argv.push('--choice', choice)
     const text = (note ?? '').trim()

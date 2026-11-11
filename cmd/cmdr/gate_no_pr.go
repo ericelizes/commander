@@ -73,7 +73,18 @@ func newNoPRWaiver(ctx context.Context, bc beads.Client, dir, stage, reason, evi
 	if evidence == "" {
 		return nil, fmt.Errorf("--no-pr needs --evidence naming the user's approval of the ship (answer id or decision)")
 	}
-	if role != "" && role != "commander" {
+	if beads.PostgresConfigured() && role != "" {
+		b, err := beads.FreshShow(ctx, freshReader(bc), dir, stage)
+		if err != nil {
+			return nil, err
+		}
+		if b == nil {
+			return nil, beads.ErrNotFound
+		}
+		if b.PlanningCommander != role {
+			return nil, fmt.Errorf("no-PR waiver belongs to planning Commander %s", b.PlanningCommander)
+		}
+	} else if role != "" && role != "commander" {
 		owners, err := ownerRoles(ctx, freshReader(bc), dir, stage)
 		if err != nil {
 			return nil, err
@@ -97,3 +108,26 @@ func newNoPRWaiver(ctx context.Context, bc beads.Client, dir, stage, reason, evi
 }
 
 func flattenLine(s string) string { return strings.Join(strings.Fields(s), " ") }
+
+func noPRCompletionContext(ctx context.Context, bc beads.Client, dir, id string, w *noPRWaiver) (context.Context, error) {
+	if w == nil || !beads.PostgresConfigured() {
+		return ctx, nil
+	}
+	bc = freshReader(bc)
+	b, err := beads.FreshShow(ctx, bc, dir, id)
+	if err != nil {
+		return ctx, err
+	}
+	if b == nil {
+		return ctx, beads.ErrNotFound
+	}
+	details, err := beads.FreshDetails(ctx, bc, dir, []string{id})
+	if err != nil {
+		return ctx, err
+	}
+	d, ok := details[id]
+	if !ok {
+		return ctx, fmt.Errorf("missing gate definition for %s", id)
+	}
+	return beads.WithCompletionWaivers(ctx, []beads.CompletionWaiver{{Bead: id, Definition: beads.CompletionDefinition(*b, d), Reason: w.Reason, Evidence: w.Evidence}}), nil
+}

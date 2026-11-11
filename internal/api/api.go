@@ -24,10 +24,12 @@ import (
 	"github.com/example-user/commander/internal/agentmail"
 	"github.com/example-user/commander/internal/beads"
 	"github.com/example-user/commander/internal/chat"
+	"github.com/example-user/commander/internal/gates"
 	"github.com/example-user/commander/internal/linearsync"
 	"github.com/example-user/commander/internal/livedata"
 	"github.com/example-user/commander/internal/overview"
 	"github.com/example-user/commander/internal/store"
+	"github.com/example-user/commander/internal/workflowtemplate"
 )
 
 // DefaultInterval is how often the sources are polled for a changed snapshot.
@@ -38,6 +40,9 @@ const pingInterval = 20 * time.Second
 
 // Options configures a Server.
 type Options struct {
+	AutomaticGateRun gates.RunFn // optional automatic-check runner; production uses bounded gates.RunShell
+	// WorkflowGH overrides only external GitHub reads in the shared close verifier.
+	WorkflowGH workflowtemplate.GHRunner
 	Changes    <-chan struct{} // committed database notifications; nil retains legacy polling
 	StateStore *store.Store    // canonical Postgres state and replay endpoint
 
@@ -86,10 +91,11 @@ type Options struct {
 
 // Server holds the latest snapshot and fans changes out to WebSocket clients.
 type Server struct {
-	overviews    *overview.Cache
-	overviewKick atomic.Bool // a background first load for Overview is under way
-	signins      signins
-	opts         Options
+	automaticGateChecks automaticGateFlights
+	overviews           *overview.Cache
+	overviewKick        atomic.Bool // a background first load for Overview is under way
+	signins             signins
+	opts                Options
 
 	refreshMu   sync.Mutex  // one Source call at a time
 	loadKept    atomic.Bool // the latest load was degraded, served last-good rows or was dropped
@@ -326,13 +332,19 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/events", s.auth(http.HandlerFunc(s.serveEvents)))
 	mux.Handle("GET /api/state/events", s.auth(http.HandlerFunc(s.serveStateEvents)))
 	mux.Handle("GET /api/livedata", s.auth(http.HandlerFunc(s.serveLiveData)))
+	mux.Handle("POST "+beads.AutomaticGatePath, s.auth(http.HandlerFunc(s.serveAutomaticGateCheck)))
+	mux.Handle("POST "+beads.PublicationPath, s.auth(http.HandlerFunc(s.servePublication)))
+	mux.Handle("POST "+DecisionReconciliationPath, s.auth(http.HandlerFunc(s.serveDecisionReconciliation)))
 	mux.Handle("POST "+beads.DoorPath, s.auth(http.HandlerFunc(s.serveWrite)))
+	mux.Handle("POST "+beads.PlanPath, s.auth(http.HandlerFunc(s.serveWrite)))
+	mux.Handle("POST "+beads.PlanProposePath, s.auth(http.HandlerFunc(s.serveWrite)))
 	mux.Handle("POST /api/cmd", s.auth(http.HandlerFunc(s.serveCmd)))
 	mux.Handle("GET /app", http.RedirectHandler("/app/", http.StatusMovedPermanently))
 	mux.Handle("GET /app/", appHandler(s.opts.AppDir, s.opts.AppDevURL))
 	s.registerTabs(mux)
 	s.registerAppShot(mux)
 	s.chatRoutes(mux)
+	s.jurisdictionRoutes(mux)
 	s.settingsRoutes(mux)
 	mux.Handle("POST /api/linear/key", s.auth(http.HandlerFunc(s.serveLinearKey)))
 	mux.Handle("DELETE /api/linear/key", s.auth(http.HandlerFunc(s.serveLinearKey)))

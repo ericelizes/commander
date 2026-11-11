@@ -156,6 +156,11 @@ func AllFresh(ctx context.Context, bc beads.Client, dir string, projectID int64)
 	return All(ctx, beads.ForActions(bc), dir, projectID)
 }
 
+// AutomaticFresh reads only automatic condition gates for the bounded watcher.
+func AutomaticFresh(ctx context.Context, bc beads.Client, dir string, projectID int64) ([]Node, error) {
+	return list(ctx, beads.ForActions(bc), dir, projectID, "verifier:auto")
+}
+
 // ForStage lists the gates of one stage bead for display.
 func ForStage(ctx context.Context, bc beads.Client, dir string, projectID int64, stageID string) ([]Node, error) {
 	return list(ctx, bc, dir, projectID, stageLabelPfx+escapeLabel(stageID))
@@ -270,6 +275,10 @@ func Remove(ctx context.Context, bc beads.Client, dir string, projectID int64, s
 	}
 	for _, n := range ns {
 		if n.Gate.Name == name {
+			if beads.PostgresConfigured() {
+				closed := "closed"
+				return bc.UpdateFields(ctx, dir, n.ID, beads.Fields{Status: &closed, AddLabels: []string{RetiredLabel}})
+			}
 			if err := bc.SetLabel(ctx, dir, n.ID, RetiredLabel, true); err != nil {
 				return err
 			}

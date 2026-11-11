@@ -76,7 +76,11 @@ func (s *Spawner) spawnCodeHost(ctx context.Context, req SpawnRequest) (*SpawnRe
 	if err := validateRequest(req); err != nil {
 		return nil, err
 	}
-	req.managerRole = ManagerRole(ctx, s.beads, req.ProjectPath, req.TaskBeadID)
+	role, err := executionOwner(ctx, s.beads, req.ProjectPath, req.TaskBeadID)
+	if err != nil {
+		return nil, err
+	}
+	req.managerRole = role
 
 	flat := req.slug()
 	agentName := "operator-" + flat
@@ -85,7 +89,7 @@ func (s *Spawner) spawnCodeHost(ctx context.Context, req SpawnRequest) (*SpawnRe
 	sessionFile := filepath.Join(operatorsDir, agentrt.SessionFileName(flat, agentrt.Claude))
 	fifoPath := filepath.Join(operatorsDir, flat+".fifo")
 	sessionName := hostSessionName(req.ProjectName, flat)
-	req, err := s.resolveProvider(ctx, req, agentName)
+	req, err = s.resolveProvider(ctx, req, agentName)
 	if err != nil {
 		return nil, err
 	}
@@ -101,6 +105,9 @@ func (s *Spawner) spawnCodeHost(ctx context.Context, req SpawnRequest) (*SpawnRe
 		return nil, fmt.Errorf("spawn: acquire lock: %w", err)
 	}
 	cleanups.push(func() error { return lock.release() })
+	if err := validateCheckpointSession(req, agentName, sessionFile, checkpointSessionID(req, sessionFile)); err != nil {
+		return bail(err)
+	}
 
 	// A follow-up Operator on a branch a finished Operator left checked out
 	// takes over that worktree (git checks a branch out in one place only),
@@ -138,7 +145,7 @@ func (s *Spawner) spawnCodeHost(ctx context.Context, req SpawnRequest) (*SpawnRe
 	if err := recheckBranchWorktree(ctx, req.repoRoot(), req.Branch, prev); err != nil {
 		return bail(fmt.Errorf("spawn: %w", err))
 	}
-	if prev != "" && prev != worktreePath {
+	if prev != "" {
 		if sessionLive(ctx, hostSessionName(req.ProjectName, filepath.Base(prev))) {
 			return bail(fmt.Errorf("spawn: branch %s is checked out at %s by an Operator that is still running: wait for it to finish, or spawn on a new branch", req.Branch, prev))
 		}
@@ -166,8 +173,16 @@ func (s *Spawner) spawnCodeHost(ctx context.Context, req SpawnRequest) (*SpawnRe
 	if err := os.MkdirAll(operatorsDir, 0o755); err != nil {
 		return bail(fmt.Errorf("spawn: create operators dir: %w", err))
 	}
-	if err := promptassets.EnsureAgentFor(agentrt.Claude, promptassets.RoleOperatorCode, agentName); err != nil {
+	if err := promptassets.EnsureAgentFor(agentrt.Claude, req.promptRole(promptassets.RoleOperatorCode), agentName); err != nil {
 		return bail(fmt.Errorf("spawn: ensure operator agent prompt: %w", err))
+	}
+	if req.ExecutionClaimToken != "" {
+		defer lock.release()
+		result, err := s.spawnNativeClaim(ctx, req, agentName, worktreePath, sessionFile)
+		if err != nil && result == nil {
+			return bail(err)
+		}
+		return result, err
 	}
 
 	if err := createPaneOutput(fifoPath); err != nil {
@@ -199,6 +214,9 @@ func (s *Spawner) spawnCodeHost(ctx context.Context, req SpawnRequest) (*SpawnRe
 			sessionID, resuming = prev, true
 		}
 	}
+	if err := validateCheckpointSession(req, agentName, sessionFile, sessionID); err != nil {
+		return bail(err)
+	}
 	// The full command is too long for a tmux argument list line, so it goes in a
 	// launcher script.
 	launcher := filepath.Join(operatorsDir, agentName+".sh")
@@ -215,6 +233,7 @@ func (s *Spawner) spawnCodeHost(ctx context.Context, req SpawnRequest) (*SpawnRe
 	}
 	spawnTime := s.now()
 	runID, err := s.store.InsertAgentRun(ctx, store.AgentRun{
+		ExecutionClaimToken: req.ExecutionClaimToken, ResumeSourceRunID: req.ResumeSourceRunID,
 		ProjectID:         req.ProjectID,
 		TaskBeadID:        req.TaskBeadID,
 		AgentName:         agentName,
@@ -282,15 +301,22 @@ func (s *Spawner) spawnKnowledgeHost(ctx context.Context, req SpawnRequest) (*Sp
 	if err := validateKnowledgeRequest(req); err != nil {
 		return nil, err
 	}
-	req.managerRole = ManagerRole(ctx, s.beads, req.ProjectPath, req.TaskBeadID)
+	role, err := executionOwner(ctx, s.beads, req.ProjectPath, req.TaskBeadID)
+	if err != nil {
+		return nil, err
+	}
+	req.managerRole = role
 
 	flat := flatTask(req.TaskBeadID)
+	if req.ExecutionClaimToken != "" {
+		flat = req.slug()
+	}
 	agentName := "operator-" + flat
 	operatorsDir := filepath.Join(req.ProjectPath, ".commander", "operators")
 	sessionFile := filepath.Join(operatorsDir, agentrt.SessionFileName(flat, agentrt.Claude))
 	fifoPath := filepath.Join(operatorsDir, flat+".fifo")
 	sessionName := hostSessionName(req.ProjectName, flat)
-	req, err := s.resolveProvider(ctx, req, agentName)
+	req, err = s.resolveProvider(ctx, req, agentName)
 	if err != nil {
 		return nil, err
 	}
@@ -306,6 +332,9 @@ func (s *Spawner) spawnKnowledgeHost(ctx context.Context, req SpawnRequest) (*Sp
 		return nil, fmt.Errorf("spawn: acquire lock: %w", err)
 	}
 	cleanups.push(func() error { return lock.release() })
+	if err := validateCheckpointSession(req, agentName, sessionFile, checkpointSessionID(req, sessionFile)); err != nil {
+		return bail(err)
+	}
 	if err := s.applyProvider(ctx, req, agentName); err != nil {
 		return bail(err)
 	}
@@ -313,8 +342,16 @@ func (s *Spawner) spawnKnowledgeHost(ctx context.Context, req SpawnRequest) (*Sp
 	if err := os.MkdirAll(operatorsDir, 0o755); err != nil {
 		return bail(fmt.Errorf("spawn: create operators dir: %w", err))
 	}
-	if err := promptassets.EnsureAgentFor(agentrt.Claude, promptassets.RoleOperatorKnowledge, agentName); err != nil {
+	if err := promptassets.EnsureAgentFor(agentrt.Claude, req.promptRole(promptassets.RoleOperatorKnowledge), agentName); err != nil {
 		return bail(fmt.Errorf("spawn: ensure operator agent prompt: %w", err))
+	}
+	if req.ExecutionClaimToken != "" {
+		defer lock.release()
+		result, err := s.spawnNativeClaim(ctx, req, agentName, "", sessionFile)
+		if err != nil && result == nil {
+			return bail(err)
+		}
+		return result, err
 	}
 
 	if err := createPaneOutput(fifoPath); err != nil {
@@ -341,6 +378,9 @@ func (s *Spawner) spawnKnowledgeHost(ctx context.Context, req SpawnRequest) (*Sp
 			sessionID, resuming = prev, true
 		}
 	}
+	if err := validateCheckpointSession(req, agentName, sessionFile, sessionID); err != nil {
+		return bail(err)
+	}
 	launcher := filepath.Join(operatorsDir, agentName+".sh")
 	script := "#!/bin/sh\nunset TMUX TMUX_PANE\n" + runTmpSetup(sessionName) + "exec " + hostOperatorCommand(req, agentName, sessionID, resuming) + "\n"
 	if err := os.WriteFile(launcher, []byte(script), 0o700); err != nil {
@@ -348,6 +388,7 @@ func (s *Spawner) spawnKnowledgeHost(ctx context.Context, req SpawnRequest) (*Sp
 	}
 	spawnTime := s.now()
 	runID, err := s.store.InsertAgentRun(ctx, store.AgentRun{
+		ExecutionClaimToken: req.ExecutionClaimToken, ResumeSourceRunID: req.ResumeSourceRunID,
 		ProjectID:         req.ProjectID,
 		TaskBeadID:        req.TaskBeadID,
 		AgentName:         agentName,
@@ -490,6 +531,13 @@ func hostResumePrompt(req SpawnRequest) string {
 	if req.ResumeNote != "" {
 		why = req.ResumeNote
 	}
+	if req.ExecutionClaimToken != "" {
+		bootstrap := hostBootstrapPrompt(req)
+		if req.ProjectType == "knowledge" {
+			bootstrap = knowledgeHostBootstrapPrompt(req)
+		}
+		return "[resume] " + why + ". Re-read live constraints and recorded answers before continuing the saved checkpoint.\n\n" + bootstrap
+	}
 	return "[resume] " + why + "; continue where you left off. " +
 		"Re-read your bead (`" + BrCommand(req.ProjectPath) + " show " + req.TaskBeadID + "`) for what is already done, and finish the task."
 }
@@ -516,6 +564,9 @@ func BrCommand(projectRoot string) string {
 // hostBootstrapPrompt is the seed message for a host Operator: it works in its
 // own worktree (the process cwd) but beads lives in the project root.
 func hostBootstrapPrompt(req SpawnRequest) string {
+	if req.ExecutionClaimToken != "" {
+		return executionBootstrapPrompt(req, fmt.Sprintf("Your working directory is your own git worktree on branch %s; the project root is %s.", req.Branch, req.ProjectPath))
+	}
 	manager := req.managerRole
 	return fmt.Sprintf(
 		"You are the Operator for task %s in project %q. "+
@@ -540,6 +591,9 @@ func prodGatePrompt(req SpawnRequest) string {
 // knowledgeHostBootstrapPrompt is the seed for a host knowledge Operator: its
 // cwd is the project path, which is also where beads lives.
 func knowledgeHostBootstrapPrompt(req SpawnRequest) string {
+	if req.ExecutionClaimToken != "" {
+		return executionBootstrapPrompt(req, fmt.Sprintf("Your assigned knowledge workspace is the project root %s. Follow its artifact and git rules; do not assume a shared-branch commit is authorized.", req.ProjectPath))
+	}
 	manager := req.managerRole
 	return fmt.Sprintf(
 		"You are the knowledge Operator for task %s in project %q. "+
@@ -550,14 +604,32 @@ func knowledgeHostBootstrapPrompt(req SpawnRequest) string {
 	)
 }
 
-// ManagerRole is the mail role of the Manager that owns a task bead: the
-// Manager of its nearest open workstream (beads.Owner; the top of its real
-// parent chain while the project's nested Managers are off). "" for an empty id.
+// ManagerRole is the compatibility name for a task's current planning owner.
+// PostgreSQL read failures never fall back to a historical Manager role.
+// Launchers use executionOwner so an unavailable owner refuses the launch.
 func ManagerRole(ctx context.Context, c beads.Client, dir, taskBeadID string) string {
 	if taskBeadID == "" {
 		return ""
 	}
-	return store.WorkstreamManagerRole(beads.Owner(ctx, c, dir, nil, nil, taskBeadID))
+	role, _ := executionOwner(ctx, c, dir, taskBeadID)
+	return role
+}
+
+func executionOwner(ctx context.Context, c beads.Client, dir, taskBeadID string) (string, error) {
+	if taskBeadID == "" {
+		return "", nil
+	}
+	if beads.PostgresConfigured() {
+		b, e := beads.FreshShow(ctx, c, dir, taskBeadID)
+		if e != nil {
+			return "", fmt.Errorf("spawn: cannot read current planning owner: %w", e)
+		}
+		if b == nil || b.PlanningCommander == "" {
+			return "", fmt.Errorf("spawn: current planning owner unavailable for %s", taskBeadID)
+		}
+		return b.PlanningCommander, nil
+	}
+	return store.WorkstreamManagerRole(beads.Owner(ctx, c, dir, nil, nil, taskBeadID)), nil
 }
 
 // branchWorktree is the worktree that has branch checked out, "" when none does.

@@ -18,9 +18,25 @@ import (
 
 // Bead is the minimal projection of a beads issue commander cares about.
 type Bead struct {
-	ID          string `json:"id"`
-	Title       string `json:"title"`
-	Description string `json:"description,omitempty"`
+	QuestionWaiting       bool     `json:"question_waiting,omitempty"`
+	HumanAnswerPending    bool     `json:"human_answer_pending,omitempty"`
+	PlanRevision          int64    `json:"plan_revision,omitempty"`
+	ExecutionReady        bool     `json:"execution_ready,omitempty"`
+	ExecutionReserved     bool     `json:"execution_reserved,omitempty"`
+	ExecutionCapable      bool     `json:"execution_capable,omitempty"`
+	ExecutionAttempts     int64    `json:"execution_attempts,omitempty"`
+	ExecutionError        string   `json:"execution_error,omitempty"`
+	ExecutionCapabilities []string `json:"execution_capabilities,omitempty"`
+	PlanningCommander     string   `json:"planning_commander,omitempty"`
+	JurisdictionRevision  int64    `json:"jurisdiction_revision,omitempty"`
+	ResponsibleAgent      string   `json:"responsible_agent_id,omitempty"`
+	ResponsibilityEpoch   int64    `json:"responsibility_epoch,omitempty"`
+	ProgressSeq           int64    `json:"progress_seq,omitempty"`
+	ProgressAt            int64    `json:"progress_at,omitempty"`
+	ResultReadyAt         int64    `json:"result_ready_at,omitempty"`
+	ID                    string   `json:"id"`
+	Title                 string   `json:"title"`
+	Description           string   `json:"description,omitempty"`
 	// AcceptanceCriteria is what counts as passed (`br update --acceptance`);
 	// on a gate bead it is the gate's criteria in the derived diagram.
 	AcceptanceCriteria string   `json:"acceptance_criteria,omitempty"`

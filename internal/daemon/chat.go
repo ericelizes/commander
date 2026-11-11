@@ -37,7 +37,7 @@ func newChatEngine(home string, st *store.Store) *chat.Engine {
 // restartsOnCrash: Commander and Managers come back on their own after a crash;
 // Operators are respawned on their bead by settle instead.
 func restartsOnCrash(role string) bool {
-	return role == "commander" || strings.HasPrefix(role, "manager-")
+	return chat.IsCommanderRole(role) || strings.HasPrefix(role, "manager-")
 }
 
 // chatDeliverer routes wake-up mail to a role's native chat when the engine

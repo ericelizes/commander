@@ -12,3 +12,5 @@ Setup: `just install` (cmdr), then `just setup-mail` (Agent Mail server —
 required for mail and for adding projects).
 
 PostgreSQL state architecture and migration rules: [docs/architecture/postgres-live-state.md](docs/architecture/postgres-live-state.md). PostgreSQL-selected installations never fall back to retired task/state files.
+
+The pending orchestration replacement is specified in [docs/architecture/commander-jurisdictions.md](docs/architecture/commander-jurisdictions.md): one shared nested work tree, inherited Commander planning jurisdictions, generic execution agents and durable supervision. Preserve the sidebar hierarchy and approval/review boundaries; legacy Manager registration must not seize transferred jurisdiction.

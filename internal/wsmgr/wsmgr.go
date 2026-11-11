@@ -124,6 +124,9 @@ You are the Manager of ONE workstream, not the whole project.
 // Manager also gets a mail cursor before anything can mail it, so its first
 // mail is news and never history held by the no-cursor rule.
 func (m *Manager) Prepare(ctx context.Context, t Target) (layout.WorkstreamWindow, error) {
+	if active,e:=m.Store.ActiveOrchestration(ctx);e!=nil{return layout.WorkstreamWindow{},e}else if active{
+		j,e:=m.Store.Jurisdiction(ctx,t.Project.ID,t.BeadID);if e!=nil{return layout.WorkstreamWindow{},e};if j.CommanderID!=Role(t.BeadID){return layout.WorkstreamWindow{},fmt.Errorf("workstream planning belongs to %s; workstreams do not create permanent agent roles",j.CommanderID)}
+	}
 	parent, err := m.validateOwner(ctx, t)
 	if err != nil {
 		return layout.WorkstreamWindow{}, err
@@ -490,6 +493,7 @@ func (m *Manager) targets(ctx context.Context, numbered func(context.Context) ([
 // the windows of every other workstream come back with the joined errors, so
 // one bad row never costs the legitimate Managers their windows.
 func (m *Manager) PrepareAll(ctx context.Context) ([]layout.WorkstreamWindow, error) {
+	if active,e:=m.Store.ActiveOrchestration(ctx);e!=nil{return nil,e}else if active{return []layout.WorkstreamWindow{},nil}
 	targets, err := m.Workstreams(ctx)
 	if err != nil {
 		return nil, err
@@ -515,6 +519,7 @@ type OpenOptions struct {
 
 // OpenResult reports what Open did.
 type OpenResult struct {
+	PlanningCommander string `json:"planning_commander,omitempty"`
 	Project string `json:"project"`
 	BeadID  string `json:"workstream_bead_id"`
 	Role    string `json:"manager_role"`
@@ -533,6 +538,19 @@ func (m *Manager) Open(ctx context.Context, projectName, beadID string, opt Open
 	}
 	if p == nil {
 		return nil, fmt.Errorf("unknown project %s", projectName)
+	}
+	if active,e:=m.Store.ActiveOrchestration(ctx);e!=nil{return nil,e}else if active{
+		focus:=beadID
+		if opt.StepID!=""{
+			var inside bool
+			if e=m.Store.DB().QueryRowContext(ctx,`WITH RECURSIVE ancestry(id,parent_id,path) AS (SELECT id,parent_id,ARRAY[id] FROM bead_tasks WHERE project_id=? AND id=? AND deleted_at IS NULL UNION ALL SELECT b.id,b.parent_id,a.path||b.id FROM bead_tasks b JOIN ancestry a ON a.parent_id=b.id WHERE b.project_id=? AND b.deleted_at IS NULL AND NOT b.id=ANY(a.path)) SELECT EXISTS(SELECT 1 FROM ancestry WHERE id=?)`,p.ID,opt.StepID,p.ID,beadID).Scan(&inside);e!=nil{return nil,e}
+			if !inside{return nil,fmt.Errorf("focus bead %s is outside the requested workstream",opt.StepID)};focus=opt.StepID
+		}
+		j,e:=m.Store.Jurisdiction(ctx,p.ID,focus);if e!=nil{return nil,e}
+		if m.Native==nil{return nil,fmt.Errorf("open planning conversation %s through the native chat interface",j.CommanderID)}
+		if e=m.Native.Start(ctx,j.CommanderID);e!=nil{return nil,e}
+		if opt.StepID!=""{if e=m.Native.Send(ctx,j.CommanderID,"The user opened bead "+opt.StepID+". Read its current goal, jurisdiction and recorded state before answering.");e!=nil{return nil,e}}
+		return &OpenResult{Project:projectName,BeadID:beadID,Role:j.CommanderID,PlanningCommander:j.CommanderID,Native:true},nil
 	}
 	// The nearest open workstream owns the bead (its root while the project's
 	// nested switch is off).
@@ -636,6 +654,7 @@ func (m *Manager) EnsureNative(ctx context.Context) error {
 	if m.Native == nil {
 		return nil
 	}
+	if active,e:=m.Store.ActiveOrchestration(ctx);e!=nil{return e}else if active{return nil}
 	targets, err := m.Owners(ctx)
 	if err != nil {
 		return err
@@ -712,6 +731,7 @@ func (m *Manager) EnsureRole(ctx context.Context, role string) error {
 		return err
 	}
 	if row != nil {
+		if active,e:=m.Store.ActiveOrchestration(ctx);e!=nil{return e}else if active{j,e:=m.Store.Jurisdiction(ctx,row.ProjectID,row.WorkstreamBeadID);if e!=nil{return e};if j.CommanderID!=role{return fmt.Errorf("%w: planning jurisdiction now belongs to %s",ErrInvalidRoute,j.CommanderID)}}
 		if Role(row.WorkstreamBeadID) != role {
 			return fmt.Errorf("%w: inconsistent registration for %q", ErrInvalidRoute, role)
 		}

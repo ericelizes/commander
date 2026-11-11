@@ -426,6 +426,14 @@ func gateCheck(ctx context.Context, st *store.Store, projectName, beadID, only s
 			results = append(results, gateCheckResult{Name: g.Name, Verifier: g.Verifier, Status: g.Status, Evidence: g.Evidence})
 			continue
 		}
+		if beads.PostgresConfigured() {
+			result, err := beads.CheckAutomaticGate(ctx, project.Path, n.ID)
+			if err != nil {
+				return nil, err
+			}
+			results = append(results, gateCheckResult{Name: g.Name, Verifier: g.Verifier, Status: result.Status, Evidence: result.Evidence})
+			continue
+		}
 		now := time.Now()
 		status, evidence := gates.EvalAuto(ctx, gateRunFn, project.Path, g.Check)
 		if status == store.GatePassed {
@@ -504,6 +512,10 @@ func gatePass(ctx context.Context, st *store.Store, projectName, beadID, name, e
 		if err := checkWorkflowCloseWaiving(ctx, bc, p.Path, p.Name, n.ID, waiver); err != nil {
 			return nil, err
 		}
+		ctx, err = noPRCompletionContext(ctx, bc, p.Path, n.ID, waiver)
+		if err != nil {
+			return nil, err
+		}
 		if by == "" {
 			by = os.Getenv("USER")
 		}
@@ -539,6 +551,10 @@ func gateRemove(ctx context.Context, st *store.Store, projectName, beadID, name,
 				return nil, err
 			}
 			if err := requireGateClosesHeld(ctx, bc, p.Path, n.ID, "internal-gate rm "+name); err != nil {
+				return nil, err
+			}
+			ctx, err = noPRCompletionContext(ctx, bc, p.Path, n.ID, waiver)
+			if err != nil {
 				return nil, err
 			}
 		}
@@ -586,6 +602,9 @@ func gatePublish(ctx context.Context, dir, id, parent string, dryRun bool) error
 	if callerIsOperator(role) {
 		return fmt.Errorf("refused: Operators do not publish approval cards; ask the owning Manager")
 	}
+	if beads.PostgresConfigured() {
+		return beads.PublishViaService(ctx, dir, id, parent, nil, "", dryRun)
+	}
 	bc := freshReader(newBeadsClientFn())
 	owners, err := ownerRoles(ctx, bc, dir, parent)
 	if err != nil {
@@ -601,6 +620,9 @@ func gatePublishRepair(ctx context.Context, dir, id, parent string, waiters []st
 	role := os.Getenv("COMMANDER_ROLE")
 	if callerIsOperator(role) {
 		return fmt.Errorf("refused: Operators do not publish approval cards; ask the owning Manager")
+	}
+	if beads.PostgresConfigured() {
+		return beads.PublishViaService(ctx, dir, id, parent, waiters, reason, dry)
 	}
 	return gates.RepairPublication(ctx, freshReader(newBeadsClientFn()), dir, id, parent, waiters, reason, role, dry)
 }

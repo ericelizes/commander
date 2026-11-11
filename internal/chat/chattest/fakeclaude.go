@@ -80,6 +80,7 @@ func run(args []string) int {
 	}
 	signal.Notify(f.sigint, syscall.SIGINT)
 	f.record("argv-"+f.sessionID, map[string]any{"argv": args, "api_key_set": os.Getenv("ANTHROPIC_API_KEY") != "",
+		"run_id": os.Getenv("COMMANDER_RUN_ID"), "run_session": os.Getenv("COMMANDER_RUN_SESSION"), "role": os.Getenv("COMMANDER_ROLE"), "manager_role": os.Getenv("COMMANDER_MANAGER_ROLE"),
 		"lock_fd": fdOpen(3), "cwd": mustGetwd(), "config_dir": os.Getenv("CLAUDE_CONFIG_DIR")})
 	// Like Claude: --resume needs the session's transcript under this config dir.
 	if root := projectsRoot(); resume && root != "" {

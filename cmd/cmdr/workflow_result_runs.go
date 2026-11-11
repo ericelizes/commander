@@ -3,9 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
-	"strings"
 
-	"github.com/example-user/commander/internal/spawn"
+	"github.com/example-user/commander/internal/workflowclose"
 )
 
 // workflowResultRuns reads exact task/run attribution, never mutable bead owners.
@@ -31,14 +30,11 @@ var workflowResultRuns = func(ctx context.Context, project, task string) (map[in
 		if r.ProjectID != p.ID || r.TaskBeadID != task || r.ID <= 0 {
 			return nil, fmt.Errorf("ambiguous task run %s", task)
 		}
-		role := strings.ToLower(r.AgentName)
-		if strings.HasPrefix(role, "op-") {
-			role = "operator-" + role
+		role, actorErr := workflowclose.Actor(r.AgentName)
+		if actorErr != nil {
+			return nil, actorErr
 		}
-		if !strings.HasPrefix(role, "operator-") || role == "operator-" {
-			return nil, fmt.Errorf("invalid review run actor")
-		}
-		out[r.ID] = spawn.CanonicalRole(role)
+		out[r.ID] = role
 	}
 	return out, nil
 }

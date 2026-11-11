@@ -1,0 +1,13 @@
+{
+  "name": "Commander creates a workstream goal and dependent tasks in one retryable request",
+  "ops": [
+    ["create", "Urgent integration", "--ref", "work", "--labels", "kind:workstream"],
+    ["create", "Restore the integration", "--parent", "$work", "--ref", "goal"],
+    ["create", "Implement the fix", "--parent=$goal", "--ref", "task", "--description", "Preserve literal $goal in this brief", "--acceptance", "The regression passes"],
+    ["create", "Verify the fix", "--parent", "$goal", "--ref", "verify"],
+    ["dep", "add", "$verify", "$task"],
+    ["comments", "add", "$task", "Keep $goal literal in this evidence"]
+  ],
+  "expected_beads": 4,
+  "expected_aliases": 4
+}

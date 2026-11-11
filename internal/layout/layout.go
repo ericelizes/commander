@@ -309,6 +309,14 @@ func (d *Director) ensureCommanderKeyBindings(ctx context.Context) error {
 }
 
 func (d *Director) ensureLinkedManagerWindows(ctx context.Context) error {
+	template, err := CommanderPromptTemplate(ctx, "")
+	if err != nil {
+		return err
+	}
+	if template == promptassets.RolePlanningCommander {
+		return nil
+	}
+
 	if handled, err := d.ensureWorkstreamManagerWindows(ctx); handled {
 		return err
 	}
@@ -1117,6 +1125,13 @@ func (d *Director) commanderChatCmd(ctx context.Context, commanderHome string) (
 		c := claudeChat{promptassets.CommanderAgentName, agentrt.Model(agentrt.TierCommander), sessionID}
 		return d.claudeChatCmd(c), &c, nil
 	}
+	template, err := CommanderPromptTemplate(ctx, commanderHome)
+	if err != nil {
+		return "", nil, err
+	}
+	if err = promptassets.EnsureAgentFor(agentrt.Opencode, template, promptassets.CommanderAgentName); err != nil {
+		return "", nil, err
+	}
 	sessionID, err := EnsureCommanderSessionID(ctx, commanderHome, captureCommanderSessionFn)
 	if err != nil {
 		return "", nil, fmt.Errorf("commander session id: %w", err)
@@ -1201,9 +1216,15 @@ func listStartupProjects(ctx context.Context) ([]store.Project, error) {
 	}
 	if _, err := os.Stat(statePath); err != nil {
 		if os.IsNotExist(err) {
-			return nil, nil
+			if _, pgErr := os.Lstat(filepath.Join(filepath.Dir(statePath), "state.postgres")); pgErr != nil {
+				if os.IsNotExist(pgErr) {
+					return nil, nil
+				}
+				return nil, pgErr
+			}
+		} else {
+			return nil, fmt.Errorf("stat state db: %w", err)
 		}
-		return nil, fmt.Errorf("stat state db: %w", err)
 	}
 	st, err := store.Open(statePath)
 	if err != nil {

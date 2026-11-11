@@ -2,9 +2,11 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -42,12 +44,13 @@ type gateWatcher struct {
 	projects interface {
 		ListProjects(ctx context.Context) ([]store.Project, error)
 	}
-	beads  beads.Client
-	gh     ghRunner
-	run    gates.RunFn
-	mail   func(ctx context.Context, toRole, subject, body string) error
-	repoOf func(path string) string
-	now    func() time.Time
+	beads          beads.Client
+	gh             ghRunner
+	run            gates.RunFn
+	canonicalCheck func(context.Context, string, string) (beads.AutomaticGateResponse, error)
+	mail           func(ctx context.Context, toRole, subject, body string) error
+	repoOf         func(path string) string
+	now            func() time.Time
 	// degraded reports an unreadable store; nil = never.
 	degraded func() bool
 
@@ -76,7 +79,7 @@ func (w *gateWatcher) Run(ctx context.Context) {
 }
 
 func (w *gateWatcher) poll(ctx context.Context) {
-	if w.degraded != nil && w.degraded() {
+	if !beads.PostgresConfigured() && w.degraded != nil && w.degraded() {
 		return
 	}
 	projects, err := w.projects.ListProjects(ctx)
@@ -85,7 +88,10 @@ func (w *gateWatcher) poll(ctx context.Context) {
 		return
 	}
 	for _, p := range projects {
-		if p.Type != "code" && p.Type != "" {
+		if beads.PostgresConfigured() && p.Status != "" && p.Status != "active" {
+			continue
+		}
+		if !beads.PostgresConfigured() && p.Type != "code" && p.Type != "" {
 			continue
 		}
 		w.pollProject(ctx, p)
@@ -93,11 +99,24 @@ func (w *gateWatcher) poll(ctx context.Context) {
 }
 
 func (w *gateWatcher) pollProject(ctx context.Context, p store.Project) {
-	nodes, err := gates.All(ctx, w.beads, p.Path, p.ID)
+	var nodes []gates.Node
+	var err error
+	if beads.PostgresConfigured() {
+		nodes, err = gates.AutomaticFresh(ctx, w.beads, p.Path, p.ID)
+	} else {
+		nodes, err = gates.All(ctx, w.beads, p.Path, p.ID)
+	}
 	if err != nil {
 		return // store unreadable: skip, never guess
 	}
-	closed, err := w.closedStages(ctx, p)
+	if len(nodes) == 0 {
+		return
+	}
+	var stages []string
+	for _, node := range nodes {
+		stages = append(stages, node.Gate.BeadID)
+	}
+	closed, err := w.closedStages(ctx, p, stages...)
 	if err != nil {
 		log.Printf("daemon: gates: list stages of %s: %v", p.Path, err)
 		return // cannot tell which stages closed: skip, never guess
@@ -131,7 +150,7 @@ func (w *gateWatcher) pollProject(ctx context.Context, p store.Project) {
 			continue
 		}
 		w.last[n.ID] = gateSeen{at: now, pins: pins}
-		if w.protectedByWorkflow(ctx, p, n) {
+		if !beads.PostgresConfigured() && w.protectedByWorkflow(ctx, p, n) {
 			continue
 		}
 		checks++
@@ -141,9 +160,18 @@ func (w *gateWatcher) pollProject(ctx context.Context, p store.Project) {
 
 // closedStages is the set of stage beads already closed or parked (deferred): their gates are not re-checked.
 // A List error is returned: an empty set would re-run (and reopen) closed stages' gates.
-func (w *gateWatcher) closedStages(ctx context.Context, p store.Project) (map[string]bool, error) {
+func (w *gateWatcher) closedStages(ctx context.Context, p store.Project, stageIDs ...string) (map[string]bool, error) {
 	closed := map[string]bool{}
-	all, err := w.beads.List(ctx, p.Path, beads.ListOptions{Labels: []string{"kind:objective"}, Status: "all"})
+	reader := w.beads
+	options := beads.ListOptions{Labels: []string{"kind:objective"}, Status: "all"}
+	if beads.PostgresConfigured() {
+		reader = beads.ForActions(reader)
+		options = beads.ListOptions{IDs: stageIDs, Status: "all"}
+		if len(stageIDs) == 0 {
+			return closed, nil
+		}
+	}
+	all, err := reader.List(ctx, p.Path, options)
 	if err != nil {
 		return nil, err
 	}
@@ -162,16 +190,79 @@ func (w *gateWatcher) stageOpen(ctx context.Context, p store.Project, stage stri
 	if ok, done := live[stage]; done {
 		return ok
 	}
+	reader := w.beads
+	if beads.PostgresConfigured() {
+		reader = beads.ForActions(reader)
+	}
 	ok := true
-	for _, id := range beads.Lineage(ctx, w.beads, p.Path, nil, stage) {
+	for _, id := range beads.Lineage(ctx, reader, p.Path, nil, stage) {
 		if closed[id] {
 			ok = false
 			break
 		}
-		b, err := w.beads.Show(ctx, p.Path, id)
+		b, err := reader.Show(ctx, p.Path, id)
 		if err != nil || (b != nil && (b.Status == "closed" || b.Status == beads.StatusDeferred)) {
 			ok = false
 			break
+		}
+		if beads.PostgresConfigured() && b != nil {
+			state, _ := beads.StepState(b.Status, b.Labels)
+			if b.HumanAnswerPending || slices.Contains(b.Labels, "hold") || state == beads.StateNeedsUser || beads.HumanApprovalGate(*b) {
+				ok = false
+				break
+			}
+			for _, wait := range beads.WaitsOf(b.Labels) {
+				if (wait.Kind == beads.WaitUser || wait.Kind == beads.WaitUntil) && beads.WaitHolds(wait, w.now()) {
+					ok = false
+					break
+				}
+			}
+			if !ok {
+				break
+			}
+			details, detailErr := beads.FreshDetails(ctx, reader, p.Path, []string{id})
+			if detailErr != nil {
+				ok = false
+				break
+			}
+			detail, found := details[id]
+			if !found {
+				ok = false
+				break
+			}
+			for _, edge := range detail.Deps {
+				if edge.Type != "blocks" {
+					continue
+				}
+				blocker, readErr := beads.FreshShow(ctx, reader, p.Path, edge.DependsOnID)
+				if errors.Is(readErr, beads.ErrNotFound) {
+					continue
+				}
+				if readErr != nil {
+					ok = false
+					break
+				}
+				if blocker == nil {
+					continue
+				}
+				if blocker.HumanAnswerPending || slices.Contains(blocker.Labels, "hold") {
+					ok = false
+					break
+				}
+				if beads.DependencyComplete(*blocker) {
+					continue
+				}
+				// A condition may gate its own stage: checking it is how that prerequisite
+				// becomes known. Other unfinished prerequisites still hold the checker.
+				if slices.Contains(blocker.Labels, "verifier:auto") && slices.Contains(blocker.Labels, "gate-of:"+beads.EscapeLabel(id)) {
+					continue
+				}
+				ok = false
+				break
+			}
+			if !ok {
+				break
+			}
 		}
 	}
 	live[stage] = ok
@@ -280,8 +371,23 @@ func (w *gateWatcher) protectedByWorkflow(ctx context.Context, p store.Project, 
 // is mailed only on passed->failed and failed->passed.
 func (w *gateWatcher) recheck(ctx context.Context, p store.Project, n gates.Node) {
 	g := n.Gate
-	status, evidence := gates.EvalAuto(ctx, w.run, p.Path, g.Check)
-	if status == store.GateFailed && g.Status == store.GatePassed {
+	var status, evidence string
+	if beads.PostgresConfigured() {
+		check := w.canonicalCheck
+		if check == nil {
+			check = beads.CheckAutomaticGate
+		}
+		result, err := check(ctx, p.Path, n.ID)
+		if err != nil {
+			log.Printf("daemon: gates: canonical check %s: %v", n.ID, err)
+			delete(w.last, n.ID)
+			return
+		}
+		status, evidence = result.Status, result.Evidence
+	} else {
+		status, evidence = gates.EvalAuto(ctx, w.run, p.Path, g.Check)
+	}
+	if !beads.PostgresConfigured() && status == store.GateFailed && g.Status == store.GatePassed {
 		// A transient gh error must not reopen a passed gate: it takes two
 		// failures in a row (the next check is the following poll).
 		if w.failing[n.ID] < gateFailsToReopen-1 {
@@ -294,9 +400,11 @@ func (w *gateWatcher) recheck(ctx context.Context, p store.Project, n gates.Node
 	if status == g.Status {
 		return
 	}
-	if err := gates.SetResult(ctx, w.beads, p.Path, n, status, evidence, "auto", w.now()); err != nil {
-		log.Printf("daemon: gates: record %s: %v", n.ID, err)
-		return
+	if !beads.PostgresConfigured() {
+		if err := gates.SetResult(ctx, w.beads, p.Path, n, status, evidence, "auto", w.now()); err != nil {
+			log.Printf("daemon: gates: record %s: %v", n.ID, err)
+			return
+		}
 	}
 	// Passing for the first time closes the gate and releases what waited on it: that work has no
 	// holder until its Manager dispatches it, so the Manager is told as for any other change.
@@ -311,9 +419,28 @@ func (w *gateWatcher) recheck(ctx context.Context, p store.Project, n gates.Node
 	case status == store.GatePassed:
 		verb = "holds again"
 	}
+	if beads.PostgresConfigured() {
+		verb = "failed its stored check"
+		if status == store.GatePassed {
+			verb = "passed its stored check"
+		}
+	}
 	subject := fmt.Sprintf("[gate] %s: %s %s", g.BeadID, g.Name, verb)
 	body := fmt.Sprintf("Gate %q on %s (%s) %s. Latest check: %s", g.Name, g.BeadID, n.ID, verb, evidence)
-	if err := w.mail(ctx, wsmgr.Role(wsmgr.Owner(ctx, w.beads, p.Path, g.BeadID)), subject, body); err != nil {
-		log.Printf("daemon: gates: mail for %s: %v", n.ID, err)
+	var target string
+	if beads.PostgresConfigured() {
+		b, err := beads.FreshShow(ctx, w.beads, p.Path, n.ID)
+		if err != nil || b == nil || b.PlanningCommander == "" {
+			log.Printf("daemon: gates: current owner unavailable for %s", n.ID)
+			return
+		}
+		target = b.PlanningCommander
+	} else {
+		target = wsmgr.Role(wsmgr.Owner(ctx, w.beads, p.Path, g.BeadID))
+	}
+	if w.mail != nil {
+		if err := w.mail(ctx, target, subject, body); err != nil {
+			log.Printf("daemon: gates: mail for %s: %v", n.ID, err)
+		}
 	}
 }

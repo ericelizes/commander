@@ -1,0 +1,616 @@
+// Package workflowclose verifies workflow completion independently of transport.
+// All graph reads and evidence writes use the caller's client and context, so
+// PostgreSQL callers can bind the entire check to their write transaction.
+package workflowclose
+
+import (
+ "context"
+ "encoding/json"
+ "errors"
+ "fmt"
+ "maps"
+ "regexp"
+ "slices"
+ "strings"
+
+ "github.com/example-user/commander/internal/beads"
+ "github.com/example-user/commander/internal/gates"
+ "github.com/example-user/commander/internal/workflowtemplate"
+)
+
+// Verifier has no process-global actor or mutable test hooks. Authority and
+// provenance readers are supplied by the owning CLI or service integration.
+type Verifier struct {
+ RecheckRetired bool
+ GH workflowtemplate.GHRunner
+ Repo func(string) string
+ FreshDetails func(context.Context, beads.Client, string, []string) (map[string]beads.Detail, error)
+ TaskRoles func(context.Context, string, string) ([]string, error)
+ OperatorCommits func(context.Context, string, string, []string) (map[string]string, error)
+ LoadResults func(context.Context, string, string, *workflowtemplate.Review) error
+ FileFollowUps func(context.Context, beads.Client, string, beads.Bead, string, string, string, string, []workflowtemplate.ReviewFinding) ([]string, error)
+ ResolveAddendum func(context.Context, beads.Client, string, string, beads.Bead, string, workflowtemplate.WriterBinding, workflowtemplate.Head, *workflowtemplate.Proof, workflowtemplate.Review) error
+ Warn func(string)
+}
+func(v Verifier) gh()workflowtemplate.GHRunner{if v.GH!=nil{return v.GH};return workflowtemplate.RunGH}
+func(v Verifier) repo(dir string)string{if v.Repo!=nil{return v.Repo(dir)};return ""}
+func(v Verifier) details(ctx context.Context,bc beads.Client,dir string,ids []string)(map[string]beads.Detail,error){if v.FreshDetails!=nil{return v.FreshDetails(ctx,bc,dir,ids)};return beads.FreshDetails(ctx,bc,dir,ids)}
+func(v Verifier) warn(message string){if v.Warn!=nil{v.Warn(message)}}
+func(v Verifier) operatorCommits(ctx context.Context,project,task string,shas []string)(map[string]string,error){if v.OperatorCommits==nil{return nil,errors.New("workflow completion requires immutable commit provenance")};return v.OperatorCommits(ctx,project,task,shas)}
+func(v Verifier) loadResults(ctx context.Context,project,task string,r *workflowtemplate.Review)error{if v.LoadResults==nil{return errors.New("workflow completion requires sealed review provenance")};return v.LoadResults(ctx,project,task,r)}
+func(v Verifier) fileFollowUps(ctx context.Context,bc beads.Client,dir string,block beads.Bead,instance,step,review,head string,f []workflowtemplate.ReviewFinding)([]string,error){if v.FileFollowUps==nil{return nil,errors.New("workflow completion requires durable minor follow-ups")};return v.FileFollowUps(ctx,bc,dir,block,instance,step,review,head,f)}
+func(v Verifier) resolveAddendum(ctx context.Context,bc beads.Client,dir,project string,block beads.Bead,step string,b workflowtemplate.WriterBinding,h workflowtemplate.Head,p *workflowtemplate.Proof,r workflowtemplate.Review)error{if v.ResolveAddendum==nil{return errors.New("workflow completion requires attributed addendum validation")};return v.ResolveAddendum(ctx,bc,dir,project,block,step,b,h,p,r)}
+func(v Verifier) rolesInScope(ctx context.Context,bc beads.Client,dir,project,root,task string)([]string,error){other,e:=v.Root(ctx,bc,dir,task);if e!=nil{return nil,e};if other!=root{return nil,fmt.Errorf("task %s is outside workstream %s",task,root)};if v.TaskRoles==nil{return nil,errors.New("workflow completion requires immutable task-run provenance")};return v.TaskRoles(ctx,project,task)}
+func roleOverlap(a,b []string)bool{for _,r:=range a{if slices.Contains(b,r){return true}};return false}
+
+// workflowNodes reads what a close of id is judged on and nothing else, fresh, so
+// its cost follows the bead's own edges and never the size of the project. A failed
+// read or a short answer refuses the close; only a bead confirmed gone is no node.
+func (v Verifier) Nodes(ctx context.Context, bc beads.Client, dir, id string) ([]workflowtemplate.Node, error) {
+	me, err := bc.List(ctx, dir, beads.ListOptions{Status: "all", IDs: []string{id}})
+	if err != nil {
+		return nil, err
+	}
+	if len(me) == 0 {
+		return nil, nil
+	}
+	// A generated step is judged only against its own snapshotted block.
+	if workflowtemplate.Label(me[0], workflowtemplate.LabelStep) != "" {
+		instance := workflowtemplate.Label(me[0], workflowtemplate.LabelInstance)
+		if instance == "" {
+			return nil, fmt.Errorf("workflow step %s has no block instance", id)
+		}
+		nodes := map[string]workflowtemplate.Node{}
+		if err := v.readInstance(ctx, bc, dir, instance, nodes); err != nil {
+			return nil, err
+		}
+		return SortedNodes(nodes), nil
+	}
+	nodes := map[string]workflowtemplate.Node{}
+	if err := v.readNodes(ctx, bc, dir, me, nodes); err != nil {
+		return nil, err
+	}
+	// A target is judged itself; a block's container on the targets that wait on it.
+	judged := []string{id}
+	if workflowtemplate.Label(me[0], workflowtemplate.LabelTemplate) != "" {
+		edges, err := bc.Dependents(ctx, dir, id)
+		if err != nil {
+			return nil, err
+		}
+		judged = nil
+		for _, e := range edges {
+			if e.Type == "blocks" {
+				judged = append(judged, e.IssueID)
+			}
+		}
+		if err := v.readIDs(ctx, bc, dir, judged, nodes); err != nil {
+			return nil, err
+		}
+	}
+	// Each judged bead is read through its waits (blocks plugged before it) and the
+	// stage a gate guards (whose pr: labels count too).
+	var related []string
+	for _, j := range judged {
+		n, ok := nodes[j]
+		if !ok {
+			continue
+		}
+		related = append(related, n.Waits...)
+		if stage := beads.UnescapeLabel(workflowtemplate.Label(n.Bead, "gate-of:")); stage != "" {
+			related = append(related, stage)
+		}
+	}
+	if err := v.readIDs(ctx, bc, dir, related, nodes); err != nil {
+		return nil, err
+	}
+	// Every instance among those, with all its steps, evidence and edges.
+	instances := map[string]bool{}
+	for _, n := range nodes {
+		if key := workflowtemplate.Label(n.Bead, workflowtemplate.LabelInstance); key != "" {
+			instances[key] = true
+		}
+	}
+	for key := range instances {
+		if err := v.readInstance(ctx, bc, dir, key, nodes); err != nil {
+			return nil, err
+		}
+	}
+	return SortedNodes(nodes), nil
+}
+
+// sortedWorkflowNodes keeps the rule's findings in one order from run to run.
+func SortedNodes(nodes map[string]workflowtemplate.Node) []workflowtemplate.Node {
+	return slices.SortedFunc(maps.Values(nodes), func(a, b workflowtemplate.Node) int {
+		return strings.Compare(a.Bead.ID, b.Bead.ID)
+	})
+}
+
+func (v Verifier) readInstance(ctx context.Context, bc beads.Client, dir, instance string, into map[string]workflowtemplate.Node) error {
+	members, err := bc.List(ctx, dir, beads.ListOptions{Status: "all", Labels: []string{workflowtemplate.LabelInstance + instance}})
+	if err != nil {
+		return err
+	}
+	return v.readNodes(ctx, bc, dir, members, into)
+}
+
+// readWorkflowIDs reads the named beads not read yet. Never lists with no ids: that is the whole project.
+func (v Verifier) readIDs(ctx context.Context, bc beads.Client, dir string, ids []string, into map[string]workflowtemplate.Node) error {
+	ids = slices.DeleteFunc(slices.Clone(ids), func(id string) bool {
+		_, read := into[id]
+		return read || id == ""
+	})
+	slices.Sort(ids)
+	ids = slices.Compact(ids)
+	if len(ids) == 0 {
+		return nil
+	}
+	bs, err := bc.List(ctx, dir, beads.ListOptions{Status: "all", IDs: ids})
+	if err != nil {
+		return err
+	}
+	for _, id := range ids {
+		if slices.ContainsFunc(bs, func(b beads.Bead) bool { return b.ID == id }) {
+			continue
+		}
+		// Exit 0 with an id left out is a short read until the bead's own read says
+		// it is gone (a dangling wait or stage is no node, as in a whole-project list).
+		b, err := beads.FreshShow(ctx, bc, dir, id)
+		if errors.Is(err, beads.ErrNotFound) || (err == nil && b == nil) {
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("the list of %v left out %s and reading it failed: %w", ids, id, err)
+		}
+		return fmt.Errorf("the list of %v came back short: it left out %s, which exists. Nothing was closed; check COMMANDER_BEADS_BIN (bd takes --id a,b, br a repeated --id) and retry", ids, id)
+	}
+	return v.readNodes(ctx, bc, dir, bs, into)
+}
+
+// readWorkflowNodes adds the fresh edges and comments of bs; a bead left without them is an error.
+func (v Verifier) readNodes(ctx context.Context, bc beads.Client, dir string, bs []beads.Bead, into map[string]workflowtemplate.Node) error {
+	bs = slices.DeleteFunc(slices.Clone(bs), func(b beads.Bead) bool {
+		_, read := into[b.ID]
+		return read
+	})
+	if len(bs) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(bs))
+	for _, b := range bs {
+		ids = append(ids, b.ID)
+	}
+	details, err := v.details(ctx, bc, dir, ids)
+	if err != nil {
+		return err
+	}
+	for _, b := range bs {
+		d, ok := details[b.ID]
+		if !ok {
+			return fmt.Errorf("missing workflow details for %s", b.ID)
+		}
+		into[b.ID] = Node(b, d)
+	}
+	return nil
+}
+
+func Node(b beads.Bead, d beads.Detail) workflowtemplate.Node {
+	b.ParentID = d.Parent
+	n := workflowtemplate.Node{Bead: b, Comments: d.Comments}
+	for _, dep := range d.Deps {
+		if dep.Type == "blocks" {
+			n.Waits = append(n.Waits, dep.DependsOnID)
+		}
+	}
+	return n
+}
+
+// checkWorkflowClose is shared by every completion door. The bead and all it is
+// judged on (edges, comments, status) are read fresh, never from the display's
+// export; evidence is recorded before the close and never inferred from closed status.
+func (v Verifier) Check(ctx context.Context, bc beads.Client, dir, project, id string) error {
+	return v.CheckWaiving(ctx, bc, dir, project, id, nil)
+}
+
+// checkWorkflowCloseWaiving is checkWorkflowClose with an optional no-PR waiver:
+// a merge target the rule finds only "has no PR yet" (no pr: label on it or its
+// stage, no review block plugged before or waited on) passes once the waiver is
+// recorded on it. Any other finding still refuses.
+func (v Verifier) CheckWaiving(ctx context.Context, bc beads.Client, dir, project, id string, w *NoPRWaiver) error {
+	// Caller supplies an uncached reader; transaction-bound clients must remain bound.
+ if v.RecheckRetired{bc=completionView{Client:bc,target:id}}
+	var seen settleSeen
+	err := v.checkOnce(ctx, bc, dir, project, id, &seen, w)
+	if err == nil || seen.pr == "" {
+		return err
+	}
+	return v.settleHint(ctx, project, seen, err)
+}
+
+// settleSeen is the block a refused step belongs to, once the close read it.
+type settleSeen struct{ block, pr string }
+
+// settleHint names settle-block when a refused step's block PR has merged: no
+// check of a merged PR can pass anymore, so only the owning Manager's settle is
+// left. It reads GitHub only (the block was already read); a failed read leaves
+// the refusal as it was.
+func (v Verifier) settleHint(ctx context.Context, project string, seen settleSeen, refused error) error {
+	if h, err := workflowtemplate.ReadHead(ctx, v.gh(), seen.pr); err != nil || h.State != "MERGED" {
+		return refused
+	}
+	return fmt.Errorf("%w. %s merged outside the review: if it will not be reviewed, the owning Manager settles the block (closes its open steps as settled, not reviewed, keeping earlier checks): cmdr workflow settle-block --project %s --block %s --reason '<why the review was not completed>'", refused, seen.pr, project, seen.block)
+}
+
+func (v Verifier) checkOnce(ctx context.Context, bc beads.Client, dir, project, id string, seen *settleSeen, w *NoPRWaiver) error {
+	b, err := bc.Show(ctx, dir, id)
+	if err != nil {
+		return err
+	}
+	if b == nil {
+		return fmt.Errorf("cannot verify missing bead %s", id)
+	}
+	target := workflowtemplate.Node{Bead: *b}
+	step := workflowtemplate.Label(*b, workflowtemplate.LabelStep)
+	managed := workflowtemplate.Label(*b, workflowtemplate.LabelTemplate) != ""
+	repo := v.repo(dir)
+	if !managed && !workflowtemplate.MergeTarget(target) {
+		held, err := workflowtemplate.BlockPluggedBefore(ctx, bc, dir, project, *b)
+		if err != nil {
+			return err
+		}
+		if !held {
+			return nil
+		}
+	}
+	nodes, err := v.Nodes(ctx, bc, dir, id)
+	if err != nil {
+		return err
+	}
+	byID := map[string]workflowtemplate.Node{}
+	for _, n := range nodes {
+		byID[n.Bead.ID] = n
+	}
+	n, ok := byID[id]
+	if !ok {
+		return fmt.Errorf("workflow bead %s missing from fresh list", id)
+	}
+	if managed && step != "" {
+		block, ok := byID[n.Bead.ParentID]
+		if !ok {
+			return fmt.Errorf("workflow step %s has no block", id)
+		}
+		if workflowtemplate.IsReviewBlock(block.Bead) {
+			seen.block, seen.pr = block.Bead.ID, workflowtemplate.BlockPR(block.Bead)
+		}
+		tpl, err := workflowtemplate.Definition(block.Bead)
+		if err != nil {
+			return err
+		}
+		instance := workflowtemplate.Label(block.Bead, workflowtemplate.LabelInstance)
+		if instance == "" || workflowtemplate.Label(*b, workflowtemplate.LabelInstance) != instance || workflowtemplate.Label(*b, workflowtemplate.LabelHash) != tpl.Hash() {
+			return fmt.Errorf("workflow step identity does not match block")
+		}
+		var verifier string
+		for _, s := range tpl.Steps {
+			if s.ID == step {
+				verifier = s.Verifier
+			}
+		}
+		if verifier == "" {
+			return fmt.Errorf("unknown workflow step %s", step)
+		}
+		for _, dep := range tpl.Waits()[step] {
+			found := false
+			for _, other := range nodes {
+				if workflowtemplate.Label(other.Bead, workflowtemplate.LabelInstance) == instance && workflowtemplate.Label(other.Bead, workflowtemplate.LabelStep) == dep {
+					for _, wait := range n.Waits {
+						if wait == other.Bead.ID && other.Bead.Status == "closed" {
+							found = true
+						}
+					}
+				}
+			}
+			if !found {
+				return fmt.Errorf("workflow step %s still needs closed predecessor %s", id, dep)
+			}
+		}
+  if settled,settleErr:=v.checkSettlement(ctx,bc,dir,project,n,block,instance,step);settled||settleErr!=nil{return settleErr}
+		binding, err := workflowtemplate.Binding(block.Comments)
+		if err != nil {
+			return err
+		}
+		if binding.PR != workflowtemplate.BlockPR(block.Bead) {
+			return fmt.Errorf("writer binding PR differs from block; ask the owning Manager to run %s", workflowtemplate.RebindCommand(project, block.Bead.ID, &binding, ""))
+		}
+		// The newest well-formed proof counts. A malformed one cannot be deleted, so it must not block the step for good.
+		var proof *workflowtemplate.Proof
+		ignored := ""
+		for _, c := range n.Comments {
+			if raw, ok := strings.CutPrefix(c.Text, workflowtemplate.ProofPrefix); ok {
+				var p workflowtemplate.Proof
+				if err := json.Unmarshal([]byte(raw), &p); err != nil {
+					ignored = fmt.Sprintf("ignored a malformed review proof on %s (%v)", id, err)
+					continue
+				}
+				if p.ReviewBead == "" || p.Head == "" {
+					ignored = fmt.Sprintf("ignored a review proof on %s with no review_bead or head", id)
+					continue
+				}
+				proof = &p
+			}
+		}
+		if ignored != "" {
+			v.warn(ignored)
+		}
+		reader := func(ctx context.Context, reviewID string) (workflowtemplate.Review, error) {
+			r, err := bc.Show(ctx, dir, reviewID)
+			if err != nil {
+				return workflowtemplate.Review{}, err
+			}
+			if r == nil || r.ID == id {
+				return workflowtemplate.Review{}, fmt.Errorf("independent review bead required")
+			}
+			root, err := v.Root(ctx, bc, dir, block.Bead.ID)
+			if err != nil {
+				return workflowtemplate.Review{}, err
+			}
+			roles, err := v.rolesInScope(ctx, bc, dir, project, root, reviewID)
+			if err != nil {
+				return workflowtemplate.Review{}, err
+			}
+			for _, task := range binding.Tasks {
+				writers, err := v.rolesInScope(ctx, bc, dir, project, root, task)
+				if err != nil {
+					return workflowtemplate.Review{}, err
+				}
+				if roleOverlap(roles, writers) {
+					return workflowtemplate.Review{}, fmt.Errorf("reviewer must differ from writer task %s", task)
+				}
+			}
+			if binding.External != nil {
+				wrote, err := v.operatorCommits(ctx, project, reviewID, binding.External.Commits)
+				if err != nil {
+					return workflowtemplate.Review{}, fmt.Errorf("cannot check reviewer %s against the external commits: %w", reviewID, err)
+				}
+				for _, sha := range binding.External.Commits {
+					if why, ok := wrote[sha]; ok {
+						return workflowtemplate.Review{}, fmt.Errorf("reviewer must differ from the writer of bound external commit %s: %s", sha, why)
+					}
+				}
+			}
+			if strings.Contains(step, "adversarial") {
+				found := false
+				for _, s := range nodes {
+					if workflowtemplate.Label(s.Bead, workflowtemplate.LabelInstance) != instance || workflowtemplate.Label(s.Bead, workflowtemplate.LabelStep) != "review" {
+						continue
+					}
+					for _, c := range s.Comments {
+						e, ok := workflowtemplate.ParseEvidence(c.Text)
+						if !ok || e.Binding != binding.Revision || e.Head != binding.Head || e.PR != binding.PR || e.Proof == nil {
+							continue
+						}
+						// Every review the primary evidence stands on (its retained
+						// prior review too); this reader also judges the adversarial
+						// proof's own prior_review, so neither can borrow the primary's.
+						found = true
+						for _, primary := range []string{e.Proof.ReviewBead, e.Proof.PriorReview} {
+							if primary == "" {
+								continue
+							}
+							if primary == reviewID {
+								return workflowtemplate.Review{}, fmt.Errorf("adversarial review must not name the primary step's review %s", primary)
+							}
+							first, err := v.rolesInScope(ctx, bc, dir, project, root, primary)
+							if err != nil {
+								return workflowtemplate.Review{}, err
+							}
+							if roleOverlap(roles, first) {
+								return workflowtemplate.Review{}, fmt.Errorf("adversarial reviewer must differ from first reviewer (review %s)", primary)
+							}
+						}
+					}
+				}
+				if !found {
+					return workflowtemplate.Review{}, fmt.Errorf("current primary review evidence required")
+				}
+			}
+			cs, err := bc.Comments(ctx, dir, reviewID)
+			if err != nil {
+				return workflowtemplate.Review{}, err
+			}
+			review := workflowtemplate.Review{ID: r.ID, Status: r.Status, Owner: strings.Join(roles, ","), RunAttributed: true}
+			for _, c := range cs {
+				review.Comments = append(review.Comments, c.Text)
+			}
+			if err = v.loadResults(ctx, project, reviewID, &review); err != nil {
+				return workflowtemplate.Review{}, err
+			}
+			review.FileFollowUps = func(ctx context.Context, reviewID, head string, findings []workflowtemplate.ReviewFinding) ([]string, error) {
+				return v.fileFollowUps(ctx, bc, dir, block.Bead, instance, step, reviewID, head, findings)
+			}
+			review.ValidateAddendum = func(ctx context.Context, h workflowtemplate.Head, p *workflowtemplate.Proof) error {
+				return v.resolveAddendum(ctx, bc, dir, project, block.Bead, id, binding, h, p, review)
+			}
+			return review, nil
+		}
+		e, err := workflowtemplate.Verify(ctx, v.gh(), reader, verifier, workflowtemplate.BlockPR(block.Bead), instance, step, proof)
+		if err != nil {
+			if ignored != "" {
+				return fmt.Errorf("%w (%s)", err, ignored)
+			}
+			return err
+		}
+		if e.Head != binding.Head {
+			return fmt.Errorf("stale writer binding: ask the owning Manager to run %s", workflowtemplate.RebindCommand(project, block.Bead.ID, &binding, e.Head))
+		}
+		e.Binding = binding.Revision
+		if verifier == "head-current" {
+			for _, other := range nodes {
+				if workflowtemplate.Label(other.Bead, workflowtemplate.LabelInstance) != instance {
+					continue
+				}
+				sid := workflowtemplate.Label(other.Bead, workflowtemplate.LabelStep)
+				if sid == "" || sid == step {
+					continue
+				}
+				v := ""
+				for _, s := range tpl.Steps {
+					if s.ID == sid {
+						v = s.Verifier
+					}
+				}
+				if other.Bead.Status != "closed" || !workflowtemplate.BoundEvidenceFor(other, block, instance, sid, v, e.PR, e.Head) {
+					return fmt.Errorf("final check: %s has unfinished or stale evidence for PR head %s", other.Bead.ID, e.Head)
+				}
+			}
+		}
+		return bc.AddComment(ctx, dir, id, e.Comment())
+	}
+	// A container closes only after its entire block passes the same merge rule.
+	scope := map[string]bool{id: true}
+	if managed {
+		scope = map[string]bool{}
+		for _, m := range nodes {
+			for _, dep := range m.Waits {
+				if dep == id {
+					scope[m.Bead.ID] = true
+				}
+			}
+		}
+		if len(scope) == 0 {
+			return fmt.Errorf("workflow block has no guarded merge target")
+		}
+		for i := range nodes {
+			if nodes[i].Bead.ID == id {
+				nodes[i].Bead.Status = "closed"
+			}
+		}
+	}
+	byID = map[string]workflowtemplate.Node{}
+	for _, n := range nodes {
+		byID[n.Bead.ID] = n
+	}
+	prs := map[string]string{}
+	for i := range nodes {
+		if !scope[nodes[i].Bead.ID] {
+			continue
+		}
+		pr := workflowtemplate.TargetPR(nodes[i], byID, project, repo)
+		if pr == "" {
+			continue
+		}
+		prs[nodes[i].Bead.ID] = pr
+		nodes[i].PRStates = map[string]string{}
+		for _, other := range append([]string{pr}, workflowtemplate.TargetPRs(nodes[i], byID, project, repo)...) {
+			if _, read := nodes[i].PRStates[other]; read {
+				continue
+			}
+			h, err := workflowtemplate.ReadHead(ctx, v.gh(), other)
+			if err != nil {
+				return err
+			}
+			nodes[i].PRStates[other] = h.State
+			if other == pr {
+				nodes[i].Head = h.SHA
+			}
+		}
+	}
+	findings := workflowtemplate.MergeRule(project, repo, nodes, scope)
+	if len(findings) > 0 {
+		if w != nil && !managed && onlyNoPR(findings, id) {
+			if namesPR(*b) {
+				return fmt.Errorf("%s (--no-pr refused: the gate's own check names a PR; label it pr:<n> and plug its review, or redefine the check)", findings[0].Text)
+			}
+			return bc.AddComment(ctx, dir, id, w.Comment())
+		}
+		if w != nil {
+			return fmt.Errorf("%s (--no-pr waives only a merge with no pr: label and no review block; this one has a PR to review)", findings[0].Text)
+		}
+		return fmt.Errorf("%s", findings[0].Text)
+	}
+	for _, n := range nodes {
+		if !scope[n.Bead.ID] || n.Head == "" {
+			continue
+		}
+		pr := prs[n.Bead.ID]
+		h, err := workflowtemplate.ReadHead(ctx, v.gh(), pr)
+		if err != nil {
+			return err
+		}
+		if h.SHA != n.Head {
+			return fmt.Errorf("PR head changed during merge review check; retry")
+		}
+		finding := "pr-review topology and current-head evidence checked"
+		if workflowtemplate.Settled(workflowtemplate.TargetPRs(n, byID, project, repo), n.PRStates) {
+			finding = "PR merged: the review block was not checked"
+		}
+		e := workflowtemplate.Evidence{Instance: workflowtemplate.Label(byID[id].Bead, workflowtemplate.LabelInstance), Step: "merge-rule", Verifier: "merge-review", PR: pr, Head: h.SHA, Finding: finding}
+		if err := bc.AddComment(ctx, dir, id, e.Comment()); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+
+func(v Verifier) Root(ctx context.Context, bc beads.Client, dir, id string) (string, error) {
+	seen := map[string]bool{}
+	for id != "" {
+		if seen[id] {
+			return "", fmt.Errorf("ancestry cycle at %s", id)
+		}
+		seen[id] = true
+		b, err := bc.Show(ctx, dir, id)
+		if err != nil {
+			return "", err
+		}
+		if b == nil {
+			return "", fmt.Errorf("missing task/ancestor %s", id)
+		}
+		ds, err := v.details(ctx, bc, dir, []string{id})
+		if err != nil {
+			return "", err
+		}
+		d, ok := ds[id]
+		if !ok {
+			return "", fmt.Errorf("unreadable ancestry %s", id)
+		}
+		if d.Parent == "" {
+			return id, nil
+		}
+		id = d.Parent
+	}
+	return "", fmt.Errorf("missing workstream ancestry")
+}
+
+// NoPRWaiver is an already-authorized waiver, never inferred from an arbitrary
+// comment. The caller must validate the actor and recorded user authority.
+type NoPRWaiver struct{By,Reason,Evidence string}
+func(w *NoPRWaiver)Comment()string{return fmt.Sprintf("merge rule waived for a ship with no PR by %s: %s. Approval: %s",w.By,w.Reason,w.Evidence)}
+
+// onlyNoPR: every finding is target id's "has no PR yet".
+func onlyNoPR(findings []workflowtemplate.Finding, id string) bool {
+	for _, f := range findings {
+		if !f.NoPR || f.Target != id {
+			return false
+		}
+	}
+	return len(findings) > 0
+}
+
+// checkPRRE: words in a gate's check that name a PR: `gh pr <verb> N` (the
+// standard merged check, gates.MergedCheck), a /pull/N URL, "PR #N", "PR N",
+// "pull request #N". A bare "#N" is not one.
+var checkPRRE = regexp.MustCompile(`(?i)\bgh\s+pr\s+[a-z-]+\s+(?:\S*/pull/)?#?\d+\b|/pull/\d+\b|\b(?:PR|pull request)\s*#?\d+\b`)
+
+// namesPR: the gate's own check names a PR. MergeRule reads only pr: labels and
+// review blocks, so a gate made by `apply --template merged --pr N` reads as
+// having no PR; the waiver must not take that gate for a ship with none.
+func namesPR(b beads.Bead) bool {
+	for _, text := range []string{b.Description, b.AcceptanceCriteria} {
+		if gates.IsMergedCheck(strings.TrimSpace(text)) || checkPRRE.MatchString(text) {
+			return true
+		}
+	}
+	return false
+}
+

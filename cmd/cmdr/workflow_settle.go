@@ -147,28 +147,7 @@ func settleWorkflowBlock(ctx context.Context, bc beads.Client, dir, project, blo
 // settled as the merge rule reads it (one merged PR, none live), each PR read
 // fresh: a target with another live PR still needs its review.
 func settledTargets(ctx context.Context, nodes []workflowtemplate.Node, project, repo string, block beads.Bead) error {
-	byID := map[string]workflowtemplate.Node{}
-	for _, n := range nodes {
-		byID[n.Bead.ID] = n
-	}
-	for _, n := range nodes {
-		if !slices.Contains(n.Waits, block.ID) || !workflowtemplate.PluggedBefore(block, n.Bead.ID, project) || n.Bead.Status == "closed" {
-			continue
-		}
-		prs := workflowtemplate.TargetPRs(n, byID, project, repo)
-		states := map[string]string{}
-		for _, pr := range prs {
-			h, err := workflowtemplate.ReadHead(ctx, workflowGH, pr)
-			if err != nil {
-				return fmt.Errorf("could not read %s, nothing settled: %w", pr, err)
-			}
-			states[pr] = h.State
-		}
-		if !workflowtemplate.Settled(prs, states) {
-			return fmt.Errorf("%s still has a live PR (%v): its review is not settled by the merge; nothing settled", n.Bead.ID, prs)
-		}
-	}
-	return nil
+	return workflowVerifier().SettledTargets(ctx, nodes, project, repo, block)
 }
 
 // settleOrder is the template's steps with every step after the ones it waits

@@ -15,6 +15,10 @@ import (
 )
 
 func postgresTestStore(t *testing.T) *Store {
+	return postgresTestStoreWithSetup(t, nil)
+}
+
+func postgresTestStoreWithSetup(t *testing.T, setup func(*sql.DB)) *Store {
 	t.Helper()
 	dsn := os.Getenv("COMMANDER_POSTGRES_TEST_DSN")
 	if dsn == "" {
@@ -36,6 +40,16 @@ func postgresTestStore(t *testing.T) *Store {
 	q := u.Query()
 	q.Set("search_path", schema)
 	u.RawQuery = q.Encode()
+	if setup != nil {
+		fixture, e := sql.Open(pgbind.Driver, u.String())
+		if e != nil {
+			t.Fatal(e)
+		}
+		setup(fixture)
+		if e = fixture.Close(); e != nil {
+			t.Fatal(e)
+		}
+	}
 	s, e := OpenPostgres(u.String())
 	if e != nil {
 		t.Fatal(e)

@@ -15,7 +15,7 @@ const RepeatAfter = 30 * time.Minute
 // Commander, the global ones plus its workstream's (and its tracks') for a
 // Manager, none for anyone else.
 func ForRole(ds []Decision, role string) []Decision {
-	if role == "commander" {
+	if role == "commander" || strings.HasPrefix(role,"commander-") {
 		return ActiveIn(ds)
 	}
 	ws, ok := strings.CutPrefix(role, "manager-")
@@ -60,7 +60,7 @@ func MarkFull(home, role string) { _ = os.Remove(seenPath(home, role)) }
 // it as seen (call it once the text was printed).
 func Deliver(home, role string, now time.Time) (string, func()) {
 	noop := func() {}
-	if role != "commander" && !strings.HasPrefix(role, "manager-") {
+	if role != "commander" && !strings.HasPrefix(role,"commander-") && !strings.HasPrefix(role, "manager-") {
 		return "", noop
 	}
 	all, err := Load(home)

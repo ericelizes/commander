@@ -1,0 +1,11 @@
+{
+  "name": "Commander answers a durable execution question without a Manager hop",
+  "question": "Can this change reuse the existing integration?",
+  "recommendation": "Reuse the existing integration and keep release approval separate.",
+  "checkpoint": "Implementation prepared; waiting for the integration decision.",
+  "answer": "Reuse it. Preserve the existing release gate.",
+  "expected_owner": "commander",
+  "expected_question_deliveries": 1,
+  "expected_execution_launches": 2,
+  "expected_user_cards": 0
+}

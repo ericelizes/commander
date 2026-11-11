@@ -143,6 +143,18 @@ type SnapProject struct {
 
 // SnapWorkstream is one workstream with its step tree.
 type SnapWorkstream struct {
+ BlockedBy []string `json:"blocked_by,omitempty"`
+ QuestionWaiting bool `json:"question_waiting,omitempty"`
+ HumanAnswerPending bool `json:"human_answer_pending,omitempty"`
+ ExecutionMode string `json:"execution_mode,omitempty"`
+ ExecutionReady bool `json:"execution_ready,omitempty"`
+ ExecutionEligible bool `json:"execution_eligible,omitempty"`
+ ExecutionReserved bool `json:"execution_reserved,omitempty"`
+ ExecutionCapable bool `json:"execution_capable,omitempty"`
+ ExecutionAttempts int64 `json:"execution_attempts,omitempty"`
+ ExecutionError string `json:"execution_error,omitempty"`
+ PlanningCommander string `json:"planning_commander,omitempty"`
+ JurisdictionRevision int64 `json:"jurisdiction_revision,omitempty"`
 	N           int             `json:"n"`
 	Project     string          `json:"project"`
 	Repo        string          `json:"repo,omitempty"` // the project's GitHub owner/name: bare pr:N labels resolve through it
@@ -210,6 +222,17 @@ type SnapGate struct {
 
 // SnapStep is one step; phases carry their children and a one-line note.
 type SnapStep struct {
+ QuestionWaiting bool `json:"question_waiting,omitempty"`
+ HumanAnswerPending bool `json:"human_answer_pending,omitempty"`
+ ExecutionMode string `json:"execution_mode,omitempty"`
+ ExecutionEligible bool `json:"execution_eligible,omitempty"`
+ ExecutionReady bool `json:"execution_ready,omitempty"`
+ ExecutionReserved bool `json:"execution_reserved,omitempty"`
+ ExecutionCapable bool `json:"execution_capable,omitempty"`
+ ExecutionAttempts int64 `json:"execution_attempts,omitempty"`
+ ExecutionError string `json:"execution_error,omitempty"`
+ PlanningCommander string `json:"planning_commander,omitempty"`
+ JurisdictionRevision int64 `json:"jurisdiction_revision,omitempty"`
 	Activity      *StatusEvidence         `json:"activity,omitempty"`
 	WorkflowCheck *workflowtemplate.Node  `json:"workflow_check,omitempty"`
 	GateChecks    []workflowtemplate.Node `json:"gate_checks,omitempty"`
@@ -446,7 +469,10 @@ func snapWorkstream(n int, ws Workstream, live LiveAgent) SnapWorkstream {
 		working = true
 	}
 	out := SnapWorkstream{
-		N: n, Project: ws.Project.Name, Repo: GitHubRepo(ws.Project.Path), ProjectID: ws.Project.ID, BeadID: r.BeadID, Title: r.Title, Tickets: r.Tickets,
+ QuestionWaiting:r.QuestionWaiting,HumanAnswerPending:r.HumanAnswerPending,
+ ExecutionMode:r.ExecutionMode,ExecutionReady:r.ExecutionReady,ExecutionEligible:r.ExecutionEligible,ExecutionReserved:r.ExecutionReserved,ExecutionCapable:r.ExecutionCapable,ExecutionAttempts:r.ExecutionAttempts,ExecutionError:r.ExecutionError,
+ PlanningCommander: r.PlanningCommander, JurisdictionRevision: r.JurisdictionRevision,
+		BlockedBy:slices.Clone(r.BlockedBy), N: n, Project: ws.Project.Name, Repo: GitHubRepo(ws.Project.Path), ProjectID: ws.Project.ID, BeadID: r.BeadID, Title: r.Title, Tickets: r.Tickets,
 		State: state, Working: working, Status: r.Status, Owner: r.Owner, Starred: r.Starred, Hold: r.Hold, HoldReason: r.HoldReason, Review: r.Review,
 		Ask: r.Ask, Note: r.Note, Decision: r.Decision,
 		ManagerRole: store.WorkstreamManagerRole(r.BeadID), NowStep: now,
@@ -532,6 +558,9 @@ func snapSteps(nodes []*StepNode, now string, live LiveAgent, stage bool) []Snap
 	for _, n := range nodes {
 		o := n.Row
 		st := SnapStep{
+ QuestionWaiting:o.QuestionWaiting,HumanAnswerPending:o.HumanAnswerPending,
+ ExecutionMode:o.ExecutionMode,ExecutionEligible:o.ExecutionEligible,ExecutionReady:o.ExecutionReady,ExecutionReserved:o.ExecutionReserved,ExecutionCapable:o.ExecutionCapable,ExecutionAttempts:o.ExecutionAttempts,ExecutionError:o.ExecutionError,
+ PlanningCommander: o.PlanningCommander, JurisdictionRevision: o.JurisdictionRevision,
 			WorkflowCheck: o.WorkflowCheck, BeadID: o.BeadID, Title: o.Title, State: o.State, Status: o.Status, Owner: o.Owner, OwnerState: o.OwnerState,
 			OwnerWhy: o.OwnerWhy, OwnerSince: o.OwnerSince, Restarts: o.Restarts,
 			Starred: o.Starred, Review: o.Review, PR: o.PR, Tickets: o.Tickets, PRRepo: o.PRRepo, Ask: o.Ask, Note: o.Note, Decision: o.Decision, SpecHash: o.SpecHash, Basis: o.Basis, PushCount: o.PushCount, PushFirst: o.PushFirst,

@@ -76,3 +76,35 @@ bd applied a removal and the parent write, exact repeats.
 `TestPublicationRepairScale_BDIntegration` (`COMMANDER_REPAIR_SCALE_BEADS=N`) times one repair.
 All fixtures are synthetic; the command must be separately reviewed before use
 on a live project.
+
+On PostgreSQL, publication and repair delegate once to authenticated
+`/api/gate/publish`. The registered planning Commander must own the gate, its placement and
+protected scope, or have an exact typed publication proposal agreed by every
+affected owner; the user retains the interactive door. The
+CLI supplies fresh bead and jurisdiction revisions. The service locks the
+project, validates those versions and leaf coverage, and commits the original
+audit, exact redundant edge removals, placement and completion audit together.
+A late failure rolls all of them back. Unapplied saved human answers refuse
+placement changes until their recorded recovery is handled. The action does
+not approve or close the gate. A missing service never falls back to local
+separate writes. Dry run writes no facts or receipt; exact committed requests
+replay their original receipt without repeating mutations or progress.
+
+The repair grant exists only inside the validated server transaction and permits
+its exact edges, placement and audit. Raw comments, environment flags and
+unrelated plan approvals cannot grant it. Removing a different relationship type
+cannot delete a blocking edge, and parent relationships use the guarded parent
+operation. For cross-owner changes, use a plan JSON object containing `dir`,
+`basis`, and a `publication` object with `gate`, `parent`, `waiters`, and `reason`.
+Do not mix it with `ops` or holding intent. Run `cmdr plan propose --file PATH`,
+inspect it with `cmdr plan get --id ID`, record each owner's exact answer, then
+`cmdr plan apply --proposal ID`. No owner agreement passes the human gate. Changed
+payloads, requester, ownership or versions refuse. An ordinary plan grant cannot
+authorize a publication action, and publication agreement cannot authorize raw
+operations. See the jurisdiction architecture document for a JSON example.
+Private PostgreSQL/HTTP and typed CLI coverage lives in
+`TestPostgresPlanPublicationRepairIsAtomicAndRetainsApproval`,
+`TestPostgresPlanPublicationRepairRefusesUnsafeOrForeignState`, and
+`TestPostgresPlanPublicationCLIUsesCanonicalServiceOnce`, the publication
+coordination API tests, and
+`TestPostgresPlanPublicationCLISavedProposalUsesTypedEndpoint`.

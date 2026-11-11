@@ -45,11 +45,22 @@ func EnsureOperatorKnowledgeAgent(agentName string) error {
 
 // Claude agent roles, keyed to the same templates the opencode agents use.
 const (
+	RolePlanningCommander = "planning-commander.md"
 	RoleCommander         = commanderTemplatePath
 	RoleManager           = leadTemplatePath
+	RoleExecutor          = "executor.md"
 	RoleOperatorCode      = operatorCodePath
 	RoleOperatorKnowledge = operatorKnowledgePath
 )
+
+// CommanderTemplate separates legacy recovery from the active jurisdiction
+// contract. A scoped Commander always owns a planning conversation.
+func CommanderTemplate(role string, active bool) string {
+	if active || role != "commander" {
+		return RolePlanningCommander
+	}
+	return RoleCommander
+}
 
 // EnsureAgentFor installs agentName for the given runtime: the opencode agent
 // file, or the Claude Code agent file translated from the same template.

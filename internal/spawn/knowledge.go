@@ -159,7 +159,7 @@ func (s *Spawner) spawnKnowledge(ctx context.Context, req SpawnRequest) (*SpawnR
 	if err := os.MkdirAll(operatorsDir, 0o755); err != nil {
 		return bail(fmt.Errorf("spawn: create operators dir: %w", err))
 	}
-	if err := promptassets.EnsureAgentFor(kind, promptassets.RoleOperatorKnowledge, agentName); err != nil {
+	if err := promptassets.EnsureAgentFor(kind, req.promptRole(promptassets.RoleOperatorKnowledge), agentName); err != nil {
 		return bail(fmt.Errorf("spawn: ensure operator agent prompt: %w", err))
 	}
 
@@ -277,6 +277,9 @@ func (s *Spawner) spawnKnowledge(ctx context.Context, req SpawnRequest) (*SpawnR
 // knowledgeBootstrapPrompt is the seed message the knowledge operator sees on
 // first invocation. Behavior lives in prompts/operator-knowledge.md.
 func knowledgeBootstrapPrompt(req SpawnRequest) string {
+	if req.ExecutionClaimToken != "" {
+		return executionBootstrapPrompt(req, "Your assigned knowledge workspace is the project root. Follow its artifact and git rules; do not assume a shared-branch commit is authorized.")
+	}
 	return fmt.Sprintf(
 		"You are the knowledge-type Operator for task %s in project %q. "+
 			"Working directory is the project root; commit directly to the current branch. "+

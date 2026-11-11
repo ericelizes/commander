@@ -99,6 +99,16 @@ func (n *Normalizer) Line(line []byte) ([]Event, *ControlRequest) {
 		return e
 	}
 	switch r.Type {
+	case "commander_execution_start":
+		var text string
+		if json.Unmarshal(r.Message, &text) != nil {
+			return nil, nil
+		}
+		event := base(KindUser)
+		event.Source = SourceEngine
+		event.Origin = "execution"
+		event.Text = text
+		return []Event{event}, nil
 	case "system":
 		return n.system(r, line, base), nil
 	case "stream_event":

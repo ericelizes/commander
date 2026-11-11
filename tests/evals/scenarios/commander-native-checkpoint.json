@@ -1,0 +1,20 @@
+{
+  "runners": [
+    "internal/spawn:TestClaimedExecutionUsesRealNativeHostAndRecoversCommittedStartup",
+    "internal/spawn:TestClaimedCodexCheckpointResumesSameThreadFromCanonicalSource",
+    "internal/spawn:TestNativeCheckpointUsesRecordedSessionThreadAndAccountWithoutRoleCopies",
+    "internal/spawn:TestLegacyCodexCheckpointPromotesExactThreadWithoutReplacingAnotherContext",
+    "internal/chat:TestNativeCheckpointRefusesFreshClaudeContextIfConversationDisappears",
+    "internal/chat:TestCodexRequiredCheckpointNeverFallsBackToThreadStart",
+    "internal/store:TestPostgresNativeCheckpointBindingCannotChangeProviderOrAccount",
+    "cmd/cmdr:TestQuestionCLIRecordsNativeProviderAndThreadFromItsCanonicalRun"
+  ],
+  "invariants": [
+    "Native checkpoint authority is the immutable database source run/session/provider/account, independent of derived role and metadata files",
+    "Prepared files and committed worktree branch survive actual scheduler resume",
+    "Claude resumes its actual transcript and Codex resumes its exact saved thread",
+    "Missing/rejected/mismatched conversations never silently create fresh context",
+    "The real question CLI records the current native provider/thread, regardless of changed role preferences",
+    "Rejected source binding changes do not consume the capacity reservation"
+  ]
+}

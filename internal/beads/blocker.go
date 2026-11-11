@@ -6,7 +6,7 @@ import (
 )
 
 // BehindOpenBlocker reports whether id waits (a blocks edge) on a blocker still
-// in play (not closed, parked or superseded) other than except: it is not ready,
+// in play (including parked unpassed approvals) other than except: it is not ready,
 // so nothing has to hold it yet (livedata.OpenBeadInvariant's rule). Reads are
 // fresh; a blocker that no longer exists holds nothing.
 func BehindOpenBlocker(ctx context.Context, c Client, dir, id, except string) (bool, error) {
@@ -25,7 +25,7 @@ func BehindOpenBlocker(ctx context.Context, c Client, dir, id, except string) (b
 		if err != nil {
 			return false, err
 		}
-		if blocker != nil && blocker.Status != "closed" && blocker.Status != StatusDeferred && !Superseded(*blocker) {
+		if blocker != nil && !DependencyComplete(*blocker) {
 			return true, nil
 		}
 	}

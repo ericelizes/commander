@@ -65,10 +65,18 @@ func (s runSettler) afterWake(ctx context.Context, res spawn.HostReapResult, gap
 	died := 0
 	s.settleStopped(ctx, res, retry)
 	for _, run := range res.Died {
+		if waiting, e := s.questionWait(ctx, run); waiting || e != nil {
+			s.settleOrRetry(ctx, retry, "question", run, func(c context.Context) error { return s.diedWhileAsleep(c, run, gap) })
+			continue
+		}
 		died++
 		s.settleOrRetry(ctx, retry, "died", run, func(c context.Context) error { return s.diedWhileAsleep(c, run, gap) })
 	}
 	for _, run := range res.Exited {
+		if waiting, e := s.questionWait(ctx, run); waiting || e != nil {
+			s.settleOrRetry(ctx, retry, "question", run, func(c context.Context) error { return s.exited(c, run) })
+			continue
+		}
 		if s.finalReport(ctx, run) != "" {
 			s.settleOrRetry(ctx, retry, "exited", run, func(c context.Context) error { return s.exited(c, run) })
 			continue

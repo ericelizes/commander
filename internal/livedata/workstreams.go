@@ -152,6 +152,7 @@ func Workstreams(data Data) []Workstream {
 
 // NeedsYou is one open step waiting on the user to verify or decide.
 type NeedsYou struct {
+ PlanRevision int64 `json:"plan_revision,omitempty"`
 	StaleWhy   string          `json:"stale_why,omitempty"` // derived by Board for its rows
 	Project    string          `json:"project"`
 	BeadID     string          `json:"bead_id"`
@@ -224,6 +225,7 @@ func askLists(data Data) ([]NeedsYou, []NoPitch) {
 	byID := rowsByID(data.Objectives)
 	for i, ws := range Workstreams(data) {
 		add := func(row ObjectiveRow, n NeedsYou) {
+ if row.HumanAnswerPending{return}
 			if row.Proposed != "" {
 				none = append(none, NoPitch{Project: n.Project, BeadID: n.BeadID, Title: n.Title, Workstream: n.Workstream, WorkstreamID: ws.Root.BeadID,
 					ManagerRole: store.WorkstreamManagerRole(ownerIn(byID, row.BeadID)), Gate: row.Gate, Proposed: row.Proposed, ProposedAt: row.ProposedAt})
@@ -372,7 +374,7 @@ func gateNeedsYou(ws Workstream, row ObjectiveRow, rank int) NeedsYou {
 		ask = row.Title + "?"
 	}
 	n := NeedsYou{
-		Project: ws.Project.Name, BeadID: row.BeadID, Title: row.Title, Workstream: ws.Root.Title,
+		Project: ws.Project.Name, BeadID: row.BeadID, Title: row.Title, Workstream: ws.Root.Title, PlanRevision:row.PlanRevision,
 		Rank: rank, Ask: ask,
 	}
 	ctx := strings.TrimSpace(row.GateNote)
@@ -380,21 +382,13 @@ func gateNeedsYou(ws Workstream, row ObjectiveRow, rank int) NeedsYou {
 		return n // no pitch: never a card to approve blind (askLists drops it)
 	}
 	n.Note = ctx
-	n.Decision = &store.Decision{
-		Question: ask,
-		Context:  ctx,
-		Options: []store.DecisionOption{
-			{Label: beads.GateApprove, Implications: "The gate closes and the work behind it may start.", Recommended: true},
-			{Label: beads.GateChange, Implications: "The gate stays open; the Manager reworks the workflow from your note."},
-			{Label: beads.GateDrop, Implications: "The Manager is told not to start this and to close the workstream."},
-		},
-	}
+	n.Decision = GateDecision(row.Title,ctx)
 	return n
 }
 
 func needsYouOf(ws Workstream, row ObjectiveRow, rank int) NeedsYou {
 	return NeedsYou{
-		Project: ws.Project.Name, BeadID: row.BeadID, Title: row.Title, Workstream: ws.Root.Title,
+		Project: ws.Project.Name, BeadID: row.BeadID, Title: row.Title, Workstream: ws.Root.Title, PlanRevision:row.PlanRevision,
 		Rank: rank, Ask: row.Ask, Note: row.Note, Decision: row.Decision, Since: row.AskSince,
 		SpecHash: row.SpecHash, Basis: row.Basis, PushCount: row.PushCount, PushFirst: row.PushFirst,
 	}
@@ -606,4 +600,15 @@ func PhaseNote(n *StepNode) string {
 		return fmt.Sprintf("%d of %d done", done, total)
 	}
 	return "not started"
+}
+
+// GateDecision is shared by displayed automatic cards and the typed answer
+// path that journals them. Recording an answer never invents different choices.
+func GateDecision(title,context string)*store.Decision{
+ ask:="Approve: "+title+"?";if strings.HasPrefix(strings.ToLower(title),"greenlight"){ask=title+"?"}
+ return &store.Decision{Question:ask,Context:context,Options:[]store.DecisionOption{
+ {Label:beads.GateApprove,Implications:"The gate closes and the work behind it may start.",Recommended:true},
+ {Label:beads.GateChange,Implications:"The gate stays open; the Manager reworks the workflow from your note."},
+ {Label:beads.GateDrop,Implications:"Do not start this; the affected workstream is parked."},
+ }}
 }

@@ -1,0 +1,105 @@
+package supervision
+
+import (
+	"github.com/example-user/commander/internal/beads"
+	"github.com/example-user/commander/internal/store"
+	"testing"
+	"time"
+)
+
+func TestResponsibilityPolicyAcrossAgentCapabilities(t *testing.T) {
+	now := time.Unix(20000, 0)
+	base := store.SupervisionFact{AgentID: "workstream-qa", SupervisorID: "commander", Status: "open", PresenceKnown: true, ProgressAt: now.Unix() - 60}
+	cases := []struct {
+		name                   string
+		change                 func(*store.SupervisionFact)
+		action, reason, target string
+	}{
+		{"idle actionable", func(f *store.SupervisionFact) {}, "wake", "work_pending", "workstream-qa"},
+		{"working", func(f *store.SupervisionFact) { f.Alive = true; f.AgentState = "working"; f.ExecutorBound = true }, "observe", "working", "workstream-qa"},
+		{"paused", func(f *store.SupervisionFact) { f.Held = true }, "observe", "held", "workstream-qa"},
+		{"blocked dependency", func(f *store.SupervisionFact) { f.OpenBlockers = 1 }, "observe", "dependency", "workstream-qa"},
+		{"subordinates working", func(f *store.SupervisionFact) { f.ChildCount = 2 }, "observe", "subordinates", "workstream-qa"},
+		{"result delivered", func(f *store.SupervisionFact) { f.ResultReady = true }, "wake", "result_pending", "workstream-qa"},
+		{"reviewer busy", func(f *store.SupervisionFact) { f.ResultReady = true; f.AgentState = "working"; f.Alive = true }, "defer", "result_pending", "workstream-qa"},
+		{"unknown runtime", func(f *store.SupervisionFact) { f.PresenceKnown = false }, "observe", "runtime_unknown", "workstream-qa"},
+		{"missing resumable execution", func(f *store.SupervisionFact) { f.ExecutorBound = true }, "resume", "work_pending", "workstream-qa"},
+		{"busy without progress", func(f *store.SupervisionFact) {
+			f.ExecutorBound = true
+			f.AgentState = "working"
+			f.ProgressAt = now.Add(-time.Hour).Unix()
+		}, "wake", "progress_check", "commander"},
+		{"review without progress", func(f *store.SupervisionFact) {
+			f.ResultReady = true
+			f.AgentState = "working"
+			f.ProgressAt = now.Add(-time.Hour).Unix()
+		}, "wake", "owner_progress", "commander"},
+		{"no outcomes despite activity", func(f *store.SupervisionFact) {
+			f.AgentState = "working"
+			f.CompletionAt = now.Add(-3 * time.Hour).Unix()
+		}, "wake", "completion_check", "commander"},
+		{"busy owner on other work", func(f *store.SupervisionFact) { f.AgentState = "working" }, "defer", "work_pending", "workstream-qa"},
+		{"real user decision", func(f *store.SupervisionFact) { f.Labels = []string{"needs-user"} }, "observe", "user_decision", "workstream-qa"},
+		{"ready queued", func(f *store.SupervisionFact) { f.ExecutionReady = true; f.ExecutionCapable = true }, "observe", "execution_queued", "workstream-qa"},
+		{"retired intent", func(f *store.SupervisionFact) { f.Labels = []string{"retired"} }, "resolve", "", "workstream-qa"},
+		{"planning question", func(f *store.SupervisionFact) {
+			f.PendingQuestions = 1
+			f.PlanningCommander = "commander-urgent"
+			f.PresenceKnown = false
+		}, "wake", "planning_question", "commander-urgent"},
+		{"question on held work", func(f *store.SupervisionFact) {
+			f.PendingQuestions = 1
+			f.PlanningCommander = "commander-urgent"
+			f.Held = true
+			f.ExecutorBound = true
+		}, "wake", "planning_question", "commander-urgent"},
+		{"question alongside human gate", func(f *store.SupervisionFact) {
+			f.PendingQuestions = 1
+			f.PlanningCommander = "commander-urgent"
+			f.Labels = []string{"needs-user"}
+		}, "wake", "planning_question", "commander-urgent"},
+		{"saved human answer on held work", func(f *store.SupervisionFact) {
+			f.PendingHumanAnswer = true
+			f.PlanningCommander = "commander-urgent"
+			f.Held = true
+			f.Labels = []string{"needs-user"}
+		}, "wake", "human_answer_pending", "commander-urgent"},
+		{"closed work needs answer receipt", func(f *store.SupervisionFact) {
+			f.PendingHumanAnswer = true
+			f.PlanningCommander = "commander-urgent"
+			f.Status = "closed"
+		}, "wake", "human_answer_pending", "commander-urgent"},
+		{"waiting for another owner", func(f *store.SupervisionFact) { f.QuestionWaiting = true }, "observe", "planning_answer", "workstream-qa"},
+		{"startup reserved", func(f *store.SupervisionFact) {
+			f.ExecutionReady = true
+			f.ExecutionCapable = true
+			f.ExecutionReserved = true
+		}, "observe", "execution_starting", "workstream-qa"},
+		{"missing execution capability", func(f *store.SupervisionFact) { f.ExecutionReady = true }, "wake", "execution_capability", "commander"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			f := base
+			c.change(&f)
+			d := Decide(f, now)
+			if d.Action != c.action || d.Reason != c.reason || d.Target != c.target {
+				t.Fatalf("decision=%#v", d)
+			}
+		})
+	}
+}
+
+func TestIncompleteRequiredRetirementIsReconciledByCurrentCommander(t *testing.T) {
+	for _, labels := range [][]string{{"kind:gate", "retired"}, {"workflow-template:pr-review", "superseded"}} {
+		fact := store.SupervisionFact{Status: "open", Labels: labels, Held: true, PlanningCommander: "commander-urgent", SupervisorID: "commander", AgentID: "executor-generic"}
+		got := Decide(fact, time.Now())
+		if got.Action != "wake" || got.Reason != "retirement_pending" || got.Target != "commander-urgent" {
+			t.Fatalf("incomplete retirement disappeared or resumed an executor: %+v", got)
+		}
+		fact.Status = beads.StatusDeferred
+		got = Decide(fact, time.Now())
+		if got.Action == "wake" || got.Action == "resume" {
+			t.Fatalf("intentional parking was treated as abandoned execution: %+v", got)
+		}
+	}
+}

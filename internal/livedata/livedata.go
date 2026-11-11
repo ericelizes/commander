@@ -65,6 +65,16 @@ func (d Data) Parents() beads.Parents {
 // ObjectiveRow is a flattened cross-project objective (a workstream or one of
 // its steps). ProjectName is best-effort: the first linked project's name.
 type ObjectiveRow struct {
+ QuestionWaiting bool
+ HumanAnswerPending bool
+ ExecutionMode string
+	PlanRevision int64
+	ExecutionEligible bool
+ ExecutionReady,ExecutionReserved,ExecutionCapable bool
+ ExecutionAttempts int64
+ ExecutionError string
+ PlanningCommander string
+ JurisdictionRevision int64
 	WorkflowCheck *workflowtemplate.Node
 	GateChecks    []workflowtemplate.Node // open merge gates of this stage (gate beads are not rows)
 	BeadID        string
@@ -283,6 +293,7 @@ func Load(ctx context.Context, deps Deps) Data {
 		}
 	}
 	lap(&out.Phases.Beads)
+	if e:=attachExecutionState(ctx,deps.Store,out.Objectives);e!=nil&&out.LoadErr==nil{out.LoadErr=e}
 
 	out.Objectives = MarkOperatorOwners(ctx, deps.Store, out.Projects, out.Objectives)
 	if died, err := deps.Store.ListCostEventsSince(ctx, out.LoadedAt.Add(-diedFor).Unix(), store.EventOperatorDied); err == nil {
@@ -807,7 +818,9 @@ func projectObjectiveRows(ctx context.Context, bc beads.Client, project store.Pr
 			ownerState = OwnerDied // cmdrd cleared the dead Operator's claim
 		}
 		out = append(out, ObjectiveRow{
-			WorkflowCheck: workflowNode(objective, details[objective.ID], reviewBlocks),
+			PlanRevision:objective.PlanRevision, ExecutionReady: objective.ExecutionReady, ExecutionReserved: objective.ExecutionReserved, ExecutionCapable: objective.ExecutionCapable, ExecutionAttempts: objective.ExecutionAttempts, ExecutionError: objective.ExecutionError,
+ PlanningCommander: objective.PlanningCommander, JurisdictionRevision: objective.JurisdictionRevision,
+ WorkflowCheck: workflowNode(objective, details[objective.ID], reviewBlocks),
 			BeadID:        objective.ID,
 			ParentBeadID:  parent,
 			Title:         objective.Title,

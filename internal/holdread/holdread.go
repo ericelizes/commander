@@ -17,7 +17,7 @@ import (
 
 // Bead is a bead as the one predicate reads it.
 func Bead(b *beads.Bead, parent string, blockers []string) holding.Bead {
-	hb := holding.Bead{ID: b.ID, Parent: parent, Status: b.Status, BlockedBy: blockers, Labels: slices.Clone(b.Labels)}
+	hb := holding.Bead{ID: b.ID, Parent: parent, Status: b.Status, BlockedBy: blockers, Labels: slices.Clone(b.Labels), Queued: b.ExecutionReady && b.PlanningCommander != "", QuestionWaiting: b.QuestionWaiting, HumanAnswerPending: b.HumanAnswerPending}
 	Derive(&hb)
 	return hb
 }
@@ -27,10 +27,14 @@ func Derive(hb *holding.Bead) {
 	state, owner := beads.StepState(hb.Status, hb.Labels)
 	hb.Gate = slices.Contains(hb.Labels, beads.GateLabel) || slices.Contains(hb.Labels, "kind:gate")
 	hb.NeedsUser = state == beads.StateNeedsUser
+	hb.HumanHold = slices.Contains(hb.Labels, "hold")
 	hb.Superseded = slices.Contains(hb.Labels, "superseded") || slices.Contains(hb.Labels, "retired")
 	hb.Owner, hb.Waits, hb.OperatorWaits, hb.Untyped, hb.Until = owner, 0, nil, "", false
 	now := time.Now()
 	for _, w := range beads.WaitsOf(hb.Labels) {
+		if w.Kind == beads.WaitUser {
+			hb.HumanHold = true
+		}
 		if !beads.WaitHolds(w, now) {
 			continue // an overdue handoff: the Manager's move, held by nothing
 		}

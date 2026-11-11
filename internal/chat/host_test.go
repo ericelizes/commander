@@ -74,7 +74,12 @@ func TestRestartAdoptsSameClaudeMidTurn(t *testing.T) {
 	waitFor(t, sub, isKind(KindPermission))
 
 	e2 := h.restart()
-	waitUntil(t, "adopted", func() bool { return e2.Running("operator-h1") })
+	// A live attachment precedes asynchronous journal replay. Wait for the
+	// pending permission to be reconstructed, not merely for the process pointer.
+	waitUntil(t, "adopted permission replay", func() bool {
+		current, err := e2.Status("operator-h1")
+		return err == nil && current.Running && len(current.Pending) == 1 && current.Pending[0].ToolName == "Bash" && current.State == store.AgentWaiting
+	})
 	st2, _ := e2.Status("operator-h1")
 	if st2.PID != st.PID || !alive(st.PID) {
 		t.Fatalf("pid %d -> %d (alive %v)", st.PID, st2.PID, alive(st.PID))

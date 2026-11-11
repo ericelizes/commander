@@ -7,6 +7,9 @@ import { useStore } from '../store'
 import { useChatTarget } from './ChatSlot'
 import { FocusHeader } from './FocusHeader'
 import { modelName } from '../../../features/chat/modelName'
+import { WorkstreamCommander } from './WorkstreamCommander'
+import { wsKey } from '../viewmodel'
+import { commanderScope } from '../jurisdiction'
 
 export function TopBar({ left, chat }: { left: number; chat: number }) {
   const focus = useStore((s) => s.focus)
@@ -17,6 +20,19 @@ export function TopBar({ left, chat }: { left: number; chat: number }) {
   const target = useChatTarget()
   const chatTitle = target.title
   const model = useStore((s) => s.chats[target.role]?.model)
+  const selected = useStore((s) => s.selected)
+  const snapshot = useStore((s) => s.snapshot)
+  const workflowOpen = useStore((s) => s.workflowOpen)
+  const jurisdiction = (() => {
+    const s = { selected, snapshot, workflowOpen }
+    const key = s.selected.kind === 'ws' ? s.selected.key : s.selected.kind === 'agent' ? s.selected.ws : ''
+    const ws = s.snapshot?.workstreams.find((w) => wsKey(w) === key)
+    if (!ws) return null
+    const row = s.snapshot?.display?.workstreams.find((r) => r.key === key)
+    const track = (s.workflowOpen?.ws === key ? s.workflowOpen.track : undefined) ?? row?.scope
+    const scope = commanderScope(ws, track)
+    return scope ? { projectId: ws.project_id, beadId: scope.beadId, workstreamKey: key, owner: scope.owner } : null
+  })()
   const split = focused && !narrow
   // A narrow window shows one pane at a time, so it names the one on screen.
   const showFocus = focused && (!narrow || !chatTab)
@@ -31,7 +47,7 @@ export function TopBar({ left, chat }: { left: number; chat: number }) {
           <span className="app-top-title">Progress</span>
         </div>
       )}
-      {showFocus && <div className="app-top-pane">{focus && <FocusHeader target={focus} />}</div>}
+      {showFocus && <div className="app-top-pane">{focus && <FocusHeader target={focus} />}{jurisdiction && <WorkstreamCommander key={`${jurisdiction.projectId}:${jurisdiction.beadId}`} {...jurisdiction} />}</div>}
       {showChat && !page && (
         <div className="app-top-pane app-top-chat">
           <span className="app-top-title">{chatTitle}</span>

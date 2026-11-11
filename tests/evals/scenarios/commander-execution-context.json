@@ -1,0 +1,17 @@
+{
+  "goal": "Execution context outranks a registered planning identity without silencing its current work",
+  "registered_role": "commander-urgent",
+  "session": "current-registered-execution",
+  "invariants": [
+    "Current claimed execution can report phases and evidence before and after planning handoff",
+    "Execution context cannot borrow planning, release, proposal, readiness or human-decision authority",
+    "Anonymous execution attribution cannot become an interactive user",
+    "Stale, partial and terminal run identities refuse",
+    "Logical planning context retains its actual jurisdiction",
+    "Role names and imported registration do not define execution authority"
+  ],
+  "runners": [
+    "internal/beads:TestPostgresRegisteredPlanningIdentityExecutionContextCannotBorrowAuthority",
+    "internal/api:TestPostgresPlanRegisteredExecutionContextCannotUsePlanningEndpoints"
+  ]
+}

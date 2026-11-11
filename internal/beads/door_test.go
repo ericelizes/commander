@@ -74,17 +74,18 @@ func TestDoorWritable(t *testing.T) {
 
 func TestDoorEnvKeep(t *testing.T) {
 	for kv, want := range map[string]bool{
-		"USER=alex":                   true,
-		"COMMANDER_ROLE=op-x":         true,
-		"BR_ACTOR=a":                  true,
-		"BEADS_ACTOR=a":               true,
-		"BEADS_DB=/x":                 false,
-		"BEADS_DOLT_SERVER_HOST=evil": false,
-		"BR_SOMETHING=1":              false,
-		"BD_ACTOR=a":                  true,
-		"COMMANDER_BEADS_BIN=/bin/sh": false,
-		"PATH=/bin":                   false,
-		"USER":                        false,
+		"USER=alex":                        true,
+		"COMMANDER_ROLE=op-x":              true,
+		"COMMANDER_MANAGER_ROLE=manager-x": true,
+		"BR_ACTOR=a":                       true,
+		"BEADS_ACTOR=a":                    true,
+		"BEADS_DB=/x":                      false,
+		"BEADS_DOLT_SERVER_HOST=evil":      false,
+		"BR_SOMETHING=1":                   false,
+		"BD_ACTOR=a":                       true,
+		"COMMANDER_BEADS_BIN=/bin/sh":      false,
+		"PATH=/bin":                        false,
+		"USER":                             false,
 	} {
 		if got := DoorEnvKeep(kv); got != want {
 			t.Errorf("%q = %v, want %v", kv, got, want)

@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -244,8 +245,22 @@ func (e *Engine) chat(role string) (*chatRole, error) {
 
 // publish assigns seqs, persists, buffers and fans out events, then records a
 // changed agent state.
-func (c *chatRole) publish(events ...Event) {
+func (c *chatRole) publish(events ...Event) { c.publishBound(nil, false, events...) }
+func (c *chatRole) publishFrom(p *process, events ...Event) bool {
+	return c.publishBound(p, false, events...)
+}
+func (c *chatRole) publishBound(origin *process, exited bool, events ...Event) bool {
 	c.mu.Lock()
+	if origin != nil && c.proc != origin && (!exited || c.proc != nil || c.meta.SessionID != origin.spec.SessionID) {
+		c.mu.Unlock()
+		return false
+	}
+	var spec Spec
+	if origin != nil {
+		spec = origin.spec
+	} else if c.proc != nil {
+		spec = c.proc.spec
+	}
 	var changed *State
 	for _, ev := range events {
 		c.emitLocked(ev)
@@ -258,17 +273,43 @@ func (c *chatRole) publish(events ...Event) {
 	}
 	c.mu.Unlock()
 	if changed != nil {
-		c.writeState(*changed)
+		c.writeStateFor(*changed, spec)
 	}
+	return true
 }
 
 func (c *chatRole) writeState(s State) {
+	c.mu.Lock()
+	var spec Spec
+	if c.proc != nil {
+		spec = c.proc.spec
+	}
+	c.mu.Unlock()
+	c.writeStateFor(s, spec)
+}
+func (c *chatRole) writeStateFor(s State, spec Spec) {
+	if spec.SessionID == "" {
+		return
+	} // Transcript history is not a live process state.
 	if c.e.opts.States == nil {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if err := c.e.opts.States.SetAgentState(ctx, c.role, s.State, s.Detail); err != nil {
+	var err error
+	if spec.ExecutionRunID > 0 {
+		sink, ok := c.e.opts.States.(interface {
+			SetAgentStateForRun(context.Context, string, int64, string, string, string) error
+		})
+		if !ok {
+			c.e.opts.Logf("chat: %s: execution state sink has no run fencing", c.role)
+			return
+		}
+		err = sink.SetAgentStateForRun(ctx, c.role, spec.ExecutionRunID, spec.SessionID, s.State, s.Detail)
+	} else {
+		err = c.e.opts.States.SetAgentState(ctx, c.role, s.State, s.Detail)
+	}
+	if err != nil {
 		c.e.opts.Logf("chat: %s: set agent state: %v", c.role, err)
 	}
 }
@@ -362,6 +403,9 @@ func (e *Engine) start(ctx context.Context, role string, o StartOptions) (st Sta
 	if e.opts.Resolver == nil {
 		return Status{}, false, errors.New("chat: no resolver configured")
 	}
+	if err = e.flushNativeExits(ctx, role); err != nil {
+		return Status{}, false, err
+	}
 	spec, err := e.opts.Resolver.Resolve(ctx, role)
 	if err != nil {
 		return Status{}, false, err
@@ -376,10 +420,24 @@ func (e *Engine) start(ctx context.Context, role string, o StartOptions) (st Sta
 		return Status{}, false, err
 	}
 	// A host that survived a cmdrd restart holds the session: adopt it.
-	if hc, hello := e.findHost(role, spec.SessionID); hc != nil {
+	hc, hello, hostErr := e.findHost(role, spec.SessionID, spec.ExecutionRunID > 0)
+	if hostErr != nil {
+		e.releaseSession(spec.SessionID)
+		return Status{}, false, hostErr
+	}
+	if hc != nil {
+		if spec.ExecutionRunID > 0 && hello.Info.ExecutionRunID != spec.ExecutionRunID {
+			hc.close()
+			e.releaseSession(spec.SessionID)
+			return Status{}, false, errors.New("native host execution identity is missing or differs from the current claim")
+		}
 		e.adopt(c, spec, hc, hello)
 		st, err = e.Status(role)
 		return st, false, err
+	}
+	if spec.ExecutionBlocked {
+		e.releaseSession(spec.SessionID)
+		return Status{}, false, errors.New("current execution is held, blocked or awaiting planning review; a new process cannot start")
 	}
 	lock, err := e.checkAndLock(ctx, spec.SessionID, role)
 	if err != nil {
@@ -391,10 +449,11 @@ func (e *Engine) start(ctx context.Context, role string, o StartOptions) (st Sta
 	// could not reach holds the lock, so it never gets this far. For a
 	// Manager the steer below makes that call (only when Claude has usage), so
 	// an outage never flips it to Claude and back, losing its Codex thread.
-	resolve := !isManagedChatRole(role) && dropDrawnCodex(e.opts.Home, role)
+	managed := spec.ExecutionRunID == 0 && isManagedChatRole(role)
+	resolve := spec.ExecutionRunID == 0 && !managed && dropDrawnCodex(e.opts.Home, role)
 	// Every Manager start lands on a runtime and account with usage left.
 	moved := ""
-	if isManagedChatRole(role) {
+	if managed {
 		var changed bool
 		if moved, changed, err = e.steerManager(role, e.NeverStarted(role)); err != nil {
 			lock.release()
@@ -415,6 +474,18 @@ func (e *Engine) start(ctx context.Context, role string, o StartOptions) (st Sta
 		}
 		again.SessionID = spec.SessionID
 		spec = again
+	}
+	if spec.ExecutionRunID > 0 {
+		current, checkErr := e.opts.Resolver.Resolve(ctx, role)
+		if checkErr != nil || current.ExecutionRunID != spec.ExecutionRunID || current.SessionID != spec.SessionID || current.Cwd != spec.Cwd || current.Runtime != spec.Runtime || current.ExecutionBlocked {
+			lock.release()
+			e.releaseSession(spec.SessionID)
+			if checkErr != nil {
+				return Status{}, false, checkErr
+			}
+			return Status{}, false, errors.New("native execution custody or authority changed before process launch")
+		}
+		spec = current
 	}
 	if err := e.spawn(ctx, c, spec, lock); err != nil {
 		lock.release()
@@ -554,6 +625,9 @@ func (e *Engine) spawn(ctx context.Context, c *chatRole, spec Spec, lock *sessio
 		}
 	}
 	resume := transcript != ""
+	if spec.ExecutionResume && spec.Runtime != RuntimeCodex && !resume {
+		return errors.New("native checkpoint conversation is unavailable; refusing a fresh context")
+	}
 
 	// Hydrate history the engine has not published yet (e.g. a Manager handed
 	// over from the TUI).
@@ -589,6 +663,7 @@ func (e *Engine) spawn(ctx context.Context, c *chatRole, spec Spec, lock *sessio
 	c.mu.Lock()
 	c.proc = p
 	c.limit, c.turnLimit = nil, nil // a new process (often on another account) starts clean
+	c.meta.ExecutionRunID = spec.ExecutionRunID
 	c.meta.SessionID, c.meta.Running, c.meta.CLIVersion = spec.SessionID, true, version
 	c.meta.TotalCostUSD, c.meta.CostKnown = base, known
 	_ = writeMeta(e.logDir(), c.role, c.meta)
@@ -631,8 +706,14 @@ func (e *Engine) startHost(spec Spec, resume bool, lock *sessionLock) (*hostConn
 		}
 		binary, args = bridge, CodexBridgeArgs(spec, e.opts.Home)
 	}
-	cfg := hostConfig{Sock: sock, Binary: binary, Args: args, Cwd: spec.Cwd,
-		Info: hostInfo{Role: spec.Role, SessionID: spec.SessionID, Model: spec.Model, Cwd: spec.Cwd, Resumed: resume, StartedAt: e.opts.Now()}}
+	cfg := hostConfig{InitialPrompt: spec.ExecutionInitialPrompt, Sock: sock, Binary: binary, Args: args, Cwd: spec.Cwd,
+		Info: hostInfo{ExecutionRunID: spec.ExecutionRunID, Role: spec.Role, SessionID: spec.SessionID, Model: spec.Model, Cwd: spec.Cwd, Resumed: resume, StartedAt: e.opts.Now()}}
+	if spec.ExecutionRunID > 0 {
+		cfg.ExitReceiptPath = nativeExitPath(e.opts.Home, spec.Role, spec.ExecutionRunID)
+		if err := os.MkdirAll(filepath.Dir(cfg.ExitReceiptPath), 0700); err != nil {
+			return nil, nil, err
+		}
+	}
 	raw, err := json.Marshal(cfg)
 	if err != nil {
 		return nil, nil, err
@@ -655,7 +736,13 @@ func (e *Engine) startHost(spec Spec, resume bool, lock *sessionLock) (*hostConn
 	cmd := exec.Command(bin, HostArg, cfgPath)
 	// COMMANDER_ROLE tells cmdr commands the agent runs who is asking
 	// (internal-operator-provider lets a Manager switch only its own Operators).
-	cmd.Env = childEnv(append(claudeacct.Env(e.opts.Home, spec.Account), "COMMANDER_ROLE="+spec.Role)...)
+	runID, runSession := "", ""
+	if spec.ExecutionRunID > 0 {
+		runID = strconv.FormatInt(spec.ExecutionRunID, 10)
+		runSession = spec.SessionID
+	}
+	env := append(claudeacct.Env(e.opts.Home, spec.Account), "COMMANDER_ROLE="+spec.Role, "COMMANDER_MANAGER_ROLE=", "COMMANDER_RUN_ID="+runID, "COMMANDER_RUN_SESSION="+runSession)
+	cmd.Env = childEnv(env...)
 	cmd.ExtraFiles = []*os.File{lock.f} // the host (and the claude it starts) hold the session lock
 	cmd.Stdout, cmd.Stderr = logf, logf
 	// Own session and process group: neither a launchd job kill nor a terminal
@@ -687,16 +774,20 @@ func (e *Engine) startHost(spec Spec, resume bool, lock *sessionLock) (*hostConn
 
 // findHost attaches to role's running host when it runs sessionID. A host on
 // another session (or none) yields nil; a stale one is ended.
-func (e *Engine) findHost(role, sessionID string) (*hostConn, *hostHello) {
+func (e *Engine) findHost(role, sessionID string, protectExecution bool) (*hostConn, *hostHello, error) {
 	sock := hostSock(e.opts.Home, role)
 	hc, hello, err := dialHost(sock)
 	if err != nil {
 		if errors.Is(err, syscall.ECONNREFUSED) {
 			_ = os.Remove(sock) // a dead host's leftover socket
 		}
-		return nil, nil
+		return nil, nil, nil
 	}
 	if hello.Info.SessionID != sessionID {
+		if protectExecution {
+			hc.close()
+			return nil, nil, errors.New("native execution host belongs to another session; reconcile its custody before replacing it")
+		}
 		e.opts.Logf("chat: ending chat host of %s on another session", role)
 		_ = hc.send(hostMsg{Op: "quit"})
 		hc.close()
@@ -706,9 +797,9 @@ func (e *Engine) findHost(role, sessionID string) (*hostConn, *hostHello) {
 			}
 			time.Sleep(20 * time.Millisecond)
 		}
-		return nil, nil
+		return nil, nil, nil
 	}
-	return hc, hello
+	return hc, hello, nil
 }
 
 // adopt takes over a running host: the claude it holds never notices. History
@@ -733,6 +824,7 @@ func (e *Engine) adopt(c *chatRole, spec Spec, hc *hostConn, hello *hostHello) {
 	c.mu.Lock()
 	c.proc = p
 	c.tracker.observe(Event{Kind: KindSession})
+	c.meta.ExecutionRunID = spec.ExecutionRunID
 	c.meta.SessionID, c.meta.Running = spec.SessionID, true
 	_ = writeMeta(e.logDir(), c.role, c.meta)
 	c.mu.Unlock()
@@ -769,6 +861,10 @@ func (e *Engine) hostLoop(c *chatRole, p *process, hello *hostHello) {
 			detached := p.detached
 			c.mu.Unlock()
 			if !detached {
+				if p.spec.ExecutionRunID > 0 {
+					e.nativeDisconnected(c, p)
+					return
+				}
 				e.onExit(c, p, &hostExit{Code: -1, Stderr: "chat host disconnected"})
 			}
 			return
@@ -854,6 +950,12 @@ func (e *Engine) ackLoop(p *process) {
 // handleLine processes one stdout line of claude. silent lines were already
 // published by a previous Engine: they only rebuild state.
 func (e *Engine) handleLine(c *chatRole, p *process, line []byte, silent bool, answered map[string]bool) {
+	c.mu.Lock()
+	current := c.proc == p && !p.detached
+	c.mu.Unlock()
+	if !current {
+		return
+	}
 	var env controlEnvelope
 	_ = json.Unmarshal(line, &env)
 	switch env.Type {
@@ -865,7 +967,7 @@ func (e *Engine) handleLine(c *chatRole, p *process, line []byte, silent bool, a
 		}
 		p.pmu.Unlock()
 		if env.Response.Subtype == "error" && !silent {
-			c.publish(Event{Kind: KindError, Source: SourceLive, Error: "control request failed: " + env.Response.Error})
+			c.publishFrom(p, Event{Kind: KindError, Source: SourceLive, Error: "control request failed: " + env.Response.Error})
 		}
 		return
 	case "control_cancel_request":
@@ -874,7 +976,7 @@ func (e *Engine) handleLine(c *chatRole, p *process, line []byte, silent bool, a
 		delete(p.pending, env.RequestID)
 		p.pmu.Unlock()
 		if ok && !silent {
-			c.publish(Event{Kind: KindResolved, Source: SourceLive, Request: &Request{ID: env.RequestID, Decision: "cancelled"}})
+			c.publishFrom(p, Event{Kind: KindResolved, Source: SourceLive, Request: &Request{ID: env.RequestID, Decision: "cancelled"}})
 		}
 		return
 	}
@@ -900,6 +1002,10 @@ func (e *Engine) handleLine(c *chatRole, p *process, line []byte, silent bool, a
 	}
 	if silent {
 		c.mu.Lock()
+		if c.proc != p {
+			c.mu.Unlock()
+			return
+		}
 		for _, ev := range events {
 			c.tracker.observe(ev)
 			if ev.Request != nil && answered[ev.Request.ID] {
@@ -909,7 +1015,9 @@ func (e *Engine) handleLine(c *chatRole, p *process, line []byte, silent bool, a
 		c.mu.Unlock()
 		return
 	}
-	c.publish(events...)
+	if !c.publishFrom(p, events...) {
+		return
+	}
 	for _, ev := range events {
 		if ev.Kind == KindCompaction {
 			boardturn.MarkFull(e.opts.Home, c.role)
@@ -936,9 +1044,13 @@ func (e *Engine) afterResult(c *chatRole, p *process) {
 	p.pmu.Unlock()
 	sort.Strings(ids)
 	for _, id := range ids {
-		c.publish(Event{Kind: KindResolved, Source: SourceEngine, Request: &Request{ID: id, Decision: "cancelled"}})
+		c.publishFrom(p, Event{Kind: KindResolved, Source: SourceEngine, Request: &Request{ID: id, Decision: "cancelled"}})
 	}
 	c.mu.Lock()
+	if c.proc != p {
+		c.mu.Unlock()
+		return
+	}
 	c.meta.TotalCostUSD, c.meta.CostKnown = p.norm.LastTotal(), true
 	_ = writeMeta(e.logDir(), c.role, c.meta)
 	c.mu.Unlock()
@@ -950,12 +1062,19 @@ func (e *Engine) onExit(c *chatRole, p *process, hx *hostExit) {
 	}
 	ex := &Exit{Code: hx.Code, Signal: hx.Signal}
 	c.mu.Lock()
+	if c.proc != p {
+		c.mu.Unlock()
+		close(p.done)
+		_ = p.hc.send(hostMsg{Op: "bye"})
+		p.hc.close()
+		return
+	}
 	ex.Expected = p.stopping
 	midTurn := c.tracker.turn
 	c.mu.Unlock()
 	if !ex.Expected && (ex.Code != 0 || ex.Signal != "") {
 		if tail := strings.TrimSpace(hx.Stderr); tail != "" {
-			c.publish(Event{Kind: KindError, Source: SourceEngine, Error: tail})
+			c.publishFrom(p, Event{Kind: KindError, Source: SourceEngine, Error: tail})
 		}
 	}
 	// Free the role before announcing the exit, so a client reacting to
@@ -971,11 +1090,18 @@ func (e *Engine) onExit(c *chatRole, p *process, hx *hostExit) {
 	}
 	_ = writeMeta(e.logDir(), c.role, c.meta)
 	c.mu.Unlock()
-	c.publish(Event{Kind: KindExit, Source: SourceEngine, SessionID: p.spec.SessionID, Exit: ex})
+	c.publishBound(p, true, Event{Kind: KindExit, Source: SourceEngine, SessionID: p.spec.SessionID, Exit: ex})
 	close(p.done)
 	_ = p.hc.send(hostMsg{Op: "bye"})
 	p.hc.close()
-	if !ex.Expected && e.opts.CrashRestart != nil && e.opts.CrashRestart(c.role) {
+	if p.spec.ExecutionRunID > 0 {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		if err := e.flushNativeExits(ctx, c.role); err != nil {
+			e.opts.Logf("chat: native exit reconciliation: %v", err)
+		}
+		cancel()
+	}
+	if p.spec.ExecutionRunID == 0 && !ex.Expected && e.opts.CrashRestart != nil && e.opts.CrashRestart(c.role) {
 		go e.restartCrashed(c, midTurn)
 	}
 }
@@ -1440,6 +1566,9 @@ func (e *Engine) ResumeRunning(ctx context.Context) {
 	e.mu.Unlock()
 	go func() {
 		defer close(done)
+		if err := e.flushNativeExits(ctx, ""); err != nil {
+			e.opts.Logf("chat: native exit recovery: %v", err)
+		}
 		e.endOrphanHosts()
 		var first sync.WaitGroup
 		for _, role := range e.knownRoles() {
@@ -1508,6 +1637,11 @@ func (e *Engine) Heartbeat(ctx context.Context, every time.Duration) {
 			return
 		case <-t.C:
 		}
+		recovery, cancel := context.WithTimeout(ctx, 5*time.Second)
+		if err := e.flushNativeExits(recovery, ""); err != nil {
+			e.opts.Logf("chat: native exit recovery: %v", err)
+		}
+		cancel()
 		e.mu.Lock()
 		chats := make([]*chatRole, 0, len(e.chats))
 		for _, c := range e.chats {
@@ -1517,9 +1651,13 @@ func (e *Engine) Heartbeat(ctx context.Context, every time.Duration) {
 		for _, c := range chats {
 			c.mu.Lock()
 			live, st := c.proc != nil, c.lastState
+			var spec Spec
+			if c.proc != nil {
+				spec = c.proc.spec
+			}
 			c.mu.Unlock()
 			if live {
-				c.writeState(st)
+				c.writeStateFor(st, spec)
 			}
 		}
 	}

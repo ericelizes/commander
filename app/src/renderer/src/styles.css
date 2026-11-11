@@ -232,10 +232,20 @@ kbd {
 }
 
 .app-top-pane {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   position: relative;
   min-width: 0;
   padding: 0 16px;
 }
+
+.workstream-commander { position: relative; margin-left: auto; flex-shrink: 0; }
+.workstream-commander > button { border: 0; background: transparent; color: var(--ink-2); font: inherit; font-size: 12px; cursor: pointer; }
+.workstream-commander-menu { position: absolute; right: 0; top: calc(100% + 8px); min-width: 220px; padding: 6px; background: var(--sheet); border: 1px solid var(--hairline-2); border-radius: 8px; box-shadow: var(--shadow); z-index: 60; }
+.workstream-commander-menu button { display: block; width: 100%; padding: 9px; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.workstream-commander-menu button:hover { background: #8881; border-radius: 4px; }
+.workstream-commander-error { position: absolute; right: 0; top: calc(100% + 8px); width: 280px; padding: 10px; background: var(--sheet); border: 1px solid var(--err); border-radius: 6px; font-size: 12px; z-index: 61; }
 
 /* A short tick in the bar, over the line between the panes below it. */
 .app-top-pane::before {

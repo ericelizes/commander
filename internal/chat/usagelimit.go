@@ -111,6 +111,9 @@ func (e *Engine) settleLimit(c *chatRole, p *process, ev Event) {
 
 	c.publish(Event{Kind: KindNotice, Source: SourceEngine, Subtype: "usage_limit",
 		Text: fmt.Sprintf("%s hit its usage limit: %s", who, u.Text)})
+	if p.spec.ExecutionRunID > 0 {
+		return
+	} // The execution adapter owns checkpoint/provider recovery.
 	switch {
 	case isManagedChatRole(c.role):
 		go e.moveManager(c)
@@ -186,7 +189,7 @@ func (e *Engine) autoSwitch(c *chatRole, from string) {
 
 func isManagerRole(role string) bool { return strings.HasPrefix(role, "manager-") }
 
-func isManagedChatRole(role string) bool { return role == "commander" || isManagerRole(role) }
+func isManagedChatRole(role string) bool { return IsCommanderRole(role) || isManagerRole(role) }
 
 // moveOptions continue a limited turn; a Manager is also told to read its
 // handover again, since the limit may have stopped it before it did.

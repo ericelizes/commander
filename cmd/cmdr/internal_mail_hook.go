@@ -501,7 +501,7 @@ func recordAgentState(role, event string, in hookInput) {
 		session = in.SessionID
 	}
 	runID, _ := strconv.ParseInt(os.Getenv("COMMANDER_RUN_ID"), 10, 64)
-	if st.IsPostgres() && strings.HasPrefix(role, "operator-") && runID == 0 {
+	if st.IsPostgres() && runID == 0 {
 		// A surviving pre-cutover bridge has no run env yet. Its current thread
 		// file can identify the imported run without accepting an old thread.
 		if run, e := st.GetAgentRunByAgentName(ctx, role); e == nil && run != nil {
@@ -516,7 +516,7 @@ func recordAgentState(role, event string, in hookInput) {
 	if err := st.SetAgentStateForRun(ctx, role, runID, session, state, detail); err != nil {
 		return
 	}
-	if st.IsPostgres() && strings.HasPrefix(role, "operator-") && event == hookStop {
+	if st.IsPostgres() && runID > 0 && event == hookStop {
 		_ = st.ObserveClassification(ctx, role, session, time.Now().UnixNano(), in.lastReply(), true)
 	}
 }
