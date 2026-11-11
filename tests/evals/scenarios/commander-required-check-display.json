@@ -1,0 +1,34 @@
+{
+  "name": "Sidebar preserves unpassed requirements across workstreams without fabricating activity or human requests",
+  "cases": [
+    {
+      "name": "deferred review",
+      "status": "deferred",
+      "labels": [
+        "workflow-template:pr-review"
+      ],
+      "want": "Waiting on deferred required check: required review"
+    },
+    {
+      "name": "retired review step",
+      "status": "open",
+      "superseded": true,
+      "labels": [
+        "workflow-step:review"
+      ],
+      "want": "Required check needs reconciliation: required review"
+    },
+    {
+      "name": "closed retired check",
+      "status": "closed",
+      "superseded": true,
+      "labels": [
+        "workflow-step:review"
+      ]
+    },
+    {
+      "name": "ordinary deferred work",
+      "status": "deferred"
+    }
+  ]
+}

@@ -220,10 +220,12 @@ type FollowUpFiler func(ctx context.Context, review, head string, findings []Rev
 // Review is a review bead as the proof reads it. Comments are oldest first.
 type Review struct {
 	ID, Status, Owner string
-	Comments          []string
-	Runs              map[int64]string
-	Recorded          map[string]reviewrun.Recorded
-	ValidateAddendum  func(context.Context, Head, *Proof) error
+	// RunAttributed is set by the guarded reader after resolving immutable runs.
+	RunAttributed    bool
+	Comments         []string
+	Runs             map[int64]string
+	Recorded         map[string]reviewrun.Recorded
+	ValidateAddendum func(context.Context, Head, *Proof) error
 	// FileFollowUps is set by the close door; nil refuses a review that leaves minors.
 	FileFollowUps FollowUpFiler
 }
@@ -353,7 +355,7 @@ func reviewProof(ctx context.Context, run GHRunner, read ReviewReader, pr string
 	if err != nil {
 		return nil, err
 	}
-	if r.ID != p.ReviewBead || r.Status != "closed" || !strings.HasPrefix(r.Owner, "operator-") {
+	if r.ID != p.ReviewBead || r.Status != "closed" || (!r.RunAttributed && !strings.HasPrefix(r.Owner, "operator-")) || strings.TrimSpace(r.Owner) == "" {
 		return nil, fmt.Errorf("proof must name a closed separate review Operator bead")
 	}
 	if p.Addendum != nil {

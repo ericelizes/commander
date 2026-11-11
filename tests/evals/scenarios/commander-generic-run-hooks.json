@@ -1,0 +1,15 @@
+{
+  "name": "Run and session identity fence execution activity regardless of role spelling",
+  "actors": [
+    "executor-task",
+    "commander-urgent"
+  ],
+  "expectations": [
+    "replacement clears prior activity",
+    "old run cannot update resumed session",
+    "foreign session cannot update current run",
+    "session-only hook is fenced once execution history exists",
+    "only current run can publish working state",
+    "closed run cannot resume through late hooks"
+  ]
+}

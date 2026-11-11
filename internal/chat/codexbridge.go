@@ -3,8 +3,10 @@ package chat
 import (
 	"bufio"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -47,6 +49,7 @@ type CodexBridgeConfig struct {
 	ThreadFile      string // holds the Codex thread id between runs
 	Handoff         string // a predecessor transcript the first turn should read ("" = none)
 	SkipPermissions bool
+	RequireResume   bool   // a checkpoint may never silently start a new thread
 	SessionID       string // the role's session id, reported in init
 	// Prompt makes a one-shot run (an Operator's `claude -p`): the bridge sends
 	// it as the first message, ignores stdin and exits when that turn ends.
@@ -67,8 +70,8 @@ func CodexBridgeArgs(spec Spec, home string) []string {
 	if hookRole == "" {
 		hookRole = spec.Role
 	}
-	return CodexBridgeConfig{Cwd: spec.Cwd, Model: CodexModel(spec.Model), PromptPath: spec.PromptPath, ThreadFile: CodexThreadFile(home, spec.Role),
-		Handoff: spec.Handoff, SkipPermissions: spec.SkipPermissions, SessionID: spec.SessionID, HookRole: hookRole}.Args()
+	return CodexBridgeConfig{Cwd: spec.Cwd, Model: CodexModel(spec.Model), PromptPath: spec.PromptPath, ThreadFile: spec.codexThreadFile(home),
+		Handoff: spec.Handoff, RequireResume: spec.ExecutionResume, SkipPermissions: spec.SkipPermissions, SessionID: spec.SessionID, HookRole: hookRole}.Args()
 }
 
 // Args is the bridge argv (without the binary) that runs cfg.
@@ -81,6 +84,9 @@ func (cfg CodexBridgeConfig) Args() []string {
 	}
 	if cfg.SkipPermissions {
 		args = append(args, "--skip-permissions")
+	}
+	if cfg.RequireResume {
+		args = append(args, "--require-resume")
 	}
 	if cfg.GuardOnly {
 		args = append(args, "--guard-only")
@@ -186,6 +192,7 @@ func MaybeRunCodexBridge() {
 	fs.StringVar(&cfg.Handoff, "handoff", "", "")
 	fs.StringVar(&cfg.SessionID, "session-id", "", "")
 	fs.BoolVar(&cfg.SkipPermissions, "skip-permissions", false, "")
+	fs.BoolVar(&cfg.RequireResume, "require-resume", false, "")
 	fs.StringVar(&cfg.Prompt, "prompt", "", "")
 	fs.StringVar(&cfg.HookRole, "hooks-role", "", "")
 	fs.BoolVar(&cfg.GuardOnly, "guard-only", false, "")
@@ -381,12 +388,18 @@ func (b *codexBridge) start(ctx context.Context) error {
 	}
 	var res json.RawMessage
 	var err error
+	if b.cfg.RequireResume && prev == "" {
+		return errors.New("checkpoint thread is unavailable; refusing fresh Codex context")
+	}
 	if prev != "" {
 		p := map[string]any{"threadId": prev}
 		for k, v := range params {
 			p[k] = v
 		}
 		res, err = b.call(ctx, "thread/resume", p)
+		if err != nil && b.cfg.RequireResume {
+			return fmt.Errorf("resume checkpoint thread: %w", err)
+		}
 	}
 	if prev == "" || err != nil {
 		res, err = b.call(ctx, "thread/start", params)
@@ -403,6 +416,9 @@ func (b *codexBridge) start(ctx context.Context) error {
 		} `json:"thread"`
 	}
 	_ = json.Unmarshal(res, &r)
+	if b.cfg.RequireResume && r.Thread.ID != prev {
+		return errors.New("Codex resumed a different checkpoint thread")
+	}
 	b.mu.Lock()
 	b.thread = r.Thread.ID
 	b.mu.Unlock()
@@ -924,4 +940,19 @@ func codexRateLimitInfo(params json.RawMessage) map[string]any {
 		info["planType"] = *rl.PlanType
 	}
 	return info
+}
+
+// A reused execution role must not resume another bead's Codex thread. The
+// immutable session is preserved only by an explicitly validated checkpoint.
+// NativeCodexThreadFile is the immutable conversation path. Callers must
+// obtain the session from a validated canonical run/checkpoint, not role prefs.
+func NativeCodexThreadFile(home, role, session string) string {
+	sum := sha256.Sum256([]byte(session))
+	return CodexThreadFile(home, fmt.Sprintf("%s-session-%x", role, sum))
+}
+func (s Spec) codexThreadFile(home string) string {
+	if s.ExecutionRunID == 0 {
+		return CodexThreadFile(home, s.Role)
+	}
+	return NativeCodexThreadFile(home, s.Role, s.SessionID)
 }

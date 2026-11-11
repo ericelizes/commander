@@ -1,8 +1,37 @@
 {
   "root": "sample-flow",
-  "ancestors": ["sample-track", "sample-wrapper-a", "sample-wrapper-b", "sample-wrapper-c", "sample-wrapper-d"],
+  "ancestors": [
+    "sample-track",
+    "sample-wrapper-a",
+    "sample-wrapper-b",
+    "sample-wrapper-c",
+    "sample-wrapper-d"
+  ],
   "leaf": "sample-action",
   "gate": "sample-approval",
   "sibling": "sample-sibling",
-  "reason": "Publish existing decision and remove redundant ancestor waits"
+  "reason": "Publish existing decision and remove redundant ancestor waits",
+  "canonical_runner": "internal/api:TestPostgresPlanPublicationRepairIsAtomicAndRetainsApproval + TestPostgresPlanPublicationRepairRefusesUnsafeOrForeignState + TestPostgresPlanPublicationCoordinationCommitsOnlyExactTypedAction + TestPostgresPlanPublicationCoordinationFencesChangedAuthorityAndPayload",
+  "canonical_refusals": [
+    "foreign-owner",
+    "executor",
+    "inherited-executor",
+    "coordination-grant",
+    "held-root",
+    "unprotected-sibling",
+    "parked-sibling",
+    "changed-basis",
+    "saved-answer",
+    "missing-leaf-basis",
+    "registered-executor"
+  ],
+  "canonical_coordination_refusals": [
+    "reason",
+    "waiters",
+    "requester",
+    "handoff",
+    "definition",
+    "refused",
+    "ordinary-plan"
+  ]
 }

@@ -32,10 +32,13 @@ const DoorPath = "/api/write"
 // Ops, when set, is a list of argv applied as one change (Args is then ignored);
 // Atomic refuses the request unless the whole list can be one transaction.
 type DoorRequest struct {
-	Dir    string     `json:"dir"`
-	Args   []string   `json:"args,omitempty"`
-	Ops    [][]string `json:"ops,omitempty"`
-	Atomic bool       `json:"atomic,omitempty"`
+	CompletionWaivers []CompletionWaiver `json:"completion_waivers,omitempty"`
+	Plan              *PlanBasis         `json:"plan,omitempty"`
+	Propose           bool               `json:"propose,omitempty"`
+	Dir               string             `json:"dir"`
+	Args              []string           `json:"args,omitempty"`
+	Ops               [][]string         `json:"ops,omitempty"`
+	Atomic            bool               `json:"atomic,omitempty"`
 	// NoWait acknowledges the durable mutation without waiting on its UI projection.
 	NoWait bool `json:"no_wait,omitempty"`
 	// Env is the caller's attribution env (see DoorEnvKeep); cmdrd applies the
@@ -72,10 +75,14 @@ func intentOf(ctx context.Context) *DoorIntent {
 
 // DoorResponse is its answer. Exit 0 with Error "" is success.
 type DoorResponse struct {
-	Stdout string `json:"stdout"`
-	Stderr string `json:"stderr"`
-	Exit   int    `json:"exit"`
-	Error  string `json:"error,omitempty"`
+	PlanReceipt string            `json:"plan_receipt,omitempty"`
+	ProposalID  string            `json:"proposal_id,omitempty"`
+	Created     map[string]string `json:"created,omitempty"`
+	Replayed    bool              `json:"replayed,omitempty"`
+	Stdout      string            `json:"stdout"`
+	Stderr      string            `json:"stderr"`
+	Exit        int               `json:"exit"`
+	Error       string            `json:"error,omitempty"`
 	// Busy says the write never started because br stayed busy (ErrBusy), so
 	// repeating it is safe.
 	Busy bool `json:"busy,omitempty"`
@@ -130,7 +137,7 @@ func DoorEnvKeep(kv string) bool {
 		return false
 	}
 	switch name {
-	case "USER", "LOGNAME", "COMMANDER_ROLE", "BEADS_ACTOR", "BD_ACTOR", "BR_ACTOR":
+	case "USER", "LOGNAME", "COMMANDER_ROLE", "BEADS_ACTOR", "BD_ACTOR", "BR_ACTOR", "COMMANDER_RUN_ID", "COMMANDER_RUN_SESSION", "COMMANDER_MANAGER_ROLE":
 		return true
 	}
 	return false
@@ -146,9 +153,8 @@ func WithDoorEnv(ctx context.Context, env []string) context.Context {
 			keep = append(keep, kv)
 		}
 	}
-	if len(keep) == 0 {
-		return ctx
-	}
+	// Even an empty attribution is explicit. Do not inherit a parent request's
+	// or daemon process's execution identity when a service sets a new context.
 	return context.WithValue(ctx, doorEnvKey{}, keep)
 }
 
@@ -231,10 +237,18 @@ func viaDoor(ctx context.Context, dir string, req DoorRequest) (DoorResponse, er
 		return DoorResponse{}, fmt.Errorf("%w: no api-token", errDoorDown)
 	}
 	req.Dir, req.Env = dir, callerEnv()
+	req.CompletionWaivers = completionWaiversOf(ctx)
 	body, _ := json.Marshal(req)
 	cctx, cancel := context.WithTimeout(ctx, doorCallTimeout)
 	defer cancel()
-	hreq, err := http.NewRequestWithContext(cctx, http.MethodPost, strings.TrimRight(strings.TrimSpace(string(rawURL)), "/")+DoorPath, bytes.NewReader(body))
+	path := DoorPath
+	if req.Plan != nil {
+		path = PlanPath
+		if req.Propose {
+			path = PlanProposePath
+		}
+	}
+	hreq, err := http.NewRequestWithContext(cctx, http.MethodPost, strings.TrimRight(strings.TrimSpace(string(rawURL)), "/")+path, bytes.NewReader(body))
 	if err != nil {
 		return DoorResponse{}, fmt.Errorf("%w: %v", errDoorDown, err)
 	}

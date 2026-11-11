@@ -126,110 +126,6 @@ func TestOperatorRespawnOffCodexCommentsOnTheBead(t *testing.T) {
 	}
 }
 
-// Nothing configured: no bead draws Codex, even with hooks ready.
-func TestCodexSharesDefaultToZero(t *testing.T) {
-	t.Setenv("COMMANDER_HOME", t.TempDir())
-	t.Setenv(agentrt.CodexShareEnvVar, "")
-	t.Setenv(agentrt.CodexManagerShareEnvVar, "")
-	old := codexHooksReady
-	codexHooksReady = func() bool { return true }
-	t.Cleanup(func() { codexHooksReady = old })
-	if got := agentrt.CodexOperatorShare(); got != 0 {
-		t.Errorf("Operator share default %v", got)
-	}
-	if got := agentrt.CodexManagerShare(); got != 0 {
-		t.Errorf("Manager share default %v", got)
-	}
-	for i := 0; i < 200; i++ {
-		if got := pickRuntime(SpawnRequest{TaskBeadID: fmt.Sprintf("commander-il9.%d", i)}, "operator-a"); got != chat.RuntimeClaude {
-			t.Fatalf("bead %d drew %s", i, got)
-		}
-	}
-}
-
-// With a share configured, new Operators split by bead: the same bead always
-// draws the same side, about share of beads go to Codex, and nothing goes to
-// Codex while Codex runs no hooks.
-func TestOperatorRuntimeSplitsByBead(t *testing.T) {
-	t.Setenv("COMMANDER_HOME", t.TempDir())
-	home := os.Getenv("COMMANDER_HOME")
-	ready := true
-	old := codexHooksReady
-	codexHooksReady = func() bool { return ready }
-	t.Cleanup(func() { codexHooksReady = old })
-
-	t.Setenv(agentrt.CodexShareEnvVar, "0.5")
-	codex := 0
-	for i := 0; i < 400; i++ {
-		bead := fmt.Sprintf("commander-il9.%d", i)
-		first := pickRuntime(SpawnRequest{TaskBeadID: bead, managerRole: "manager-bd-1"}, "operator-a")
-		_ = os.Remove(chat.RuntimeFile(home, "operator-a"))
-		if again := pickRuntime(SpawnRequest{TaskBeadID: bead, managerRole: "manager-bd-1"}, "operator-a"); again != first {
-			t.Fatalf("%s: %s then %s", bead, first, again)
-		}
-		if first == chat.RuntimeCodex {
-			codex++
-		}
-	}
-	if codex < 160 || codex > 240 {
-		t.Errorf("share 0.5 sent %d of 400 beads to codex", codex)
-	}
-
-	bead := "commander-il9.7"
-	for share, want := range map[string]string{"0": chat.RuntimeClaude, "1": chat.RuntimeCodex} {
-		t.Setenv(agentrt.CodexShareEnvVar, share)
-		if got := pickRuntime(SpawnRequest{TaskBeadID: bead}, "operator-b"); got != want {
-			t.Errorf("share %s: %s", share, got)
-		}
-	}
-	t.Setenv(agentrt.CodexShareEnvVar, "1")
-	if got := pickRuntime(SpawnRequest{TaskBeadID: bead, Runtime: chat.RuntimeClaude}, "operator-c"); got != chat.RuntimeClaude {
-		t.Errorf("explicit --runtime claude lost to the split: %s", got)
-	}
-	ready = false
-	if got := pickRuntime(SpawnRequest{TaskBeadID: bead}, "operator-d"); got != chat.RuntimeClaude {
-		t.Errorf("no Codex hooks, still sent to codex")
-	}
-	if got := pickRuntime(SpawnRequest{TaskBeadID: bead, Runtime: chat.RuntimeCodex}, "operator-e"); got != chat.RuntimeClaude || chat.ReadRuntimePin(home, "operator-e") != chat.RuntimeCodex {
-		t.Errorf("explicit --runtime codex must fall back while retaining intent: %s", got)
-	}
-}
-
-// The share comes from config.toml unless the env sets it.
-func TestCodexOperatorShareFromConfig(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("COMMANDER_HOME", home)
-	t.Setenv(agentrt.CodexShareEnvVar, "")
-	if got := agentrt.CodexOperatorShare(); got != agentrt.DefaultCodexOperatorShare {
-		t.Errorf("default %v", got)
-	}
-	if err := os.WriteFile(filepath.Join(home, "config.toml"), []byte("[runtime]\ncodex_operator_share = 0.2\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if got := agentrt.CodexOperatorShare(); got != 0.2 {
-		t.Errorf("config: %v", got)
-	}
-	t.Setenv(agentrt.CodexShareEnvVar, "0.9")
-	if got := agentrt.CodexOperatorShare(); got != 0.9 {
-		t.Errorf("env: %v", got)
-	}
-
-	t.Setenv(agentrt.CodexManagerShareEnvVar, "")
-	if got := agentrt.CodexManagerShare(); got != agentrt.DefaultCodexManagerShare {
-		t.Errorf("manager default %v", got)
-	}
-	if err := os.WriteFile(filepath.Join(home, "config.toml"), []byte("[runtime]\ncodex_operator_share = 0.2\ncodex_manager_share = 0.3\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if got := agentrt.CodexManagerShare(); got != 0.3 {
-		t.Errorf("manager config: %v", got)
-	}
-	t.Setenv(agentrt.CodexManagerShareEnvVar, "0.7")
-	if got := agentrt.CodexManagerShare(); got != 0.7 {
-		t.Errorf("manager env: %v", got)
-	}
-}
-
 // Operators inherit only a runtime a person chose for their Manager, not one
 // a share drew: else the Operator share would never apply under such Managers.
 func TestOperatorRuntimeIgnoresAManagersDrawnRuntime(t *testing.T) {
@@ -283,15 +179,60 @@ func pickRuntime(req SpawnRequest, agentName string) string {
 	return rt
 }
 
-// codexDraws makes every bead draw Codex (share 1, hooks ready).
+// codexDraws puts new agents on Codex: the order Codex then Claude, Codex
+// signed in, hooks ready.
 func codexDraws(t *testing.T) string {
 	t.Helper()
 	t.Setenv("COMMANDER_HOME", t.TempDir())
-	t.Setenv(agentrt.CodexShareEnvVar, "1")
+	useAgentOrder(t, chat.RuntimeCodex, chat.RuntimeClaude)
+	codexSignedIn(t)
 	old := codexHooksReady
 	codexHooksReady = func() bool { return true }
 	t.Cleanup(func() { codexHooksReady = old })
 	return os.Getenv("COMMANDER_HOME")
+}
+
+// useAgentOrder sets the agents' account order for one test.
+func useAgentOrder(t *testing.T, order ...string) {
+	t.Helper()
+	prev := defaultAgentOrder
+	defaultAgentOrder = func() []string { return order }
+	t.Cleanup(func() { defaultAgentOrder = prev })
+}
+
+// codexSignedIn gives the test a signed-in Codex account.
+func codexSignedIn(t *testing.T) {
+	t.Helper()
+	dir := t.TempDir()
+	t.Setenv("CODEX_HOME", dir)
+	if err := os.WriteFile(filepath.Join(dir, "auth.json"), []byte(`{"tokens":{"access_token":"test"}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// New agents run on the first account in their order that can take a run.
+func TestNewAgentsFollowTheAccountOrder(t *testing.T) {
+	home := codexDraws(t)
+	if got := pickRuntime(SpawnRequest{TaskBeadID: "bd-1"}, "operator-a"); got != chat.RuntimeCodex {
+		t.Fatalf("Codex first: %s", got)
+	}
+	if got := pickRuntime(SpawnRequest{TaskBeadID: "bd-1", Runtime: chat.RuntimeClaude}, "operator-b"); got != chat.RuntimeClaude {
+		t.Fatalf("explicit Claude lost to the order: %s", got)
+	}
+	useAgentOrder(t, chat.RuntimeClaude, chat.RuntimeCodex)
+	if got := pickRuntime(SpawnRequest{TaskBeadID: "bd-1"}, "operator-d"); got != chat.RuntimeClaude {
+		t.Fatalf("Claude first: %s", got)
+	}
+	useAgentOrder(t, chat.RuntimeCodex, chat.RuntimeClaude)
+	codexHooksReady = func() bool { return false }
+	if got := pickRuntime(SpawnRequest{TaskBeadID: "bd-1"}, "operator-e"); got != chat.RuntimeClaude {
+		t.Fatalf("Codex without hooks: %s", got)
+	}
+	codexHooksReady = func() bool { return true }
+	markOut(t, home, chat.RuntimeCodex, "")
+	if got := pickRuntime(SpawnRequest{TaskBeadID: "bd-1"}, "operator-c"); got != chat.RuntimeClaude {
+		t.Fatalf("Codex out, Claude is the fallback: %s", got)
+	}
 }
 
 func TestServiceTaskForcesClaudeOnACodexDraw(t *testing.T) {
@@ -302,7 +243,7 @@ func TestServiceTaskForcesClaudeOnACodexDraw(t *testing.T) {
 		t.Errorf("keyword on a codex draw = %q, %q", rt, reason)
 	}
 	req.TaskText = "Refactor the parser"
-	if rt, reason := resolveOperatorRuntime(req, "operator-b"); rt != chat.RuntimeCodex || reason != chat.RuntimeCodex {
+	if rt, reason := resolveOperatorRuntime(req, "operator-b"); rt != chat.RuntimeCodex || reason != ReasonAgentAccounts {
 		t.Errorf("no keyword leaves the draw: %q, %q", rt, reason)
 	}
 }

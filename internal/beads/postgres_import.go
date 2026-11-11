@@ -27,6 +27,9 @@ func ImportPostgresProject(ctx context.Context, s *store.Store, pid int64, r io.
 		return counts, errors.New("bead import requires Postgres")
 	}
 	e := s.WithTx(ctx, func(q store.Querier) error {
+		if _, e := q.ExecContext(ctx, `SELECT pg_advisory_xact_lock(?)`, pid); e != nil {
+			return e
+		}
 		var existing int
 		if e := q.QueryRowContext(ctx, `SELECT COUNT(*) FROM bead_tasks WHERE project_id=?`, pid).Scan(&existing); e != nil {
 			return e
@@ -105,7 +108,10 @@ func ImportPostgresProject(ctx context.Context, s *store.Store, pid int64, r io.
 				counts.Comments++
 			}
 		}
-		return scan.Err()
+		if e := scan.Err(); e != nil {
+			return e
+		}
+		return store.SeedImportedJurisdictions(ctx, q, pid)
 	})
 	if e != nil {
 		return ImportCounts{}, e

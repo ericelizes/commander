@@ -61,6 +61,8 @@ export interface BoardProgress {
 }
 
 export interface BoardRow {
+  planning_commander?: string
+  jurisdiction_revision?: number
   key: string
   n: number
   title: string
@@ -181,6 +183,8 @@ export interface WorkflowStep {
 }
 
 export interface BoardTrack {
+  planning_commander?: string
+  jurisdiction_revision?: number
   key: string
   bead_id: string
   letter: string // its number after the row's: ".1", ".1.2"
@@ -217,6 +221,17 @@ export interface Decision {
 export type StepState = 'not-started' | 'in-progress' | 'review' | 'needs-user' | 'blocked' | 'done' | string
 
 export interface SnapStep {
+  question_waiting?: boolean
+ human_answer_pending?: boolean
+  execution_mode?: string
+  execution_eligible?: boolean
+  execution_ready?: boolean
+  execution_reserved?: boolean
+  execution_capable?: boolean
+  execution_attempts?: number
+  execution_error?: string
+  planning_commander?: string
+  jurisdiction_revision?: number
   pr_repo?: string
   bead_id: string
   title: string
@@ -282,6 +297,17 @@ export interface CardBasis {
 export type GraphLevel = 1 | 2 | 3
 
 export interface SnapWorkstream {
+  question_waiting?: boolean
+ human_answer_pending?: boolean
+  execution_mode?: string
+  execution_ready?: boolean
+  execution_eligible?: boolean
+  execution_reserved?: boolean
+  execution_capable?: boolean
+  execution_attempts?: number
+  execution_error?: string
+  planning_commander?: string
+  jurisdiction_revision?: number
   repo?: string // GitHub owner/name from cmdrd
   n: number
   project: string
@@ -344,6 +370,7 @@ export interface SnapGateNode {
 }
 
 export interface NeedsYou {
+ plan_revision?: number
   stale_why?: string // the server-derived reason this card needs another look
   project: string
   bead_id: string

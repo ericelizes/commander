@@ -97,3 +97,13 @@ incomplete execution or coverage, altered artifacts, stale
 identity/head/base/binding, additional NOT CLEAN, generic-prefix forgery and
 Operator/foreign Manager misuse, explicit prose transcription, wrong source
 ID/digest, unsupported claims and attempted author impersonation. Fixtures contain only invented identities.
+
+On PostgreSQL, new records belong to the current planning Commander, including
+scoped urgent conversations. The canonical write door rechecks ownership under
+the project lock and stamps recorder plus jurisdiction revision in the existing
+comment row. A later handoff retains that recorded authority. Completion still
+checks the exact source, artifacts and independent execution identities; the
+stamp alone does not pass a review. Historical Manager records keep their
+legacy validation path. `TestPostgresPlanReviewAddendumSurvivesCommanderHandoff`
+exercises the typed recording CLI and canonical completion service with private
+PostgreSQL, HTTP, retained synthetic artifacts and generic execution identities.

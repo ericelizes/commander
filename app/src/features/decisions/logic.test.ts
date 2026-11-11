@@ -33,6 +33,11 @@ describe('resolveArgv', () => {
   })
 })
 
+it('binds an answer to the displayed planning revision', () => {
+ expect(resolveArgv({...plainFlag, plan_revision: 42}, 'approve')).toContain('--revision')
+ expect(resolveArgv({...plainFlag, plan_revision: 42}, 'approve')).toContain('42')
+})
+
 describe('cmdError', () => {
   it('prefers the JSON error cmdr prints on stderr', () => {
     expect(cmdError({ ok: false, stdout: '', stderr: '{"error":"bead not found"}\n', exit: 1 })).toBe('bead not found')

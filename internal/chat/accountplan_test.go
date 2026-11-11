@@ -57,20 +57,20 @@ func TestCommanderPlanSkipsDisconnectedAndExhaustedAccounts(t *testing.T) {
 	if err := WriteRuntime(h.home, "commander", RuntimeClaude); err != nil {
 		t.Fatal(err)
 	}
-	plan, err := planChatStart(h.home, "commander", false, usage, now, func() bool { return true })
+	plan, err := planChatStart(h.home, "commander", false, usage, now, func() bool { return true }, commanderOrder)
 	if err != nil || plan.runtime != RuntimeCodex || plan.pin != RuntimeClaude {
 		t.Fatalf("Claude preference blocked fallback: %+v %v", plan, err)
 	}
 	usage[RuntimeCodex] = Usage{Status: UsageOut, OutUntil: now.Add(time.Hour).Unix()}
-	if _, err := planChatStart(h.home, "commander", false, usage, now, func() bool { return true }); !errors.Is(err, ErrNoUsage) {
+	if _, err := planChatStart(h.home, "commander", false, usage, now, func() bool { return true }, commanderOrder); !errors.Is(err, ErrNoUsage) {
 		t.Fatalf("all exhausted: %v", err)
 	}
 	delete(usage, RuntimeCodex)
-	if _, err := planChatStart(h.home, "commander", false, usage, now, func() bool { return false }); !errors.Is(err, ErrNoUsage) {
+	if _, err := planChatStart(h.home, "commander", false, usage, now, func() bool { return false }, commanderOrder); !errors.Is(err, ErrNoUsage) {
 		t.Fatalf("missing hooks: %v", err)
 	}
 	os.Remove(filepath.Join(CodexHome(), "auth.json"))
-	if _, err := planChatStart(h.home, "commander", false, usage, now, func() bool { return true }); !errors.Is(err, ErrNoUsage) {
+	if _, err := planChatStart(h.home, "commander", false, usage, now, func() bool { return true }, commanderOrder); !errors.Is(err, ErrNoUsage) {
 		t.Fatalf("disconnected Codex: %v", err)
 	}
 }
@@ -105,5 +105,35 @@ func TestCommanderAutoContinuesOnCodexAfterLimit(t *testing.T) {
 	waitFor(t, sub, func(e Event) bool { return e.Kind == KindUser && strings.HasPrefix(e.Text, "[switch]") })
 	if st, _ := h.e.Status("commander"); st.Runtime != RuntimeCodex || !st.Running {
 		t.Fatalf("Commander did not automatically continue on Codex: %+v", st)
+	}
+}
+
+var commanderOrder = []string{RuntimeClaude, RuntimeCodex}
+
+func TestCommanderReturnsToClaudeWhenCodexWasOnlyAFallback(t *testing.T) {
+	h := accountHarness(t)
+	now := time.Now()
+	if err := WriteAutoRuntime(h.home, "commander", RuntimeCodex); err != nil {
+		t.Fatal(err)
+	}
+	plan, err := planChatStart(h.home, "commander", false, map[string]Usage{}, now, func() bool { return true }, commanderOrder)
+	if err != nil || plan.runtime != RuntimeClaude || plan.account != "default" {
+		t.Fatalf("Commander stayed on its Codex fallback: %+v %v", plan, err)
+	}
+}
+
+func TestCommanderFollowsSavedAccountOrder(t *testing.T) {
+	h := accountHarness(t, "work")
+	now := time.Now()
+	plan, err := planChatStart(h.home, "commander", false, map[string]Usage{}, now, func() bool { return true }, []string{RuntimeCodex, RuntimeClaude})
+	if err != nil || plan.runtime != RuntimeCodex {
+		t.Fatalf("saved order Codex first: %+v %v", plan, err)
+	}
+	plan, err = planChatStart(h.home, "commander", false, map[string]Usage{}, now, func() bool { return true }, []string{"work", RuntimeCodex})
+	if err != nil || plan.runtime != RuntimeClaude || plan.account != "work" {
+		t.Fatalf("saved order naming one account: %+v %v", plan, err)
+	}
+	if _, err = planChatStart(h.home, "commander", false, map[string]Usage{UsageKey(RuntimeClaude, "work"): {Status: UsageOut, OutUntil: now.Add(time.Hour).Unix()}}, now, func() bool { return true }, []string{"work"}); !errors.Is(err, ErrNoUsage) {
+		t.Fatalf("an account outside the order was used: %v", err)
 	}
 }

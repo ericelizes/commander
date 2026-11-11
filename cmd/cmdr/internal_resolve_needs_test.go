@@ -342,3 +342,27 @@ func TestApprovingAGateNeverWidensProductionAuthority(t *testing.T) {
 		})
 	}
 }
+
+func TestResolveHumanHoldApprovalDoesNotMarkWorkComplete(t *testing.T) {
+	stubMail(t)
+	card := `{"question":"Resume this held work?","options":[{"label":"Resume","approves":true},{"label":"Keep held"}]}`
+	bc, st, pid := approvingChoiceSetup(t, card)
+	for i := range bc.ListResult {
+		if bc.ListResult[i].ID == "ms-1.1" {
+			bc.ListResult[i].Labels = []string{"kind:objective", beads.NeedsUserLabel, "hold"}
+		}
+	}
+	stdout, stderr, output := withTempOutputFiles(t)
+	if code := runInternalResolveNeeds([]string{"--project", "manifest", "--bead", "ms-1.1", "--action", "decide", "--choice", "Resume"}, stdout, stderr); code != 0 {
+		_, errOut := output()
+		t.Fatalf("resolve failed: %d %s", code, errOut)
+	}
+	answer, e := st.GetNeedsResolution(context.Background(), pid, "ms-1.1")
+	if e != nil || answer == nil || !answer.Approved {
+		t.Fatalf("explicit resume approval was lost: %+v %v", answer, e)
+	}
+	b, e := bc.Show(context.Background(), "", "ms-1.1")
+	if e != nil || b.Status == "closed" {
+		t.Fatal("resume approval falsely completed the work", e)
+	}
+}

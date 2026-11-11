@@ -1,0 +1,8 @@
+{
+  "name": "Only a service-owned check can publish an automatic gate outcome",
+  "command": "fixture-check",
+  "changed_command": "fixture-check-v2",
+  "passed_evidence": "the stored check passed",
+  "failed_evidence": "the stored check failed",
+  "expectations": ["raw passing writes refuse", "foreign executors cannot trigger checks", "caller-supplied outcomes refuse", "success and failure record once", "checks run outside the graph lock", "changed definitions reject results atomically", "late failure cannot overwrite newer success", "concurrent identical checks share one execution"]
+}

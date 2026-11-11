@@ -35,11 +35,17 @@ func (s *Store) RecordPitch(ctx context.Context, projectID int64, beadID, title,
 		return fmt.Errorf("store: latest pitch %s: %w", beadID, err)
 	}
 	if last == decision && answer == "" {
+		sameScope := true
+		if s.postgres {
+			if err := s.db.QueryRowContext(ctx, `SELECT NOT EXISTS(SELECT 1 FROM bead_tasks b WHERE b.project_id=? AND b.id=? AND NOT EXISTS(SELECT 1 FROM pitch_authority_bases p WHERE p.project_id=b.project_id AND p.bead_id=b.id AND p.version=? AND p.scope_epoch=b.human_scope_epoch))`, projectID, beadID, version).Scan(&sameScope); err != nil {
+				return err
+			}
+		}
 		// The same card again is no new version, unless it was re-raised
 		// against a changed spec/dependency (or the old one has no basis): then it is a
 		// new version with the new basis.
 		old, _ := ParseBasis(lastBasis.String)
-		if basis == nil || basis.Spec == "" || (old != nil && old.Spec == basis.Spec && maps.Equal(old.Named, basis.Named) && maps.Equal(old.PRs, basis.PRs) && maps.Equal(old.Answers, basis.Answers)) {
+		if sameScope && (basis == nil || basis.Spec == "" || (old != nil && old.Spec == basis.Spec && maps.Equal(old.Named, basis.Named) && maps.Equal(old.PRs, basis.PRs) && maps.Equal(old.Answers, basis.Answers))) {
 			return nil
 		}
 	}

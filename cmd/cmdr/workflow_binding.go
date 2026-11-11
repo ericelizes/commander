@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/example-user/commander/internal/beads"
-	"github.com/example-user/commander/internal/spawn"
+	"github.com/example-user/commander/internal/workflowclose"
 	"github.com/example-user/commander/internal/workflowtemplate"
 )
 
@@ -41,14 +41,10 @@ var workflowTaskRoles = func(ctx context.Context, project, task string) ([]strin
 		if r.ProjectID != p.ID || r.TaskBeadID != task || strings.TrimSpace(r.AgentName) == "" {
 			return nil, fmt.Errorf("ambiguous task run provenance for %s", task)
 		}
-		role := strings.ToLower(r.AgentName)
-		if role == "operator-" || role == "op-" || (!strings.HasPrefix(role, "operator-") && !strings.HasPrefix(role, "op-")) {
-			return nil, fmt.Errorf("ambiguous Operator role for task %s", task)
+		role, actorErr := workflowclose.Actor(r.AgentName)
+		if actorErr != nil {
+			return nil, fmt.Errorf("ambiguous execution role for task %s: %w", task, actorErr)
 		}
-		if !strings.HasPrefix(role, "operator-") {
-			role = "operator-" + role
-		}
-		role = spawn.CanonicalRole(strings.ToLower(role))
 		if !slices.Contains(roles, role) {
 			roles = append(roles, role)
 		}
@@ -72,33 +68,7 @@ func workflowOwnerRoles(ctx context.Context, bc beads.Client, dir, id, root stri
 }
 
 func workflowRoot(ctx context.Context, bc beads.Client, dir, id string) (string, error) {
-	seen := map[string]bool{}
-	for id != "" {
-		if seen[id] {
-			return "", fmt.Errorf("ancestry cycle at %s", id)
-		}
-		seen[id] = true
-		b, err := bc.Show(ctx, dir, id)
-		if err != nil {
-			return "", err
-		}
-		if b == nil {
-			return "", fmt.Errorf("missing task/ancestor %s", id)
-		}
-		ds, err := workflowFreshDetails(ctx, bc, dir, []string{id})
-		if err != nil {
-			return "", err
-		}
-		d, ok := ds[id]
-		if !ok {
-			return "", fmt.Errorf("unreadable ancestry %s", id)
-		}
-		if d.Parent == "" {
-			return id, nil
-		}
-		id = d.Parent
-	}
-	return "", fmt.Errorf("missing workstream ancestry")
+	return workflowVerifier().Root(ctx, bc, dir, id)
 }
 func workflowRolesInScope(ctx context.Context, bc beads.Client, dir, project, root, task string) ([]string, error) {
 	other, err := workflowRoot(ctx, bc, dir, task)

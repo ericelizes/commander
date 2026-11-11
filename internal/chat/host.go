@@ -21,7 +21,8 @@ import (
 // claude child: it holds claude's stdin, journals claude's stdout lines and
 // serves them over a unix socket, so the Engine (cmdrd) can restart without
 // claude noticing. The host does no interpretation of the stream: the Engine
-// normalizes, persists and publishes. Lines the Engine has not acknowledged
+// normalizes, persists and publishes. Bound executions end after one result;
+// the host records actual process exit, never bead completion. Lines the Engine has not acknowledged
 // stay in the journal, so a new Engine attaches and picks up where the old one
 // stopped.
 
@@ -40,21 +41,24 @@ const (
 // hostInfo is what the Engine tells the host about the process it starts, so a
 // later Engine can adopt it without resolving anything.
 type hostInfo struct {
-	Role      string    `json:"role"`
-	SessionID string    `json:"session_id"`
-	Model     string    `json:"model,omitempty"`
-	Cwd       string    `json:"cwd,omitempty"`
-	Resumed   bool      `json:"resumed,omitempty"`
-	StartedAt time.Time `json:"started_at"`
+	ExecutionRunID int64     `json:"execution_run_id,omitempty"`
+	Role           string    `json:"role"`
+	SessionID      string    `json:"session_id"`
+	Model          string    `json:"model,omitempty"`
+	Cwd            string    `json:"cwd,omitempty"`
+	Resumed        bool      `json:"resumed,omitempty"`
+	StartedAt      time.Time `json:"started_at"`
 }
 
 // hostConfig is the file passed to the host (argv[2]).
 type hostConfig struct {
-	Sock   string   `json:"sock"`
-	Binary string   `json:"binary"`
-	Args   []string `json:"args"`
-	Cwd    string   `json:"cwd"`
-	Info   hostInfo `json:"info"`
+	InitialPrompt   string   `json:"initial_prompt,omitempty"`
+	ExitReceiptPath string   `json:"exit_receipt_path,omitempty"`
+	Sock            string   `json:"sock"`
+	Binary          string   `json:"binary"`
+	Args            []string `json:"args"`
+	Cwd             string   `json:"cwd"`
+	Info            hostInfo `json:"info"`
 }
 
 // hostExit reports how claude ended.
@@ -96,19 +100,21 @@ type host struct {
 	stdin    io.WriteCloser
 	wmu      sync.Mutex // stdin writes
 
-	mu        sync.Mutex
-	cond      *sync.Cond
-	journal   []journalLine
-	bytes     int
-	next      int64 // idx of the next stdout line
-	acked     int64
-	turnStart int64 // idx after the last result line: the journal keeps the current turn
-	done      map[string]bool
-	exited    *hostExit
-	quit      bool
-	client    *hostClientConn
-	stderr    tailBuffer
-	lock      *os.File // the session lock, dropped when claude is gone
+	mu                sync.Mutex
+	cond              *sync.Cond
+	journal           []journalLine
+	bytes             int
+	next              int64 // idx of the next stdout line
+	acked             int64
+	turnStart         int64 // idx after the last result line: the journal keeps the current turn
+	done              map[string]bool
+	exited            *hostExit
+	quit              bool
+	nativeEndOnce     sync.Once
+	nativeResultError bool
+	client            *hostClientConn
+	stderr            tailBuffer
+	lock              *os.File // the session lock, dropped when claude is gone
 }
 
 type hostClientConn struct {
@@ -187,6 +193,7 @@ func (h *host) startClaude() {
 		err = cmd.Start()
 	}
 	if err != nil {
+		h.persistNativeExit(&hostExit{Code: -1, Stderr: err.Error()})
 		h.releaseLock()
 		h.mu.Lock()
 		h.exited = &hostExit{Code: -1, Stderr: err.Error()}
@@ -196,6 +203,19 @@ func (h *host) startClaude() {
 	}
 	h.cmd, h.stdin = cmd, stdin
 	go h.pump(stdout)
+	if h.cfg.Info.ExecutionRunID > 0 && h.cfg.InitialPrompt != "" {
+		// The detached host owns first delivery. A daemon dying between binding a
+		// run and sending a chat message cannot leave an idle claimed execution.
+		journal, _ := json.Marshal(map[string]any{"type": "commander_execution_start", "session_id": h.cfg.Info.SessionID, "uuid": fmt.Sprintf("execution-start-%d", h.cfg.Info.ExecutionRunID), "message": h.cfg.InitialPrompt})
+		h.mu.Lock()
+		h.journal = append(h.journal, journalLine{idx: h.next, line: string(journal)})
+		h.next++
+		h.bytes += len(journal)
+		h.cond.Broadcast()
+		h.mu.Unlock()
+		raw, _ := json.Marshal(map[string]any{"type": "user", "message": map[string]any{"role": "user", "content": h.cfg.InitialPrompt}})
+		h.writeStdin(string(raw))
+	}
 }
 
 // pump journals claude's stdout, then reaps it and records the exit.
@@ -221,6 +241,9 @@ func (h *host) pump(stdout io.Reader) {
 		}
 		h.cond.Broadcast()
 		h.mu.Unlock()
+		if t.Type == "result" && h.cfg.Info.ExecutionRunID > 0 {
+			h.finishNativeTurn(sc.Bytes())
+		}
 	}
 	err := h.cmd.Wait()
 	ex := &hostExit{Stderr: h.stderr.String()}
@@ -232,6 +255,7 @@ func (h *host) pump(stdout io.Reader) {
 	} else if err != nil {
 		ex.Code = -1
 	}
+	h.persistNativeExit(ex)
 	h.releaseLock()
 	h.mu.Lock()
 	h.exited = ex

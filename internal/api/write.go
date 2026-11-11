@@ -46,6 +46,26 @@ func (s *Server) serveWrite(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, beads.DoorResponse{Exit: 2, Error: "bad request: " + err.Error()})
 		return
 	}
+	if (r.URL.Path == beads.PlanPath || r.URL.Path == beads.PlanProposePath) && req.Plan == nil {
+		writeJSON(w, http.StatusBadRequest, beads.DoorResponse{Exit: 2, Error: "planning endpoint requires a versioned plan"})
+		return
+	}
+	if req.Plan != nil && (!req.Atomic || !beads.PostgresConfigured()) {
+		writeJSON(w, http.StatusBadRequest, beads.DoorResponse{Exit: 2, Error: "versioned plans require an atomic PostgreSQL batch"})
+		return
+	}
+	if req.Propose && r.URL.Path != beads.PlanProposePath {
+		writeJSON(w, http.StatusBadRequest, beads.DoorResponse{Exit: 2, Error: "proposal must use the proposal endpoint"})
+		return
+	}
+	if len(req.CompletionWaivers) > beads.MaxOps || req.Plan != nil && len(req.CompletionWaivers) > 0 {
+		writeJSON(w, http.StatusBadRequest, beads.DoorResponse{Exit: 2, Error: "typed completion waivers require an unversioned completion request"})
+		return
+	}
+	if len(req.CompletionWaivers) > 0 && beads.HasExecutionAttribution(req.Env) {
+		writeJSON(w, http.StatusOK, beads.DoorResponse{Exit: 1, Error: "execution sessions cannot record planning waivers"})
+		return
+	}
 	ops := req.Ops
 	if len(ops) == 0 {
 		ops = [][]string{req.Args}
@@ -57,6 +77,28 @@ func (s *Server) serveWrite(w http.ResponseWriter, r *http.Request) {
 	if fi, err := os.Stat(filepath.Join(req.Dir, ".beads")); req.Dir == "" || !filepath.IsAbs(req.Dir) || err != nil || !fi.IsDir() {
 		writeJSON(w, http.StatusBadRequest, beads.DoorResponse{Exit: 2, Error: "dir is not a beads project"})
 		return
+	}
+	if req.Plan != nil {
+		replayCtx := beads.WithPlanRequest(beads.WithDoorEnv(r.Context(), req.Env), req.Plan, ops, req.Intent)
+		r = r.WithContext(replayCtx)
+		if r.URL.Path == beads.PlanProposePath {
+			result, e := beads.ProposePlan(replayCtx, req.Dir, ops, req.Intent)
+			if e != nil {
+				writeJSON(w, http.StatusOK, beads.DoorResponse{Exit: 1, Error: e.Error(), Settled: true})
+				return
+			}
+			writeJSON(w, http.StatusOK, result)
+			return
+		}
+		prior, e := beads.LookupPlanReceipt(replayCtx, req.Dir, ops)
+		if e != nil {
+			writeJSON(w, http.StatusOK, beads.DoorResponse{Exit: 1, Error: e.Error(), Settled: true})
+			return
+		}
+		if prior != nil {
+			writeJSON(w, http.StatusOK, prior)
+			return
+		}
 	}
 	if role := roleOf(req.Env); role != "" {
 		if err := s.checkWrite(r.Context(), req.Dir, role, ops); err != nil {
@@ -86,6 +128,13 @@ func (s *Server) serveWrite(w http.ResponseWriter, r *http.Request) {
 	// A caller that hangs up must not cancel a write already running.
 	ctx, cancel := context.WithTimeout(beads.WithDoorEnv(context.WithoutCancel(r.Context()), req.Env), writeDeadline)
 	defer cancel()
+	ctx = beads.WithPlanBasis(ctx, req.Plan)
+	ctx = beads.WithCompletionValidator(ctx, s.completionValidator(req.Dir, roleOf(req.Env), req.CompletionWaivers))
+	if req.Plan != nil {
+		ctx = beads.WithPlanValidator(ctx, func(checkCtx context.Context, ops [][]string) error {
+			return s.checkWrite(checkCtx, req.Dir, roleOf(req.Env), ops)
+		})
+	}
 	backendStart := time.Now()
 	resp := beads.ApplyOps(ctx, req.Dir, ops, req.Atomic, batchOK, run, batch)
 	if resp.Exit == 0 && plan != nil {

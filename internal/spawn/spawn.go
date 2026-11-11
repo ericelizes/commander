@@ -50,13 +50,14 @@ type AgentRunStore interface {
 // on SpawnRequest.ProjectType: "code" → spawnCode (Docker + worktree),
 // "knowledge" → spawnKnowledge (tmux pane, no Docker, commits to current branch).
 type Spawner struct {
-	store         AgentRunStore
-	opencode      opencode.Client
-	beads         beads.Client
-	am            agentmail.Client
-	docker        docker.Client
-	tmux          tmuxctl.Client
-	commanderRepo string
+	store           AgentRunStore
+	opencode        opencode.Client
+	beads           beads.Client
+	am              agentmail.Client
+	docker          docker.Client
+	tmux            tmuxctl.Client
+	commanderRepo   string
+	nativeExecution NativeExecutionRuntime
 
 	// now is overridable for deterministic tests; defaults to time.Now.
 	now func() time.Time
@@ -84,10 +85,16 @@ type Spawner struct {
 
 // SpawnRequest is the user-supplied intent.
 type SpawnRequest struct {
-	ProjectID   int64
-	ProjectName string
-	ProjectPath string // host abs path
-	ProjectType string // "code" or "knowledge"
+	ExecutionClaimToken         string // generic scheduler's durable startup reservation
+	ResumeSourceRunID           int64
+	ResumeDriver, ResumeAccount string
+	ResumeSessionID             string
+	ResumeRuntime               string
+	ResumeNativeThread          string
+	ProjectID                   int64
+	ProjectName                 string
+	ProjectPath                 string // host abs path
+	ProjectType                 string // "code" or "knowledge"
 	// RepoPath is the git checkout Operator worktrees come from when the
 	// project path (the beads root) is not itself a repo; "" = ProjectPath.
 	RepoPath   string
@@ -129,6 +136,9 @@ type SpawnRequest struct {
 	// TaskText is the task bead's title and brief; a Codex draw is overridden to
 	// Claude when it names a local background service (needsBackgroundService).
 	TaskText string
+	// AgentAccounts is the account order of a new execution agent
+	// (store.AgentAccounts); nil = read from the store, else the default.
+	AgentAccounts []string
 
 	// Account is the Claude account (claudeacct) of a host Operator; "" = its
 	// Manager's (resolveOperatorAccount).
@@ -217,6 +227,29 @@ func New(
 // COMMANDER_OPERATOR_RUNTIME=host; "knowledge" runs spawnKnowledge (tmux pane,
 // no Docker, commits to current branch).
 func (s *Spawner) Spawn(ctx context.Context, req SpawnRequest) (result *SpawnResult, spawnErr error) {
+	if admission, ok := s.store.(interface {
+		CheckExecutionAdmission(context.Context, int64, string, string) error
+	}); ok {
+		if e := admission.CheckExecutionAdmission(ctx, req.ProjectID, req.TaskBeadID, req.ExecutionClaimToken); e != nil {
+			return nil, fmt.Errorf("spawn admission: %w", e)
+		}
+	}
+
+	if req.AgentAccounts == nil {
+		if src, ok := s.store.(interface {
+			AgentAccounts(context.Context) (map[string][]string, error)
+		}); ok {
+			if order, e := src.AgentAccounts(ctx); e == nil {
+				req.AgentAccounts = order[store.AgentKindAgent]
+			}
+		}
+	}
+	// The ready-bead scheduler delegates provider/model choice to the runtime.
+	// Preserve explicit legacy callers while giving claimed execution its
+	// configured default before either host validator runs.
+	if req.ExecutionClaimToken != "" && req.Model == "" {
+		req.Model = agentrt.Model(agentrt.TierOperator)
+	}
 	defer func() {
 		if spawnErr == nil && result != nil && result.RunID > 0 {
 			if err := s.acceptDispatchHandoff(ctx, req); err != nil {

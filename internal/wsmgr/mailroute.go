@@ -39,6 +39,15 @@ func (m *Manager) OwnerOfRole(ctx context.Context, role string) (owner, why stri
 	if p == nil {
 		return role, "", nil
 	}
+	if active, e := m.Store.ActiveOrchestration(ctx); e != nil {
+		return "", "", e
+	} else if active {
+		j, e := m.Store.Jurisdiction(ctx, p.ID, bead)
+		if e != nil {
+			return "", "", e
+		}
+		return j.CommanderID, "Routed to the current planning jurisdiction", nil
+	}
 	root, err := StrictOwner(ctx, m.Beads, p.Path, bead)
 	if err != nil {
 		return "", "", err

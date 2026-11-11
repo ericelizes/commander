@@ -31,6 +31,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/example-user/commander/internal/agentmail"
@@ -155,34 +156,37 @@ type State struct {
 // Daemon is the long-lived runtime. Construct via New (production) or via
 // the test seam in daemon_test.go (mocked clients + skipSocket=true).
 type Daemon struct {
-	store    *store.Store
-	opencode opencode.Client
-	beads    beads.Client
-	reads    beads.Client // cached, export-backed reader for periodic sweeps
+	executionWG       sync.WaitGroup
+	orchestrationMode string // read from canonical database before starting workers
+	store             *store.Store
+	opencode          opencode.Client
+	beads             beads.Client
+	reads             beads.Client // cached, export-backed reader for periodic sweeps
 	// invariantReads is the invariant watcher's own export reader (nil without one).
-	invariantReads beads.Client
-	am             agentmail.Client
-	docker         docker.Client
-	tmux           tmuxctl.Client
-	spawner        *spawn.Spawner
-	watchdog       *ceilings.Watchdog
-	scheduler      *scheduler.Scheduler
-	inbox          *inbox.Poller
-	waker          *wake.Waker    // nil when the am server client can't be built
-	chat           *chat.Engine   // native chat engine (headless Claude sessions for the app)
-	ensured        *wsmgr.Manager // starts every open workstream's Manager natively; nil without mail
-	settle         runSettler     // moves an Operator's bead on when its process ends
-	watch          opWatch        // looks at running Operators every minute; wakes their Manager when needed
-	live           *livedata.Source
-	liveOps        *liveOperators
-	health         *healthBoard
-	invariant      *invariantWatcher // mails a Manager about open beads with no agent, wait or the user; nil without mail
-	pitch          *pitchWatcher     // mails a Manager whose ready ask has no pitch; nil without mail
-	gates          *gateWatcher      // re-checks condition gates; nil without mail
-	waits          *waitWatcher      // wakes a Manager when the CI/review it waits on is done; nil without mail
-	notifier       notify.Notifier
-	cfg            *config.Config
-	socket         *Socket
+	invariantReads     beads.Client
+	am                 agentmail.Client
+	docker             docker.Client
+	tmux               tmuxctl.Client
+	spawner            *spawn.Spawner
+	watchdog           *ceilings.Watchdog
+	scheduler          *scheduler.Scheduler
+	inbox              *inbox.Poller
+	waker              *wake.Waker    // nil when the am server client can't be built
+	chat               *chat.Engine   // native chat engine (headless Claude sessions for the app)
+	ensured            *wsmgr.Manager // starts every open workstream's Manager natively; nil without mail
+	settle             runSettler     // moves an Operator's bead on when its process ends
+	watch              opWatch        // looks at running Operators every minute; wakes their Manager when needed
+	live               *livedata.Source
+	liveOps            *liveOperators
+	health             *healthBoard
+	supervisionDeliver func(context.Context, string, string) error
+	invariant          *invariantWatcher // mails a Manager about open beads with no agent, wait or the user; nil without mail
+	pitch              *pitchWatcher     // mails a Manager whose ready ask has no pitch; nil without mail
+	gates              *gateWatcher      // re-checks condition gates; nil without mail
+	waits              *waitWatcher      // wakes a Manager when the CI/review it waits on is done; nil without mail
+	notifier           notify.Notifier
+	cfg                *config.Config
+	socket             *Socket
 
 	// notifyEnabled gates the OS-notification fan-out. Default true; the
 	// cmdrd `--notifications=false` flag flips it off for headless runs
@@ -278,7 +282,7 @@ func New() (*Daemon, error) {
 	if srv, err := agentmail.NewServerClientFromEnv(); err == nil {
 		spawnServer = srv
 	}
-	sp := newDaemonSpawner(st, oc, bd, am, spawnServer, dk, tx, commanderRepo).WithDockerSandbox(cfg.OperatorSandbox == "docker")
+	sp := newDaemonSpawner(st, oc, bd, am, spawnServer, dk, tx, commanderRepo).WithDockerSandbox(cfg.OperatorSandbox == "docker").WithNativeExecution(chatEngine)
 	wd := ceilings.NewWatchdog(st, dk, oc, bd, am, ceilingsLimitsFrom(cfg))
 	// The periodic readers share one cache, so a project nobody wrote to costs
 	// no br call however often they look.
@@ -444,35 +448,42 @@ func New() (*Daemon, error) {
 		}
 	}
 
+	// Canonical condition checks are database work. Optional Agent Mail must not
+	// be able to disable them; durable supervision observes committed outcomes.
+	if liveGates == nil && st.IsPostgres() {
+		liveGates = &gateWatcher{projects: st, beads: bd, gh: runGH, run: gates.RunShell, repoOf: livedata.GitHubRepo, now: time.Now, last: map[string]gateSeen{}, failing: map[string]int{}}
+	}
+
 	return &Daemon{
-		store:          st,
-		opencode:       oc,
-		beads:          bd,
-		reads:          reads,
-		invariantReads: invariantReads,
-		am:             am,
-		docker:         dk,
-		tmux:           tx,
-		spawner:        sp,
-		watchdog:       wd,
-		scheduler:      sc,
-		inbox:          pl,
-		waker:          waker,
-		chat:           chatEngine,
-		ensured:        ensured,
-		settle:         settle,
-		watch:          watch,
-		live:           live,
-		liveOps:        liveOps,
-		health:         health,
-		waits:          waits,
-		invariant:      invariant,
-		pitch:          pitch,
-		gates:          liveGates,
-		notifier:       notify.NewSystem(),
-		cfg:            cfg,
-		home:           home,
-		notifyEnabled:  true,
+		store:              st,
+		opencode:           oc,
+		beads:              bd,
+		reads:              reads,
+		invariantReads:     invariantReads,
+		am:                 am,
+		docker:             dk,
+		tmux:               tx,
+		spawner:            sp,
+		watchdog:           wd,
+		scheduler:          sc,
+		inbox:              pl,
+		waker:              waker,
+		chat:               chatEngine,
+		ensured:            ensured,
+		settle:             settle,
+		watch:              watch,
+		supervisionDeliver: watch.deliver,
+		live:               live,
+		liveOps:            liveOps,
+		health:             health,
+		waits:              waits,
+		invariant:          invariant,
+		pitch:              pitch,
+		gates:              liveGates,
+		notifier:           notify.NewSystem(),
+		cfg:                cfg,
+		home:               home,
+		notifyEnabled:      true,
 	}, nil
 }
 
@@ -488,6 +499,11 @@ func (d *Daemon) SetNotificationsEnabled(enabled bool) {
 // nil on a clean ctx-cancellation; a non-nil error indicates a startup
 // failure that prevented the daemon from coming up.
 func (d *Daemon) Run(ctx context.Context) error {
+	control, err := d.store.OrchestrationControl(ctx)
+	if err != nil {
+		return fmt.Errorf("daemon: read orchestration control: %w", err)
+	}
+	d.orchestrationMode = control.Mode
 	started := time.Now()
 	defer beads.StopBackground(d.reads)
 	defer beads.StopBackground(d.invariantReads)
@@ -514,13 +530,19 @@ func (d *Daemon) Run(ctx context.Context) error {
 	if err := d.watchdog.Start(ctx); err != nil {
 		return fmt.Errorf("daemon: start watchdog: %w", err)
 	}
-	d.scheduler.Start(ctx)
+	if d.store.IsPostgres() && d.orchestrationMode == "active" {
+		d.executionWG.Add(1)
+		go func() { defer d.executionWG.Done(); d.runExecution(ctx) }()
+	} else {
+		d.scheduler.Start(ctx)
+	}
 	d.inbox.Start(ctx)
 	if d.store != nil && !d.skipSocket {
 		go d.reapHostRuns(ctx)
 		if d.store.IsPostgres() && d.live != nil && d.live.Live != nil {
 			go d.reconcilePostgresPresence(ctx)
 			go d.observeLegacyPostgresOperators(ctx)
+			go d.runSupervision(ctx)
 		}
 		sweepReads := d.reads
 		if sweepReads == nil {
@@ -540,7 +562,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 	if d.waits != nil && !d.skipSocket {
 		go d.waits.Run(ctx)
 	}
-	if d.invariant != nil && !d.skipSocket {
+	if d.invariant != nil && !d.skipSocket && !(d.store.IsPostgres() && d.orchestrationMode == "active") {
 		go d.invariant.Run(ctx)
 	}
 	if d.pitch != nil && !d.skipSocket {
@@ -641,6 +663,7 @@ const shutdownLimit = 5 * time.Second
 // shutdown tears down every subsystem in reverse-startup order. Idempotent —
 // calling multiple times is safe.
 func (d *Daemon) shutdown() {
+	d.executionWG.Wait() // finish bounded startup cleanup before closing its store
 	if d.chat != nil {
 		d.chat.Close() // processes finish their turn and exit; they resume on the next start
 	}
@@ -1015,7 +1038,14 @@ func (d *Daemon) reapHostRuns(ctx context.Context) {
 			log.Printf("daemon: killed %d orphaned pipe-pane writers %v (err=%v)", len(pids), pids, err)
 		}
 		first = false
-		d.watch.pass(ctx)
+		if d.store.IsPostgres() && d.orchestrationMode == "active" {
+			watch := d.watch
+			watch.deliver = nil
+			watch.mail = nil
+			watch.pass(ctx)
+		} else {
+			d.watch.pass(ctx)
+		}
 		sleep.done()
 		select {
 		case <-ctx.Done():
@@ -1048,6 +1078,9 @@ const ensureInterval = 30 * time.Second
 // once the chats that were running before a restart are back (so a surviving
 // host is adopted, not duplicated), then again every ensureInterval.
 func (d *Daemon) ensureManagers(ctx context.Context) {
+	if d.store.IsPostgres() && d.orchestrationMode == "active" {
+		return
+	}
 	if err := d.chat.WaitResumed(ctx); err != nil {
 		return
 	}

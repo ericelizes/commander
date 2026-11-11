@@ -1,0 +1,7 @@
+{
+ "name": "A planning batch cannot reuse an old human approval for a new hold",
+ "question": "Approve releasing this exact hold?",
+ "answer": "Approve",
+ "request_id": "release-current-hold",
+ "second_request_id": "release-later-hold"
+}

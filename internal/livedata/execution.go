@@ -1,6 +1,7 @@
 package livedata
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 
@@ -21,6 +22,10 @@ type SnapExecution struct {
 }
 
 func executionOf(s Snapshot, data Data, chats map[string]ChatState) []SnapExecution {
+	if data.Postgres && data.ObservedExecutions != nil {
+		return observedExecutionOf(s, data)
+	}
+
 	out := map[string]SnapExecution{}
 	alive := map[string]bool{}
 	if s.Live != nil {
@@ -115,7 +120,11 @@ func executionCount(s Snapshot, pid int64, id string, steps []SnapStep) int {
 	roles := map[string]bool{}
 	for _, run := range s.Executions {
 		if run.ProjectID == pid && ids[run.BeadID] && run.State == store.AgentWorking {
-			roles[run.Role] = true
+			key := run.Role
+			if run.RunID > 0 {
+				key = fmt.Sprintf("run:%d", run.RunID)
+			}
+			roles[key] = true
 		}
 	}
 	return len(roles)
@@ -154,6 +163,11 @@ func applyExecutionCounts(s *Snapshot, d *Display) {
 			continue
 		}
 		r.Working = executionCount(*s, ws.ProjectID, ws.BeadID, ws.Steps)
+		if s.Storage == "postgres" && r.Working == 0 && r.Kind == "working" {
+			r.Kind = "waiting"
+			r.Text = waitingExecutionText(*s, ws.ProjectID, ws.BeadID, ws.Steps)
+		}
+
 		updateTrackExecutions(*s, ws.ProjectID, ws.Steps, r.Tracks)
 	}
 }
@@ -178,6 +192,10 @@ func updateTrackExecutions(s Snapshot, pid int64, steps []SnapStep, tracks []Boa
 	for i := range tracks {
 		st := byID[tracks[i].BeadID]
 		tracks[i].Working = executionCount(s, pid, tracks[i].BeadID, st.Children)
+		if s.Storage == "postgres" && tracks[i].Working == 0 && tracks[i].Kind == "working" {
+			tracks[i].Kind = "waiting"
+			tracks[i].Text = waitingExecutionText(s, pid, tracks[i].BeadID, st.Children)
+		}
 		updateTrackExecutions(s, pid, steps, tracks[i].Children)
 	}
 }

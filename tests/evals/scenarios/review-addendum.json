@@ -36,5 +36,18 @@
     "wrong-source-digest",
     "unsupported-claim",
     "author-impersonation"
-  ]
+  ],
+  "jurisdiction": {
+    "commander": "commander-urgent",
+    "flow": [
+      "former-owner-refuses",
+      "current-owner-records",
+      "same-request-reuses-journal",
+      "return-keeps-authority",
+      "unstamped-copy-refuses",
+      "canonical-completion-rechecks-artifacts",
+      "original-history-unchanged"
+    ]
+  },
+  "postgres_runner": "cmd/cmdr:TestPostgresPlanReviewAddendumSurvivesCommanderHandoff"
 }

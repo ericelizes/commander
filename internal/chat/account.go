@@ -2,6 +2,7 @@ package chat
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -77,7 +78,7 @@ func AutoSwitchFile(home, role string) string { return filepath.Join(home, "chat
 // AutoSwitch reports whether role switches accounts by itself at a usage
 // limit: always for a Manager (decision d82), else when its file is set.
 func AutoSwitch(home, role string) bool {
-	return role == "commander" || isManagerRole(role) || fileExists(AutoSwitchFile(home, role))
+	return IsCommanderRole(role) || isManagerRole(role) || fileExists(AutoSwitchFile(home, role))
 }
 
 // SetAutoSwitch turns role's auto-switch on or off.
@@ -183,6 +184,9 @@ func (e *Engine) idleProcess(role, what string) (*process, error) {
 	}
 	if p == nil {
 		return nil, nil
+	}
+	if p.spec.ExecutionRunID > 0 {
+		return nil, errors.New("execution session/provider is bound to its current run; use a validated checkpoint and a new claim")
 	}
 	c.mu.Lock()
 	busy := c.tracker.turn || len(c.tracker.order) > 0

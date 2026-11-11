@@ -20,6 +20,16 @@ type sessionMinter interface {
 // that first reads its predecessor's conversation log. A turn in flight (or a
 // pending approval) refuses with ErrBusy: the restart would cut it.
 func (e *Engine) Fresh(ctx context.Context, role string) (Status, error) {
+	if e.opts.Resolver != nil {
+		spec, err := e.opts.Resolver.Resolve(ctx, role)
+		if err != nil {
+			return Status{}, err
+		}
+		if spec.ExecutionRunID > 0 {
+			return Status{}, errors.New("execution session is bound to its current run; resume its validated checkpoint instead")
+		}
+	}
+
 	minter, ok := e.opts.Resolver.(sessionMinter)
 	if !ok {
 		return Status{}, errors.New("chat: this engine cannot start fresh sessions")

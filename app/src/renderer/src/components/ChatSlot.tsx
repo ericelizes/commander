@@ -42,6 +42,7 @@ export function useChatTarget(): ChatTarget {
     const byKey = (key: string) => snapshot.workstreams.find((w) => wsKey(w) === key)
     if (selected.kind !== 'agent') return commander
     const w = byKey(selected.ws)
+    if (selected.key === 'commander' || selected.key.startsWith('commander-')) return { role: selected.key, title: selected.key === 'commander' ? 'Commander' : `${w?.title ?? 'Focused'} Commander`, kind: 'commander' }
     if (w && selected.key === w.manager_role) return { role: w.manager_role, title: `${w.title} Manager`, kind: 'manager' }
     // A nested workstream with a Manager of its own.
     const nested = managerOfRole(snapshot, selected.key)

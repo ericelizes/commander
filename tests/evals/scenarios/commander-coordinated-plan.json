@@ -1,0 +1,8 @@
+{
+  "name": "Two Commanders agree on exact tree changes before one atomic commit",
+  "ordinary_title": "Ordinary work preserves the agreed dependency",
+  "urgent_title": "Urgent work uses the agreed integration",
+  "ordinary_answer": "Agreed for the ordinary workstream; release gates stay intact.",
+  "urgent_answer": "Agreed for the urgent workstream; apply the saved plan.",
+  "expected_user_cards": 0
+}

@@ -19,6 +19,10 @@ import (
 // onto Claude because its task names a local background service.
 const ReasonClaudeServiceKeyword = chat.RuntimeClaude + "-service-keyword"
 
+// ReasonAgentAccounts is the operator-runtime reason of a run placed on the
+// first account in the agents' account order with usage left.
+const ReasonAgentAccounts = "agent-accounts"
+
 // ReasonClaudeHooksUnavailable records an effective Claude run while Codex intent remains pinned.
 const ReasonClaudeHooksUnavailable = chat.RuntimeClaude + "-hooks-unavailable"
 
@@ -96,8 +100,10 @@ func pickOperatorRuntime(req SpawnRequest, agentName string) (rt, reason string,
 	if rt == "" && !req.Resume && needsBackgroundService(req.TaskText) {
 		rt, reason = chat.RuntimeClaude, ReasonClaudeServiceKeyword
 	}
-	if rt == "" && !req.Resume && chat.CodexByShare(req.TaskBeadID, agentrt.CodexOperatorShare()) && codexHooksReady() {
-		rt = chat.RuntimeCodex
+	if rt == "" && !req.Resume {
+		if p, ok := firstAgentAccount(req); ok {
+			rt, reason = p.Runtime, ReasonAgentAccounts
+		}
 	}
 	if rt != chat.RuntimeCodex {
 		rt = chat.RuntimeClaude
@@ -108,11 +114,28 @@ func pickOperatorRuntime(req SpawnRequest, agentName string) (rt, reason string,
 	return rt, reason, pinned
 }
 
-// shareMayDraw reports whether a new run's runtime is left to the share draw
-// on its task bead, which CheckUsage cannot make before the bead exists.
-func shareMayDraw(req SpawnRequest) bool {
-	return req.Runtime == "" && req.Account == "" && !req.Resume && !needsBackgroundService(req.TaskText) &&
-		agentrt.CodexOperatorShare() > 0 && codexHooksReady()
+// agentOrder is req's account order for a new execution agent, else the default.
+func agentOrder(req SpawnRequest) []string {
+	if len(req.AgentAccounts) > 0 {
+		return req.AgentAccounts
+	}
+	return defaultAgentOrder()
+}
+
+// defaultAgentOrder is the order with nothing saved. Tests replace it.
+var defaultAgentOrder = func() []string { return store.DefaultAgentAccounts[store.AgentKindAgent] }
+
+// firstAgentAccount is the first account in the agents' order that can take a
+// new run now.
+func firstAgentAccount(req SpawnRequest) (chat.Provider, bool) {
+	home, now := agentrt.CommanderHome(), usageNow()
+	accounts := chat.Accounts(home, readUsage(home), now)
+	for _, p := range chat.OrderAccounts(agentOrder(req), accounts) {
+		if chat.AccountAvailable(p, accounts, now, codexHooksReady) {
+			return p, true
+		}
+	}
+	return chat.Provider{}, false
 }
 
 // offCodexNote notes on the bead a respawn or crash restart that moved an

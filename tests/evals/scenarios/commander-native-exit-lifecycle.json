@@ -1,0 +1,27 @@
+{
+  "role": "operator-native-finish",
+  "goal": "Release execution capacity from real process exit without pretending work completed",
+  "runners": [
+    "internal/chat:TestNativeExecutionOneTurnReleasesCapacityWithoutCompletingWork",
+    "internal/chat:TestNativeExitReceiptSurvivesFailedCommitAndRecoversAfterRestart",
+    "internal/chat:TestNativeHostFinishesAndRecordsExitWhileEngineIsDetached",
+    "internal/chat:TestNativeCheckpointAnswerAndExitResumeThroughCanonicalCapacity",
+    "internal/chat:TestNativeExecutionUsageLimitDoesNotRestartARegisteredPlannerInline",
+    "internal/chat:TestNativeReceiptFailureDoesNotStarveOtherRecordedExits",
+    "internal/chat:TestNativeConnectionLossDoesNotReleaseAStillLiveExecution",
+    "internal/chat:TestNativeCodexCheckpointSelectsOnlyMatchingHostRunThread",
+    "internal/chat:TestNativeCodexExecutionFinishesAndReplacementStartsItsOwnThread"
+  ],
+  "invariants": [
+    "A bound execution host ends after one result while planning chats stay persistent",
+    "The native host records actual exit independently of its daemon connection",
+    "Canonical run/session validation and first-terminal-state preservation fence exit commits",
+    "Failed commits retain receipts and refuse accidental restart of completed work",
+    "Claim capacity becomes reusable while the unfinished bead remains open",
+    "Saved checkpoint answers and exits resume through the normal capacity reservation",
+    "An unrelated bad receipt cannot stop other exit reconciliation",
+    "Socket loss preserves live custody and permits adoption of the same process",
+    "Native checkpoints do not borrow another run's Codex thread",
+    "Actual fake Codex hosts end their runs and fresh replacements start independent threads"
+  ]
+}

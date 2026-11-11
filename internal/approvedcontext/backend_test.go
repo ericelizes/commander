@@ -12,6 +12,10 @@ import (
 )
 
 func TestRestoreExactBackend(t *testing.T) {
+	// This is a legacy fake-backend fixture, not an installed Commander. Keep
+	// ancestry reads on the same isolated backend as its private state database.
+	t.Setenv("COMMANDER_HOME", t.TempDir())
+
 	for _, tc := range []struct {
 		name, raw string
 		deny      bool

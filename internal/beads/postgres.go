@@ -72,16 +72,25 @@ func projectID(ctx context.Context, q store.Querier, dir string) (int64, error) 
 const pgBeadColumns = `b.id,b.title,b.description,b.acceptance_criteria,b.status,b.issue_type,b.priority,b.labels,COALESCE(b.parent_id,''),b.assigned_agent,b.created_at,b.updated_at,b.close_reason,
  (SELECT COUNT(*) FROM bead_dependencies d WHERE d.project_id=b.project_id AND d.issue_id=b.id),
  (SELECT COUNT(*) FROM bead_dependencies d WHERE d.project_id=b.project_id AND d.depends_on_id=b.id),
- (SELECT COUNT(*) FROM bead_comments c WHERE c.project_id=b.project_id AND c.bead_id=b.id)`
+ (SELECT COUNT(*) FROM bead_comments c WHERE c.project_id=b.project_id AND c.bead_id=b.id),
+ commander_planning_owner(b.project_id,b.id),COALESCE((SELECT revision FROM jurisdiction_projects j WHERE j.project_id=b.project_id),1),
+ b.responsible_agent_id,b.responsibility_epoch,b.progress_seq,b.progress_at,b.result_ready_at,b.plan_revision,b.execution_ready,b.execution_capabilities,b.execution_attempts,b.execution_error,
+ EXISTS(SELECT 1 FROM execution_slots x WHERE x.project_id=b.project_id AND x.bead_id=b.id AND x.run_id IS NULL AND x.lease_until>EXTRACT(EPOCH FROM clock_timestamp())::bigint),
+ EXISTS(SELECT 1 FROM execution_slots x JOIN projects p ON p.id=b.project_id WHERE x.enabled AND jsonb_exists(x.capabilities,p.type) AND b.execution_capabilities <@ x.capabilities),
+ EXISTS(SELECT 1 FROM bead_questions q WHERE q.project_id=b.project_id AND q.bead_id=b.id AND q.blocking AND q.state='pending'),commander_pending_human_answer(b.project_id,b.id)`
 
 func scanPGBead(row interface{ Scan(...any) error }) (Bead, error) {
 	var b Bead
 	var labels []byte
-	err := row.Scan(&b.ID, &b.Title, &b.Description, &b.AcceptanceCriteria, &b.Status, &b.Type, &b.Priority, &labels, &b.ParentID, &b.AssignedAgent, &b.CreatedAt, &b.UpdatedAt, &b.CloseReason, &b.DependencyCount, &b.DependentCount, &b.CommentCount)
+	var capabilities []byte
+	err := row.Scan(&b.ID, &b.Title, &b.Description, &b.AcceptanceCriteria, &b.Status, &b.Type, &b.Priority, &labels, &b.ParentID, &b.AssignedAgent, &b.CreatedAt, &b.UpdatedAt, &b.CloseReason, &b.DependencyCount, &b.DependentCount, &b.CommentCount, &b.PlanningCommander, &b.JurisdictionRevision, &b.ResponsibleAgent, &b.ResponsibilityEpoch, &b.ProgressSeq, &b.ProgressAt, &b.ResultReadyAt, &b.PlanRevision, &b.ExecutionReady, &capabilities, &b.ExecutionAttempts, &b.ExecutionError, &b.ExecutionReserved, &b.ExecutionCapable, &b.QuestionWaiting, &b.HumanAnswerPending)
 	if err != nil {
 		return b, err
 	}
 	err = json.Unmarshal(labels, &b.Labels)
+	if err == nil {
+		err = json.Unmarshal(capabilities, &b.ExecutionCapabilities)
+	}
 	b.Parent = b.ParentID
 	return b, err
 }

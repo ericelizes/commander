@@ -78,7 +78,7 @@ func ExecRunner(path string) Runner {
 		// COMMANDER_MANAGER_ROLE inherited from the shell that started cmdrd
 		// must not make them checked as an agent.
 		for _, kv := range os.Environ() {
-			if !strings.HasPrefix(kv, "COMMANDER_ROLE=") && !strings.HasPrefix(kv, "COMMANDER_MANAGER_ROLE=") {
+			if !strings.HasPrefix(kv, "COMMANDER_ROLE=") && !strings.HasPrefix(kv, "COMMANDER_MANAGER_ROLE=") && !strings.HasPrefix(kv, "COMMANDER_RUN_ID=") && !strings.HasPrefix(kv, "COMMANDER_RUN_SESSION=") {
 				cmd.Env = append(cmd.Env, kv)
 			}
 		}

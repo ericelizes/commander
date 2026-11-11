@@ -165,6 +165,20 @@ func run(args []string, stdout, stderr *os.File) int {
 		return runColumn(args[1:], stderr)
 	case "bead", "beads-compat":
 		return runBeadsCompat(args[1:], stdout, stderr)
+	case "supervision":
+		return runSupervision(args[1:], stdout, stderr)
+	case "jurisdiction":
+		return runJurisdiction(args[1:], stdout, stderr)
+	case "execution":
+		return runExecution(args[1:], stdout, stderr)
+	case "orchestration":
+		return runOrchestration(args[1:], stdout, stderr)
+	case "plan":
+		return runPlan(args[1:], stdout, stderr)
+	case "decision":
+		return runDecision(args[1:], stdout, stderr)
+	case "question":
+		return runQuestion(args[1:], stdout, stderr)
 	case "storage":
 		return runStoragePostgres(args[1:], stdout, stderr)
 	case "board":

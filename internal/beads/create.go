@@ -84,6 +84,9 @@ var noInheritSupport sync.Map // beads binary -> bool, read once from `create --
 // supportsNoInherit reports whether the beads binary takes --no-inherit-labels
 // (upstream bd; br rejects it), by its help text, cached per binary.
 func (c *cmdClient) supportsNoInherit(ctx context.Context, dir string) bool {
+	if PostgresConfigured() {
+		return true
+	}
 	bin := beadsBinary()
 	if v, ok := noInheritSupport.Load(bin); ok {
 		return v.(bool)

@@ -28,7 +28,9 @@ func TestHeldMatrix(t *testing.T) {
 		kind Kind
 		why  Why
 	}{
+		{"durable queue is custody, not a working process", Bead{ID: "queued", Status: "open", Queued: true}, fakeWorld{}, true, Queue, WhyNone},
 		{"idle manager owner", Bead{ID: "x", Status: "in_progress", Owner: "manager-w"}, fakeWorld{live: map[string]string{"manager-w": "idle"}}, false, "", WhyManagerIdle},
+		{"idle scoped Commander owner", Bead{ID: "x", Status: "in_progress", Owner: "commander-urgent"}, fakeWorld{live: map[string]string{"commander-urgent": "idle"}}, false, "", WhyManagerIdle},
 		{"working manager owner", Bead{ID: "x", Status: "in_progress", Owner: "manager-w"}, fakeWorld{live: map[string]string{"manager-w": "working"}}, true, Operator, ""},
 		{"owner with no live source", Bead{ID: "x", Status: "in_progress", Owner: "manager-w"}, fakeWorld{}, true, Operator, ""},
 		{"dead operator with a wait", Bead{ID: "x", Status: "open", Owner: "operator-a", OwnerState: OwnerDied, Waits: 1}, fakeWorld{}, false, "", WhyOwnerGone},
@@ -40,10 +42,13 @@ func TestHeldMatrix(t *testing.T) {
 		{"blocked only through its parent", Bead{ID: "x", Parent: "p", Status: "open"}, fakeWorld{beads: map[string]Bead{"blk": open, "p": {ID: "p", Status: "open", BlockedBy: []string{"blk"}}}}, true, Blocker, ""},
 		{"superseded blocker", Bead{ID: "x", Status: "open", BlockedBy: []string{"blk"}}, fakeWorld{beads: map[string]Bead{"blk": {ID: "blk", Status: "open", Superseded: true}}}, false, "", WhyNoHolder},
 		{"parked blocker", Bead{ID: "x", Status: "open", BlockedBy: []string{"blk"}}, fakeWorld{beads: map[string]Bead{"blk": {ID: "blk", Status: "deferred"}}}, false, "", WhyNoHolder},
+		{"parked approval still blocks", Bead{ID: "x", Status: "open", BlockedBy: []string{"blk"}}, fakeWorld{beads: map[string]Bead{"blk": {ID: "blk", Status: "deferred", Gate: true}}}, true, Blocker, ""},
+		{"retired human hold still blocks", Bead{ID: "x", Status: "open", BlockedBy: []string{"blk"}}, fakeWorld{beads: map[string]Bead{"blk": {ID: "blk", Status: "open", HumanHold: true, Superseded: true}}}, true, Blocker, ""},
 		{"closed blocker", Bead{ID: "x", Status: "open", BlockedBy: []string{"blk"}}, fakeWorld{beads: map[string]Bead{"blk": {ID: "blk", Status: "closed"}}}, false, "", WhyNoHolder},
 		{"unknown blocker", Bead{ID: "x", Status: "open", BlockedBy: []string{"nope"}}, fakeWorld{}, false, "", WhyNoHolder},
 		{"open child", Bead{ID: "x", Status: "open"}, fakeWorld{child: map[string]bool{"x": true}}, true, Children, ""},
 		{"empty scope", Bead{ID: "x", Status: "open"}, fakeWorld{}, false, "", WhyNoHolder},
+		{"explicit human hold", Bead{ID: "x", Status: "open", HumanHold: true, Queued: true}, fakeWorld{}, true, Parked, ""},
 		{"user card", Bead{ID: "x", Status: "open", NeedsUser: true}, fakeWorld{}, true, User, ""},
 		{"gate", Bead{ID: "x", Status: "open", Gate: true}, fakeWorld{}, true, Gate, ""},
 		{"parked", Bead{ID: "x", Status: "deferred"}, fakeWorld{}, true, Parked, ""},
@@ -75,5 +80,18 @@ func TestHeldDeadOwnerNotExcusedByAncestorBlocker(t *testing.T) {
 	b.BlockedBy = []string{"blk"}
 	if _, held, _ := Held(b, w); !held {
 		t.Fatal("its own open blocker still holds it")
+	}
+}
+
+func TestParkedWorkflowCheckStillHoldsItsDependents(t *testing.T) {
+	for _, status := range []string{StatusDeferred, "open"} {
+		b := Bead{ID: "review", Status: status, Superseded: true, Labels: []string{"workflow-template:pr-review", "retired"}}
+		if !BlockerHolds(b) {
+			t.Fatalf("unfinished workflow check released dependents: %+v", b)
+		}
+		b.Status = StatusClosed
+		if BlockerHolds(b) {
+			t.Fatalf("completed workflow check still blocks: %+v", b)
+		}
 	}
 }

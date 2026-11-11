@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/example-user/commander/internal/agentrt"
 	"github.com/example-user/commander/internal/layout"
 	promptassets "github.com/example-user/commander/prompts"
 )
@@ -36,7 +37,11 @@ func init() {
 // importing a minimal session JSON. This avoids leaving a visible bootstrap
 // prompt in the transcript just to mint a session id.
 func captureCommanderSession(ctx context.Context) (string, error) {
-	if err := promptassets.EnsureCommanderAgent(); err != nil {
+	template, err := layout.CommanderPromptTemplate(ctx, agentrt.CommanderHome())
+	if err != nil {
+		return "", err
+	}
+	if err := promptassets.EnsureAgentFor(agentrt.Opencode, template, promptassets.CommanderAgentName); err != nil {
 		return "", fmt.Errorf("ensure commander agent prompt: %w", err)
 	}
 	workspaceRoot, err := promptassets.CommanderWorkspaceRoot()

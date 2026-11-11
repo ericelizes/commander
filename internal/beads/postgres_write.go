@@ -28,6 +28,96 @@ func (f pgFlags) one(k string) string {
 	return v[len(v)-1]
 }
 func (f pgFlags) has(k string) bool { _, ok := f[k]; return ok }
+
+func pgCallerValue(ctx context.Context, key string) string {
+	if env, ok := ctx.Value(doorEnvKey{}).([]string); ok {
+		for _, kv := range env {
+			if v, yes := strings.CutPrefix(kv, key+"="); yes {
+				return v
+			}
+		}
+		return ""
+	}
+	return os.Getenv(key)
+}
+
+// A planning conversation cannot edit another Commander's jurisdiction.
+// Active runtime executors may publish only current-run execution evidence;
+// tree edits require planning ownership or an exact coordinated plan grant.
+func pgCheckPlanningScope(ctx context.Context, q store.Querier, pid int64, verb string, pos []string, f pgFlags) error {
+	if ExecutionAttributed(ctx) {
+		active, e := pgActiveExecution(ctx, q)
+		if e != nil {
+			return e
+		}
+		if active {
+			return pgCheckExecutorWrite(ctx, q, pid, verb, pos, f)
+		}
+	}
+	actor := pgCallerValue(ctx, "COMMANDER_ROLE")
+	if actor == "" {
+		return nil
+	}
+	var planner bool
+	if e := q.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM commander_sessions WHERE agent_id=?)`, actor).Scan(&planner); e != nil {
+		return e
+	}
+	if !planner {
+		if actor == "commander" || strings.HasPrefix(actor, "commander-") {
+			return errors.New("planning conversation is not registered")
+		}
+		active, e := pgActiveExecution(ctx, q)
+		if e != nil {
+			return e
+		}
+		if active {
+			return pgCheckExecutorWrite(ctx, q, pid, verb, pos, f)
+		}
+		return nil
+	}
+	check := func(id string) error {
+		var owner string
+		if e := q.QueryRowContext(ctx, `SELECT commander_planning_owner(?,NULLIF(?,''))`, pid, id).Scan(&owner); e != nil {
+			return e
+		}
+		if owner != actor {
+			if grant, _ := ctx.Value(coordinationGrantKey{}).(bool); grant {
+				return nil
+			}
+			return fmt.Errorf("planning change on %s belongs to %s; coordinate the change or transfer jurisdiction", id, owner)
+		}
+		return nil
+	}
+	if verb == "create" {
+		return check(f.one("--parent"))
+	}
+	if verb == "dep" {
+		if len(pos) == 3 {
+			if e := check(pos[1]); e != nil {
+				return e
+			}
+			return check(pos[2])
+		}
+		return nil
+	}
+	if verb == "link" {
+		for _, id := range pos {
+			if e := check(id); e != nil {
+				return e
+			}
+		}
+		return nil
+	}
+	if len(pos) > 0 {
+		if e := check(pos[0]); e != nil {
+			return e
+		}
+	}
+	if f.has("--parent") {
+		return check(f.one("--parent"))
+	}
+	return nil
+}
 func parsePGFlags(args []string, allowed string) ([]string, pgFlags, error) {
 	pos := []string{}
 	f := pgFlags{}
@@ -108,9 +198,21 @@ func postgresRun(ctx context.Context, dir string, args []string) ([]byte, []byte
 		return nil, nil, nil
 	}
 	var out []byte
+	if e = validateAutomaticGateOperations(ctx, [][]string{args}); e != nil {
+		return nil, nil, e
+	}
 	e = s.WithTx(ctx, func(q store.Querier) error {
 		pid, e := projectID(ctx, q, dir)
 		if e != nil {
+			return e
+		}
+		if _, e = q.ExecContext(ctx, `SELECT pg_advisory_xact_lock(?)`, pid); e != nil {
+			return e
+		}
+		if e = pgCheckPlanBasis(ctx, q, pid, [][]string{args}); e != nil {
+			return e
+		}
+		if e = pgCheckAutomaticGateResult(ctx, q, pid, dir); e != nil {
 			return e
 		}
 		out, e = pgWrite(ctx, q, pid, args)
@@ -121,6 +223,9 @@ func postgresRun(ctx context.Context, dir string, args []string) ([]byte, []byte
 
 // Every operation, including its event trigger, runs in the caller's transaction.
 func pgWrite(ctx context.Context, q store.Querier, pid int64, args []string) ([]byte, error) {
+	if e := checkPublicationOperation(ctx, pid, args); e != nil {
+		return nil, e
+	}
 	if len(args) < 2 {
 		return nil, errors.New("missing bead arguments")
 	}
@@ -132,13 +237,22 @@ func pgWrite(ctx context.Context, q store.Querier, pid int64, args []string) ([]
 		if _, e := rand.Read(entropy[:]); e != nil {
 			return nil, e
 		}
-		author := os.Getenv("COMMANDER_ROLE")
-		if env, ok := ctx.Value(doorEnvKey{}).([]string); ok {
-			for _, kv := range env {
-				if v, yes := strings.CutPrefix(kv, "COMMANDER_ROLE="); yes {
-					author = v
-				}
+		factKind, factDefinition, factValue, factErr := pgAutomaticGateComment(ctx, q, pid, args[2], args[3])
+		if factErr != nil {
+			return nil, factErr
+		}
+		if factKind == "" {
+			factKind, factDefinition, factValue, factErr = pgReviewAddendumComment(ctx, q, pid, args[2], args[3])
+			if factErr != nil {
+				return nil, factErr
 			}
+		}
+		if e := pgCheckRuntimeComment(ctx, q, pid, args[2]); e != nil {
+			return nil, e
+		}
+		author := pgCallerValue(ctx, "COMMANDER_ROLE")
+		if factKind == "automatic-gate" {
+			author = "auto"
 		}
 		if strings.TrimSpace(args[3]) == "" {
 			return nil, errors.New("comment text cannot be empty")
@@ -146,7 +260,27 @@ func pgWrite(ctx context.Context, q store.Querier, pid int64, args []string) ([]
 		if author == "" {
 			author = "user"
 		}
-		_, e := q.ExecContext(ctx, `INSERT INTO bead_comments(project_id,bead_id,id,author,text,created_at) VALUES(?,?,?,?,?,?)`, pid, args[2], hex.EncodeToString(entropy[:]), author, args[3], time.Now().UTC().Format(time.RFC3339Nano))
+		runText, session := pgCallerValue(ctx, "COMMANDER_RUN_ID"), pgCallerValue(ctx, "COMMANDER_RUN_SESSION")
+		rid, _ := strconv.ParseInt(runText, 10, 64)
+		var runID any
+		if rid > 0 {
+			var bound bool
+			if e := q.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM agent_runs WHERE id=? AND project_id=? AND task_bead_id=? AND opencode_session_id=? AND replace(agent_name,'.','-')=replace(?::text,'.','-'))`, rid, pid, args[2], session, author).Scan(&bound); e != nil {
+				return nil, e
+			}
+			if !bound {
+				return nil, errors.New("comment run identity does not match this actor, session and bead")
+			}
+			runID = rid
+		}
+		_, e := q.ExecContext(ctx, `INSERT INTO bead_comments(project_id,bead_id,id,author,text,created_at,run_id,fact_kind,fact_definition,fact_value) VALUES(?,?,?,?,?,?,?,?,?,?::jsonb)`, pid, args[2], hex.EncodeToString(entropy[:]), author, args[3], time.Now().UTC().Format(time.RFC3339Nano), runID, factKind, factDefinition, factValue)
+		if e == nil && rid > 0 && strings.HasPrefix(strings.ToLower(strings.TrimSpace(args[3])), "final report") {
+			var ok bool
+			e = q.QueryRowContext(ctx, `SELECT commander_report_result(?,?,?,?,?)`, pid, args[2], rid, session, args[3]).Scan(&ok)
+			if e == nil && !ok {
+				return nil, errors.New("final report belongs to a replaced run")
+			}
+		}
 		return nil, e
 	}
 	verb := args[0]
@@ -156,6 +290,9 @@ func pgWrite(ctx context.Context, q store.Querier, pid int64, args []string) ([]
 	}
 	if len(pos) == 0 {
 		return nil, errors.New("missing bead identity")
+	}
+	if e = pgCheckPlanningScope(ctx, q, pid, verb, pos, f); e != nil {
+		return nil, e
 	}
 	if f.has("--claim") {
 		return nil, errors.New("claims are created by Commander dispatch with a run identity")
@@ -176,6 +313,9 @@ func pgWrite(ctx context.Context, q store.Querier, pid int64, args []string) ([]
 		id := "bead-" + hex.EncodeToString(entropy[:])
 		parent := f.one("--parent")
 		if parent != "" {
+			if e := pgCheckCompletedStructure(ctx, q, pid, parent); e != nil {
+				return nil, e
+			}
 			var exists int
 			if e = q.QueryRowContext(ctx, `SELECT 1 FROM bead_tasks WHERE project_id=? AND id=? AND deleted_at IS NULL FOR UPDATE`, pid, parent).Scan(&exists); e != nil {
 				return nil, fmt.Errorf("parent unavailable: %w", e)
@@ -194,6 +334,15 @@ func pgWrite(ctx context.Context, q store.Querier, pid int64, args []string) ([]
 		labels := []string{}
 		if f.has("--labels") {
 			labels = strings.Split(f.one("--labels"), ",")
+		}
+		if pgCallerValue(ctx, "COMMANDER_ROLE") != "" && slices.Contains(labels, DecisionAnsweredLabel) {
+			active, err := pgActiveExecution(ctx, q)
+			if err != nil {
+				return nil, err
+			}
+			if active {
+				return nil, errors.New("a new bead cannot invent a recorded human answer")
+			}
 		}
 		raw, _ := json.Marshal(labels)
 		typ := f.one("--type")
@@ -239,8 +388,22 @@ func pgWrite(ctx context.Context, q store.Querier, pid int64, args []string) ([]
 			}
 			from, to = pos[0], pos[1]
 		}
+		if kind == "parent-child" {
+			return nil, errors.New("parent links must use the guarded parent operation")
+		}
+		if e := pgCheckCompletedStructure(ctx, q, pid, from); e != nil {
+			return nil, e
+		}
 		if sub == "remove" || sub == "rm" {
-			_, e = q.ExecContext(ctx, `DELETE FROM bead_dependencies WHERE project_id=? AND issue_id=? AND depends_on_id=? AND type <> 'parent-child'`, pid, from, to)
+			if kind == "blocks" {
+				if e := pgCheckHumanUnlink(ctx, q, pid, from, to); e != nil {
+					return nil, e
+				}
+				if e := pgCheckWorkflowUnlink(ctx, q, pid, from, to); e != nil {
+					return nil, e
+				}
+			}
+			_, e = q.ExecContext(ctx, `DELETE FROM bead_dependencies WHERE project_id=? AND issue_id=? AND depends_on_id=? AND type=?`, pid, from, to, kind)
 			return nil, e
 		}
 		if sub != "add" {
@@ -275,8 +438,8 @@ func pgWrite(ctx context.Context, q store.Querier, pid int64, args []string) ([]
 	}
 	id := pos[0]
 	var labelsRaw []byte
-	var parent string
-	if e = q.QueryRowContext(ctx, `SELECT labels,COALESCE(parent_id,'') FROM bead_tasks WHERE project_id=? AND id=? AND deleted_at IS NULL FOR UPDATE`, pid, id).Scan(&labelsRaw, &parent); e != nil {
+	var parent, oldStatus, oldTitle, oldDescription, oldAcceptance, oldType string
+	if e = q.QueryRowContext(ctx, `SELECT labels,COALESCE(parent_id,''),status,title,description,acceptance_criteria,issue_type FROM bead_tasks WHERE project_id=? AND id=? AND deleted_at IS NULL FOR UPDATE`, pid, id).Scan(&labelsRaw, &parent, &oldStatus, &oldTitle, &oldDescription, &oldAcceptance, &oldType); e != nil {
 		if errors.Is(e, sql.ErrNoRows) {
 			return nil, ErrNotFound
 		}
@@ -286,6 +449,11 @@ func pgWrite(ctx context.Context, q store.Querier, pid int64, args []string) ([]
 	if e = json.Unmarshal(labelsRaw, &labels); e != nil {
 		return nil, e
 	}
+	if e = pgCheckWorkflowMutation(ctx, q, pid, Bead{ID: id, Title: oldTitle, Description: oldDescription, AcceptanceCriteria: oldAcceptance, Type: oldType, Status: oldStatus, ParentID: parent, Labels: labels}, verb, pos, f); e != nil {
+		return nil, e
+	}
+	beforeLabels := slices.Clone(labels)
+	newStatus := oldStatus
 	sets := []string{"updated_at=?"}
 	values := []any{now}
 	set := func(col string, value any) { sets = append(sets, col+"=?"); values = append(values, value) }
@@ -302,6 +470,9 @@ func pgWrite(ctx context.Context, q store.Querier, pid int64, args []string) ([]
 				}
 				if pair[0] == "--status" && !slices.Contains([]string{"open", "in_progress", "blocked", "deferred", "closed"}, v) {
 					return nil, errors.New("invalid bead status")
+				}
+				if pair[0] == "--status" {
+					newStatus = v
 				}
 				set(pair[1], v)
 			}
@@ -354,6 +525,7 @@ func pgWrite(ctx context.Context, q store.Querier, pid int64, args []string) ([]
 			}
 		}
 	case "close":
+		newStatus = "closed"
 		set("status", "closed")
 		set("close_reason", f.one("--reason"))
 	case "delete":
@@ -372,6 +544,12 @@ func pgWrite(ctx context.Context, q store.Querier, pid int64, args []string) ([]
 	default:
 		return nil, fmt.Errorf("unsupported Postgres bead operation %s", verb)
 	}
+	if e := pgCheckHumanMutation(ctx, q, pid, id, verb, oldStatus, newStatus, beforeLabels, labels, f.has("--parent") && f.one("--parent") != parent, f); e != nil {
+		return nil, e
+	}
+	if e := pgCheckCompletion(ctx, q, pid, id, oldStatus, newStatus, slices.Contains(labels, "retired") || slices.Contains(labels, "superseded")); e != nil {
+		return nil, e
+	}
 	raw, e := json.Marshal(labels)
 	if e != nil {
 		return nil, e
@@ -383,29 +561,96 @@ func pgWrite(ctx context.Context, q store.Querier, pid int64, args []string) ([]
 }
 
 func postgresApplyOps(ctx context.Context, dir string, ops [][]string) DoorResponse {
+	if planBasisOf(ctx) != nil {
+		if e := requirePlanningCaller(ctx); e != nil {
+			return DoorResponse{Exit: 1, Error: e.Error(), Atomic: true}
+		}
+	}
+	if e := validateAutomaticGateOperations(ctx, ops); e != nil {
+		return DoorResponse{Exit: 1, Error: e.Error(), Atomic: true}
+	}
 	s, e := postgresStore()
 	if e != nil {
 		return DoorResponse{Exit: 1, Error: e.Error()}
 	}
 	var outputs []string
+	var response DoorResponse
+	envelope, record, err := receiptEnvelope(ctx, ops)
+	if err != nil {
+		return DoorResponse{Exit: 1, Error: err.Error(), Atomic: true}
+	}
 	e = s.WithTx(ctx, func(q store.Querier) error {
 		pid, e := projectID(ctx, q, dir)
 		if e != nil {
 			return e
 		}
+		if _, e = q.ExecContext(ctx, `SELECT pg_advisory_xact_lock(?)`, pid); e != nil {
+			return e
+		}
+		if record {
+			prior, err := readPlanReceipt(ctx, q, pid, envelope)
+			if err != nil {
+				return err
+			}
+			if prior != nil {
+				response = *prior
+				return nil
+			}
+		}
+		if e = pgCheckPlanBasis(ctx, q, pid, ops); e != nil {
+			return e
+		}
+		if e = pgCheckAutomaticGateResult(ctx, q, pid, dir); e != nil {
+			return e
+		}
+		if AutomaticGateUnchanged(ctx) {
+			response = DoorResponse{Atomic: true}
+			return nil
+		}
+		var err error
+		ctx, err = authorizeCoordinatedPlan(ctx, q, pid, ops)
+		if err != nil {
+			return err
+		}
+		aliases := map[string]string{}
+		writeCtx := context.WithValue(ctx, postgresReaderKey{}, q)
 		for _, op := range ops {
-			out, e := pgWrite(ctx, q, pid, op)
+			ref := ""
+			if record {
+				var err error
+				op, ref, err = resolvePlanOperation(op, aliases)
+				if err != nil {
+					return err
+				}
+				if validator, ok := ctx.Value(planValidatorKey{}).(PlanValidator); ok {
+					if err = validator(writeCtx, [][]string{op}); err != nil {
+						return err
+					}
+				}
+			}
+			out, e := pgWrite(writeCtx, q, pid, op)
 			if e != nil {
 				return e
+			}
+			if ref != "" {
+				aliases[ref] = strings.TrimSpace(string(out))
 			}
 			if len(out) > 0 {
 				outputs = append(outputs, string(out))
 			}
+		}
+		response = DoorResponse{Stdout: strings.Join(outputs, "\n"), Applied: len(ops), Atomic: true}
+		if len(aliases) > 0 {
+			response.Created = aliases
+		}
+		if record {
+			response.PlanReceipt = envelope.Key
+			return savePlanReceipt(ctx, q, pid, envelope, response)
 		}
 		return nil
 	})
 	if e != nil {
 		return DoorResponse{Exit: 1, Error: e.Error(), Atomic: true}
 	}
-	return DoorResponse{Stdout: strings.Join(outputs, "\n"), Applied: len(ops), Atomic: true}
+	return response
 }

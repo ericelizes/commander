@@ -232,10 +232,20 @@ kbd {
 }
 
 .app-top-pane {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   position: relative;
   min-width: 0;
   padding: 0 16px;
 }
+
+.workstream-commander { position: relative; margin-left: auto; flex-shrink: 0; }
+.workstream-commander > button { border: 0; background: transparent; color: var(--ink-2); font: inherit; font-size: 12px; cursor: pointer; }
+.workstream-commander-menu { position: absolute; right: 0; top: calc(100% + 8px); min-width: 220px; padding: 6px; background: var(--sheet); border: 1px solid var(--hairline-2); border-radius: 8px; box-shadow: var(--shadow); z-index: 60; }
+.workstream-commander-menu button { display: block; width: 100%; padding: 9px; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.workstream-commander-menu button:hover { background: #8881; border-radius: 4px; }
+.workstream-commander-error { position: absolute; right: 0; top: calc(100% + 8px); width: 280px; padding: 10px; background: var(--sheet); border: 1px solid var(--err); border-radius: 6px; font-size: 12px; z-index: 61; }
 
 /* A short tick in the bar, over the line between the panes below it. */
 .app-top-pane::before {
@@ -4524,7 +4534,38 @@ body.nav-dragging * {
   color: var(--text-3);
 }
 
-.split-row input {
+.account-order {
+  margin-top: 8px;
+  padding-top: 4px;
+}
+
+.account-order-kind {
+  margin-top: 10px;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+
+.account-order-title {
+  color: var(--text);
+}
+
+.account-order-list {
+  margin: 6px 0;
+  padding-left: 20px;
+}
+
+.account-order-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+}
+
+.account-order-list li span {
+  flex: 1;
+}
+
+.account-order-kind select {
   height: 30px;
   padding: 0 9px;
   border-radius: 8px;
@@ -4533,41 +4574,6 @@ body.nav-dragging * {
   color: var(--text);
   font: inherit;
   font-size: 12.5px;
-}
-
-.runtime-split {
-  margin-top: 8px;
-  padding-top: 4px;
-}
-
-.split-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 12px;
-  font-size: 12.5px;
-  color: var(--text-2);
-}
-
-.split-row label {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.split-row input {
-  width: 64px;
-}
-
-.split-out {
-  margin: 8px 0 0;
-  padding: 8px 10px;
-  border-radius: 8px;
-  background: var(--raised-2);
-  font-family: var(--mono);
-  font-size: 11.5px;
-  white-space: pre-wrap;
-  color: var(--text-2);
 }
 
 /* Under a chat whose turn stopped at a plan limit: continue on another account. */

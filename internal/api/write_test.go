@@ -31,7 +31,14 @@ func projectDir(t *testing.T) string {
 func postWrite(t *testing.T, url, token string, req beads.DoorRequest) (*http.Response, beads.DoorResponse) {
 	t.Helper()
 	body, _ := json.Marshal(req)
-	r, _ := http.NewRequest(http.MethodPost, url+beads.DoorPath, bytes.NewReader(body))
+	path := beads.DoorPath
+	if req.Plan != nil {
+		path = beads.PlanPath
+		if req.Propose {
+			path = beads.PlanProposePath
+		}
+	}
+	r, _ := http.NewRequest(http.MethodPost, url+path, bytes.NewReader(body))
 	if token != "" {
 		r.Header.Set("Authorization", "Bearer "+token)
 	}

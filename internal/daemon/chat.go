@@ -23,10 +23,14 @@ const HandoverEnvVar = "COMMANDER_CHAT_HANDOVER"
 
 func newChatEngine(home string, st *store.Store) *chat.Engine {
 	return chat.New(chat.Options{
-		Home:          home,
-		Resolver:      chat.StoreResolver{Store: st, Home: home},
-		States:        st,
-		Costs:         chat.StoreCosts{Store: st},
+		Home:     home,
+		Resolver: chat.StoreResolver{Store: st, Home: home},
+		States:   st,
+		Costs:    chat.StoreCosts{Store: st},
+		AccountOrder: func(ctx context.Context, kind string) ([]string, error) {
+			order, err := st.AgentAccounts(ctx)
+			return order[kind], err
+		},
 		Tmux:          layout.DefaultRunner{},
 		AllowHandover: os.Getenv(HandoverEnvVar) == "1",
 		CrashRestart:  restartsOnCrash,
@@ -37,7 +41,7 @@ func newChatEngine(home string, st *store.Store) *chat.Engine {
 // restartsOnCrash: Commander and Managers come back on their own after a crash;
 // Operators are respawned on their bead by settle instead.
 func restartsOnCrash(role string) bool {
-	return role == "commander" || strings.HasPrefix(role, "manager-")
+	return chat.IsCommanderRole(role) || strings.HasPrefix(role, "manager-")
 }
 
 // chatDeliverer routes wake-up mail to a role's native chat when the engine

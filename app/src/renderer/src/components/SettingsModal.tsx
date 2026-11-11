@@ -9,7 +9,7 @@ import { Cloud } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { hasConnections, openInPanel, signinStatus, SIGNIN_SITES } from '../../../features/inspector'
 import { agentRows, type AgentRow } from '../providers'
-import { getMachine, getSettings, rebalance, saveShares, type Machine, type MachineSample, type Settings } from '../settingsApi'
+import { defaultAgentAccounts, getMachine, getSettings, saveAgentAccounts, type AgentAccounts, type AgentKind, type Machine, type MachineSample } from '../settingsApi'
 import { useStore } from '../store'
 import { operatorsVM } from '../viewmodel'
 import type { SnapStep } from '../../../shared/snapshot'
@@ -28,7 +28,7 @@ const SECTIONS: { id: SettingsSection; label: string }[] = [
   { id: 'display', label: 'Display' },
 ]
 
-export function SettingsModal({ onClose, section: initial = 'agents', onSaved }: { onClose: () => void; section?: SettingsSection; onSaved?: (s: Settings) => void }) {
+export function SettingsModal({ onClose, section: initial = 'agents' }: { onClose: () => void; section?: SettingsSection }) {
   const [section, setSection] = useState<SettingsSection>(initial)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
@@ -51,7 +51,7 @@ export function SettingsModal({ onClose, section: initial = 'agents', onSaved }:
             ×
           </button>
           {section === 'connections' && <><LinearSettings /><Connections onDone={onClose} /></>}
-          {section === 'agents' && <AgentsSection onSaved={onSaved} />}
+          {section === 'agents' && <AgentsSection />}
           {section === 'machine' && <MachineSection />}
           {section === 'privacy' && <CaptureSection />}
           {section === 'display' && (
@@ -227,7 +227,7 @@ function stepTitle(workstreams: { steps?: SnapStep[] }[], beadID: string): strin
   }
 }
 
-function AgentsSection({ onSaved }: { onSaved?: (s: Settings) => void }) {
+function AgentsSection() {
   const [tab, setTab] = useState<'agents' | 'usage'>('agents')
   const rows = useAgentRows()
   return (
@@ -244,7 +244,7 @@ function AgentsSection({ onSaved }: { onSaved?: (s: Settings) => void }) {
       {tab === 'agents' ? (
         <>
           <AgentsTab />
-          <RuntimeSplit onSaved={onSaved} />
+          <AccountOrder />
         </>
       ) : (
         <UsageTab rows={rows} />
@@ -320,66 +320,79 @@ function AgentsTab() {
   )
 }
 
-function RuntimeSplit({ onSaved }: { onSaved?: (s: Settings) => void }) {
+const agentKinds: { kind: AgentKind; label: string; note: string }[] = [
+  { kind: 'commander', label: 'Commander', note: 'Every Commander conversation.' },
+  { kind: 'agent', label: 'Agents', note: 'Agents that work on beads.' },
+]
+
+/** entryLabel names an account-order entry: a provider or one account. */
+function entryLabel(entry: string): string {
+  if (entry === 'claude') return 'Any Claude account'
+  if (entry === 'codex') return 'Codex'
+  return `Claude · ${entry}`
+}
+
+/** AccountOrder: which accounts each kind of agent runs on, first choice first. */
+function AccountOrder() {
   const config = useStore((s) => s.config)
-  const [mgr, setMgr] = useState('')
-  const [ops, setOps] = useState('')
-  const [out, setOut] = useState('')
+  const accounts = useStore((s) => s.accounts)
+  const [order, setOrder] = useState<AgentAccounts | null>(null)
   const [error, setError] = useState('')
   useEffect(() => {
     if (!config) return
-    void getSettings(config).then((s) => {
-      if (!s) return
-      setMgr(String(Math.round(s.codex_manager_share * 100)))
-      setOps(String(Math.round(s.codex_operator_share * 100)))
-    })
+    void getSettings(config).then((s) => setOrder(s?.agent_accounts ?? defaultAgentAccounts))
   }, [config])
-  if (!config) return null
-  const save = async () => {
+  if (!config || !order) return null
+  const save = async (kind: AgentKind, next: string[]) => {
     setError('')
-    const m = Number(mgr) / 100
-    const o = Number(ops) / 100
-    if (![m, o].every((v) => Number.isFinite(v) && v >= 0 && v <= 1)) {
-      setError('Shares are 0 to 100%.')
-      return
-    }
-    const r = await saveShares(config, { codex_manager_share: m, codex_operator_share: o })
+    const r = await saveAgentAccounts(config, kind, next)
     if (r.error) setError(r.error)
-    else if (r.settings) {
-      setOut('Saved.')
-      onSaved?.(r.settings)
-    }
+    else if (r.order) setOrder(r.order)
   }
-  const run = async (dry: boolean) => {
-    setError('')
-    const r = await rebalance(config, dry)
-    if (!r.ok) setError((r.stderr || r.error || 'rebalance failed').trim())
-    else setOut((r.stdout || 'Done.').trim())
-  }
+  const choices = ['claude', 'codex', ...accounts.filter((a) => a.runtime === 'claude' && a.logged_in && !a.duplicate_of).map((a) => a.name)]
   return (
-    <section className="runtime-split" aria-label="Runtime split">
-      <div className="agents-group-head">Runtime split</div>
-      <p className="settings-sub">The share of agents that run on Codex; the rest run on Claude. Rebalance moves agents between turns to match.</p>
-      <div className="split-row">
-        <label>
-          Managers on Codex
-          <input type="number" min={0} max={100} step={5} value={mgr} onChange={(e) => setMgr(e.target.value)} aria-label="Managers on Codex (%)" />%
-        </label>
-        <label>
-          Operators on Codex
-          <input type="number" min={0} max={100} step={5} value={ops} onChange={(e) => setOps(e.target.value)} aria-label="Operators on Codex (%)" />%
-        </label>
-        <button type="button" className="btn" onClick={() => void save()}>
-          Save
-        </button>
-        <button type="button" className="btn" onClick={() => void run(true)}>
-          Preview
-        </button>
-        <button type="button" className="btn btn-primary" onClick={() => void run(false)}>
-          Rebalance now
-        </button>
-      </div>
-      {out && <pre className="split-out">{out}</pre>}
+    <section className="account-order" aria-label="Accounts by agent">
+      <div className="agents-group-head">Accounts by agent</div>
+      <p className="settings-sub">Each kind of agent uses the first account on its list that has usage left; the rest are fallbacks.</p>
+      {agentKinds.map(({ kind, label, note }) => {
+        const list = order[kind]
+        const move = (i: number) => {
+          const next = [...list]
+          ;[next[i - 1], next[i]] = [next[i], next[i - 1]]
+          void save(kind, next)
+        }
+        const addable = choices.filter((c) => !list.includes(c))
+        return (
+          <div key={kind} className="account-order-kind" role="group" aria-label={`${label} accounts`}>
+            <div className="account-order-title">
+              {label} <span className="settings-sub">{note}</span>
+            </div>
+            <ol className="account-order-list">
+              {list.map((entry, i) => (
+                <li key={entry}>
+                  <span>{entryLabel(entry)}</span>
+                  <button type="button" className="btn" disabled={i === 0} onClick={() => move(i)} aria-label={`Move up: ${entryLabel(entry)}`}>
+                    ↑
+                  </button>
+                  <button type="button" className="btn" disabled={list.length === 1} onClick={() => void save(kind, list.filter((e) => e !== entry))} aria-label={`Remove: ${entryLabel(entry)}`}>
+                    ×
+                  </button>
+                </li>
+              ))}
+            </ol>
+            {addable.length > 0 && (
+              <select aria-label="Add a fallback" value="" onChange={(e) => e.target.value && void save(kind, [...list, e.target.value])}>
+                <option value="">Add a fallback…</option>
+                {addable.map((c) => (
+                  <option key={c} value={c}>
+                    {entryLabel(c)}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+        )
+      })}
       {error && (
         <p className="state-error" role="alert">
           {error}

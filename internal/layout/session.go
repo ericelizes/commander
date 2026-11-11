@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/example-user/commander/internal/agentrt"
+	"github.com/example-user/commander/internal/store"
 	promptassets "github.com/example-user/commander/prompts"
 )
 
@@ -34,12 +35,39 @@ func EnsureCommanderSessionID(ctx context.Context, commanderHome string, capture
 // runtime: it installs the Claude commander agent and mints a UUID instead of
 // importing a blank opencode session.
 func EnsureClaudeCommanderSessionID(ctx context.Context, commanderHome string) (string, error) {
-	return ensureCommanderSessionIDFile(ctx, commanderHome, claudeCommanderSessionFileName, func(context.Context) (string, error) {
-		if err := promptassets.EnsureClaudeAgent(promptassets.RoleCommander, promptassets.CommanderAgentName); err != nil {
-			return "", fmt.Errorf("ensure claude commander agent: %w", err)
+	template, err := CommanderPromptTemplate(ctx, commanderHome)
+	if err != nil {
+		return "", err
+	}
+	// Refresh before reusing an existing session as well as before minting one.
+	if err = promptassets.EnsureClaudeAgent(template, promptassets.CommanderAgentName); err != nil {
+		return "", fmt.Errorf("ensure claude commander agent: %w", err)
+	}
+	return ensureCommanderSessionIDFile(ctx, commanderHome, claudeCommanderSessionFileName, func(context.Context) (string, error) { return agentrt.NewClaudeSessionID(), nil })
+}
+
+// CommanderPromptTemplate reads active orchestration from canonical state.
+// PostgreSQL configuration errors cannot select a legacy delegation contract.
+func CommanderPromptTemplate(ctx context.Context, commanderHome string) (string, error) {
+	if commanderHome == "" {
+		commanderHome = agentrt.CommanderHome()
+	}
+	if _, err := os.Lstat(filepath.Join(commanderHome, "state.postgres")); err != nil {
+		if os.IsNotExist(err) {
+			return promptassets.RoleCommander, nil
 		}
-		return agentrt.NewClaudeSessionID(), nil
-	})
+		return "", err
+	}
+	st, err := store.Open(filepath.Join(commanderHome, "state.db"))
+	if err != nil {
+		return "", err
+	}
+	defer st.Close()
+	active, err := st.ActiveOrchestration(ctx)
+	if err != nil {
+		return "", err
+	}
+	return promptassets.CommanderTemplate("commander", active), nil
 }
 
 var claudeCommanderSessionFileName = agentrt.SessionFileName("commander", agentrt.Claude)

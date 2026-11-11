@@ -1,0 +1,21 @@
+{
+  "roles": [
+    "operator-foreground",
+    "manager-imported",
+    "commander-urgent",
+    "generic-executor"
+  ],
+  "runners": [
+    "internal/store:TestPostgresActiveExecutionCannotBypassCapacityAdmission",
+    "internal/store:TestPostgresAdmissionFencesConcurrentModeChanges",
+    "internal/store:TestPostgresShadowImportsRemainReadableButCannotLaunchAfterActivation",
+    "internal/spawn:TestPostgresAdmissionRefusesBeforeRuntimeOrWorkspacePreparation"
+  ],
+  "invariants": [
+    "Every fresh active run requires a canonical capacity reservation regardless of role name",
+    "Mode changes serialize with reservation and run binding",
+    "Refused launches do not create run or claim custody",
+    "Pre-activation imported runs retain identity and can finish",
+    "Native process tests reserve ready work rather than relying on the legacy insertion path"
+  ]
+}

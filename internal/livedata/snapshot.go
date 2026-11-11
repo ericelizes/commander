@@ -19,10 +19,11 @@ import (
 // Snapshot is the JSON view of the cockpit served by cmdrd's /api/snapshot
 // and /api/events: what the TUI sidebar and title bar show, as data.
 type Snapshot struct {
-	Storage    string            `json:"storage,omitempty"`
-	Executions []SnapExecution   `json:"executions"`
-	PRStates   map[string]string `json:"pr_states,omitempty"`
-	Answers    map[string]int    `json:"answers,omitempty"`
+	Storage         string            `json:"storage,omitempty"`
+	Executions      []SnapExecution   `json:"executions"`
+	ExecutionChecks []SnapExecution   `json:"execution_checks,omitempty"` // recorded claims without current positive process evidence
+	PRStates        map[string]string `json:"pr_states,omitempty"`
+	Answers         map[string]int    `json:"answers,omitempty"`
 	// PreserveVersion marks a failed project read served from last-good rows.
 	PreserveVersion bool `json:"-"`
 	// KeptLastGood marks a read that overlapped writes, served quietly from last-good
@@ -143,29 +144,41 @@ type SnapProject struct {
 
 // SnapWorkstream is one workstream with its step tree.
 type SnapWorkstream struct {
-	N           int             `json:"n"`
-	Project     string          `json:"project"`
-	Repo        string          `json:"repo,omitempty"` // the project's GitHub owner/name: bare pr:N labels resolve through it
-	ProjectID   int64           `json:"project_id"`
-	BeadID      string          `json:"bead_id"`
-	Title       string          `json:"title"`
-	Tickets     []string        `json:"tickets,omitempty"` // Linear ids of its ticket: labels
-	State       string          `json:"state"`
-	Working     bool            `json:"working,omitempty"` // an agent under it is working now
-	Status      string          `json:"status"`
-	Owner       string          `json:"owner,omitempty"`
-	Starred     bool            `json:"starred,omitempty"`
-	Hold        bool            `json:"hold,omitempty"`        // the root bead has the hold label; a hold lower down is not here
-	HoldReason  string          `json:"hold_reason,omitempty"` // from its latest "hold by" comment
-	Review      string          `json:"review,omitempty"`
-	Ask         string          `json:"ask,omitempty"`
-	Note        string          `json:"note,omitempty"`
-	Decision    *store.Decision `json:"decision,omitempty"`
-	ManagerRole string          `json:"manager_role"`
-	NowStep     string          `json:"now_step,omitempty"` // bead id of the step the Manager is on
-	Done        int             `json:"done"`
-	Total       int             `json:"total"`
-	Steps       []SnapStep      `json:"steps"`
+	BlockedBy            []string        `json:"blocked_by,omitempty"`
+	QuestionWaiting      bool            `json:"question_waiting,omitempty"`
+	HumanAnswerPending   bool            `json:"human_answer_pending,omitempty"`
+	ExecutionMode        string          `json:"execution_mode,omitempty"`
+	ExecutionReady       bool            `json:"execution_ready,omitempty"`
+	ExecutionEligible    bool            `json:"execution_eligible,omitempty"`
+	ExecutionReserved    bool            `json:"execution_reserved,omitempty"`
+	ExecutionCapable     bool            `json:"execution_capable,omitempty"`
+	ExecutionAttempts    int64           `json:"execution_attempts,omitempty"`
+	ExecutionError       string          `json:"execution_error,omitempty"`
+	PlanningCommander    string          `json:"planning_commander,omitempty"`
+	JurisdictionRevision int64           `json:"jurisdiction_revision,omitempty"`
+	N                    int             `json:"n"`
+	Project              string          `json:"project"`
+	Repo                 string          `json:"repo,omitempty"` // the project's GitHub owner/name: bare pr:N labels resolve through it
+	ProjectID            int64           `json:"project_id"`
+	BeadID               string          `json:"bead_id"`
+	Title                string          `json:"title"`
+	Tickets              []string        `json:"tickets,omitempty"` // Linear ids of its ticket: labels
+	State                string          `json:"state"`
+	Working              bool            `json:"working,omitempty"` // an agent under it is working now
+	Status               string          `json:"status"`
+	Owner                string          `json:"owner,omitempty"`
+	Starred              bool            `json:"starred,omitempty"`
+	Hold                 bool            `json:"hold,omitempty"`        // the root bead has the hold label; a hold lower down is not here
+	HoldReason           string          `json:"hold_reason,omitempty"` // from its latest "hold by" comment
+	Review               string          `json:"review,omitempty"`
+	Ask                  string          `json:"ask,omitempty"`
+	Note                 string          `json:"note,omitempty"`
+	Decision             *store.Decision `json:"decision,omitempty"`
+	ManagerRole          string          `json:"manager_role"`
+	NowStep              string          `json:"now_step,omitempty"` // bead id of the step the Manager is on
+	Done                 int             `json:"done"`
+	Total                int             `json:"total"`
+	Steps                []SnapStep      `json:"steps"`
 	// The workstream bead's own waits (waiting:... labels), as on a step.
 	Waiting     string           `json:"waiting,omitempty"`
 	WaitSince   int64            `json:"waiting_since,omitempty"`
@@ -210,21 +223,32 @@ type SnapGate struct {
 
 // SnapStep is one step; phases carry their children and a one-line note.
 type SnapStep struct {
-	Activity      *StatusEvidence         `json:"activity,omitempty"`
-	WorkflowCheck *workflowtemplate.Node  `json:"workflow_check,omitempty"`
-	GateChecks    []workflowtemplate.Node `json:"gate_checks,omitempty"`
-	BeadID        string                  `json:"bead_id"`
-	Title         string                  `json:"title"`
-	State         string                  `json:"state"`
-	Working       bool                    `json:"working,omitempty"` // an agent under it is working now
-	Status        string                  `json:"status"`
-	Owner         string                  `json:"owner,omitempty"`
-	OwnerState    string                  `json:"owner_state,omitempty"` // its Operator: working | finished (exited, reported) | died (exited, step still open)
-	OwnerWhy      string                  `json:"owner_why,omitempty"`   // why, when cmdrd corrected the claim against what runs or settled a death
-	OwnerSince    int64                   `json:"owner_since,omitempty"` // unix s its Operator stopped, when known
-	Restarts      int                     `json:"restarts,omitempty"`    // automatic restarts cmdrd made of its Operator
-	Starred       bool                    `json:"starred,omitempty"`
-	Review        string                  `json:"review,omitempty"` // PR number while in review ("?" = unknown)
+	QuestionWaiting      bool                    `json:"question_waiting,omitempty"`
+	HumanAnswerPending   bool                    `json:"human_answer_pending,omitempty"`
+	ExecutionMode        string                  `json:"execution_mode,omitempty"`
+	ExecutionEligible    bool                    `json:"execution_eligible,omitempty"`
+	ExecutionReady       bool                    `json:"execution_ready,omitempty"`
+	ExecutionReserved    bool                    `json:"execution_reserved,omitempty"`
+	ExecutionCapable     bool                    `json:"execution_capable,omitempty"`
+	ExecutionAttempts    int64                   `json:"execution_attempts,omitempty"`
+	ExecutionError       string                  `json:"execution_error,omitempty"`
+	PlanningCommander    string                  `json:"planning_commander,omitempty"`
+	JurisdictionRevision int64                   `json:"jurisdiction_revision,omitempty"`
+	Activity             *StatusEvidence         `json:"activity,omitempty"`
+	WorkflowCheck        *workflowtemplate.Node  `json:"workflow_check,omitempty"`
+	GateChecks           []workflowtemplate.Node `json:"gate_checks,omitempty"`
+	BeadID               string                  `json:"bead_id"`
+	Title                string                  `json:"title"`
+	State                string                  `json:"state"`
+	Working              bool                    `json:"working,omitempty"` // an agent under it is working now
+	Status               string                  `json:"status"`
+	Owner                string                  `json:"owner,omitempty"`
+	OwnerState           string                  `json:"owner_state,omitempty"` // its Operator: working | finished (exited, reported) | died (exited, step still open)
+	OwnerWhy             string                  `json:"owner_why,omitempty"`   // why, when cmdrd corrected the claim against what runs or settled a death
+	OwnerSince           int64                   `json:"owner_since,omitempty"` // unix s its Operator stopped, when known
+	Restarts             int                     `json:"restarts,omitempty"`    // automatic restarts cmdrd made of its Operator
+	Starred              bool                    `json:"starred,omitempty"`
+	Review               string                  `json:"review,omitempty"` // PR number while in review ("?" = unknown)
 	// ReviewFact is what GitHub says now about the reviews this step waits on,
 	// looked up live by cmdrd rather than recorded by an agent.
 	PRRepo      string           `json:"pr_repo,omitempty"`
@@ -446,7 +470,10 @@ func snapWorkstream(n int, ws Workstream, live LiveAgent) SnapWorkstream {
 		working = true
 	}
 	out := SnapWorkstream{
-		N: n, Project: ws.Project.Name, Repo: GitHubRepo(ws.Project.Path), ProjectID: ws.Project.ID, BeadID: r.BeadID, Title: r.Title, Tickets: r.Tickets,
+		QuestionWaiting: r.QuestionWaiting, HumanAnswerPending: r.HumanAnswerPending,
+		ExecutionMode: r.ExecutionMode, ExecutionReady: r.ExecutionReady, ExecutionEligible: r.ExecutionEligible, ExecutionReserved: r.ExecutionReserved, ExecutionCapable: r.ExecutionCapable, ExecutionAttempts: r.ExecutionAttempts, ExecutionError: r.ExecutionError,
+		PlanningCommander: r.PlanningCommander, JurisdictionRevision: r.JurisdictionRevision,
+		BlockedBy: slices.Clone(r.BlockedBy), N: n, Project: ws.Project.Name, Repo: GitHubRepo(ws.Project.Path), ProjectID: ws.Project.ID, BeadID: r.BeadID, Title: r.Title, Tickets: r.Tickets,
 		State: state, Working: working, Status: r.Status, Owner: r.Owner, Starred: r.Starred, Hold: r.Hold, HoldReason: r.HoldReason, Review: r.Review,
 		Ask: r.Ask, Note: r.Note, Decision: r.Decision,
 		ManagerRole: store.WorkstreamManagerRole(r.BeadID), NowStep: now,
@@ -532,6 +559,9 @@ func snapSteps(nodes []*StepNode, now string, live LiveAgent, stage bool) []Snap
 	for _, n := range nodes {
 		o := n.Row
 		st := SnapStep{
+			QuestionWaiting: o.QuestionWaiting, HumanAnswerPending: o.HumanAnswerPending,
+			ExecutionMode: o.ExecutionMode, ExecutionEligible: o.ExecutionEligible, ExecutionReady: o.ExecutionReady, ExecutionReserved: o.ExecutionReserved, ExecutionCapable: o.ExecutionCapable, ExecutionAttempts: o.ExecutionAttempts, ExecutionError: o.ExecutionError,
+			PlanningCommander: o.PlanningCommander, JurisdictionRevision: o.JurisdictionRevision,
 			WorkflowCheck: o.WorkflowCheck, BeadID: o.BeadID, Title: o.Title, State: o.State, Status: o.Status, Owner: o.Owner, OwnerState: o.OwnerState,
 			OwnerWhy: o.OwnerWhy, OwnerSince: o.OwnerSince, Restarts: o.Restarts,
 			Starred: o.Starred, Review: o.Review, PR: o.PR, Tickets: o.Tickets, PRRepo: o.PRRepo, Ask: o.Ask, Note: o.Note, Decision: o.Decision, SpecHash: o.SpecHash, Basis: o.Basis, PushCount: o.PushCount, PushFirst: o.PushFirst,
@@ -726,9 +756,28 @@ func (s *Source) build(ctx context.Context, data Data) Snapshot {
 		for _, p := range native {
 			databaseChats[p.Role] = ChatState{State: p.State, Detail: p.Detail}
 		}
+		facts, err := s.Deps.Store.ObservedExecutions(ctx)
+		if err != nil {
+			return Snapshot{Storage: "postgres", Executions: []SnapExecution{}, Degraded: &SnapDegraded{Reason: "Current execution evidence is unavailable"}}
+		}
+		data.ObservedExecutions = facts
+		data.Objectives = markObservedExecutionOwners(data.Objectives, facts)
+		maskObservedAgentStates(&data)
+
 		liveRead = func() ([]string, time.Time, bool) { return alive, time.Now(), known }
 	}
-	if liveRead != nil {
+	if data.ObservedExecutions != nil {
+		// PostgreSQL counts only fresh observations, never the legacy grace that
+		// treated a newly inserted claim as an already running process.
+		alive := []string{}
+		for _, fact := range data.ObservedExecutions {
+			if fact.Known && fact.Alive {
+				alive = append(alive, fact.Role)
+			}
+		}
+		live = NewSnapLive(alive, time.Now().Unix(), nil)
+		data.Operators = LiveRuns(data.Operators, live.operators())
+	} else if liveRead != nil {
 		if alive, at, ok := liveRead(); ok {
 			live = NewSnapLive(alive, at.Unix(), data.Operators)
 			data.Objectives = MarkLiveOwners(data.Objectives, live.operators())
@@ -826,6 +875,10 @@ func (s *Source) build(ctx context.Context, data Data) Snapshot {
 	if s.Deps.Store != nil && s.Deps.Store.IsPostgres() {
 		snap.Storage = "postgres"
 		snap.Executions = executionOf(snap, data, currentChats)
+		if data.ObservedExecutions != nil {
+			snap.ExecutionChecks = unverifiedExecutionOf(snap, data)
+			applyObservedWorking(&snap)
+		}
 	}
 	d := Board(snap, now)
 	applyExecutionCounts(&snap, &d)

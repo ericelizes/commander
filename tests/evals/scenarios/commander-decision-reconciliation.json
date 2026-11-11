@@ -1,0 +1,24 @@
+{
+  "goal": "Preserve saved human direction while recovering a changed or unverifiable decision scope",
+  "source_answer_id": "saved-original",
+  "request_id": "recover-cli",
+  "ask": "Resume expanded work?",
+  "reason": "The expanded scope is outside the original approval",
+  "runners": [
+    "internal/store:TestPostgresDecisionReconciliationPreservesAnswerHoldAndHistory",
+    "internal/store:TestPostgresDecisionReconciliationRefusesWrongSourceOwnerAndCurrentApproval",
+    "internal/store:TestPostgresDecisionReconciliationAtomicLateFailure",
+    "internal/store:TestPostgresDecisionReconciliationRebaselinesOnlyUnansweredHistoricalQuestion",
+    "cmd/cmdr:TestPostgresPlanDecisionReconciliationCLIUsesCurrentOwnerWithoutApproving"
+  ],
+  "invariants": [
+    "Original answer payload and pitch remain immutable",
+    "Holds and approval gates remain unpassed",
+    "Administrative recovery does not advance execution progress",
+    "Only the current Commander and exact observed source may reconcile",
+    "Still-applicable answers must resume without asking again",
+    "A replacement question creates no approval authority",
+    "A late failure rolls back question, journal state, queue and receipt",
+    "A repeated exact request returns its original receipt"
+  ]
+}

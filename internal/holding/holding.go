@@ -5,19 +5,24 @@
 // reads through a World and does no I/O.
 package holding
 
-import "strings"
+import (
+	"slices"
+	"strings"
+)
 
 // Kind is what holds a bead (the closed set of invariant I1).
 type Kind string
 
 const (
-	Gate     Kind = "gate"     // a gate bead: held by its stage and approvers
-	User     Kind = "user"     // a needs-user card
-	Children Kind = "children" // at least one open child answers for it
-	Parked   Kind = "parked"   // status deferred
-	Wait     Kind = "wait"     // a typed wait (ci, review, operator, until with a label ...)
-	Operator Kind = "operator" // a live Operator (or a live named agent) on it
-	Blocker  Kind = "blocker"  // an open, unparked, non-superseded bead it waits on
+	Gate             Kind = "gate"              // a gate bead: held by its stage and approvers
+	User             Kind = "user"              // a needs-user card
+	Children         Kind = "children"          // at least one open child answers for it
+	Parked           Kind = "parked"            // status deferred
+	Wait             Kind = "wait"              // a typed wait (ci, review, operator, until with a label ...)
+	Operator         Kind = "operator"          // a live Operator (or a live named agent) on it
+	Blocker          Kind = "blocker"           // an open, unparked, non-superseded bead it waits on
+	Queue            Kind = "queue"             // durable executable intent awaiting runtime capacity
+	PlanningDecision Kind = "planning-decision" // recorded question for the responsible planning owner
 )
 
 // Status values the predicate reads.
@@ -36,14 +41,18 @@ const (
 
 // Bead is the part of a bead Held reads.
 type Bead struct {
-	ID, Parent string
-	Status     string
-	Gate       bool
-	NeedsUser  bool
-	Superseded bool
-	Owner      string
-	OwnerState string
-	Waits      int // recorded typed waits (and until: time waits), waits on an Operator left out
+	Queued             bool
+	QuestionWaiting    bool
+	HumanAnswerPending bool
+	HumanHold          bool
+	ID, Parent         string
+	Status             string
+	Gate               bool
+	NeedsUser          bool
+	Superseded         bool
+	Owner              string
+	OwnerState         string
+	Waits              int // recorded typed waits (and until: time waits), waits on an Operator left out
 	// OperatorWaits are the roles of the bead's waits on an Operator: such a wait holds only
 	// while that Operator runs (World.OwnerLive), as the board reads it (MarkLiveOwners).
 	OperatorWaits []string
@@ -85,13 +94,15 @@ const (
 // IsManager reports whether an owner names a Manager or Commander. Such a name
 // says who is accountable, not who is moving: it holds only mid-turn.
 func IsManager(owner string) bool {
-	return strings.HasPrefix(owner, "manager-") || owner == "commander"
+	return strings.HasPrefix(owner, "manager-") || owner == "commander" || strings.HasPrefix(owner, "commander-")
 }
 
 // BlockerHolds reports whether a blocker still holds its dependant back: open and
-// in play (a closed, parked or superseded one may never finish or is done).
+// in play. A required gate or human hold remains unpassed when parked or retired.
 func BlockerHolds(b Bead) bool {
-	return b.Status != StatusClosed && b.Status != StatusDeferred && !b.Superseded
+	return b.HumanAnswerPending || b.Status != StatusClosed && (b.Gate || b.NeedsUser || b.HumanHold || slices.ContainsFunc(b.Labels, func(l string) bool {
+		return strings.HasPrefix(l, "workflow-template:") || strings.HasPrefix(l, "workflow-step:")
+	}) || b.Status != StatusDeferred && !b.Superseded)
 }
 
 // Held is the one predicate. A closed bead is not a candidate (held = false,
@@ -123,12 +134,20 @@ func Held(b Bead, w World) (Holder, bool, Why) {
 
 func own(b Bead, w World) (Holder, bool, Why) {
 	switch {
+	case b.HumanAnswerPending:
+		return Holder{Kind: PlanningDecision}, true, WhyNone
 	case b.Gate:
 		return Holder{Kind: Gate}, true, WhyNone
 	case b.NeedsUser:
 		return Holder{Kind: User}, true, WhyNone
+	case b.HumanHold:
+		return Holder{Kind: Parked}, true, WhyNone
 	case w.HasOpenChild(b.ID):
 		return Holder{Kind: Children}, true, WhyNone
+	case b.Queued:
+		return Holder{Kind: Queue}, true, WhyNone
+	case b.QuestionWaiting:
+		return Holder{Kind: PlanningDecision}, true, WhyNone
 	case b.OwnerState == OwnerDied || b.OwnerState == OwnerFinished:
 		// Its Operator is gone: a wait it or its Manager wrote names nobody who will act.
 		return Holder{}, false, WhyOwnerGone

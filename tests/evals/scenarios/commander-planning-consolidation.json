@@ -1,0 +1,22 @@
+{
+  "goal": "Consolidate only imported planning boundaries while retaining live work and explicit Commander choices",
+  "request_id": "consolidate-cli-once",
+  "reason": "Consolidate imported planning while preserving the urgent thread",
+  "runners": [
+    "internal/store:TestPostgresJurisdictionConsolidationPreservesClaimsDecisionsAndOverrides",
+    "internal/store:TestPostgresJurisdictionConsolidationRejectsStaleInventoryAndForeignActors",
+    "internal/store:TestPostgresJurisdictionConsolidationRollsBackLateFailureAndConcurrentRetry",
+    "internal/store:TestPostgresJurisdictionConsolidationDoesNotFenceOnHeartbeatOrExecutionProgress",
+    "cmd/cmdr:TestPostgresJurisdictionConsolidationCLIUsesReviewedInventoryAndCanonicalService"
+  ],
+  "invariants": [
+    "Imported and explicit boundaries have distinct provenance",
+    "Same-owner user transfers make an imported boundary explicit",
+    "Shadow-only exact inventory and default Commander authority are required",
+    "Current execution run, session, custody, holds, answers, tree and progress remain intact",
+    "Explicit urgent scopes and explicitly retained legacy identities survive",
+    "Execution questions route to the resulting current owner",
+    "Lost-response and concurrent retries do not repeat the migration",
+    "Retirement candidates are not permission to kill a runtime"
+  ]
+}

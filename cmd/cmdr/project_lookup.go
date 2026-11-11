@@ -27,8 +27,8 @@ func resolveProject(name string) (*store.Project, error) {
 	if err != nil {
 		return nil, fmt.Errorf("resolve state dir: %w", err)
 	}
-	if _, err := os.Stat(statePath); err != nil {
-		return nil, fmt.Errorf("no state db at %s: %w", statePath, err)
+	if err := checkStateStorePresent(statePath); err != nil {
+		return nil, err
 	}
 
 	st, err := store.Open(statePath)
@@ -61,8 +61,8 @@ func resolveTaskOpenTarget(taskBeadID string) (resolvedOpenTarget, error) {
 	if err != nil {
 		return resolvedOpenTarget{}, fmt.Errorf("resolve state dir: %w", err)
 	}
-	if _, err := os.Stat(statePath); err != nil {
-		return resolvedOpenTarget{}, fmt.Errorf("no state db at %s: %w", statePath, err)
+	if err := checkStateStorePresent(statePath); err != nil {
+		return resolvedOpenTarget{}, err
 	}
 
 	st, err := store.Open(statePath)
@@ -245,4 +245,20 @@ func shouldSkipWorkspaceDir(name string) bool {
 		return true
 	}
 	return strings.HasPrefix(name, ".")
+}
+
+// PostgreSQL installations deliberately have no SQLite state file. Validate
+// the selected configuration without creating a retired backend as a sentinel.
+func checkStateStorePresent(path string) error {
+	dsn, e := store.PostgresDSN(path)
+	if e != nil {
+		return e
+	}
+	if dsn != "" {
+		return nil
+	}
+	if _, e = os.Stat(path); e != nil {
+		return fmt.Errorf("no state db at %s: %w", path, e)
+	}
+	return nil
 }
