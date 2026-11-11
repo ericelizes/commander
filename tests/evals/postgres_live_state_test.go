@@ -107,8 +107,10 @@ func TestPostgresLiveStateScenario(t *testing.T) {
 	if first.Degraded != nil || first.Storage != "postgres" || len(first.Workstreams) != 1 {
 		t.Fatalf("initial state: %#v", first)
 	}
-	if first.Display.Workstreams[0].Working != 1 {
-		t.Fatalf("nested Manager missing or idle parent counted: %#v", first.Display)
+	// The working count is actual executions: a planning Manager's chat
+	// activity, nested or not, is not work progress.
+	if first.Display.Workstreams[0].Working != 0 {
+		t.Fatalf("planning chat activity counted as execution: %#v", first.Display)
 	}
 	if e = s.SetAgentState(ctx, childRole, store.AgentIdle, ""); e != nil {
 		t.Fatal(e)
@@ -118,9 +120,10 @@ func TestPostgresLiveStateScenario(t *testing.T) {
 		if next.Version <= first.Version {
 			continue
 		}
-		if len(next.Display.Workstreams) > 0 && next.Display.Workstreams[0].Working == 0 {
+		if len(next.Display.Workstreams) == 1 && next.Display.Workstreams[0].Working == 0 {
 			break
 		}
+		t.Fatalf("state change pushed a wrong frame: %#v", next.Display)
 	}
 	events, e := s.StateEventsSince(ctx, 0, 1000)
 	if e != nil || len(events) == 0 {
