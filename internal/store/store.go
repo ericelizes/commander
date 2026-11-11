@@ -98,6 +98,16 @@ func (s *Store) WithTx(ctx context.Context, fn func(q Querier) error) error {
 	if err != nil {
 		return fmt.Errorf("store: begin tx: %w", err)
 	}
+	// Migration 5 serializes graph/custody writes in statement triggers.
+	// Take that same lock before callbacks can acquire project, mode, slot or
+	// row locks. Otherwise a callback can invert the trigger's graph lock with
+	// claimRun. Read-only snapshots use their own transactions and remain MVCC.
+	if s.postgres {
+		if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(734031823)`); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+	}
 	if err := fn(tx); err != nil {
 		_ = tx.Rollback()
 		return err
