@@ -23,6 +23,7 @@ import (
 	"github.com/example-user/commander/internal/pgtest"
 	"github.com/example-user/commander/internal/spawn"
 	"github.com/example-user/commander/internal/store"
+	"github.com/example-user/commander/internal/testguard"
 	"github.com/example-user/commander/internal/tmuxctl"
 )
 
@@ -40,6 +41,7 @@ func TestExhaustedCapacityScenario(t *testing.T) {
 			t.Run(kind+"/"+target, func(t *testing.T) {
 				ctx := context.Background()
 				home := t.TempDir()
+				testguard.NoLeakedProcesses(t, home)
 				fakeDir := t.TempDir()
 				for key, value := range map[string]string{"HOME": home, "COMMANDER_HOME": home, "COMMANDER_WORKSPACE_ROOT": t.TempDir(), "XDG_CONFIG_HOME": t.TempDir(), "CODEX_HOME": t.TempDir(), chattest.EnvVar: "1", chattest.DirVar: fakeDir, chattest.ProjectsVar: filepath.Join(home, ".claude", "projects"), "COMMANDER_ROLE": "", "COMMANDER_RUN_ID": "", "COMMANDER_RUN_SESSION": "", "COMMANDER_MANAGER_ROLE": ""} {
 					t.Setenv(key, value)
