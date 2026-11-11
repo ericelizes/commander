@@ -533,6 +533,9 @@ func (d *Daemon) Run(ctx context.Context) error {
 	if d.store.IsPostgres() && d.orchestrationMode == "active" {
 		d.executionWG.Add(1)
 		go func() { defer d.executionWG.Done(); d.runExecution(ctx) }()
+		if d.chat != nil {
+			go executionRedirector{store: d.store, send: d.chat.Send}.run(ctx)
+		}
 	} else {
 		d.scheduler.Start(ctx)
 	}

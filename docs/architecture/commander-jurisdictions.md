@@ -694,7 +694,13 @@ adoption, one first-turn journal entry, immutable provider selection and physica
 exit. A separate actual fake Codex host test covers native exit and fresh thread
 identity. The actual Worker-to-Codex and checkpoint paths are now exercised below.
 Release verification still includes legacy process attestation/drain,
-plan revocation, activation preflight and sidebar behavior.
+activation preflight and sidebar behavior.
+
+Redirecting a running agent goes through its bead. When a bead's plan revision
+moves past the one its running native execution claimed, cmdrd sends one
+message into that agent's session (re-read the bead and change course; stop
+and report if the bead is closed or deferred) and records an
+`execution-redirect` fact on the bead, so each revision is told once.
 
 Per-agent cost ceilings are not a release requirement: production enforces
 none today (the old watchdog only consumed opencode streams), and subscription

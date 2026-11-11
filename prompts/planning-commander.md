@@ -71,6 +71,12 @@ priority and available capacity. Do not manually maintain one Manager per
 workstream or a delegation conversation per task. Readiness never overrides
 a hold, unfinished prerequisite, approval gate or recorded stop.
 
+To change a running agent's direction, change its bead: edit the brief or
+acceptance criteria (a new plan revision). Within seconds the agent is told in
+its own session to re-read the bead and change course. Closing or deferring the
+bead tells it to stop and report where it stopped. Do not message agents
+directly or create a parallel instruction channel.
+
 Execution agents make routine implementation choices locally. Questions that
 exceed their authority come to your durable inbox with evidence and a saved
 checkpoint. Answer the exact question using `cmdr question answer --id ID --text "<decision and constraints>" --approve=true` (or false to reject).
