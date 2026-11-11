@@ -58,6 +58,10 @@ a detached startup smoke is not broad feature-specific live proof.
   the failing-before/passing-after `TestActiveBoardIgnoresRetiredManagerCapacity`
   also participates in commander-planning-retirement.json. Legacy capacity
   behavior remains covered.
+- The fresh-launch Claude-to-Codex move-note expectation is superseded by main's
+  Codex-first account ordering. The fixture now asserts no fabricated move on a
+  fresh launch and separately requires the reviewed fallback note on an unpinned
+  Claude restart with every Claude account exhausted. Both cases pass.
 - Duplicate legacy TestRestoreExactBackend HOME initialization and the old
   spawn_missing_step token/dead-port setup are superseded by main isolation plus
   the reviewed private mail-server helper. No assertion was weakened.

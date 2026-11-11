@@ -27,7 +27,9 @@
      "role_account": "work", "out": ["claude:work", "claude:spare"], "runtime": "claude", "account": "default", "intent": "work", "note": "was headed for Claude account work"},
     {"name": "crash restart with nothing left writes nothing", "project_type": "code", "resume": true, "role_runtime": "codex",
      "role_account": "work", "out": ["codex", "claude:work", "claude:spare", "claude:default"], "refused": "has usage left"},
-    {"name": "all Claude accounts out automatically starts guarded Codex", "project_type": "code",
+    {"name": "Codex first with all Claude accounts out starts without moving", "project_type": "code",
+     "out": ["claude:default", "claude:work", "claude:spare"], "runtime": "codex", "account": "default", "intent": "", "note": ""},
+    {"name": "unpinned Claude restart with all Claude accounts out moves to guarded Codex", "project_type": "code", "resume": true, "role_runtime": "claude",
      "out": ["claude:default", "claude:work", "claude:spare"], "runtime": "codex", "account": "default", "intent": "", "note": "no logged-in Claude account has usage left"}
   ]
 }
