@@ -97,9 +97,10 @@ type Server struct {
 	signins             signins
 	opts                Options
 
-	refreshMu   sync.Mutex  // one Source call at a time
-	loadKept    atomic.Bool // the latest load was degraded, served last-good rows or was dropped
-	loadStarted time.Time   // when the latest Source call began (under refreshMu)
+	refreshMu    sync.Mutex  // one Source call at a time
+	loadKept     atomic.Bool // the latest load was degraded, served last-good rows or was dropped
+	loadStarted  time.Time   // when the latest Source call began (under refreshMu)
+	failingSince time.Time   // first failed live-state read of the current streak (under refreshMu)
 
 	slowLoad      time.Duration  // the load time worth a log line
 	refreshBudget time.Duration  // bounds the load a settle starts
@@ -140,7 +141,23 @@ func (s *Server) refreshLocked(ctx context.Context) bool {
 	s.loadStarted = time.Now()
 	snap := s.opts.Source(ctx)
 	if s.opts.StateStore != nil && (ctx.Err() != nil || snap.Degraded != nil || snap.KeptLastGood || snap.PreserveVersion) {
+		now := time.Now()
+		if s.failingSince.IsZero() {
+			s.failingSince = now
+		}
+		// One slow read under load is not an outage: keep retrying (Poll runs
+		// every second) and report unavailable only once reads keep failing.
+		s.mu.Lock()
+		healthy := s.version > 0 && s.cur.Degraded == nil
+		s.mu.Unlock()
+		if healthy && now.Sub(s.failingSince) < unavailableGrace {
+			s.loadKept.Store(true)
+			log.Printf("api: live state read failed after %s; retrying before reporting it unavailable", time.Since(s.loadStarted).Round(time.Millisecond))
+			return false
+		}
 		snap = unavailablePostgresSnapshot()
+	} else {
+		s.failingSince = time.Time{}
 	}
 	// Its own context ended (a settle's budget, a shutdown): what it read is not
 	// the board. Keep the one we have; a settle answers settled:false.
@@ -187,6 +204,10 @@ func (s *Server) refreshLocked(ctx context.Context) bool {
 }
 
 const defaultSlowLoad = livedata.SlowLoad
+
+// unavailableGrace is how long live-state reads may keep failing before the
+// app is told the state is unavailable.
+const unavailableGrace = 10 * time.Second
 
 // pendingPatchTTL bounds how long a patch outlives loads that kept the last rows (degraded, busy):
 // past it the bead reads as the loads show it, so a later write to it (one with no intent, no patch

@@ -87,6 +87,9 @@ type Waker struct {
 	// the input box holds real text. The daemon marks the row and mails Commander.
 	OnStuck func(role string, m agentmail.Mail, first bool)
 	stuck   map[string]bool
+	// Only, when set, limits polling to the roles it accepts: with Commander
+	// the sole planner, retired Managers' inboxes are never read.
+	Only func(role string) bool
 	// OnDeliver reports delivery failures, including while a retry backs off.
 	// Deferred mail is not reported as delivered; success or an empty pending
 	// batch clears the health issue.
@@ -270,7 +273,7 @@ func (w *Waker) Poll(ctx context.Context) {
 	w.mu.Unlock()
 	signals := w.signals()
 	for _, a := range agents {
-		if !receives(a.Role, running) {
+		if !receives(a.Role, running) || (w.Only != nil && !w.Only(a.Role)) {
 			w.forget(a.Role)
 			continue
 		}

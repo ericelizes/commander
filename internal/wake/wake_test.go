@@ -1232,3 +1232,18 @@ func TestPoll_RespawnedOperatorIgnoresItsEarlierRunsMail(t *testing.T) {
 		t.Fatalf("unread = %d, %v; want only the mail sent since", n, err)
 	}
 }
+
+func TestOnlyLimitsWhichInboxesArePolled(t *testing.T) {
+	dir := &fakeDir{finished: map[string]bool{}, agents: []store.AmAgent{
+		{Role: "commander", AmName: "C"},
+		{Role: "manager-retired", AmName: "M"},
+		{Role: "operator-exec-vm-1-abc", AmName: "E"},
+	}}
+	mail := &countingMail{fakeMail: fakeMail{}, calls: map[string]int{}}
+	w := newTestWaker(mail, dir, &fakeOut{})
+	w.Only = func(role string) bool { return role == "commander" }
+	w.Poll(context.Background())
+	if mail.calls["C"] != 1 || mail.calls["M"] != 0 || mail.calls["E"] != 0 {
+		t.Fatalf("inbox reads: %v", mail.calls)
+	}
+}

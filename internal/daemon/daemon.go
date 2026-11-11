@@ -504,6 +504,11 @@ func (d *Daemon) Run(ctx context.Context) error {
 		return fmt.Errorf("daemon: read orchestration control: %w", err)
 	}
 	d.orchestrationMode = control.Mode
+	if d.waker != nil && d.store.IsPostgres() && d.orchestrationMode == "active" {
+		// Commander is the only planner and execution agents have no mail:
+		// retired Managers' inboxes are not polled.
+		d.waker.Only = chat.IsCommanderRole
+	}
 	started := time.Now()
 	defer beads.StopBackground(d.reads)
 	defer beads.StopBackground(d.invariantReads)
