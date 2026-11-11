@@ -2,7 +2,7 @@
 
 This source composes the reviewed custody candidate b6a345cb, Mac service/app
 slice ab0b747c..158f0064, own-run ca72ca82..3e064c92 and gate withdrawal
-db4c96b6..e442a2f48 onto canonical main 21756bbe (which includes 2324ad7c).
+db4c96b6..e442a2f48 onto canonical main 64d90ffc (which includes 21756bbe and 2324ad7c).
 The historical review of b6a345cb by operator-exec-vm-16-4deda3fcfee4 remains
 attributed to that reviewer; it is not a review of this new composition.
 
@@ -23,8 +23,9 @@ The opener takes the existing migration advisory transaction lock before
 checking catalog shape. Embedded fingerprints in `internal/store/schema_shapes`
 record each canonical historical shape, generated on private PostgreSQL 16.15
 from the unchanged numbered SQL. Each fingerprint covers an entire catalog
-object definition: column type/nullability/default, constraints, indexes,
-triggers or function body/signature. Unrelated additional objects are allowed;
+object definition: column type/nullability/default and generated/identity expressions, constraints,
+index definitions/validity, trigger definitions/enabled state or function
+body/signature. Unrelated additional objects are allowed;
 missing or changed required objects refuse. The final shape is checked before
 commit and on every reopen. These fingerprints intentionally fail closed if a
 PostgreSQL version renders incompatible catalog definitions; a future supported
