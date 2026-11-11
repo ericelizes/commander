@@ -1695,6 +1695,23 @@ The shared `applyDoor` also retains core intent custody and live-owner checks:
 `TestPlaceIntegrationDoorIntentCustody` covers refusal for an agent and the
 user's holder-first Manager receipt, response holders and pending board patches.
 
+In active PostgreSQL orchestration, the daemon discovers paired Macs every 15
+seconds and advertises one `place:mac:<name>` execution slot per device. These
+slots claim only ready beads requiring `mac`, retain the global/workstream caps,
+and respect an optional `run-on:` label. VM slots do not advertise `mac`.
+The worker binds its canonical claim into `RecordOffer`; no host process starts.
+An unlabeled Mac bead may use its bound place slot at acceptance; explicit
+place labels still must match. The existing Mac app dialog, Claude-only launch,
+read-only policy and per-run token remain required. Reports cross the write door
+with the recorded immutable run/session, and PostgreSQL reconciles the result
+and exit atomically. Missing reports create an inspection result; no exit closes
+the bead or automatically redispatches its ready intent. Canonical runs skip the
+legacy Manager settlement. Tests: `TestPostgresMacSlotAdmission`,
+`TestPostgresMacDiscovery`, and `TestPostgresMacExecutionScenario`
+(`tests/evals/scenarios/mac-execution.json`, private PostgreSQL, paired fake Mac,
+real guarded CLI, harmless simulated Operator and canonical bead result).
+This source path does not establish a real Mac install, pairing or release.
+
 ## Workstream Overview
 
 The default workstream/track view is Overview, with Workflow as a second tab.

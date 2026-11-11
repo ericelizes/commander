@@ -1,0 +1,7 @@
+{
+  "place": "mac:simulated",
+  "bead": "mac-task",
+  "brief": "Read the synthetic report on this simulated Mac.",
+  "report": "Final report: synthetic report read; isolated Mac execution succeeded.",
+  "deny": ["git push origin HEAD", "git merge topic", "cmdr deploy prod", "echo changed > /foreign/output"]
+}

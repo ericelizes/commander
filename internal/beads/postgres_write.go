@@ -241,6 +241,10 @@ func pgWrite(ctx context.Context, q store.Querier, pid int64, args []string) ([]
 		return nil, errors.New("missing bead arguments")
 	}
 	if args[0] == "comments" {
+		// The place write door terminates flags before arbitrary report text.
+		if len(args) == 5 && args[1] == "add" && args[3] == "--" {
+			args = []string{args[0], args[1], args[2], args[4]}
+		}
 		if len(args) != 4 || args[1] != "add" {
 			return nil, errors.New("comments requires add, bead and text")
 		}
@@ -287,7 +291,9 @@ func pgWrite(ctx context.Context, q store.Querier, pid int64, args []string) ([]
 		_, e := q.ExecContext(ctx, `INSERT INTO bead_comments(project_id,bead_id,id,author,text,created_at,run_id,fact_kind,fact_definition,fact_value) VALUES(?,?,?,?,?,?,?,?,?,?::jsonb)`, pid, args[2], hex.EncodeToString(entropy[:]), author, args[3], time.Now().UTC().Format(time.RFC3339Nano), runID, factKind, factDefinition, factValue)
 		if e == nil && rid > 0 && strings.HasPrefix(strings.ToLower(strings.TrimSpace(args[3])), "final report") {
 			var ok bool
-			e = q.QueryRowContext(ctx, `SELECT commander_report_result(?,?,?,?,?)`, pid, args[2], rid, session, args[3]).Scan(&ok)
+			// A place still needs its run token for report retry, heartbeat and
+			// physical exit. EndPlaceRun publishes its result atomically with exit.
+			e = q.QueryRowContext(ctx, `SELECT CASE WHEN EXISTS(SELECT 1 FROM place_runs WHERE run_id=? AND state IN('offered','running')) THEN TRUE ELSE commander_report_result(?,?,?,?,?) END`, rid, pid, args[2], rid, session, args[3]).Scan(&ok)
 			if e == nil && !ok {
 				return nil, errors.New("final report belongs to a replaced run")
 			}

@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/example-user/commander/internal/execution"
+	"github.com/example-user/commander/internal/place"
+	"github.com/example-user/commander/internal/store"
 )
 
 func (d *Daemon) runExecution(ctx context.Context) {
@@ -41,6 +43,7 @@ func (d *Daemon) runExecution(ctx context.Context) {
 		ticker := time.NewTicker(15 * time.Second)
 		defer ticker.Stop()
 		for {
+			d.passPlaceExecutions(ctx, capacity, perWorkstream, cfg.CheckCapacity)
 			d.recoverNativeExecutions(ctx)
 			select {
 			case <-ctx.Done():
@@ -92,6 +95,36 @@ func (d *Daemon) recoverNativeExecutions(ctx context.Context) {
 		}
 		if recordErr := d.store.RecordNativeStartupAttempt(ctx, role, bound.RunID, bound.SessionID, detail, time.Now().Unix()); recordErr != nil {
 			log.Printf("execution recovery record: %v", recordErr)
+		}
+	}
+}
+
+// Discover pairings on each pass so pairing/revocation needs no daemon restart.
+// Each device owns one durable slot and retains the normal global capacity cap.
+func (d *Daemon) passPlaceExecutions(ctx context.Context, capacity, perWorkstream int, check func(context.Context, store.Project, string) error) {
+	if d.places == nil {
+		return
+	}
+	places, err := d.store.ListPlaces(ctx)
+	if err != nil {
+		log.Printf("execution places: %v", err)
+		return
+	}
+	for _, p := range places {
+		if p.Kind != "mac" || !place.ValidName(p.Name) {
+			continue
+		}
+		slot := "place:" + p.Name
+		if err := d.store.ConfigureExecutionSlot(ctx, slot, []string{"code", "knowledge", "mac"}, p.Paired()); err != nil {
+			log.Printf("execution place slot: %v", err)
+			continue
+		}
+		if !p.Paired() {
+			continue
+		}
+		w := execution.Worker{Store: d.store, Place: p.Name, OfferPlace: d.places.Offer, Capacity: capacity, WorkstreamCapacity: perWorkstream, CheckCapacity: check}
+		if err := w.PassSlot(ctx, slot); err != nil {
+			log.Printf("execution place %s: %v", p.Name, err)
 		}
 	}
 }

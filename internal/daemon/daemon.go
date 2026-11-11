@@ -505,13 +505,21 @@ func New() (*Daemon, error) {
 		notifyEnabled:      true,
 	}
 	pd := &placeDeps{st: st, am: placeAM, repo: commanderRepo, settle: settle, home: home}
-	d.places = place.NewService(pd.deps(func(ctx context.Context, dir, bead, role, text string) error {
+	placeConfig := pd.deps(func(ctx context.Context, dir, bead, role, text string) error {
 		srv := d.apiServer.Load()
 		if srv == nil {
 			return fmt.Errorf("cmdrd's API is not up")
 		}
 		return srv.DoorComment(ctx, dir, bead, role, text)
-	}))
+	})
+	placeConfig.RunComment = func(ctx context.Context, run *place.Run, text string) error {
+		srv := d.apiServer.Load()
+		if srv == nil {
+			return fmt.Errorf("cmdrd's API is not up")
+		}
+		return srv.DoorRunComment(ctx, run, text)
+	}
+	d.places = place.NewService(placeConfig)
 	return d, nil
 }
 

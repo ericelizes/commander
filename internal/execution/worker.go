@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/example-user/commander/internal/place"
 	"github.com/example-user/commander/internal/spawn"
 	"github.com/example-user/commander/internal/store"
 )
@@ -21,6 +22,8 @@ type Spawner interface {
 type Worker struct {
 	Store              *store.Store
 	Spawner            Spawner
+	Place              string
+	OfferPlace         func(context.Context, int64) (bool, error)
 	Slots              []string
 	Capacity           int
 	WorkstreamCapacity int
@@ -146,23 +149,42 @@ func (w *Worker) PassSlot(ctx context.Context, slot string) error {
 	if w.CheckCapacity != nil {
 		e = w.CheckCapacity(launchCtx, claim.Project, claim.BeadID)
 	}
-	if e == nil && w.Spawner == nil {
+	if e == nil && w.Spawner == nil && w.Place == "" {
 		e = fmt.Errorf("no execution runtime adapter")
 	}
 	if e == nil {
 		// Runtime role names remain an adapter detail. The bead and immutable run
 		// session identify execution, and planning authority comes from jurisdiction.
-		name := "exec-" + slot + "-" + claim.Token[:12]
+		name := "exec-" + strings.ReplaceAll(slot, ":", "-") + "-" + claim.Token[:12]
 		brief := fmt.Sprintf("%s\n\nGoal and brief:\n%s\n\nAcceptance criteria:\n%s\n\nPlanning owner: %s. Read the current bead and its ancestors before work. Ordinary implementation decisions are yours. Record a result with evidence; ask the planning owner only when a decision exceeds your authority. Do not infer release permission, clear holds, or change other workstreams.\n", claim.Title, claim.Description, claim.Acceptance, claim.PlanningCommander)
 		var result *spawn.SpawnResult
 		request := spawn.SpawnRequest{ExecutionClaimToken: claim.Token, ProjectID: claim.Project.ID, ProjectName: claim.Project.Name, ProjectPath: claim.Project.Path, ProjectType: claim.Project.Type, RepoPath: claim.Project.RepoPath, TaskBeadID: claim.BeadID, Branch: "work/" + name, Name: name, TaskText: brief}
-		orders, orderErr := w.Store.AgentAccounts(launchCtx)
-		e = orderErr
-		request.AgentAccounts = orders[store.AgentKindAgent]
-		if e == nil {
-			e = w.resumeQuestionCheckpoint(launchCtx, *claim, &request)
+		if w.Place == "" {
+			orders, orderErr := w.Store.AgentAccounts(launchCtx)
+			e = orderErr
+			request.AgentAccounts = orders[store.AgentKindAgent]
+			if e == nil {
+				e = w.resumeQuestionCheckpoint(launchCtx, *claim, &request)
+			}
 		}
-		if e == nil {
+		if e == nil && w.Place != "" {
+			if slot != "place:"+w.Place {
+				e = fmt.Errorf("place does not own execution slot")
+			} else if claim.ResumeRunID != 0 {
+				e = fmt.Errorf("place checkpoint continuation is not supported")
+			} else {
+				var id int64
+				id, e = place.RecordOffer(launchCtx, w.Store, place.OfferRequest{ExecutionClaimToken: claim.Token, ProjectID: claim.Project.ID, TaskID: claim.BeadID, StepID: claim.BeadID, AgentName: "operator-" + name, Place: w.Place, ManagerRole: claim.PlanningCommander, Brief: claim.Description})
+				if e == nil {
+					result = &spawn.SpawnResult{RunID: id}
+					// Delivery can be retried at device hello. A committed offer
+					// retains custody even when its channel is disconnected.
+					if w.OfferPlace != nil {
+						_, _ = w.OfferPlace(launchCtx, id)
+					}
+				}
+			}
+		} else if e == nil {
 			result, e = w.Spawner.Spawn(launchCtx, request)
 		}
 		if e == nil && (result == nil || result.RunID == 0) {

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 // Place is a paired device that runs Operators on the user's own machine
@@ -362,6 +363,14 @@ func (s *Store) EndPlaceRun(ctx context.Context, runID int64, state, reason stri
 		if state == PlaceDied {
 			runStatus = "orphan-reaped"
 		}
+		if s.postgres {
+			if err := closeSupervisedRunTx(ctx, q, runID, runStatus, "", "", ""); err != nil {
+				return err
+			}
+			// Missing reports require inspection, not automatic redispatch.
+			var accepted bool
+			return q.QueryRowContext(ctx, `SELECT commander_report_result(r.project_id,r.task_bead_id,r.id,r.opencode_session_id,?) FROM agent_runs r WHERE r.id=?`, "Mac execution ended ("+runStatus+") without a final report. Inspect the run before deciding the next action.", runID).Scan(&accepted)
+		}
 		if _, err := q.ExecContext(ctx, `UPDATE agent_runs SET status = ? WHERE id = ? AND status = 'running'`, runStatus, runID); err != nil {
 			return fmt.Errorf("store: close agent_run %d: %w", runID, err)
 		}
@@ -401,6 +410,16 @@ func (s *Store) ForgetPlaceComment(ctx context.Context, runID int64, clientID st
 	return err
 }
 
+// PlaceExecutionSlot is true only for a run bound to this place's canonical slot.
+func (s *Store) PlaceExecutionSlot(ctx context.Context, runID int64, place string) (bool, error) {
+	if !s.postgres {
+		return false, nil
+	}
+	var ok bool
+	err := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM execution_slots WHERE run_id=? AND agent_id=?)`, runID, "place:"+place).Scan(&ok)
+	return ok, err
+}
+
 // InsertPlaceOffer records a place run whole: its agent_runs row (running, no
 // pane, no container) and its place_runs row, refusing a second active run on
 // the place in the same transaction. It returns the run id.
@@ -433,6 +452,15 @@ func (s *Store) InsertPlaceOffer(ctx context.Context, run AgentRun, pr PlaceRun)
 		}
 		if err != nil {
 			return fmt.Errorf("store: insert place agent_run: %w", err)
+		}
+		if s.postgres && run.ExecutionClaimToken != "" {
+			var slot string
+			if err = q.QueryRowContext(ctx, `SELECT agent_id FROM execution_slots WHERE run_id=?`, id).Scan(&slot); err != nil {
+				return err
+			}
+			if strings.HasPrefix(slot, "place:") && slot != "place:"+pr.Place {
+				return errors.New("place does not own the claimed execution slot")
+			}
 		}
 		_, err = q.ExecContext(ctx, `INSERT INTO place_runs(`+placeRunCols+`) VALUES (?, ?, ?, '', ?, ?, ?, ?, '', ?, 0, 0, 0, 0, 0, 0)`,
 			id, pr.Place, PlaceOffered, pr.StepID, pr.ManagerRole, pr.ProdGate, pr.BriefSHA, pr.OfferedAt)

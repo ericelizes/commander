@@ -236,7 +236,12 @@ func viaDoor(ctx context.Context, dir string, req DoorRequest) (DoorResponse, er
 	if err != nil || strings.TrimSpace(string(rawTok)) == "" {
 		return DoorResponse{}, fmt.Errorf("%w: no api-token", errDoorDown)
 	}
-	req.Dir, req.Env = dir, callerEnv()
+	req.Dir = dir
+	if env, explicit := ctx.Value(doorEnvKey{}).([]string); explicit {
+		req.Env = append([]string(nil), env...)
+	} else {
+		req.Env = callerEnv()
+	}
 	req.CompletionWaivers = completionWaiversOf(ctx)
 	body, _ := json.Marshal(req)
 	cctx, cancel := context.WithTimeout(ctx, doorCallTimeout)

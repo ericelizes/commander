@@ -294,16 +294,26 @@ func (s *Server) servePlaceExit(w http.ResponseWriter, r *http.Request, run *pla
 	placeResult(w, s.opts.Places.Exit(r.Context(), run, req.Status, req.Reason), nil)
 }
 
-// DoorComment writes text on bead through the write door as role (door checks
-// apply to an agent role; "" is cmdrd's own note). Places wire their
-// Deps.Comment to it.
+// DoorRunComment carries the authenticated place run identity through the write
+// door. The PostgreSQL adapter rechecks it against the current bead claim.
+func (s *Server) DoorRunComment(ctx context.Context, run *place.Run, text string) error {
+	return s.doorComment(ctx, run.Project.Path, run.AgentRun.TaskBeadID, text, []string{"COMMANDER_ROLE=" + run.AgentRun.AgentName, fmt.Sprintf("COMMANDER_RUN_ID=%d", run.AgentRun.ID), "COMMANDER_RUN_SESSION=" + run.AgentRun.OpencodeSessionID})
+}
+
+// DoorComment retains the legacy role-only comment path (empty role is cmdrd).
 func (s *Server) DoorComment(ctx context.Context, dir, bead, role, text string) error {
+	var env []string
+	if role != "" {
+		env = []string{"COMMANDER_ROLE=" + role}
+	}
+	return s.doorComment(ctx, dir, bead, text, env)
+}
+
+func (s *Server) doorComment(ctx context.Context, dir, bead, text string, env []string) error {
 	// "--" ends the flags: a run's text starting with "-" is text, never a
 	// flag of bd/br (both stop flag parsing there).
 	req := beads.DoorRequest{Dir: dir, Args: []string{"comments", "add", bead, "--", text}, NoWait: true}
-	if role != "" {
-		req.Env = []string{"COMMANDER_ROLE=" + role}
-	}
+	req.Env = env
 	status, resp := s.applyDoor(ctx, req)
 	if status != http.StatusOK || resp.Exit != 0 || resp.Error != "" {
 		return fmt.Errorf("comment on %s: %s", bead, strings.TrimSpace(resp.Error+" "+resp.Stderr))

@@ -132,8 +132,15 @@ func (p *placeDeps) deps(comment func(ctx context.Context, dir, bead, role, text
 			return mails, nil
 		},
 		RecordUsage: p.recordUsage,
-		Settle:      p.settle.settlePlace,
-		Revision:    place.BuildRevision(),
+		Settle: func(ctx context.Context, result place.Settlement) error {
+			// PostgreSQL exits reconcile results and custody in EndPlaceRun.
+			// Slot reuse must not send an old exit through legacy settlement.
+			if p.st.IsPostgres() {
+				return nil
+			}
+			return p.settle.settlePlace(ctx, result)
+		},
+		Revision: place.BuildRevision(),
 	}
 }
 

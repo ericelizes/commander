@@ -45,7 +45,8 @@ type Settlement struct {
 
 // Deps are what the service reads and writes outside the store.
 type Deps struct {
-	Store *store.Store
+	RunComment func(context.Context, *Run, string) error
+	Store      *store.Store
 	// ReadBead reads a bead's title and description (fresh).
 	ReadBead func(ctx context.Context, projectDir, id string) (Bead, error)
 	// Comment writes text on bead through the write door as role (door checks apply).
@@ -451,7 +452,12 @@ func (s *Service) stillAllowed(ctx context.Context, dir, place string, pr *store
 	if err != nil {
 		return "", err
 	}
-	if named, err := FromLabels(step.Labels); err != nil || named != place {
+	named, labelErr := FromLabels(step.Labels)
+	bound, bindErr := s.d.Store.PlaceExecutionSlot(ctx, pr.RunID, place)
+	if bindErr != nil {
+		return "", bindErr
+	}
+	if labelErr != nil || (named != place && !(named == "" && bound)) {
 		return "step " + pr.StepID + " no longer runs on " + place, nil
 	}
 	if pr.ProdGate == "" {
@@ -613,7 +619,13 @@ func (s *Service) Comment(ctx context.Context, r *Run, clientID, text string, re
 	if !fresh {
 		return true, nil
 	}
-	if err := s.d.Comment(ctx, r.Project.Path, r.AgentRun.TaskBeadID, r.AgentRun.AgentName, text); err != nil {
+	writeComment := func() error {
+		if s.d.RunComment != nil {
+			return s.d.RunComment(ctx, r, text)
+		}
+		return s.d.Comment(ctx, r.Project.Path, r.AgentRun.TaskBeadID, r.AgentRun.AgentName, text)
+	}
+	if err := writeComment(); err != nil {
 		_ = s.d.Store.ForgetPlaceComment(ctx, r.AgentRun.ID, clientID)
 		return false, err
 	}
@@ -692,8 +704,8 @@ func (s *Service) Exit(ctx context.Context, r *Run, status, reason string) error
 	if reason == "" {
 		reason = status
 	}
-	s.end(ctx, r.AgentRun.ID, state, clip(reason, 200))
-	return nil
+	_, err := s.d.Store.EndPlaceRun(ctx, r.AgentRun.ID, state, clip(reason, 200), s.d.Now().Unix())
+	return err
 }
 
 // --- the sweep ------------------------------------------------------------

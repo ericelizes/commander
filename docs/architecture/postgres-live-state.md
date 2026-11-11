@@ -13,6 +13,12 @@ parity. `cmdr bead --project-dir PATH` supplies reads and attributed comments.
 Task/approval mutations continue through Commander's existing guarded doors.
 Postgres dispatch uses host Claude/Codex Operators, including when Docker is
 available. The old Docker/opencode launch path is not a Postgres backend.
+Ready work requiring `mac` instead uses a paired Mac's `place:mac:<name>` slot.
+VM slots cannot claim it. The place retains its native confirmation dialog,
+Claude-only read-only launch and run-token endpoints. Reports carry the recorded
+run/session through the write door; physical exit records the canonical result
+for Commander review without closing the bead. Pairing, installation and release
+remain separate user actions.
 
 ## Data and interfaces
 

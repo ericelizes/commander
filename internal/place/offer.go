@@ -6,22 +6,25 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/example-user/commander/internal/store"
 )
 
 // OfferRequest is a spawn on a place: the task bead exists, the gates were
 // judged by the caller; this records the run for the Mac to pick up.
 type OfferRequest struct {
-	ProjectID   int64
-	TaskID      string
-	AgentName   string
-	Place       string
-	StepID      string
-	ManagerRole string
-	ProdGate    string
-	Brief       string
-	Runtime     string
-	Now         time.Time
+	ExecutionClaimToken string
+	ProjectID           int64
+	TaskID              string
+	AgentName           string
+	Place               string
+	StepID              string
+	ManagerRole         string
+	ProdGate            string
+	Brief               string
+	Runtime             string
+	Now                 time.Time
 }
 
 // RecordOffer checks the place and records the run (offered). Refused: an
@@ -48,7 +51,7 @@ func RecordOffer(ctx context.Context, st *store.Store, r OfferRequest) (int64, e
 		r.Now = time.Now()
 	}
 	id, err := st.InsertPlaceOffer(ctx,
-		store.AgentRun{ProjectID: r.ProjectID, TaskBeadID: r.TaskID, AgentName: r.AgentName, SpawnTime: r.Now.Unix()},
+		store.AgentRun{OpencodeSessionID: uuid.NewString(), ExecutionClaimToken: r.ExecutionClaimToken, ProjectID: r.ProjectID, TaskBeadID: r.TaskID, AgentName: r.AgentName, SpawnTime: r.Now.Unix()},
 		store.PlaceRun{Place: r.Place, StepID: r.StepID, ManagerRole: r.ManagerRole, ProdGate: r.ProdGate,
 			BriefSHA: BriefSHA(r.Brief), OfferedAt: r.Now.Unix()})
 	if errors.Is(err, store.ErrPlaceBusy) {
