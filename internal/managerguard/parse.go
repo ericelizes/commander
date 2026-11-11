@@ -114,6 +114,7 @@ func parse(line string) []segment {
 			flushSeg()
 			for len(heredocs) > 0 { // skip the heredoc body
 				doc := heredocs[0]
+				terminated := false
 				var body strings.Builder
 				heredocs = heredocs[1:]
 				for i+1 < len(rs) {
@@ -122,15 +123,23 @@ func parse(line string) []segment {
 						j++
 					}
 					bodyLine := string(rs[i+1 : j])
-					lineText := strings.TrimSpace(bodyLine)
+					lineText := bodyLine
+					if doc.stripTabs {
+						lineText = strings.TrimLeft(lineText, "\t")
+					}
 					i = j
-					if lineText == doc.delim {
+					if doc.resolved && lineText == doc.delim {
+						terminated = true
 						break
 					}
 					body.WriteString(bodyLine)
 					body.WriteRune('\n')
 				}
 				text := body.String()
+				if !terminated {
+					// Uncertain or incomplete input cannot prove an inert body.
+					segs[doc.owner].subs = append(segs[doc.owner].subs, text)
+				}
 				if !doc.quoted {
 					segs[doc.owner].subs = append(segs[doc.owner].subs, heredocSubstitutions(text)...)
 				}
@@ -197,7 +206,8 @@ func parse(line string) []segment {
 					hereSource = true
 					continue
 				}
-				if i+1 < len(rs) && rs[i+1] == '-' {
+				stripTabs := i+1 < len(rs) && rs[i+1] == '-'
+				if stripTabs {
 					i++
 				}
 				flushWord()
@@ -205,12 +215,9 @@ func parse(line string) []segment {
 				for j < len(rs) && (rs[j] == ' ' || rs[j] == '\t') {
 					j++
 				}
-				k := j
-				for k < len(rs) && !strings.ContainsRune(" \t\n;|&<>()", rs[k]) {
-					k++
-				}
-				raw := string(rs[j:k])
-				heredocs = append(heredocs, heredoc{strings.Trim(raw, `'"`), strings.ContainsAny(raw, `'"\`), len(segs)})
+				doc, k := heredocDelimiter(rs, j)
+				doc.owner, doc.stripTabs = len(segs), stripTabs
+				heredocs = append(heredocs, doc)
 				i = k - 1
 			}
 		default:
@@ -316,9 +323,66 @@ func commands(line string, depth int) [][]string {
 }
 
 type heredoc struct {
-	delim  string
-	quoted bool
-	owner  int
+	delim     string
+	quoted    bool
+	owner     int
+	stripTabs bool
+	resolved  bool
+}
+
+// heredocDelimiter performs quote removal only: delimiter words are not
+// expanded. Unsupported quoting fails closed rather than hiding the rest.
+func heredocDelimiter(rs []rune, start int) (heredoc, int) {
+	doc := heredoc{resolved: true}
+	var word strings.Builder
+	var quote rune
+	haveWord := false
+	i := start
+	for ; i < len(rs); i++ {
+		c := rs[i]
+		if c == '\n' {
+			// Multiline delimiter quoting is outside this parser's proof.
+			// Leave the remaining lines available for conservative inspection.
+			break
+		}
+		if quote == 0 && strings.ContainsRune(" \t\n;|&<>()", c) {
+			break
+		}
+		haveWord = true
+		if c == '\\' && quote != '\'' {
+			if i+1 == len(rs) {
+				doc.resolved = false
+				break
+			}
+			next := rs[i+1]
+			if next != '\n' {
+				doc.quoted = true
+			}
+			if quote == 0 || strings.ContainsRune("$`\"\\\n", next) {
+				i++
+				if next != '\n' {
+					word.WriteRune(next)
+				}
+				continue
+			}
+		}
+		if c == quote {
+			quote = 0
+			continue
+		}
+		if quote == 0 && (c == '\'' || c == '"') {
+			quote, doc.quoted = c, true
+			continue
+		}
+		// ANSI-C and locale quotes require additional shell-specific decoding.
+		if quote == 0 && c == '$' && i+1 < len(rs) && (rs[i+1] == '\'' || rs[i+1] == '"') {
+			doc.resolved = false
+		}
+		word.WriteRune(c)
+	}
+	doc.delim = word.String()
+	doc.resolved = doc.resolved && haveWord && quote == 0
+	return doc, i
 }
 
 func shellStdin(words []string) bool {
