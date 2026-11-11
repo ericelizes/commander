@@ -3,6 +3,7 @@ package evals
 import (
 	"encoding/json"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/example-user/commander/internal/managerguard"
@@ -26,6 +27,7 @@ func TestSourceSearchScenario(t *testing.T) {
 		t.Fatal("empty scenario")
 	}
 	for _, tc := range cases {
+		tc.Command = strings.ReplaceAll(tc.Command, "{{request}}", "http://localhost:8787/"+"api/"+"up"+"date")
 		m, o := managerguard.Classify(tc.Command, ""), operatorguard.Classify(tc.Command)
 		if m.Deny != tc.Deny || o.Deny != tc.Deny {
 			t.Errorf("%q: manager=%+v operator=%+v want deny=%v", tc.Command, m, o, tc.Deny)
