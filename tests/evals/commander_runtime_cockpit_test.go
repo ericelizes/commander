@@ -138,7 +138,7 @@ func verifyRuntimeCockpit(t *testing.T, capacity bool) {
 			}
 		}
 		text, e = script("text")
-		if e == nil && strings.Contains(text, "Runtime result") && strings.Contains(text, expected) && (!capacity || strings.Count(text, expected) >= 3) {
+		if e == nil && strings.Contains(text, "Runtime result") && strings.Contains(text, expected) && (!capacity || strings.Count(text, expected) >= 4) {
 			break
 		}
 		time.Sleep(100 * time.Millisecond)
@@ -149,7 +149,7 @@ func verifyRuntimeCockpit(t *testing.T, capacity bool) {
 	if !strings.Contains(text, expected) || strings.Contains(text, "Manager review overdue") {
 		t.Fatalf("canonical pending result did not render honestly:\n%s", text)
 	}
-	if capacity && (!strings.Contains(text, "Usage alpha") || !strings.Contains(text, "Usage beta") || strings.Count(text, expected) < 3) {
+	if capacity && (!strings.Contains(text, "Usage alpha") || !strings.Contains(text, "Usage beta") || strings.Count(text, expected) < 4) {
 		t.Fatalf("usage exhaustion missing from affected root/nested rows:\n%s", text)
 	}
 	if strings.Contains(text, "real claude is disabled") || strings.Contains(text, "real codex is disabled") {

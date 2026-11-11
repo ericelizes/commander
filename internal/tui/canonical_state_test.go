@@ -31,6 +31,20 @@ func TestCanonicalNestedUsageShowsCauseInsteadOfLegacyHolder(t *testing.T) {
 	if !found {
 		t.Fatal("nested row missing")
 	}
+	frame.Display.Workstreams[0].Tracks = nil
+	frame.Workstreams = []livedata.SnapWorkstream{{ProjectID: 1, Steps: []livedata.SnapStep{{BeadID: "leaf", ExecutionMode: "active", ExecutionReady: true, ExecutionEligible: true, ExecutionError: cause}}}}
+	found = false
+	for _, row := range workstreamRows(1, ws, true, false, true, animState{truth: newCanonicalState(frame)}) {
+		if row.row.BeadID == "leaf" && row.kind == "objective" {
+			found = true
+			if text := stripANSI(row.node.Title); !strings.Contains(text, cause) || strings.Contains(text, "manager-retired") {
+				t.Fatal("ordinary leaf lost capacity cause", text)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("ordinary leaf missing")
+	}
 }
 
 func TestCanonicalTerminalCountsAndSpinnersIgnoreLegacyManagerActivity(t *testing.T) {
