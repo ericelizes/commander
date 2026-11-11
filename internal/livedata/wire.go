@@ -108,6 +108,9 @@ func (s *Source) LastLoadErr() error {
 // meanwhile would otherwise not show until the next load finished.
 func (s *Source) Last() (Data, bool) {
 	if s.Deps.Store != nil && s.Deps.Store.IsPostgres() {
+		if d, ok := s.Recent(recentFresh); ok {
+			return d, true
+		}
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
 		data, _ := s.Current(ctx)

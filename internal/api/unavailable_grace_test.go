@@ -50,3 +50,20 @@ func TestFailedLiveStateReadWithNoGoodFrameIsUnavailableAtOnce(t *testing.T) {
 		t.Fatal("no good frame to keep, but unavailable was not reported")
 	}
 }
+
+func TestBoardSkipsChangesItNeverReads(t *testing.T) {
+	for _, c := range []struct {
+		entities []string
+		want     bool
+	}{
+		{nil, true},
+		{[]string{"usage_turns"}, false},
+		{[]string{"usage_turns", "bead_supervision", "supervision_attempts"}, false},
+		{[]string{"usage_turns", "bead_tasks"}, true},
+		{[]string{"agent_state"}, true},
+	} {
+		if got := boardReadsAny(c.entities); got != c.want {
+			t.Errorf("%v: %v, want %v", c.entities, got, c.want)
+		}
+	}
+}

@@ -175,3 +175,35 @@ func (s *Store) migratePostgres(ctx context.Context) error {
 	}
 	return tx.Commit()
 }
+
+// StateEntitiesSince lists the distinct tables with state events after seq,
+// and the newest seq seen (seq itself when there are none).
+func (s *Store) StateEntitiesSince(ctx context.Context, seq int64) ([]string, int64, error) {
+	if !s.postgres {
+		return nil, seq, nil
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT entity,MAX(seq) FROM state_events WHERE seq>? GROUP BY entity`, seq)
+	if err != nil {
+		return nil, seq, err
+	}
+	defer rows.Close()
+	var out []string
+	newest := seq
+	for rows.Next() {
+		var entity string
+		var max int64
+		if err := rows.Scan(&entity, &max); err != nil {
+			return nil, seq, err
+		}
+		out = append(out, entity)
+		newest = maxInt64(newest, max)
+	}
+	return out, newest, rows.Err()
+}
+
+func maxInt64(a, b int64) int64 {
+	if a > b {
+		return a
+	}
+	return b
+}

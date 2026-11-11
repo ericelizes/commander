@@ -210,8 +210,31 @@ const defaultSlowLoad = livedata.SlowLoad
 const (
 	liveReadTimeout = 8 * time.Second
 	changeBatch     = 500 * time.Millisecond
-	minRebuildGap   = 2 * time.Second
+	minRebuildGap   = time.Second
 )
+
+// boardBlind are tables whose changes the board never reads: token usage and
+// supervision bookkeeping. A burst made only of these needs no rebuild.
+var boardBlind = map[string]bool{"usage_turns": true, "bead_supervision": true, "supervision_attempts": true}
+
+func boardReadsAny(entities []string) bool {
+	if len(entities) == 0 {
+		return true // a notification without a recorded event: rebuild to be safe
+	}
+	for _, e := range entities {
+		if !boardBlind[e] {
+			return true
+		}
+	}
+	return false
+}
+
+// latestStateSeq is the newest state event's sequence number (0 when none).
+func (s *Server) latestStateSeq(ctx context.Context) int64 {
+	var seq int64
+	_ = s.opts.StateStore.DB().QueryRowContext(ctx, `SELECT COALESCE(MAX(seq),0) FROM state_events`).Scan(&seq)
+	return seq
+}
 
 // unavailableGrace is how long live-state reads may keep failing before the
 // app is told the state is unavailable.
@@ -281,22 +304,41 @@ func contentHash(s livedata.Snapshot) [32]byte {
 // Poll refreshes every interval until ctx is done.
 func (s *Server) Poll(ctx context.Context) {
 	changes := s.opts.Changes
+	var cursor int64
+	if s.opts.StateStore != nil {
+		cursor = s.latestStateSeq(ctx)
+	}
+	skip := false
+	var lastRefresh time.Time
 	t := time.NewTicker(s.opts.Interval)
 	defer t.Stop()
 	for {
-		lastRefresh := time.Now()
-		readCtx := ctx
-		cancel := func() {}
-		if s.opts.StateStore != nil {
-			readCtx, cancel = context.WithTimeout(ctx, liveReadTimeout)
+		if !skip {
+			lastRefresh = time.Now()
+			readCtx := ctx
+			cancel := func() {}
+			if s.opts.StateStore != nil {
+				readCtx, cancel = context.WithTimeout(ctx, liveReadTimeout)
+			}
+			s.Refresh(readCtx)
+			cancel()
 		}
-		s.Refresh(readCtx)
-		cancel()
+		skip = false
 		select {
 		case <-ctx.Done():
 			return
 		case <-t.C:
 		case _, ok := <-changes:
+			if ok && s.opts.StateStore != nil {
+				entities, next, err := s.opts.StateStore.StateEntitiesSince(ctx, cursor)
+				if err == nil {
+					cursor = next
+					if !boardReadsAny(entities) {
+						skip = true
+						continue
+					}
+				}
+			}
 			if !ok {
 				changes = nil
 			} else {

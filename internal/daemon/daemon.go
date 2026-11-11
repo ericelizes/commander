@@ -591,7 +591,11 @@ func (d *Daemon) Run(ctx context.Context) error {
 				case <-ctx.Done():
 					return
 				case <-t.C:
-					timedHealthLoad(ctx, d.live.Snapshot, livedata.SlowLoad)
+					// The API rebuilds on every relevant change; build here only
+					// when nothing has for a whole health interval.
+					if _, fresh := d.live.Recent(healthEvery); !fresh {
+						timedHealthLoad(ctx, d.live.Snapshot, livedata.SlowLoad)
+					}
 				}
 			}
 		}()

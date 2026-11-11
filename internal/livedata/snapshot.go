@@ -674,6 +674,26 @@ type Source struct {
 	last     lastData
 	unreadAt time.Time
 	unread   map[string]int
+
+	// recent is the latest clean PostgreSQL build, so readers that only need
+	// current data (Last, the health loop) reuse it instead of loading again.
+	recentMu   sync.Mutex
+	recentData Data
+	recentAt   time.Time
+}
+
+// recentFresh is how old a build Last may reuse: about one rebuild interval.
+const recentFresh = 2 * time.Second
+
+// Recent returns the latest clean PostgreSQL build if it is at most maxAge old.
+// Callers must treat the returned Data as read-only: it is shared.
+func (s *Source) Recent(maxAge time.Duration) (Data, bool) {
+	s.recentMu.Lock()
+	defer s.recentMu.Unlock()
+	if s.recentAt.IsZero() || time.Since(s.recentAt) > maxAge {
+		return Data{}, false
+	}
+	return s.recentData, true
 }
 
 // LoadTimes is what a slow load's log line says. Projects read slowest first; what
@@ -733,6 +753,11 @@ func (s *Source) Current(ctx context.Context) (Data, Snapshot) {
 			data.Agents = map[string]store.AgentState{}
 		}
 		data.CanonicalSnapshot = &frame
+		if frame.Degraded == nil {
+			s.recentMu.Lock()
+			s.recentData, s.recentAt = data, time.Now()
+			s.recentMu.Unlock()
+		}
 		data.Metrics.AgentCount = frame.Fleet.Agents
 		data.Metrics.ActiveCount = frame.Fleet.Active
 		data.Metrics.BlockedCount = frame.Fleet.Blocked
