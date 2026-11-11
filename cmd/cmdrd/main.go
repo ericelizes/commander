@@ -34,6 +34,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"syscall"
@@ -51,6 +52,11 @@ func main() {
 	flag.Parse()
 	singleInstance()
 	startProfiler()
+	// The daemon allocates heavily per board rebuild but keeps little live
+	// (about 100 MB). Collect less often: a few hundred MB for much less GC CPU.
+	if os.Getenv("GOGC") == "" {
+		debug.SetGCPercent(400)
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
