@@ -126,7 +126,7 @@ not an actor supplied in the plan. For example:
 
 ```json
 {
-  "dir": "/home/exedev/code/example",
+  "dir": "/path/to/project",
   "basis": {
     "request_id": "revise-integration-20261110",
     "jurisdiction_revision": 3,
