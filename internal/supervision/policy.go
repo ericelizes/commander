@@ -168,6 +168,11 @@ func Decide(f store.SupervisionFact, now time.Time) Decision {
 			d.Description = "Subordinates are carrying out the work"
 			return d
 		}
+		if len(f.Children) > 0 && !anyChildActionable(f.Children, now) {
+			d.Reason = "subordinates_waiting"
+			d.Description = "Subordinates are waiting on recorded decisions, dependencies or execution"
+			return d
+		}
 		d.Reason = "subordinate_progress"
 		d.Description = "Investigate subordinate progress"
 	} else if result {
@@ -213,6 +218,35 @@ func Decide(f store.SupervisionFact, now time.Time) Decision {
 	d.CheckAfter = 15 * time.Second
 	return d
 }
+
+// anyChildActionable reports whether some open child has a next step nobody is
+// carrying out. A child that is held, waits on the user, a gate, a question, a
+// dependency or an external wait, is queued for or running an execution, or
+// has open children of its own (its own supervision covers them) is not.
+func anyChildActionable(children []store.SupervisionChild, now time.Time) bool {
+	for _, c := range children {
+		if childActionable(c, now) {
+			return true
+		}
+	}
+	return false
+}
+
+func childActionable(c store.SupervisionChild, now time.Time) bool {
+	if c.Status == beads.StatusDeferred || has(c.Labels, "hold") || c.QuestionWaiting || c.OpenBlockers > 0 || c.ExecutionReady || c.Running || c.HasOpenChildren {
+		return false
+	}
+	if state, _ := beads.StepState(c.Status, c.Labels); state == beads.StateNeedsUser || has(c.Labels, beads.GateLabel) {
+		return false
+	}
+	for _, w := range beads.WaitsOf(c.Labels) {
+		if !beads.IsManagerHandoff(w) && beads.WaitHolds(w, now) {
+			return false
+		}
+	}
+	return true
+}
+
 func has(ls []string, want string) bool {
 	for _, l := range ls {
 		if l == want {

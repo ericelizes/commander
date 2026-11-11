@@ -224,8 +224,8 @@ func (w *Worker) Pass(ctx context.Context) error {
 				status = "escalated"
 			}
 			retry := delay
-			if p.f.Job.Attempts > 2 {
-				retry = 5 * time.Minute
+			if state != "pending" {
+				retry = max(delay, repeatBackoff(p.f.Job.Attempts))
 			}
 			if err := w.Store.FinishSupervision(ctx, p.f, p.d.Reason, status, role, detail, now.Add(retry), attempted); err != nil {
 				return err
@@ -261,4 +261,22 @@ func Prompt(role string, batch []pending) string {
 		}
 	}
 	return b.String()
+}
+
+// repeatBackoff spaces out an obligation delivered again with nothing changed:
+// a minute, then 5, 15 and 60 minutes, then every 4 hours. Progress or a new
+// assignment generation starts a new obligation with no attempts.
+func repeatBackoff(attempts int64) time.Duration {
+	switch {
+	case attempts <= 2:
+		return time.Minute
+	case attempts == 3:
+		return 5 * time.Minute
+	case attempts == 4:
+		return 15 * time.Minute
+	case attempts == 5:
+		return time.Hour
+	default:
+		return 4 * time.Hour
+	}
 }
