@@ -62,8 +62,17 @@ func actorLine(row nextactor.Row) line {
 }
 
 func (b board) actorContext(project string, pid int64, commander string) nextactor.Context {
+	if b.actorMemo == nil {
+		b.actorMemo = map[string]map[string]nextactor.Result{}
+	}
+	memo := b.actorMemo[project]
+	if memo == nil {
+		memo = map[string]nextactor.Result{}
+		b.actorMemo[project] = memo
+	}
 	return nextactor.Context{
-		Now: time.Unix(b.now, 0),
+		Now:  time.Unix(b.now, 0),
+		Memo: memo,
 		Commander: func(id string) (bool, int64) {
 			a, ok := b.s.Agents[id]
 			if !ok {

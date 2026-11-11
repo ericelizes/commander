@@ -84,6 +84,9 @@ type Context struct {
 	// Lookup resolves a blocking bead. Nil means chains are not followed:
 	// a blocked bead then reads as Actor None, reason "dependency".
 	Lookup func(id string) (Bead, bool)
+	// Memo, when set, remembers each bead's chain decision for the life of the
+	// context (one board build), so shared blockers are decided once.
+	Memo map[string]Result
 }
 
 // Result is the decision for one bead.
@@ -109,6 +112,18 @@ func Decide(b Bead, ctx Context) Result {
 // resolve is decide, descending into a parent whose children carry its state:
 // the most urgent move among them.
 func resolve(b Bead, ctx Context, seen map[string]bool, depth int) Result {
+	if ctx.Memo != nil {
+		if r, ok := ctx.Memo[b.ID]; ok {
+			return r
+		}
+		r := resolveOnce(b, ctx, seen, depth)
+		ctx.Memo[b.ID] = r
+		return r
+	}
+	return resolveOnce(b, ctx, seen, depth)
+}
+
+func resolveOnce(b Bead, ctx Context, seen map[string]bool, depth int) Result {
 	r := decide(b, ctx, seen, depth)
 	if r.Actor != None || r.Reason != "children" || ctx.Lookup == nil || depth >= maxChainDepth || seen[b.ID] {
 		return r

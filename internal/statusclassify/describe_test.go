@@ -71,8 +71,9 @@ func TestFinishDescriptionKeepsOneOpeningAndRejectsJunk(t *testing.T) {
 	if _, ok := finishDescription("Working:", "   "); ok {
 		t.Fatal("empty accepted")
 	}
-	if _, ok := finishDescription("Working:", strings.Repeat("x", 200)); ok {
-		t.Fatal("overlong accepted")
+	long := strings.Repeat("parity tests ", 12)
+	if got, ok := finishDescription("Working:", long); !ok || len([]rune(got)) > len("Working: ")+maxDescriptionWords+1 || !strings.HasSuffix(got, "…") {
+		t.Fatalf("an overlong answer was not shortened: %q", got)
 	}
 	for _, actor := range []string{"user", "stuck", "agent", "commander", "external", "none"} {
 		if !strings.HasPrefix(promptFor(actor), describeBase) {

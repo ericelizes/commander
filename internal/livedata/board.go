@@ -204,7 +204,7 @@ func newBoard(s Snapshot, nowSec int64) board {
 			s.NeedsYou[i].StaleWhy = why
 		}
 	}
-	b := board{s: s, now: nowSec, loc: BoardZone(), needsIDs: map[string]bool{}, asks: map[string]int{}, trackAsks: map[string]int{}, noPitch: map[string]NoPitch{}, heldCard: map[string]string{}, actors: map[string]nextactor.Row{}}
+	b := board{s: s, now: nowSec, loc: BoardZone(), needsIDs: map[string]bool{}, asks: map[string]int{}, trackAsks: map[string]int{}, noPitch: map[string]NoPitch{}, heldCard: map[string]string{}, actors: map[string]nextactor.Row{}, actorMemo: map[string]map[string]nextactor.Result{}}
 	for _, p := range s.NoPitch {
 		b.noPitch[p.Project+"\x00"+p.BeadID] = p
 	}
@@ -246,7 +246,8 @@ type board struct {
 	now             int64
 	loc             *time.Location
 	needsIDs        map[string]bool
-	actors          map[string]nextactor.Row // next-actor state per row and track, by project:bead
+	actors          map[string]nextactor.Row               // next-actor state per row and track, by project:bead
+	actorMemo       map[string]map[string]nextactor.Result // chain decisions per project, for one build
 	asks, trackAsks map[string]int
 	noPitch         map[string]NoPitch // project\x00bead: ready asks whose pitch the Manager has not written
 	heldCard        map[string]string  // project\x00gate: the ancestor whose open card is this gate's ask
