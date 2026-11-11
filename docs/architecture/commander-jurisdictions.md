@@ -416,10 +416,11 @@ flow: native model behavior, foreground claims, Docker claim custody,
 cross-provider checkpoint recovery and the complete UI state audit remain
 release requirements.
 
-## Remaining implementation and evidence required before cutover
+## Implementation scope and release evidence
 
-The jurisdiction store and supervision foundation are under implementation.
-This document describes the full target, not a claim that it is already shipped.
+The jurisdiction, execution and supervision scope below is implemented. Release
+qualification also requires the installed-version and read-only live checks; source
+coverage alone is not evidence that a cutover has happened.
 
 - Focused Commander chat creation, independent session/runtime recovery,
   provider fallback, scoped context, urgent-thread navigation and return handoff.
@@ -445,7 +446,9 @@ Current targeted integration coverage lives in `internal/store/jurisdiction_test
 `internal/supervision/worker_test.go`. They cover inherited scope, nested overrides,
 concurrent transfer conflicts, rollback, retained legacy ownership, holds and
 execution preservation, result routing, acknowledgement races, restart retry
-state and shadow mode. They do not yet prove the pending product flows above.
+state and shadow mode. Broader product coverage includes the native execution,
+question/checkpoint, atomic-plan, authority, canonical-state and detached-cockpit
+evals, plus the renderer jurisdiction and nested ownership tests.
 
 ## Recovering obsolete saved human decisions
 
@@ -849,7 +852,7 @@ The explicit restored-state rehearsal accepts only a dedicated
 commander_rehearsal_* database on the separate trial server at 127.0.0.1:55432.
 It migrates an actual production backup, consolidates imported ownership and
 activates orchestration without starting a model. It compares fingerprints of
-all pre-existing columns in thirteen durable tables, preserving work, ordering,
+all pre-existing columns in fifteen durable tables, preserving work, ordering,
 dependencies, decisions, gates, execution history and usage. Production cutover
 still requires full release checks and verification of the real installation.
 
@@ -876,3 +879,9 @@ is needed. Execution-attributed or run-bound identities cannot borrow that
 planning context. Missing brief/criteria errors name the existing guarded plan
 repair; ordinary leaf edits use --description and --acceptance, then fresh
 revisioned readiness. Holds and immutable workflow definitions remain guarded.
+
+
+The sidebar names the responsible Commander on each root workstream. Nested
+workstreams inherit that label unless they have an override, in which case the
+override is named beside the nested title. The focus menu uses the same recorded
+identity. Ownership labels never contribute to execution counts or spinners.

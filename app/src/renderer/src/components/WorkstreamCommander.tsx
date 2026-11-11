@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useStore } from '../store'
+import { commanderName } from '../jurisdiction'
 
 interface Jurisdiction {
   project_id: number
@@ -55,8 +56,8 @@ export function WorkstreamCommander({ projectId, beadId, workstreamKey, owner }:
   }
 
   return <div className="workstream-commander">
-    <button type="button" aria-label="Commander for this workstream" aria-expanded={open} onClick={() => setOpen(!open)} disabled={busy}>
-      {busy ? 'Updating…' : 'Commander ▾'}
+    <button type="button" aria-label="Commander for this workstream" title={owner} aria-expanded={open} onClick={() => setOpen(!open)} disabled={busy}>
+      {busy ? 'Updating…' : `${commanderName(owner)} ▾`}
     </button>
     {open && <div className="workstream-commander-menu">
       <button type="button" disabled={busy} onClick={() => void run('open')}>Open responsible Commander</button>

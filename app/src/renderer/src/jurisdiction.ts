@@ -12,3 +12,8 @@ export function commanderScope(ws: SnapWorkstream, beadId?: string): { beadId: s
   }
   return null
 }
+
+// Keep the recorded identity distinguishable when several focused conversations exist.
+export function commanderName(owner: string): string {
+  return owner === 'commander' ? 'Commander' : owner.startsWith('commander-') ? `Commander · ${owner.slice('commander-'.length)}` : owner
+}

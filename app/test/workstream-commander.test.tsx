@@ -36,6 +36,7 @@ it('keeps the conversation in place when a concurrent handoff conflicts', async 
     .mockResolvedValueOnce({ ok: false, status: 409, json: async () => ({ error: 'Ownership changed; reread the workstream' }) })
   vi.stubGlobal('fetch', fetcher)
   render(<WorkstreamCommander projectId={7} beadId="nested" workstreamKey="qa:root" owner="commander-urgent" />)
+  expect(screen.getByRole('button', { name: 'Commander for this workstream' })).toHaveTextContent('Commander · urgent')
   fireEvent.click(screen.getByRole('button', { name: 'Commander for this workstream' }))
   fireEvent.click(screen.getByRole('button', { name: 'Return to parent Commander' }))
   expect(await screen.findByRole('alert')).toHaveTextContent('Ownership changed')

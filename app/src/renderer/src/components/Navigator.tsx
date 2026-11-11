@@ -5,6 +5,7 @@ import { MyProgress, progressWorkstreams } from '../../../features/linear/MyProg
 import { AllClear } from './AllClear'
 import { useAgentRows } from './SettingsModal'
 import { useStore } from '../store'
+import { commanderName } from '../jurisdiction'
 import { board, fmtAge, fmtUSD, finishedOperatorsVM, operatorsVM, percent, type FleetVM } from '../viewmodel'
 import type { BoardRow, BoardTrack, Display, SnapStep, Snapshot } from '../../../shared/snapshot'
 import { Spinner } from './Glyphs'
@@ -356,6 +357,7 @@ function Workstream({ w, tracks, folded, onToggle, selected, cursor, mod }: { w:
                 {w.starred && <span className="star">★ </span>}
                 {splitTickets(w.title).text}
               </span>
+              <PlanningOwner owner={w.planning_commander} />
               {w.why && <span className="ws-state-why" title={w.why} aria-label={w.why}>⚠</span>}
             </div>
             <WorkstreamState w={w} />
@@ -366,12 +368,17 @@ function Workstream({ w, tracks, folded, onToggle, selected, cursor, mod }: { w:
       {!folded && tracks.length > 0 && (
         <div className="ws-tracks" role="group" aria-label={`Workstreams under ${w.title}`}>
           {tracks.map((t) => (
-            <TrackRow key={t.key} t={t} n={w.n} wsKey={w.key} />
+            <TrackRow key={t.key} t={t} n={w.n} wsKey={w.key} parentOwner={w.planning_commander} />
           ))}
         </div>
       )}
     </div>
   )
+}
+
+function PlanningOwner({ owner }: { owner?: string }) {
+  if (!owner) return null
+  return <span className="row-commander" title={owner} aria-label={`Responsible Commander: ${owner}`}>{commanderName(owner)}</span>
 }
 
 // ProgressRing draws a workstream's progress around its rank, so the row needs no bar of its own.
@@ -387,7 +394,7 @@ function ProgressRing({ pct }: { pct: number }) {
 // TrackRow is a nested workstream under its parent: number, title and the same one
 // state line. A click opens the top-level workstream (one Manager runs all of it)
 // scoped to this one. The sidebar shows two levels; a chevron opens what is deeper.
-function TrackRow({ t, n, wsKey }: { t: BoardTrack; n: number; wsKey: string }) {
+function TrackRow({ t, n, wsKey, parentOwner }: { t: BoardTrack; n: number; wsKey: string; parentOwner?: string }) {
   const leaving = useStore((s) => !!s.leaving[t.key])
   const nowSec = useStore((s) => s.nowSec)
   const { lifted, openNested, isOpen, toggleOpen } = useContext(NavContext)
@@ -401,6 +408,7 @@ function TrackRow({ t, n, wsKey }: { t: BoardTrack; n: number; wsKey: string }) 
           <div className="row-head">
             <span className="rank track-rank">{n}{t.letter}</span>
             <span className="row-title">{splitTickets(t.title).text}</span>
+            {t.planning_commander !== parentOwner && <PlanningOwner owner={t.planning_commander} />}
           </div>
           <StateLine kind={t.kind} text={t.text} agents={t.working} age={age(t.since, nowSec)} />
           {t.why && <span className="ws-state-why" title={t.why} aria-label={t.why}>⚠</span>}
@@ -414,7 +422,7 @@ function TrackRow({ t, n, wsKey }: { t: BoardTrack; n: number; wsKey: string }) 
       )}
       {open && children.length > 0 && (
         <div className="ws-tracks ws-tracks-nested" role="group" aria-label={`Workstreams under ${t.title}`}>
-          {children.map((c) => <TrackRow key={c.key} t={c} n={n} wsKey={wsKey} />)}
+          {children.map((c) => <TrackRow key={c.key} t={c} n={n} wsKey={wsKey} parentOwner={t.planning_commander ?? parentOwner} />)}
         </div>
       )}
     </div>
