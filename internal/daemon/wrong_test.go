@@ -1,6 +1,9 @@
 package daemon
 
 import (
+	"encoding/json"
+	"github.com/example-user/commander/internal/nextactor"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -147,5 +150,41 @@ func TestWrongNamesAWorkstreamWithNoTicket(t *testing.T) {
 		if w.Key == "no-ticket:p:a" {
 			t.Fatal("without Linear connected, no ticket is not a problem")
 		}
+	}
+}
+
+// Exercise the board health projection for both top-level and nested scopes.
+func TestWrongOnScreenChainsScenario(t *testing.T) {
+	raw, err := os.ReadFile("../../tests/evals/scenarios/wrong-on-screen-chains.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var scenario struct {
+		Cases []struct {
+			Name, Kind, Actor, Reason, Who, Words string
+			Want                                  bool
+		}
+	}
+	if err := json.Unmarshal(raw, &scenario); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range scenario.Cases {
+		t.Run(c.Name, func(t *testing.T) {
+			actor := &nextactor.Row{Lead: nextactor.Result{Actor: nextactor.Actor(c.Actor), Reason: c.Reason, Who: c.Who, Via: []string{"Reporting fix", "Decide"}}}
+			for _, track := range []bool{false, true} {
+				row := livedata.BoardRow{Key: "p:a", N: 1, Title: "QA Hub", Kind: c.Kind, Why: "via Reporting fix ← Decide", Actor: actor, PlanningCommander: "commander"}
+				if track {
+					row.Tracks = []livedata.BoardTrack{{Key: "p:b", Letter: "a", Title: "Track", Kind: row.Kind, Why: row.Why, Actor: actor, PlanningCommander: "commander"}}
+					row.Why = ""
+				}
+				got := wrongOnScreen(livedata.Display{Workstreams: []livedata.BoardRow{row}}, nil, linearsync.Response{}, t.TempDir(), time.Now())
+				if (len(got) > 0) != c.Want {
+					t.Fatalf("track=%v entries=%+v want mismatch=%v", track, got, c.Want)
+				}
+				if c.Want && (!strings.Contains(got[0].Text, c.Words) || strings.Contains(got[0].Text, "Its Manager")) {
+					t.Fatalf("wrong actor: %+v", got)
+				}
+			}
+		})
 	}
 }
