@@ -29,7 +29,7 @@ const postgresCatalogSQL = `SELECT kind,identity,definition FROM (
 
 func postgresCatalog(ctx context.Context, q Querier) (map[string]string, error) {
 	var schema string
-	if err := q.QueryRowContext(ctx, `SELECT current_schema()`).Scan(&schema); err != nil {
+	if err := q.QueryRowContext(ctx, `SELECT quote_ident(current_schema())`).Scan(&schema); err != nil {
 		return nil, err
 	}
 	rows, err := q.QueryContext(ctx, postgresCatalogSQL)
@@ -43,10 +43,22 @@ func postgresCatalog(ctx context.Context, q Querier) (map[string]string, error) 
 		if err = rows.Scan(&kind, &id, &definition); err != nil {
 			return nil, err
 		}
-		definition = strings.ReplaceAll(definition, schema, "fixture")
+		definition = normalizePostgresDefinition(kind, definition, schema)
 		out[kind+":"+id] = fmt.Sprintf("%x", sha256.Sum256([]byte(definition)))
 	}
 	return out, rows.Err()
+}
+
+// Normalize only catalog-rendered namespace positions, never SQL body aliases
+// or literals that happen to contain a short schema name (such as "b").
+func normalizePostgresDefinition(kind, definition, quotedSchema string) string {
+	switch kind {
+	case "function":
+		return strings.Replace(definition, "FUNCTION "+quotedSchema+".", "FUNCTION fixture.", 1)
+	case "index", "trigger":
+		return strings.Replace(definition, " ON "+quotedSchema+".", " ON fixture.", 1)
+	}
+	return definition
 }
 
 func validatePostgresLineage(ctx context.Context, q Querier, version int) error {

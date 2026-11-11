@@ -101,3 +101,14 @@ func TestPostgresRecordedVersionNeedsShape(t *testing.T) {
 		})
 	}
 }
+
+func TestPostgresCatalogNamespaceNormalization(t *testing.T) {
+	got := normalizePostgresDefinition("function", "CREATE OR REPLACE FUNCTION b.fn() RETURNS bigint AS 'SELECT b.id FROM bead_tasks b'", "b")
+	if got != "CREATE OR REPLACE FUNCTION fixture.fn() RETURNS bigint AS 'SELECT b.id FROM bead_tasks b'" {
+		t.Fatal(got)
+	}
+	got = normalizePostgresDefinition("index", `CREATE INDEX idx ON "odd schema".bead_tasks USING btree (id)`, `"odd schema"`)
+	if got != "CREATE INDEX idx ON fixture.bead_tasks USING btree (id)" {
+		t.Fatal(got)
+	}
+}
