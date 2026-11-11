@@ -8,6 +8,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
+	"strings"
 	"time"
 )
 
@@ -19,13 +21,15 @@ type SupervisionFact struct {
 	Epoch, ProgressSeq, ProgressAt, CompletionAt, RunID             int64
 	Labels                                                          []string
 	Deleted, Held, PresenceKnown, Alive, ResultReady, ExecutorBound bool
-	AgentState                                                      string
-	ExecutionReady, ExecutionReserved, ExecutionCapable             bool
-	ExecutionAttempts                                               int64
-	ExecutionError                                                  string
-	PendingQuestions                                                int
-	QuestionWaiting                                                 bool
-	ChildCount, OpenBlockers                                        int
+	// GateInactive only affects supervision; it never changes gate state or visibility.
+	GateInactive                                        bool
+	AgentState                                          string
+	ExecutionReady, ExecutionReserved, ExecutionCapable bool
+	ExecutionAttempts                                   int64
+	ExecutionError                                      string
+	PendingQuestions                                    int
+	QuestionWaiting                                     bool
+	ChildCount, OpenBlockers                            int
 	// Children are the open, non-deferred direct children, so the policy can
 	// tell legitimately waiting subordinates from stalled ones.
 	Children []SupervisionChild
@@ -51,6 +55,9 @@ type SupervisionJob struct {
 	Reason, State, Target, Token, RequestID                                             string
 	OpenedAt, PhaseSince, DueAt, Attempts, DeliveredAt, AcknowledgedAt, EscalationLevel int64
 }
+
+// Gate-of labels encode punctuation as _hh (for example, a dotted stage ID).
+var supervisionLabelEscape = regexp.MustCompile(`_[0-9a-fA-F]{2}`)
 
 func supervisionToken() string {
 	var b [16]byte
@@ -149,7 +156,31 @@ func (s *Store) SupervisionFact(ctx context.Context, j SupervisionJob) (*Supervi
 		f.PresenceKnown = true
 		f.Alive = false
 	}
-	e = s.db.QueryRowContext(ctx, `WITH RECURSIVE ancestry AS (SELECT id,parent_id,status,labels,ARRAY[id] AS path FROM bead_tasks WHERE project_id=? AND id=? UNION ALL SELECT b.id,b.parent_id,b.status,b.labels,a.path||b.id FROM bead_tasks b JOIN ancestry a ON a.parent_id=b.id WHERE b.project_id=? AND NOT b.id=ANY(a.path)) SELECT EXISTS(SELECT 1 FROM ancestry WHERE jsonb_exists_any(labels,ARRAY['hold','superseded','retired']) OR status='deferred' OR (status='closed' AND id<>?))`, f.ProjectID, f.BeadID, f.ProjectID, f.BeadID).Scan(&f.Held)
+	gateTargets := []string{}
+	isGate := false
+	for _, label := range f.Labels {
+		if label == "kind:gate" || label == "gate" {
+			isGate = true
+		}
+		if strings.HasPrefix(label, "gate-of:") {
+			target := supervisionLabelEscape.ReplaceAllStringFunc(strings.TrimPrefix(label, "gate-of:"), func(part string) string {
+				decoded, _ := hex.DecodeString(part[1:])
+				return string(decoded)
+			})
+			gateTargets = append(gateTargets, target)
+		}
+	}
+	targets, _ := json.Marshal(gateTargets)
+	e = s.db.QueryRowContext(ctx, `WITH RECURSIVE ancestry AS (
+ SELECT id,parent_id,status,labels,ARRAY[id] AS path FROM bead_tasks WHERE project_id=? AND id=?
+ UNION ALL SELECT b.id,b.parent_id,b.status,b.labels,a.path||b.id FROM bead_tasks b JOIN ancestry a ON a.parent_id=b.id WHERE b.project_id=? AND NOT b.id=ANY(a.path)
+ ), guarded AS (
+ SELECT id,parent_id,status,ARRAY[id] AS path FROM bead_tasks WHERE project_id=? AND id IN (SELECT jsonb_array_elements_text(?::jsonb))
+ UNION ALL SELECT b.id,b.parent_id,b.status,g.path||b.id FROM bead_tasks b JOIN guarded g ON g.parent_id=b.id WHERE b.project_id=? AND NOT b.id=ANY(g.path)
+ ) SELECT
+ EXISTS(SELECT 1 FROM ancestry WHERE jsonb_exists_any(labels,ARRAY['hold','superseded','retired']) OR status='deferred' OR (status='closed' AND id<>?)),
+ ?::boolean AND (EXISTS(SELECT 1 FROM ancestry WHERE status IN ('closed','deferred') AND id<>?) OR EXISTS(SELECT 1 FROM guarded WHERE status IN ('closed','deferred')))
+ `, f.ProjectID, f.BeadID, f.ProjectID, f.ProjectID, string(targets), f.ProjectID, f.BeadID, isGate, f.BeadID).Scan(&f.Held, &f.GateInactive)
 	if e != nil {
 		return nil, e
 	}
