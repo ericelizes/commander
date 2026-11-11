@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,25 +14,56 @@ import (
 	"github.com/example-user/commander/internal/livedata"
 )
 
-func TestBrBeadsBatchesShowAfterList(t *testing.T) {
+func TestBrBeadsSingleIDShowAfterList(t *testing.T) {
 	var calls []string
+	ids := []string{"p-3", "p-1", "p-2"}
 	run := func(dir string, args ...string) ([]byte, error) {
 		calls = append(calls, strings.Join(args, " "))
 		if args[0] == "list" {
-			return []byte(`{"issues":[{"id":"p-1"},{"id":"p-1.1"}]}`), nil
+			return []byte(`{"issues":[{"id":"p-3"},{"id":"p-1"},{"id":"p-2"}]}`), nil
 		}
-		return []byte(`[{"id":"p-1","status":"open"},{"id":"p-1.1","status":"closed"}]`), nil
+		if len(args) != 3 || args[2] != "--json" {
+			return nil, fmt.Errorf("show requires one bead")
+		}
+		return []byte(fmt.Sprintf(`{"id":%q,"status":"open","dependencies":[{"depends_on_id":"root","type":"parent-child"}]}`, args[1])), nil
 	}
 	raw, err := brBeads(run, "/p")
 	if err != nil {
 		t.Fatal(err)
 	}
-	var got []map[string]any
-	if err := json.Unmarshal(raw, &got); err != nil || len(got) != 2 {
+	var got []struct {
+		ID           string
+		Dependencies []struct {
+			ID   string
+			Type string `json:"dependency_type"`
+		}
+	}
+	if err := json.Unmarshal(raw, &got); err != nil || len(got) != len(ids) {
 		t.Fatalf("beads = %s, %v", raw, err)
 	}
-	if len(calls) != 2 || calls[1] != "show p-1 p-1.1 --json" {
-		t.Fatalf("calls = %v", calls)
+	for i, id := range ids {
+		if len(got[i].Dependencies) != 1 || got[i].Dependencies[0].ID != "root" || got[i].Dependencies[0].Type != "parent-child" {
+			t.Fatalf("dependencies: %s", raw)
+		}
+		if got[i].ID != id || calls[i+1] != "show "+id+" --json" {
+			t.Fatalf("order: %s; calls %v", raw, calls)
+		}
+	}
+}
+
+func TestBrBeadsPreservesShowError(t *testing.T) {
+	want := errors.New("br show p-2 --json: backend unavailable")
+	raw, err := brBeads(func(_ string, args ...string) ([]byte, error) {
+		if args[0] == "list" {
+			return []byte(`[{"id":"p-1"},{"id":"p-2"}]`), nil
+		}
+		if args[1] == "p-2" {
+			return nil, want
+		}
+		return []byte(`[{"id":"p-1"}]`), nil
+	}, "/p")
+	if raw != nil || !errors.Is(err, want) {
+		t.Fatalf("got %s, %v", raw, err)
 	}
 }
 

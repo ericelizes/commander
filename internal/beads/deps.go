@@ -2,6 +2,7 @@ package beads
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -82,11 +83,9 @@ func (c *cmdClient) Dependents(ctx context.Context, projectDir, issueID string) 
 	return deps, nil
 }
 
-// showBatch is how many beads one `br show` call asks for. br show costs
-// about a quarter second per bead, so a project's whole tree (~200 beads) in one
-// call outlives the per-call timeout; small batches finish well inside it and a
-// failed one costs only its own beads.
-const showBatch = 20
+// showBatch is one because the PostgreSQL bead backend accepts only one ID
+// per show. Keep concurrency bounded below for callers reading many details.
+const showBatch = 1
 
 // showConcurrency bounds the parallel `br show` calls of one read.
 const showConcurrency = 3
@@ -292,7 +291,7 @@ func (c *cmdClient) details(ctx context.Context, projectDir string, ids []string
 	return out, &PartialDetailsError{Missing: failed, Err: firstEr}
 }
 
-// showOnce runs one `br show` for a batch, retrying once when it was killed or
+// showOnce runs one single-ID `br show`, retrying once when it was killed or
 // failed for a reason other than the caller giving up.
 func (c *cmdClient) showOnce(ctx context.Context, projectDir string, batch []string) (map[string]Detail, error) {
 	args := append(append([]string{"show"}, batch...), "--json")
@@ -318,10 +317,15 @@ func (c *cmdClient) showOnce(ctx context.Context, projectDir string, batch []str
 		var shown []struct {
 			ID           string `json:"id"`
 			Dependencies []struct {
-				ID   string `json:"id"`
-				Type string `json:"dependency_type"`
+				ID            string `json:"id"`
+				Type          string `json:"dependency_type"`
+				DependsOnID   string `json:"depends_on_id"`
+				CanonicalType string `json:"type"`
 			} `json:"dependencies"`
 			Comments []Comment `json:"comments"`
+		}
+		if raw := bytes.TrimSpace(stdout); len(raw) > 0 && raw[0] == '{' {
+			stdout = append(append([]byte{'['}, raw...), ']')
 		}
 		if err := json.Unmarshal(stdout, &shown); err != nil {
 			return nil, fmt.Errorf("br show: decode: %w", err)
@@ -330,6 +334,12 @@ func (c *cmdClient) showOnce(ctx context.Context, projectDir string, batch []str
 		for _, s := range shown {
 			d := Detail{Comments: s.Comments}
 			for _, e := range s.Dependencies {
+				if e.ID == "" {
+					e.ID = e.DependsOnID
+				}
+				if e.Type == "" {
+					e.Type = e.CanonicalType
+				}
 				d.Deps = append(d.Deps, Dep{IssueID: s.ID, DependsOnID: e.ID, Type: e.Type})
 				if e.Type == "parent-child" {
 					d.Parent = e.ID
