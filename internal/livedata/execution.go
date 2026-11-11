@@ -12,13 +12,15 @@ import (
 // SnapExecution is the one observed run set used for presence, row counts and
 // fleet counts. Assignment and process presence do not imply an active turn.
 type SnapExecution struct {
-	Role       string `json:"role"`
-	State      string `json:"state"`
-	ProjectID  int64  `json:"project_id"`
-	BeadID     string `json:"bead_id"`
-	TaskBeadID string `json:"task_bead_id,omitempty"`
-	RunID      int64  `json:"run_id,omitempty"`
-	SessionID  string `json:"session_id,omitempty"`
+	StartupAttempts int64  `json:"startup_attempts,omitempty"`
+	StartupError    string `json:"startup_error,omitempty"`
+	Role            string `json:"role"`
+	State           string `json:"state"`
+	ProjectID       int64  `json:"project_id"`
+	BeadID          string `json:"bead_id"`
+	TaskBeadID      string `json:"task_bead_id,omitempty"`
+	RunID           int64  `json:"run_id,omitempty"`
+	SessionID       string `json:"session_id,omitempty"`
 }
 
 func executionOf(s Snapshot, data Data, chats map[string]ChatState) []SnapExecution {

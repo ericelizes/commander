@@ -45,6 +45,8 @@ func TestLegacyApproverScenario(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("COMMANDER_HOME", home)
+	t.Setenv("AM_HTTP_BEARER_TOKEN", "private-fixture-token")
+	t.Setenv("AM_HTTP_URL", "http://127.0.0.1:1")
 	t.Setenv("COMMANDER_STATE_DB", "")
 	t.Setenv("COMMANDER_WRITE_DOOR", "off")
 	t.Setenv("COMMANDER_LEGACY_OWNER_ALIASES", "")

@@ -39,6 +39,11 @@ func (b board) activeWorkstreamLine(ws SnapWorkstream, asks int) line {
 	if ws.Hold || ws.Status == beads.StatusDeferred {
 		return line{kind: "waiting", text: "Paused by recorded direction", why: ws.HoldReason}
 	}
+	for _, run := range b.s.ExecutionChecks {
+		if run.ProjectID == ws.ProjectID && executionScopeContains(ws.BeadID, ws.Steps, run.BeadID) && run.StartupAttempts >= 5 && run.StartupError != "" {
+			return line{kind: "waiting", text: "Commander to repair the execution launch", why: run.StartupError}
+		}
+	}
 	if executionCount(b.s, ws.ProjectID, ws.BeadID, ws.Steps) > 0 {
 		return line{kind: "working", text: workingText(b.liveSteps(ws))}
 	}

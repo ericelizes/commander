@@ -74,3 +74,22 @@ func TestActiveBoardCountsOnlyCurrentExecutionAndChecksUnknownCustody(t *testing
 		t.Fatal("actual execution disappeared", row)
 	}
 }
+
+func TestActiveBoardExhaustedLaunchShowsRepairWithoutInventingActivity(t *testing.T) {
+	s := activeBoardFixture()
+	facts := Data{Postgres: true, ObservedExecutions: []store.ObservedExecution{{ProjectID: 1, BeadID: "hidden", Path: []string{"hidden", "leaf", "root"}, RunID: 7, SessionID: "current", Role: "executor-current", StartupAttempts: 5, StartupError: "adapter refused startup"}}}
+	s.ExecutionChecks = unverifiedExecutionOf(s, facts)
+	s.Executions = observedExecutionOf(s, facts)
+	d := Board(s, 1)
+	applyExecutionCounts(&s, &d)
+	if row := d.Workstreams[0]; row.Kind != "waiting" || row.Text != "Commander to repair the execution launch" || row.Working != 0 || row.PlanningCommander != "commander-focused" {
+		t.Fatal("exhausted startup hidden or counted active", row)
+	}
+	if len(s.ExecutionChecks) != 1 || s.ExecutionChecks[0].SessionID != "current" || s.ExecutionChecks[0].RunID != 7 || s.Fleet.Active != 0 {
+		t.Fatal("repair lost exact execution identity", s.ExecutionChecks, s.Fleet)
+	}
+	s.Workstreams[0].Hold = true
+	if row := Board(s, 1).Workstreams[0]; row.Text != "Paused by recorded direction" {
+		t.Fatal("repair overrode hold", row)
+	}
+}

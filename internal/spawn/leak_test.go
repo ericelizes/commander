@@ -158,6 +158,9 @@ func TestSpawnHost_OperatorEnvironmentCarriesItsRole(t *testing.T) {
 // fresh or crash-restarted, has the mail hook beside its guard; a Codex one has
 // only the guard, passed to the bridge. Real launcher, private tmux, fake agent.
 func TestSpawnHost_LauncherCarriesTheMailHook(t *testing.T) {
+	previousHooks := codexHooksReady
+	codexHooksReady = func() bool { return true }
+	t.Cleanup(func() { codexHooksReady = previousHooks })
 	if _, err := exec.LookPath("tmux"); err != nil {
 		t.Skip("tmux not installed")
 	}

@@ -357,6 +357,7 @@ func TestWire_RoundTripsDataThroughJSON(t *testing.T) {
 		Projects:   []store.Project{{ID: 1, Name: "p"}},
 		Objectives: []ObjectiveRow{{BeadID: "w", Title: "WS", ProjectName: "p", ProjectID: 1, State: "in-progress"}},
 		Ranks:      map[store.WorkstreamKey]int{{ProjectID: 1, BeadID: "w"}: 3},
+		BeadRanks:  map[store.WorkstreamKey]int{{ProjectID: 1, BeadID: "w.1"}: 2},
 		Agents:     map[string]store.AgentState{"manager-w": {Role: "manager-w", State: store.AgentWorking, Detail: "Bash: go test"}},
 		LoadErr:    errors.New("br busy"),
 	}
@@ -369,7 +370,7 @@ func TestWire_RoundTripsDataThroughJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := FromWire(w)
-	if got.Ranks[store.WorkstreamKey{ProjectID: 1, BeadID: "w"}] != 3 || got.Agents["manager-w"].Detail != "Bash: go test" ||
+	if got.BeadRanks[store.WorkstreamKey{ProjectID: 1, BeadID: "w.1"}] != 2 || got.Ranks[store.WorkstreamKey{ProjectID: 1, BeadID: "w"}] != 3 || got.Agents["manager-w"].Detail != "Bash: go test" ||
 		len(got.Objectives) != 1 || got.LoadErr == nil || got.LoadErr.Error() != "br busy" {
 		t.Fatalf("round trip lost data: %+v", got)
 	}

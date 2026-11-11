@@ -125,6 +125,23 @@ func Decide(f store.SupervisionFact, now time.Time) Decision {
 		}
 		return d
 	}
+	// A failed native start retains custody; exhaustion is a repair obligation
+	// even when no process observation ever became available. Do not release or
+	// duplicate an execution merely because its local startup failed.
+	if f.ExecutorBound && !f.Alive && f.ExecutionAttempts >= 5 && f.ExecutionError != "" {
+		d.Reason = "execution_launch_blocked"
+		d.Description = "Investigate the recorded execution startup failure; retain custody until it is reconciled"
+		d.Action = "wake"
+		d.Target = f.PlanningCommander
+		if d.Target == "" {
+			d.Target = f.SupervisorID
+		}
+		if d.Target == "" {
+			d.Target = "commander"
+		}
+		d.CheckAfter = time.Minute
+		return d
+	}
 	if !f.PresenceKnown {
 		d.Reason = "runtime_unknown"
 		d.Description = "Checking agent availability"
@@ -136,7 +153,7 @@ func Decide(f store.SupervisionFact, now time.Time) Decision {
 	if f.CompletionAt > 0 && now.Unix()-f.CompletionAt >= 2*60*60 {
 		d.Reason = "completion_check"
 		d.Description = "Investigate work without a completed outcome"
-		if f.AgentState == store.AgentWorking {
+		if f.Alive && f.AgentState == store.AgentWorking {
 			d.Target = f.SupervisorID
 		}
 		if d.Target == "" {
@@ -156,7 +173,7 @@ func Decide(f store.SupervisionFact, now time.Time) Decision {
 	} else if result {
 		d.Reason = "result_pending"
 		d.Description = "Review and accept the recorded result"
-	} else if f.ExecutorBound && (f.AgentState == store.AgentWorking || f.AgentState == store.AgentWaiting) {
+	} else if f.ExecutorBound && f.Alive && (f.AgentState == store.AgentWorking || f.AgentState == store.AgentWaiting) {
 		if age < 20*60 {
 			d.Reason = "working"
 			d.Description = "Agent is working"
@@ -177,7 +194,7 @@ func Decide(f store.SupervisionFact, now time.Time) Decision {
 	}
 	// A busy owner receives the obligation at its next safe turn, not an
 	// interrupt in the middle of a tool. Persist it so idle transitions retry it.
-	if d.Target == f.AgentID && (f.AgentState == store.AgentWorking || f.AgentState == store.AgentWaiting) {
+	if f.Alive && d.Target == f.AgentID && (f.AgentState == store.AgentWorking || f.AgentState == store.AgentWaiting) {
 		if age >= 20*60 && f.SupervisorID != "" && f.SupervisorID != f.AgentID {
 			d.Target = f.SupervisorID
 			d.Reason = "owner_progress"

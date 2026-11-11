@@ -33,6 +33,8 @@ func TestSpawnMissingStepScenario(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("COMMANDER_HOME", home)
+	t.Setenv("AM_HTTP_BEARER_TOKEN", "private-fixture-token")
+	t.Setenv("AM_HTTP_URL", "http://127.0.0.1:1")
 	st, err := store.Open(filepath.Join(home, "state.db"))
 	if err != nil {
 		t.Fatal(err)

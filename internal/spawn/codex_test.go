@@ -215,6 +215,14 @@ func codexSignedIn(t *testing.T) {
 // New agents run on the first account in their order that can take a run.
 func TestNewAgentsFollowTheAccountOrder(t *testing.T) {
 	home := codexDraws(t)
+	claudeHome := t.TempDir()
+	t.Setenv("HOME", claudeHome)
+	if err := os.MkdirAll(filepath.Join(claudeHome, ".claude"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(claudeHome, ".claude", ".credentials.json"), []byte(`{"claudeAiOauth":{"accessToken":"fixture-token"}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
 	if got := pickRuntime(SpawnRequest{TaskBeadID: "bd-1"}, "operator-a"); got != chat.RuntimeCodex {
 		t.Fatalf("Codex first: %s", got)
 	}

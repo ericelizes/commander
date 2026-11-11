@@ -38,7 +38,7 @@ func observedExecutionOf(s Snapshot, data Data) []SnapExecution {
 		if state == "" {
 			state = "unknown"
 		}
-		out = append(out, SnapExecution{Role: fact.Role, State: state, ProjectID: fact.ProjectID, BeadID: bead, TaskBeadID: fact.BeadID, RunID: fact.RunID, SessionID: fact.SessionID})
+		out = append(out, SnapExecution{StartupAttempts: fact.StartupAttempts, StartupError: fact.StartupError, Role: fact.Role, State: state, ProjectID: fact.ProjectID, BeadID: bead, TaskBeadID: fact.BeadID, RunID: fact.RunID, SessionID: fact.SessionID})
 	}
 	return out
 }

@@ -35,7 +35,7 @@ type Data struct {
 	Projects           []store.Project
 	Objectives         []ObjectiveRow
 	Operators          []OperatorRow
-	Ranks              map[store.WorkstreamKey]int // the user's priority order; see workstream_ranks
+	Ranks              map[store.WorkstreamKey]int `json:"-"` // the user's priority order; see workstream_ranks
 	BeadRanks          map[store.WorkstreamKey]int `json:"-"` // each bead's priority among its siblings; see bead_ranks
 	Agents             map[string]store.AgentState // live state per agent mail role (hooks + scrape)
 	Checkins           map[string]store.Checkin    // each Manager's next check-in on its running Operators (and Commander's)
