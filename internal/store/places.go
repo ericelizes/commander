@@ -244,13 +244,87 @@ func (s *Store) ListPlaceRuns(ctx context.Context, place string, activeOnly bool
 // AcceptPlaceRun moves an offered run to running with its token's hash.
 // False when the run is not offered (declined, ended, accepted already).
 func (s *Store) AcceptPlaceRun(ctx context.Context, runID int64, tokenHash string, at int64) (bool, error) {
-	res, err := s.db.ExecContext(ctx, `UPDATE place_runs SET state = ?, token_hash = ?, accepted_at = ?, last_beat = ?
-		WHERE run_id = ? AND state = ?`, PlaceRunning, tokenHash, at, at, runID, PlaceOffered)
-	if err != nil {
-		return false, fmt.Errorf("store: accept place run %d: %w", runID, err)
+	_, accepted, err := s.AcceptPlaceRunWithToken(ctx, runID, at, func() (string, string) { return "", tokenHash })
+	return accepted, err
+}
+
+// AcceptPlaceRunWithToken invokes mint only after canonical launch authority
+// has been fenced. The plaintext leaves this function only after commit.
+func (s *Store) AcceptPlaceRunWithToken(ctx context.Context, runID, at int64, mint func() (string, string)) (string, bool, error) {
+	var accepted bool
+	var token string
+	err := s.WithTx(ctx, func(q Querier) error {
+		allowed, err := s.placeExecutionAllowed(ctx, q, runID)
+		if err != nil || !allowed {
+			return err
+		}
+		var state string
+		if err := q.QueryRowContext(ctx, `SELECT state FROM place_runs WHERE run_id=?`, runID).Scan(&state); err != nil {
+			return err
+		}
+		if state != PlaceOffered {
+			return nil
+		}
+		var tokenHash string
+		token, tokenHash = mint()
+		res, err := q.ExecContext(ctx, `UPDATE place_runs SET state = ?, token_hash = ?, accepted_at = ?, last_beat = ?
+			WHERE run_id = ? AND state = ?`, PlaceRunning, tokenHash, at, at, runID, PlaceOffered)
+		if err != nil {
+			return fmt.Errorf("store: accept place run %d: %w", runID, err)
+		}
+		n, err := res.RowsAffected()
+		accepted = n > 0
+		return err
+	})
+	if err != nil || !accepted {
+		return "", false, err
 	}
-	n, err := res.RowsAffected()
-	return n > 0, err
+	return token, accepted, nil
+}
+
+// PlaceExecutionAllowed revalidates current custody for a run-token request.
+// Acceptance uses the same predicate inside the transaction that installs the
+// token. An offered run is never evidence of a surviving physical process.
+func (s *Store) PlaceExecutionAllowed(ctx context.Context, runID int64) (bool, error) {
+	var allowed bool
+	err := s.WithTx(ctx, func(q Querier) error {
+		var err error
+		allowed, err = s.placeExecutionAllowed(ctx, q, runID)
+		return err
+	})
+	return allowed, err
+}
+
+func (s *Store) placeExecutionAllowed(ctx context.Context, q Querier, runID int64) (bool, error) {
+	var allowed bool
+	if !s.postgres {
+		// Legacy task authority is read through the service's bead reader.
+		err := q.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM agent_runs WHERE id=? AND status='running')`, runID).Scan(&allowed)
+		return allowed, err
+	}
+	// WithTx holds graph custody before this mode fence. Direct canonical
+	// writes also take that graph lock through migration 5's triggers.
+	var mode string
+	if err := q.QueryRowContext(ctx, `SELECT mode FROM orchestration_control WHERE id=1 FOR SHARE`).Scan(&mode); err != nil {
+		return false, err
+	}
+	if mode != "active" && mode != "shadow" {
+		return false, nil
+	}
+	err := q.QueryRowContext(ctx, `SELECT EXISTS(
+	 SELECT 1 FROM agent_runs r JOIN bead_tasks b ON b.project_id=r.project_id AND b.id=r.task_bead_id
+	 JOIN projects p ON p.id=b.project_id
+	 JOIN place_runs pr ON pr.run_id=r.id JOIN places device ON device.name=pr.place
+	 WHERE device.revoked_at IS NULL AND r.id=? AND r.status='running' AND b.active_run_id=r.id AND b.assigned_agent=r.agent_name
+	 AND b.deleted_at IS NULL AND p.status='active' AND b.result_run_id IS NULL
+	 AND commander_execution_allowed(b.project_id,b.id,TRUE)
+	 AND ((?='shadow' AND NOT EXISTS(SELECT 1 FROM execution_slots s WHERE s.run_id=r.id))
+	 OR (?='active' AND EXISTS(SELECT 1 FROM execution_slots s WHERE s.run_id=r.id
+	   AND s.project_id=b.project_id AND s.bead_id=b.id
+	   AND s.enabled AND s.plan_revision=b.plan_revision AND s.responsibility_epoch=b.responsibility_epoch FOR SHARE OF s)))
+	 FOR SHARE OF device
+	)`, runID, mode, mode).Scan(&allowed)
+	return allowed, err
 }
 
 // BeatPlaceRun records a heartbeat on a running run; false when not running.

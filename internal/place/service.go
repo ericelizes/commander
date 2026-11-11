@@ -402,7 +402,8 @@ func (s *Service) Fetch(ctx context.Context, place string, runID int64) (*RunInf
 // Accept is the user's yes in the Mac's dialog: the brief must still be the one
 // offered (and shown), the step must still name this place, and a prod gate
 // must still be closed, approved by the user and cover the scope the dialog
-// showed (scopeSHA); the run goes running and its token is minted, once.
+// showed (scopeSHA). Canonical launch authority is fenced again in the store
+// transaction before the run goes running and its token is minted, once.
 func (s *Service) Accept(ctx context.Context, place string, runID int64, briefSHA, scopeSHA string) (string, error) {
 	run, pr, proj, err := s.runOf(ctx, runID)
 	if err != nil {
@@ -418,6 +419,9 @@ func (s *Service) Accept(ctx context.Context, place string, runID int64, briefSH
 	if err != nil {
 		return "", err
 	}
+	if run.Status != "running" || task.Status == "closed" || task.Status == "deferred" || slices.Contains(task.Labels, "hold") || slices.Contains(task.Labels, "needs-user") {
+		return "", fmt.Errorf("%w: execution authority changed after the offer", ErrConflict)
+	}
 	if briefSHA != pr.BriefSHA || BriefSHA(task.Description) != pr.BriefSHA {
 		s.end(ctx, runID, store.PlaceDeclined, "brief changed after the offer")
 		return "", fmt.Errorf("%w: the brief changed after the offer; the Manager must offer a new run", ErrConflict)
@@ -428,13 +432,12 @@ func (s *Service) Accept(ctx context.Context, place string, runID int64, briefSH
 		s.end(ctx, runID, store.PlaceDeclined, why)
 		return "", fmt.Errorf("%w: %s; the Manager must offer a new run", ErrConflict, why)
 	}
-	tok, hash := NewToken()
-	ok, err := s.d.Store.AcceptPlaceRun(ctx, runID, hash, s.d.Now().Unix())
+	tok, ok, err := s.d.Store.AcceptPlaceRunWithToken(ctx, runID, s.d.Now().Unix(), NewToken)
 	if err != nil {
 		return "", err
 	}
 	if !ok {
-		return "", fmt.Errorf("%w: run %d was answered already", ErrConflict, runID)
+		return "", fmt.Errorf("%w: run %d was answered already or execution authority changed", ErrConflict, runID)
 	}
 	return tok, nil
 }
@@ -548,7 +551,8 @@ type Run struct {
 }
 
 // Authorize returns the run a token belongs to: the run must be running, the
-// token's hash must match and the run must be younger than TokenTTL.
+// token's hash must match, the run must be younger than TokenTTL, and current
+// canonical execution authority must still permit this run.
 func (s *Service) Authorize(ctx context.Context, runID int64, token string) (*Run, error) {
 	if token == "" {
 		return nil, ErrUnauthorized
@@ -566,6 +570,20 @@ func (s *Service) Authorize(ctx context.Context, runID int64, token string) (*Ru
 	}
 	if s.d.Now().Sub(time.Unix(pr.AcceptedAt, 0)) > TokenTTL {
 		s.end(ctx, runID, store.PlaceStopped, "run token expired (12 h)")
+		return nil, ErrUnauthorized
+	}
+	allowed, err := s.d.Store.PlaceExecutionAllowed(ctx, runID)
+	if err != nil {
+		return nil, err
+	}
+	if !allowed {
+		return nil, ErrUnauthorized
+	}
+	task, err := s.d.ReadBead(ctx, proj.Path, run.TaskBeadID)
+	if err != nil {
+		return nil, err
+	}
+	if task.Status == "closed" || task.Status == "deferred" || slices.Contains(task.Labels, "hold") || slices.Contains(task.Labels, "needs-user") {
 		return nil, ErrUnauthorized
 	}
 	return &Run{AgentRun: *run, PlaceRun: *pr, Project: *proj}, nil

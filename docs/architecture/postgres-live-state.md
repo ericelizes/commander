@@ -118,9 +118,24 @@ reverse migration and is not an automatic file rename.
 
 This is one VM and one Postgres instance. It removes SQLite's single-writer
 constraint and per-agent Beads subprocess scans; it is not high availability or
-multi-region replication. A project-scoped graph lock protects concurrent
-hierarchy edits; runtime writes do not take that lock. Small connection pools,
-bounded event batches and bounded classifier children protect the VM.
+multi-region replication. Project locks protect local hierarchy edits. Qualified graph/custody writes
+also serialize installation-wide through migration 5's graph lock. Store.WithTx
+acquires that lock before callbacks can take project, mode, slot or row locks;
+statement triggers retain the same serialization for direct writes. This also
+serializes unrelated Store.WithTx callbacks, a deliberate conservative boundary.
+Read-only repeatable-read snapshots and direct accounting-only writes keep their
+existing paths. Small connection pools, bounded event batches and bounded
+classifier children protect the VM.
+
+Mac acceptance is a fresh launch boundary. Within the token-install transaction,
+it rechecks current task/ancestor restrictions, active project, exact running
+canonical run/claim and orchestration mode. Active mode additionally requires the
+same enabled bound slot and current plan revision/responsibility epoch; binding
+stores the post-binding epoch. A shadow offer cannot become an active claim, and
+an active claim cannot launch after a change to shadow/off. Token generation runs
+only after this fence; a refusal stores and returns no token. Each token request
+revalidates current authority too. An offered run never proves a surviving
+physical process. These checks do not implement active remote scheduling.
 
 `COMMANDER_POSTGRES_TEST_DSN` accepts only the disposable `commander_trial`
 database and creates a unique schema for each test. Unit, interaction and load

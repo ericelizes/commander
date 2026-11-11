@@ -1,0 +1,4 @@
+{
+  "comment": "Actual Mac Service.Accept and Authorize against isolated PostgreSQL canonical state; a stale bead reader deliberately retains its original open view. Adapted from independent reviewer .206.4.16. Each change must refuse delayed acceptance with an empty token/hash, and separately revoke an already accepted token. A valid unchanged offer must authorize before revocation.",
+  "changes": ["hold", "closed", "reclaimed", "exited", "off", "active"]
+}

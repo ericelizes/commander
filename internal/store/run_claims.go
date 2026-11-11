@@ -134,7 +134,7 @@ func claimRun(ctx context.Context, q Querier, r AgentRun) (int64, error) {
 			return e
 		}
 		if claimAgent != "" {
-			_, e = q.ExecContext(ctx, `UPDATE execution_slots SET run_id=?,lease_until=0,plan_revision=(SELECT plan_revision FROM bead_tasks WHERE project_id=? AND id=?) WHERE agent_id=? AND claim_token=?`, id, r.ProjectID, r.TaskBeadID, claimAgent, r.ExecutionClaimToken)
+			_, e = q.ExecContext(ctx, `UPDATE execution_slots SET run_id=?,lease_until=0,(plan_revision,responsibility_epoch)=(SELECT plan_revision,responsibility_epoch FROM bead_tasks WHERE project_id=? AND id=?) WHERE agent_id=? AND claim_token=?`, id, r.ProjectID, r.TaskBeadID, claimAgent, r.ExecutionClaimToken)
 		}
 		return e
 	}()
