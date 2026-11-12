@@ -1,0 +1,17 @@
+{
+  "description": "Private-handler eval: real HTTP custody door refuses typed foreign provenance failures and foreign receipts before any write; legacy local read failures retain their policy. Not a PG integration fixture.",
+  "cases": [
+    {"name":"wrapped list ambiguity refuses","fail":"list","typed":true},
+    {"name":"fresh show provenance refuses","fail":"show","typed":true},
+    {"name":"fresh details provenance refuses","fail":"details","typed":true},
+    {"name":"incoming foreign closure read refuses","fail":"dependents","typed":true},
+    {"name":"legacy local read still fails open","fail":"list","allow":true},
+    {"name":"foreign source receipt refuses","foreign":true},
+    {"name":"leave unheld cannot authorize foreign receipt","foreign":true,"leave":true},
+    {"name":"local source receipt still precedes close","allow":true},
+    {"name":"show not found typed=False","fail":"show","typed":false,"notfound":true,"allow":true,"leave":true},
+    {"name":"show not found typed=True","fail":"show","typed":true,"notfound":true,"allow":false,"leave":true},
+    {"name":"reached not found typed=False","fail":"reached","typed":false,"notfound":true,"allow":true,"leave":true},
+    {"name":"reached not found typed=True","fail":"reached","typed":true,"notfound":true,"allow":false,"leave":true}
+  ]
+}

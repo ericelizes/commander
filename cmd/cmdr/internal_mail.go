@@ -168,7 +168,10 @@ func runInternalMail(args []string, stdout, stderr *os.File) int {
 	home := appCommanderHome()
 	oneShot, rest := splitCodexOperators(ctx, st, home, toRoles)
 	if *interrupt {
+		placeStopped, others := stopPlaceRuns(ctx, home, st, rest, *from, stderr)
+		rest = others
 		stopped, failed := stopCodexOperators(ctx, oneShot, *from, stderr)
+		stopped = append(stopped, placeStopped...)
 		result["stopped"] = stopped
 		if len(failed) > 0 {
 			result["unreachable"] = failed

@@ -33,10 +33,13 @@ func (s *Store) ImportSQLite(ctx context.Context, path string) (map[string]int64
 	if e = src.QueryRowContext(ctx, `PRAGMA user_version`).Scan(&version); e != nil {
 		return nil, e
 	}
-	if version != 22 {
-		return nil, fmt.Errorf("migration requires SQLite schema 22; found %d", version)
+	if version != 22 && version != 23 {
+		return nil, fmt.Errorf("migration requires SQLite schema 22 or 23; found %d", version)
 	}
 	tables := []string{"projects", "objectives", "objective_tasks", "cost_events", "agent_runs", "tui_state", "am_agents", "workstream_ranks", "workstream_managers", "inspector_tabs", "inspector_state", "needs_you", "agent_state", "gates", "watch_issues", "manager_checkins", "chat_costs", "usage_turns", "usage_scan", "pitches", "needs_resolutions", "board_since", "manager_unregistrations", "bead_ranks"}
+	if version == 23 {
+		tables = append(tables, "places", "place_runs", "place_comments")
+	}
 	counts := map[string]int64{}
 	tx, e := s.db.BeginTx(ctx, nil)
 	if e != nil {

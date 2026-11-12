@@ -61,17 +61,31 @@ func projectID(ctx context.Context, q store.Querier, dir string) (int64, error) 
 	if real, e := filepath.EvalSymlinks(abs); e == nil {
 		abs = real
 	}
-	var id int64
-	err = q.QueryRowContext(ctx, `SELECT id FROM projects WHERE path=? OR repo_path=? ORDER BY CASE WHEN path=? THEN 0 ELSE 1 END LIMIT 1`, abs, abs, abs).Scan(&id)
-	if errors.Is(err, sql.ErrNoRows) {
-		return 0, fmt.Errorf("project is not registered: %s", dir)
+	rows, err := q.QueryContext(ctx, `SELECT DISTINCT id FROM projects WHERE path=? OR repo_path=?`, abs, abs)
+	if err != nil {
+		return 0, err
 	}
-	return id, err
+	defer rows.Close()
+	var id int64
+	count := 0
+	for rows.Next() {
+		if err = rows.Scan(&id); err != nil {
+			return 0, err
+		}
+		count++
+	}
+	if err = rows.Err(); err != nil {
+		return 0, err
+	}
+	if count != 1 {
+		return 0, qualifiedFailure("project", dir, fmt.Errorf("expected one registered project identity, found %d", count))
+	}
+	return id, nil
 }
 
 const pgBeadColumns = `b.id,b.title,b.description,b.acceptance_criteria,b.status,b.issue_type,b.priority,b.labels,COALESCE(b.parent_id,''),b.assigned_agent,b.created_at,b.updated_at,b.close_reason,
  (SELECT COUNT(*) FROM bead_dependencies d WHERE d.project_id=b.project_id AND d.issue_id=b.id),
- (SELECT COUNT(*) FROM bead_dependencies d WHERE d.project_id=b.project_id AND d.depends_on_id=b.id),
+ (SELECT COUNT(*) FROM bead_dependencies d WHERE d.target_project_id=b.project_id AND d.depends_on_id=b.id),
  (SELECT COUNT(*) FROM bead_comments c WHERE c.project_id=b.project_id AND c.bead_id=b.id),
  commander_planning_owner(b.project_id,b.id),COALESCE((SELECT revision FROM jurisdiction_projects j WHERE j.project_id=b.project_id),1),
  b.responsible_agent_id,b.responsibility_epoch,b.progress_seq,b.progress_at,b.result_ready_at,b.plan_revision,b.execution_ready,b.execution_capabilities,b.execution_attempts,b.execution_error,
@@ -95,7 +109,7 @@ func scanPGBead(row interface{ Scan(...any) error }) (Bead, error) {
 	return b, err
 }
 
-func (*postgresClient) List(ctx context.Context, dir string, o ListOptions) ([]Bead, error) {
+func (*postgresClient) listLocal(ctx context.Context, dir string, o ListOptions) ([]Bead, error) {
 	s, err := postgresStore()
 	if err != nil {
 		return nil, err
@@ -156,7 +170,7 @@ func (*postgresClient) List(ctx context.Context, dir string, o ListOptions) ([]B
 	return out, rows.Err()
 }
 
-func (*postgresClient) Show(ctx context.Context, dir, id string) (*Bead, error) {
+func (*postgresClient) showLocal(ctx context.Context, dir, id string) (*Bead, error) {
 	s, e := postgresStore()
 	if e != nil {
 		return nil, e
@@ -179,10 +193,10 @@ func (c *postgresClient) freshShow(ctx context.Context, dir, id string) (*Bead, 
 }
 
 func (*postgresClient) Deps(ctx context.Context, dir, id string) ([]Dep, error) {
-	return pgDeps(ctx, dir, id, false)
+	return qualifiedDeps(ctx, dir, id, false)
 }
 func (*postgresClient) Dependents(ctx context.Context, dir, id string) ([]Dep, error) {
-	return pgDeps(ctx, dir, id, true)
+	return qualifiedDeps(ctx, dir, id, true)
 }
 func pgDeps(ctx context.Context, dir, id string, reverse bool) ([]Dep, error) {
 	s, e := postgresStore()
@@ -239,7 +253,7 @@ func (*postgresClient) Comments(ctx context.Context, dir, id string) ([]Comment,
 
 // Details hydrates an arbitrary selection in three indexed queries, independent
 // of the number of beads. It never reads an export or invokes a process.
-func (*postgresClient) Details(ctx context.Context, dir string, ids []string) (map[string]Detail, error) {
+func (*postgresClient) detailsLocal(ctx context.Context, dir string, ids []string) (map[string]Detail, error) {
 	out := map[string]Detail{}
 	if len(ids) == 0 {
 		return out, nil

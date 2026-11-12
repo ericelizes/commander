@@ -21,6 +21,7 @@ import type { WindowState } from '../../electron/window-state'
 import { registerInspectorIpc } from '../../electron/inspector'
 import { attachContextMenu } from '../../electron/context-menu'
 import { registerRemoteUpdateIpc, remoteSettings, runSsh, type RemoteUpdateStatus } from '../../electron/remote-update'
+import { startPlaces, pairThisMac, type PlaceMainDeps } from '../../electron/place-main'
 
 const isMac = process.platform === 'darwin'
 const argv = process.argv
@@ -164,8 +165,17 @@ if (smoke) {
   // The shell owns the app lifecycle: single instance, menu, shortcuts
   // (Cmd/Ctrl+0..9 -> nav:expand-or-go), window state, dock badge, cmdrd health.
   void app.whenReady().then(allowApiOrigin)
+  // This Mac as a place for governed Operators (docs/plans/2026-11-09-mac-operator.md):
+  // only once paired, and every run asks the user here first.
+  const placeDeps: PlaceMainDeps = {
+    app, dialog, safeStorage: electron.safeStorage, commanderHome: commanderHome(),
+    api: () => { const { apiUrl, token } = apiConfig(); return { apiUrl, token } },
+    log: (m) => log('info', m),
+  }
+  void app.whenReady().then(() => startPlaces(placeDeps))
   appShell = startAppShell(electron, {
     isDev: !app.isPackaged,
+    pairPlace: isMac ? () => void pairThisMac(placeDeps).catch((e) => log('info', `place: pairing failed: ${(e as Error).message}`)) : undefined,
     createWindow: (state) => {
       const win = createWindow(state)
       registerInspectorIpc(win, { dev: !app.isPackaged })

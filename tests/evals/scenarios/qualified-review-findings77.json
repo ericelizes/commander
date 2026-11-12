@@ -1,0 +1,4 @@
+{
+  "description": "Private PostgreSQL regressions for the five independent review4328 findings on Mac composition 9ef7aeba. Executed by internal/beads TestPostgresFinding77Scenario: stopped dotted owner cannot release a foreign blocker; disabled service door refuses without a commit; replaced run cannot reuse role authority; local-only reader failures retain their type; selected qualified comments use one query and retain contents. No live state or Mac execution.",
+  "findings": ["QPG-OWNER-ROLE", "QPG-WRITE-DOOR", "QPG-RUN-FENCE", "QPG-LOCAL-ERROR", "QPG-DETAIL-NPLUS1"]
+}

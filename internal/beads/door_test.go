@@ -102,6 +102,48 @@ func TestWithDoorEnv_ReachesBr(t *testing.T) {
 	}
 }
 
+func TestWithDoorEnvReachesHTTPDoor(t *testing.T) {
+	t.Setenv("COMMANDER_ROLE", "operator-ambient")
+	t.Setenv("COMMANDER_RUN_ID", "88")
+	t.Setenv("COMMANDER_RUN_SESSION", "ambient-session")
+	home := t.TempDir()
+	t.Setenv("COMMANDER_HOME", home)
+	seen := make(chan DoorRequest, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var got DoorRequest
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Error(err)
+		}
+		seen <- got
+		json.NewEncoder(w).Encode(DoorResponse{})
+	}))
+	defer srv.Close()
+	for name, value := range map[string]string{"api-url": srv.URL, "api-token": "fixture"} {
+		if err := os.WriteFile(filepath.Join(home, name), []byte(value), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	explicit := []string{"COMMANDER_ROLE=operator-place", "COMMANDER_RUN_ID=99", "COMMANDER_RUN_SESSION=place-session"}
+	for _, tc := range []struct {
+		name string
+		ctx  context.Context
+		want []string
+	}{
+		{"bound", WithDoorEnv(context.Background(), explicit), explicit},
+		{"cleared", WithDoorEnv(context.Background(), nil), nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := viaDoor(tc.ctx, t.TempDir(), DoorRequest{Args: []string{"comments", "add", "foreign", "attempt"}}); err != nil {
+				t.Fatal(err)
+			}
+			got := <-seen
+			if strings.Join(got.Env, "\n") != strings.Join(tc.want, "\n") {
+				t.Fatalf("attribution changed in HTTP transport: %v", got.Env)
+			}
+		})
+	}
+}
+
 // A door that answers 401/503 sends nothing: the write runs directly, logged.
 func TestRunWrite_FallsBackOn401And503(t *testing.T) {
 	for _, code := range []int{http.StatusUnauthorized, http.StatusServiceUnavailable, http.StatusNotFound} {

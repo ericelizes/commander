@@ -1,0 +1,8 @@
+{
+  "description": "Native private commander_trial interaction lifecycle, executed by internal/beads TestPostgresQualifiedInteractionScenario. Each case starts with a source-owned cross-project blocks edge; a target transition must refuse before any foreign receipt, then succeed once its real source-local review holder exists. No configured live database or real roles.",
+  "cases": [
+    {"name":"close", "args":["close"], "status":"closed"},
+    {"name":"park", "args":["update","--status","deferred"], "status":"deferred"},
+    {"name":"supersede", "args":["update","--add-label","superseded"], "status":"open"}
+  ]
+}

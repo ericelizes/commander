@@ -26,6 +26,8 @@ export interface AppShellOptions {
   createWindow: (state: WindowState) => BrowserWindow
   daemonDeps?: DaemonDeps
   platform?: string
+  // Pair this Mac as a place (App menu item); undefined = none.
+  pairPlace?: () => void
 }
 
 export interface AppShell {
@@ -120,6 +122,7 @@ export function startAppShell(electron: ElectronMain, opts: AppShellOptions): Ap
       appName: app.name,
       dispatch,
       rendererSource,
+      pairPlace: opts.pairPlace,
     })))
   }
 

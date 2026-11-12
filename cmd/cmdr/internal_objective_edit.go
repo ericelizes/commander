@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/example-user/commander/internal/ownercompat"
+	"github.com/example-user/commander/internal/place"
 	"os"
 	"regexp"
 	"slices"
@@ -37,6 +38,7 @@ type internalObjectiveEditResult struct {
 	Track   *bool  `json:"track,omitempty"`
 	// MaxOperators is the workstream's Operator cap override ("none" = default).
 	MaxOperators string `json:"max_operators,omitempty"`
+	RunOn        string `json:"run_on,omitempty"`
 	// Then lists the steps a close's --then-* hold was written on.
 	Then []string `json:"then,omitempty"`
 	// Custody lists the steps a close or create left unheld that now carry the
@@ -75,6 +77,7 @@ func runInternalSetObjective(args []string, stdout, stderr *os.File) int {
 	fs.BoolVar(track, "track", false, "old name of --workstream")
 	noTrack := fs.Bool("no-workstream", false, "turn a nested workstream back into a plain step (it stays under its parent)")
 	fs.BoolVar(noTrack, "no-track", false, "old name of --no-workstream")
+	runOn := fs.String("run-on", "", "the paired place this step's Operator runs on (mac:<name>, see cmdr place list); \"none\" runs it on cmdrd's machine again. Spawns there need a closed user gate over the step")
 	maxOps := fs.String("max-operators", "", "on a workstream bead: how many Operators may run under it at once, overriding [concurrency] max_operators_per_workstream; \"none\" restores the default")
 	holdArg := fs.String("hold", "", "hold the bead (and everything under it): internal-ship refuses and Operators stop shipping; the value is the reason (use \"-\" for none)")
 	noHold := fs.Bool("no-hold", false, "clear a hold")
@@ -91,8 +94,8 @@ func runInternalSetObjective(args []string, stdout, stderr *os.File) int {
 		emitErr(stderr, fmt.Sprintf("parse flags: %v", err))
 		return 1
 	}
-	if *projectName == "" || *beadID == "" || (*star == "" && *status == "" && *state == "" && *owner == "" && *review == "" && *until == "" && *viz == "" && *lane == "" && *maxOps == "" && *decisionArg == "" && len(waiting) == 0 && !*track && !*noTrack && *holdArg == "" && !*noHold && !*park && !*unpark && *cardCheckArg == "" && !*pushReset) {
-		emitErr(stderr, "missing required flag(s): --project, --bead, and one of --star, --status, --state, --owner, --review, --until, --viz, --lane, --max-operators, --decision, --waiting, --workstream, --no-workstream, --hold, --no-hold, --park, --unpark, --card-check, --push-reset")
+	if *projectName == "" || *beadID == "" || (*star == "" && *status == "" && *state == "" && *owner == "" && *review == "" && *until == "" && *viz == "" && *lane == "" && *maxOps == "" && *runOn == "" && *decisionArg == "" && len(waiting) == 0 && !*track && !*noTrack && *holdArg == "" && !*noHold && !*park && !*unpark && *cardCheckArg == "" && !*pushReset) {
+		emitErr(stderr, "missing required flag(s): --project, --bead, and one of --star, --status, --state, --owner, --review, --until, --viz, --lane, --max-operators, --run-on, --decision, --waiting, --workstream, --no-workstream, --hold, --no-hold, --park, --unpark, --card-check, --push-reset")
 		return 1
 	}
 	if *pushReset {
@@ -140,6 +143,10 @@ func runInternalSetObjective(args []string, stdout, stderr *os.File) int {
 	}
 	if *viz != "" && *viz != "none" && *viz != "1" && *viz != "2" && *viz != "3" {
 		emitErr(stderr, "--viz must be 1, 2, 3 or none")
+		return 1
+	}
+	if err := checkRunOn(*runOn); err != nil {
+		emitErr(stderr, err.Error())
 		return 1
 	}
 	if n, err := strconv.Atoi(*maxOps); *maxOps != "" && *maxOps != "none" && (err != nil || n <= 0) {
@@ -412,6 +419,12 @@ func runInternalSetObjective(args []string, stdout, stderr *os.File) int {
 				return result, err
 			}
 			result.Lane = laneValue
+		}
+		if *runOn != "" {
+			if err := applySoleLabel(ctx, bc, dir, *beadID, place.LabelPrefix, *runOn); err != nil {
+				return result, err
+			}
+			result.RunOn = *runOn
 		}
 		if *maxOps != "" {
 			// The cap is read from the owning workstream bead only (spawn.CheckWorkstreamCap):

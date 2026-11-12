@@ -254,6 +254,7 @@ export interface SnapStep {
   status: string
   owner?: string
   owner_state?: 'working' | 'finished' | 'died' // its Operator by process: alive, exited after reporting, exited with the step open
+  place_text?: string // its Operator runs on a paired place (the user's Mac): what cmdrd sees of it
   starred?: boolean
   review?: string
   pr?: string[] // PR numbers of its pr: labels

@@ -19,6 +19,7 @@ import (
 	"github.com/example-user/commander/internal/chat"
 	"github.com/example-user/commander/internal/decisions"
 	"github.com/example-user/commander/internal/mailstate"
+	"github.com/example-user/commander/internal/place"
 	"github.com/example-user/commander/internal/store"
 )
 
@@ -56,7 +57,7 @@ const (
 
 	// maxHookMails and maxHookBody keep an inbox backlog from swamping a turn;
 	// mail beyond the cap stays unread for the next hook run.
-	maxHookMails = 10
+	maxHookMails = place.HookMailLimit
 	maxHookBody  = 4000
 
 	hookTimeout = 5 * time.Second
@@ -68,6 +69,7 @@ func runInternalMailHook(args []string, stdin io.Reader, stdout io.Writer) int {
 	role := fs.String("role", "", "this agent's mail role")
 	event := fs.String("event", "", "hook event (default: read hook_event_name from stdin)")
 	mailOnly := fs.Bool("mail", false, "deliver mail only (a host Operator)")
+	placeRun := fs.Bool("place", false, "deliver mail only, read through cmdrd with the place run's token (an Operator on the user's Mac)")
 	if err := fs.Parse(args); err != nil || *role == "" {
 		return 0
 	}
@@ -75,6 +77,10 @@ func runInternalMailHook(args []string, stdin io.Reader, stdout io.Writer) int {
 	ev := *event
 	if ev == "" {
 		ev = in.event()
+	}
+	if *placeRun {
+		placeOperatorMail(*role, ev, os.Getenv, stdout)
+		return 0
 	}
 	if *mailOnly {
 		if ev == hookStop || ev == hookPostToolUse || ev == hookPreToolUse || ev == hookUserPromptSubmit {
@@ -630,4 +636,31 @@ func runInternalStateHook(args []string, stdin io.Reader) int {
 	}
 	recordAgentState(*role, ev, in)
 	return 0
+}
+
+// placeOperatorMail is the mail hook on the Mac: the run's unread mail, read
+// by cmdrd for the run's own role (the run token reaches no other inbox), shown
+// with the same quoting and authority line as a host Operator's.
+func placeOperatorMail(role, ev string, getenv func(string) string, stdout io.Writer) {
+	e, err := readPlaceRunEnv(getenv)
+	if err != nil {
+		return
+	}
+	out, err := placeCall(e, "GET", "mail", nil)
+	if err != nil {
+		return
+	}
+	raw, _ := json.Marshal(out["mail"])
+	var mails []agentmail.Mail
+	if json.Unmarshal(raw, &mails) != nil || len(mails) == 0 {
+		return
+	}
+	shown := mails
+	if len(shown) > maxHookMails {
+		shown = shown[:maxHookMails]
+	}
+	text := renderHookMail(shown, len(mails)-len(shown), role, map[string]string{})
+	if b, err := hookOutput(ev, text); err == nil {
+		_, _ = stdout.Write(append(b, '\n'))
+	}
 }

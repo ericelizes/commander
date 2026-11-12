@@ -139,6 +139,11 @@ func (s *Store) SettleClassificationUsage(ctx context.Context, key string, input
 
 func (s *Store) CompleteClassification(ctx context.Context, j ClassificationJob, kind, text string) error {
 	return s.WithTx(ctx, func(q Querier) error {
+		if s.postgres {
+			if _, e := q.ExecContext(ctx, `SELECT pg_advisory_xact_lock(734031823)`); e != nil {
+				return e
+			}
+		}
 		if j.RunID == 0 {
 			var owner bool
 			if e := q.QueryRowContext(ctx, `SELECT commander_planning_owner(project_id,id)=? FROM bead_tasks WHERE project_id=? AND id=? AND deleted_at IS NULL FOR UPDATE`, j.Role, j.ProjectID, j.BeadID).Scan(&owner); errors.Is(e, sql.ErrNoRows) {

@@ -21,6 +21,15 @@ type UnreadListFunc func(ctx context.Context, role string) ([]agentmail.Mail, er
 
 // NewUnreadListFunc lists unread mail for a role, like NewUnreadFunc counts it.
 func NewUnreadListFunc(st *store.Store) UnreadListFunc {
+	return newUnreadListFunc(st, false)
+}
+
+// NewUnreadBodyListFunc includes the instructions delivered to an agent hook.
+func NewUnreadBodyListFunc(st *store.Store) UnreadListFunc {
+	return newUnreadListFunc(st, true)
+}
+
+func newUnreadListFunc(st *store.Store, bodies bool) UnreadListFunc {
 	if st == nil {
 		return nil
 	}
@@ -35,7 +44,7 @@ func NewUnreadListFunc(st *store.Store) UnreadListFunc {
 			if err != nil || name == "" {
 				return nil, err
 			}
-			return client.FetchInbox(ctx, key, name, time.Time{}, agentmail.InboxOptions{Limit: 50})
+			return client.FetchInbox(ctx, key, name, time.Time{}, agentmail.InboxOptions{Limit: 50, IncludeBodies: bodies})
 		})
 		mails, err := mailstate.Unread(ctx, inbox, role)
 		if err != nil || len(mails) == 0 {

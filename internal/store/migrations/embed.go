@@ -14,4 +14,4 @@ var FS embed.FS
 // LatestVersion is the highest schema version this binary knows how to apply.
 // Bump this whenever a new migration file lands. Open() refuses to run against
 // a database with PRAGMA user_version > LatestVersion (a loud schema drift error).
-const LatestVersion = 22
+const LatestVersion = 23

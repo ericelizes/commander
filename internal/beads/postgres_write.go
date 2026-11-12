@@ -96,6 +96,12 @@ func pgCheckPlanningScope(ctx context.Context, q store.Querier, pid int64, verb 
 			if e := check(pos[1]); e != nil {
 				return e
 			}
+			// A qualified edge mutates the source record only. Its foreign
+			// target is resolved and validated in pgQualifiedDep, not here
+			// against an unrelated local bead with the same spelling.
+			if f.has("--source-project") || f.has("--target-project") {
+				return nil
+			}
 			return check(pos[2])
 		}
 		return nil
@@ -202,27 +208,32 @@ func postgresRun(ctx context.Context, dir string, args []string) ([]byte, []byte
 		return nil, nil, e
 	}
 	e = s.WithTx(ctx, func(q store.Querier) error {
-		pid, e := projectID(ctx, q, dir)
-		if e != nil {
+		return pgWithCustody(ctx, q, dir, func() error {
+			pid, e := projectID(ctx, q, dir)
+			if e != nil {
+				return e
+			}
+			if _, e = q.ExecContext(ctx, `SELECT pg_advisory_xact_lock(?)`, pid); e != nil {
+				return e
+			}
+			if e = pgCheckPlanBasis(ctx, q, pid, [][]string{args}); e != nil {
+				return e
+			}
+			if e = pgCheckAutomaticGateResult(ctx, q, pid, dir); e != nil {
+				return e
+			}
+			out, e = pgWrite(ctx, q, pid, args)
 			return e
-		}
-		if _, e = q.ExecContext(ctx, `SELECT pg_advisory_xact_lock(?)`, pid); e != nil {
-			return e
-		}
-		if e = pgCheckPlanBasis(ctx, q, pid, [][]string{args}); e != nil {
-			return e
-		}
-		if e = pgCheckAutomaticGateResult(ctx, q, pid, dir); e != nil {
-			return e
-		}
-		out, e = pgWrite(ctx, q, pid, args)
-		return e
+		})
 	})
 	return out, nil, e
 }
 
 // Every operation, including its event trigger, runs in the caller's transaction.
 func pgWrite(ctx context.Context, q store.Querier, pid int64, args []string) ([]byte, error) {
+	if _, e := q.ExecContext(ctx, `SELECT pg_advisory_xact_lock(734031823)`); e != nil {
+		return nil, e
+	}
 	if e := checkPublicationOperation(ctx, pid, args); e != nil {
 		return nil, e
 	}
@@ -230,6 +241,10 @@ func pgWrite(ctx context.Context, q store.Querier, pid int64, args []string) ([]
 		return nil, errors.New("missing bead arguments")
 	}
 	if args[0] == "comments" {
+		// The place write door terminates flags before arbitrary report text.
+		if len(args) == 5 && args[1] == "add" && args[3] == "--" {
+			args = []string{args[0], args[1], args[2], args[4]}
+		}
 		if len(args) != 4 || args[1] != "add" {
 			return nil, errors.New("comments requires add, bead and text")
 		}
@@ -276,7 +291,9 @@ func pgWrite(ctx context.Context, q store.Querier, pid int64, args []string) ([]
 		_, e := q.ExecContext(ctx, `INSERT INTO bead_comments(project_id,bead_id,id,author,text,created_at,run_id,fact_kind,fact_definition,fact_value) VALUES(?,?,?,?,?,?,?,?,?,?::jsonb)`, pid, args[2], hex.EncodeToString(entropy[:]), author, args[3], time.Now().UTC().Format(time.RFC3339Nano), runID, factKind, factDefinition, factValue)
 		if e == nil && rid > 0 && strings.HasPrefix(strings.ToLower(strings.TrimSpace(args[3])), "final report") {
 			var ok bool
-			e = q.QueryRowContext(ctx, `SELECT commander_report_result(?,?,?,?,?)`, pid, args[2], rid, session, args[3]).Scan(&ok)
+			// A place still needs its run token for report retry, heartbeat and
+			// physical exit. EndPlaceRun publishes its result atomically with exit.
+			e = q.QueryRowContext(ctx, `SELECT CASE WHEN EXISTS(SELECT 1 FROM place_runs WHERE run_id=? AND state IN('offered','running')) THEN TRUE ELSE commander_report_result(?,?,?,?,?) END`, rid, pid, args[2], rid, session, args[3]).Scan(&ok)
 			if e == nil && !ok {
 				return nil, errors.New("final report belongs to a replaced run")
 			}
@@ -284,7 +301,7 @@ func pgWrite(ctx context.Context, q store.Querier, pid int64, args []string) ([]
 		return nil, e
 	}
 	verb := args[0]
-	pos, f, e := parsePGFlags(args[1:], "--title --description --acceptance --notes --status --priority --type --labels --add-label --remove-label --parent --assignee --reason --force --silent --no-inherit-labels --claim")
+	pos, f, e := parsePGFlags(args[1:], "--title --description --acceptance --notes --status --priority --type --labels --add-label --remove-label --parent --assignee --reason --force --silent --no-inherit-labels --claim --source-project --target-project")
 	if e != nil {
 		return nil, e
 	}
@@ -394,6 +411,16 @@ func pgWrite(ctx context.Context, q store.Querier, pid int64, args []string) ([]
 		if e := pgCheckCompletedStructure(ctx, q, pid, from); e != nil {
 			return nil, e
 		}
+		if f.has("--source-project") || f.has("--target-project") {
+			return pgQualifiedDep(ctx, q, pid, from, to, sub, kind, f)
+		}
+		var foreign bool
+		if e = q.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM bead_dependencies WHERE project_id=? AND issue_id=? AND depends_on_id=? AND target_project_id<>project_id)`, pid, from, to).Scan(&foreign); e != nil {
+			return nil, e
+		}
+		if foreign {
+			return nil, qualifiedFailure("endpoint", from, errors.New("qualified source requires explicit endpoint projects"))
+		}
 		if sub == "remove" || sub == "rm" {
 			if kind == "blocks" {
 				if e := pgCheckHumanUnlink(ctx, q, pid, from, to); e != nil {
@@ -419,6 +446,15 @@ func pgWrite(ctx context.Context, q store.Querier, pid int64, args []string) ([]
 		// links cannot jointly introduce a cycle.
 		if _, e = q.ExecContext(ctx, `SELECT pg_advisory_xact_lock(?)`, pid); e != nil {
 			return nil, e
+		}
+		v, err := loadQualifiedView(ctx, q, pid, false)
+		if err != nil {
+			return nil, err
+		}
+		if v != nil {
+			if err = qualifiedCycle(v.edges, qualifiedNode{pid, from}, qualifiedNode{pid, to}, kind, qualifiedGraphLimit); err != nil {
+				return nil, err
+			}
 		}
 		var cycle bool
 		e = q.QueryRowContext(ctx, `WITH RECURSIVE reachable(id) AS (SELECT ?::text UNION SELECT d.depends_on_id FROM bead_dependencies d JOIN reachable r ON d.issue_id=r.id WHERE d.project_id=? AND d.type=?) SELECT EXISTS(SELECT 1 FROM reachable WHERE id=?)`, to, pid, kind, from).Scan(&cycle)
@@ -580,74 +616,76 @@ func postgresApplyOps(ctx context.Context, dir string, ops [][]string) DoorRespo
 		return DoorResponse{Exit: 1, Error: err.Error(), Atomic: true}
 	}
 	e = s.WithTx(ctx, func(q store.Querier) error {
-		pid, e := projectID(ctx, q, dir)
-		if e != nil {
-			return e
-		}
-		if _, e = q.ExecContext(ctx, `SELECT pg_advisory_xact_lock(?)`, pid); e != nil {
-			return e
-		}
-		if record {
-			prior, err := readPlanReceipt(ctx, q, pid, envelope)
-			if err != nil {
-				return err
-			}
-			if prior != nil {
-				response = *prior
-				return nil
-			}
-		}
-		if e = pgCheckPlanBasis(ctx, q, pid, ops); e != nil {
-			return e
-		}
-		if e = pgCheckAutomaticGateResult(ctx, q, pid, dir); e != nil {
-			return e
-		}
-		if AutomaticGateUnchanged(ctx) {
-			response = DoorResponse{Atomic: true}
-			return nil
-		}
-		var err error
-		ctx, err = authorizeCoordinatedPlan(ctx, q, pid, ops)
-		if err != nil {
-			return err
-		}
-		aliases := map[string]string{}
-		writeCtx := context.WithValue(ctx, postgresReaderKey{}, q)
-		for _, op := range ops {
-			ref := ""
-			if record {
-				var err error
-				op, ref, err = resolvePlanOperation(op, aliases)
-				if err != nil {
-					return err
-				}
-				if validator, ok := ctx.Value(planValidatorKey{}).(PlanValidator); ok {
-					if err = validator(writeCtx, [][]string{op}); err != nil {
-						return err
-					}
-				}
-			}
-			out, e := pgWrite(writeCtx, q, pid, op)
+		return pgWithCustody(ctx, q, dir, func() error {
+			pid, e := projectID(ctx, q, dir)
 			if e != nil {
 				return e
 			}
-			if ref != "" {
-				aliases[ref] = strings.TrimSpace(string(out))
+			if _, e = q.ExecContext(ctx, `SELECT pg_advisory_xact_lock(?)`, pid); e != nil {
+				return e
 			}
-			if len(out) > 0 {
-				outputs = append(outputs, string(out))
+			if record {
+				prior, err := readPlanReceipt(ctx, q, pid, envelope)
+				if err != nil {
+					return err
+				}
+				if prior != nil {
+					response = *prior
+					return nil
+				}
 			}
-		}
-		response = DoorResponse{Stdout: strings.Join(outputs, "\n"), Applied: len(ops), Atomic: true}
-		if len(aliases) > 0 {
-			response.Created = aliases
-		}
-		if record {
-			response.PlanReceipt = envelope.Key
-			return savePlanReceipt(ctx, q, pid, envelope, response)
-		}
-		return nil
+			if e = pgCheckPlanBasis(ctx, q, pid, ops); e != nil {
+				return e
+			}
+			if e = pgCheckAutomaticGateResult(ctx, q, pid, dir); e != nil {
+				return e
+			}
+			if AutomaticGateUnchanged(ctx) {
+				response = DoorResponse{Atomic: true}
+				return nil
+			}
+			var err error
+			ctx, err = authorizeCoordinatedPlan(ctx, q, pid, ops)
+			if err != nil {
+				return err
+			}
+			aliases := map[string]string{}
+			writeCtx := context.WithValue(ctx, postgresReaderKey{}, q)
+			for _, op := range ops {
+				ref := ""
+				if record {
+					var err error
+					op, ref, err = resolvePlanOperation(op, aliases)
+					if err != nil {
+						return err
+					}
+					if validator, ok := ctx.Value(planValidatorKey{}).(PlanValidator); ok {
+						if err = validator(writeCtx, [][]string{op}); err != nil {
+							return err
+						}
+					}
+				}
+				out, e := pgWrite(writeCtx, q, pid, op)
+				if e != nil {
+					return e
+				}
+				if ref != "" {
+					aliases[ref] = strings.TrimSpace(string(out))
+				}
+				if len(out) > 0 {
+					outputs = append(outputs, string(out))
+				}
+			}
+			response = DoorResponse{Stdout: strings.Join(outputs, "\n"), Applied: len(ops), Atomic: true}
+			if len(aliases) > 0 {
+				response.Created = aliases
+			}
+			if record {
+				response.PlanReceipt = envelope.Key
+				return savePlanReceipt(ctx, q, pid, envelope, response)
+			}
+			return nil
+		})
 	})
 	if e != nil {
 		return DoorResponse{Exit: 1, Error: e.Error(), Atomic: true}

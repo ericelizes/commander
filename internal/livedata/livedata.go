@@ -124,6 +124,7 @@ type ObjectiveRow struct {
 	Viz                                                 int          // the bead's own viz:<n> label (0 = none); see EffectiveViz
 	Task                                                bool         // an Operator task bead (kind:task, not an objective, gate or track): agent-internal, not a step the user plans
 	KindTask                                            bool         // labelled kind:task at all (also with kind:objective, e.g. converted then --no-workstream): never a workstream row, as wsmgr refuses to register one
+	PlaceText                                           string
 	// Owns: a nested workstream with a Manager of its own (an open kind:workstream
 	// bead under another, in a project whose nested Managers are on); see beads.Owner.
 	Owns        bool
@@ -897,7 +898,30 @@ func projectObjectiveRows(ctx context.Context, bc beads.Client, project store.Pr
 		return out, partial
 	}
 	out = dropOrphans(out, closed)
-	attachFoldedOutcomes(out, objectiveBeads, details)
+	outcomeBeads := objectiveBeads
+	if beads.PostgresConfigured() {
+		var missing []string
+		seen := map[string]bool{}
+		for _, b := range objectiveBeads {
+			seen[b.ID] = true
+		}
+		for _, row := range out {
+			for _, id := range row.BlockedBy {
+				if !seen[id] {
+					seen[id] = true
+					missing = append(missing, id)
+				}
+			}
+		}
+		if len(missing) > 0 {
+			blockers, e := bc.List(ctx, project.Path, beads.ListOptions{Status: "all", IDs: missing})
+			if e != nil {
+				return nil, e
+			}
+			outcomeBeads = append(slices.Clone(objectiveBeads), blockers...)
+		}
+	}
+	attachFoldedOutcomes(out, outcomeBeads, details)
 	attachFoldedBlocks(out, objectiveBeads, details, reviewBlocks)
 	if len(out) == 0 && expectsRows(expected, closed, func(id string) string { return parentOf(details, id) }) {
 		return nil, errors.New("rows missing: open beads were listed but no rows were built")

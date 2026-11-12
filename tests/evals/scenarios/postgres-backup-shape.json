@@ -1,0 +1,6 @@
+{
+  "name": "PostgreSQL custom backup preserves strict shape attestation",
+  "test": "TestPostgresCustomDumpRestoreShape",
+  "steps": ["compose schema 5", "pg_dump --format=custom", "drop private schema", "pg_restore --exit-on-error", "OpenPostgres succeeds", "alter restored trigger operator", "OpenPostgres refuses shape mismatch"],
+  "wrong_operator": " AND "
+}

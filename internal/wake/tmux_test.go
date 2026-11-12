@@ -219,3 +219,38 @@ func TestPoll_RealShapedRunningOperatorKeepsItsMailForTheHook(t *testing.T) {
 		})
 	}
 }
+
+// placeRuns is a run row with no pane whose run is on a paired place.
+type placeRuns struct {
+	hostRuns
+	place bool
+}
+
+func (p placeRuns) ListAgentRunsByProject(context.Context, int64, string) ([]store.AgentRun, error) {
+	return []store.AgentRun{{ID: 9, ProjectID: 1, TaskBeadID: realTask, AgentName: realRole, Status: "running"}}, nil
+}
+
+func (p placeRuns) GetPlaceRun(_ context.Context, id int64) (*store.PlaceRun, error) {
+	if !p.place || id != 9 {
+		return nil, nil
+	}
+	return &store.PlaceRun{RunID: id, Place: "mac:laptop"}, nil
+}
+
+// Mail to an Operator running on the user's Mac never opens a local window
+// (that would start a second Operator on the task): it defers like a host
+// Operator's, and the Mac's mail hook reads it.
+func TestTmuxDeliverer_PlaceOperatorMailOpensNoWindow(t *testing.T) {
+	mr := &layout.MockRunner{}
+	d := &TmuxDeliverer{Projects: placeRuns{place: true}, Director: layout.NewDirectorWith(mr), Managers: &fakeManagers{}}
+	for _, role := range realRoles {
+		for _, deliver := range []func(context.Context, string, string) error{d.Deliver, d.DeliverStale} {
+			if err := deliver(context.Background(), role, "[mail] hi"); !errors.Is(err, ErrPlaceOperator) || !errors.Is(err, ErrHostOperator) {
+				t.Fatalf("%s: got %v, want ErrPlaceOperator", role, err)
+			}
+		}
+	}
+	if len(mr.Calls) != 0 {
+		t.Fatalf("place Operator delivery touched tmux: %v", mr.Calls)
+	}
+}

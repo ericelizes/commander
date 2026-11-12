@@ -174,12 +174,14 @@ func (r SpawnRequest) slug() string {
 
 // SpawnResult summarizes a successful spawn.
 type SpawnResult struct {
-	RunID        int64
-	SessionID    string // ses_-prefixed, captured from opencode bootstrap
-	ContainerID  string
-	AgentName    string // operator-<flat-branch>
-	WorktreePath string // <project>/.worktrees/<flat-branch>
-	SpawnTime    time.Time
+	RunID       int64
+	SessionID   string // ses_-prefixed, captured from opencode bootstrap
+	ContainerID string
+	AgentName   string // operator-<flat-branch>
+	// PlaceOfferSent: a run offered to a paired place reached its Mac now.
+	PlaceOfferSent bool
+	WorktreePath   string // <project>/.worktrees/<flat-branch>
+	SpawnTime      time.Time
 	// Runtime and Account are what a host Operator runs on; Moved says why
 	// that is not where it was headed (a usage limit), "" = it is.
 	Runtime, Account, Moved string

@@ -157,12 +157,15 @@ func (s *Store) ClaimNextExecution(ctx context.Context, agent string, capacity i
 		e = q.QueryRowContext(ctx, `SELECT b.project_id,b.id,b.title,b.description,b.acceptance_criteria,b.plan_revision,b.responsibility_epoch,commander_planning_owner(b.project_id,b.id),p.name,p.path,p.type,p.repo_path,p.status
    ,COALESCE(CASE WHEN b.resume_plan_revision=b.plan_revision THEN b.resume_run_id END,0) FROM bead_tasks b JOIN projects p ON p.id=b.project_id
    WHERE p.status='active' AND b.execution_ready AND b.execution_due_at<=? AND b.execution_attempts<5 AND b.status='open' AND b.deleted_at IS NULL AND b.result_run_id IS NULL
+   AND (? NOT LIKE 'place:%' OR (jsonb_exists(b.execution_capabilities,'mac')
+     AND EXISTS(SELECT 1 FROM places pl WHERE 'place:'||pl.name=? AND pl.kind='mac' AND pl.revoked_at IS NULL)
+     AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements_text(b.labels) lab WHERE lab LIKE 'run-on:%' AND lab <> 'run-on:'||substring(? from 7))))
    AND jsonb_exists(?::jsonb,p.type) AND b.execution_capabilities <@ ?::jsonb AND commander_execution_allowed(b.project_id,b.id)
    AND commander_execution_capacity_allowed(b.project_id,b.id,?,?,?)
    AND NOT EXISTS(SELECT 1 FROM agent_runs r WHERE r.id=b.active_run_id AND r.status='running')
    AND NOT EXISTS(SELECT 1 FROM bead_tasks child WHERE child.project_id=b.project_id AND child.parent_id=b.id AND child.status NOT IN('closed','deferred') AND child.deleted_at IS NULL)
    AND NOT EXISTS(SELECT 1 FROM execution_slots x WHERE x.project_id=b.project_id AND x.bead_id=b.id)
-   ORDER BY commander_execution_priority(b.project_id,b.id),b.priority,b.created_at,b.project_id,b.id LIMIT 1 FOR UPDATE OF b SKIP LOCKED`, now.Unix(), string(caps), string(caps), perWorkstream, now.Unix(), agent).Scan(&c.Project.ID, &c.BeadID, &c.Title, &c.Description, &c.Acceptance, &c.PlanRevision, &c.Epoch, &c.PlanningCommander, &c.Project.Name, &c.Project.Path, &c.Project.Type, &c.Project.RepoPath, &c.Project.Status, &c.ResumeRunID)
+   ORDER BY commander_execution_priority(b.project_id,b.id),b.priority,b.created_at,b.project_id,b.id LIMIT 1 FOR UPDATE OF b SKIP LOCKED`, now.Unix(), agent, agent, agent, string(caps), string(caps), perWorkstream, now.Unix(), agent).Scan(&c.Project.ID, &c.BeadID, &c.Title, &c.Description, &c.Acceptance, &c.PlanRevision, &c.Epoch, &c.PlanningCommander, &c.Project.Name, &c.Project.Path, &c.Project.Type, &c.Project.RepoPath, &c.Project.Status, &c.ResumeRunID)
 		if errors.Is(e, sql.ErrNoRows) {
 			return nil
 		}

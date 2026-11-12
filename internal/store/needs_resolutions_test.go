@@ -102,7 +102,10 @@ func TestResolveNeeds_MigrationPreservesLegacyReceipts(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Reconstruct the predecessor schema in this private fixture only.
-	_, err = st.DB().Exec(`DROP TABLE bead_ranks;
+	_, err = st.DB().Exec(`DROP TABLE place_comments;
+ DROP TABLE place_runs;
+ DROP TABLE places;
+ DROP TABLE bead_ranks;
  DROP TABLE manager_unregistrations;
  ALTER TABLE agent_runs DROP COLUMN worktree_path;
  ALTER TABLE pitches DROP COLUMN basis;

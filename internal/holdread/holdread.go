@@ -8,8 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"strings"
-	"time"
 
 	"github.com/example-user/commander/internal/beads"
 	"github.com/example-user/commander/internal/holding"
@@ -23,36 +21,7 @@ func Bead(b *beads.Bead, parent string, blockers []string) holding.Bead {
 }
 
 // Derive recomputes what Held reads from a bead's status and labels (after a simulated label edit).
-func Derive(hb *holding.Bead) {
-	state, owner := beads.StepState(hb.Status, hb.Labels)
-	hb.Gate = slices.Contains(hb.Labels, beads.GateLabel) || slices.Contains(hb.Labels, "kind:gate")
-	hb.NeedsUser = state == beads.StateNeedsUser
-	hb.HumanHold = slices.Contains(hb.Labels, "hold")
-	hb.Superseded = slices.Contains(hb.Labels, "superseded") || slices.Contains(hb.Labels, "retired")
-	hb.Owner, hb.Waits, hb.OperatorWaits, hb.Untyped, hb.Until = owner, 0, nil, "", false
-	now := time.Now()
-	for _, w := range beads.WaitsOf(hb.Labels) {
-		if w.Kind == beads.WaitUser {
-			hb.HumanHold = true
-		}
-		if !beads.WaitHolds(w, now) {
-			continue // an overdue handoff: the Manager's move, held by nothing
-		}
-		if w.Kind == beads.WaitOperator {
-			hb.OperatorWaits = append(hb.OperatorWaits, "operator-"+strings.TrimPrefix(w.Ref, "operator-"))
-			continue
-		}
-		hb.Waits++
-		if w.Untyped() && hb.Untyped == "" {
-			hb.Untyped = w.Ref
-		}
-	}
-	for _, l := range hb.Labels {
-		if strings.HasPrefix(l, "until:") {
-			hb.Until = true
-		}
-	}
-}
+func Derive(hb *holding.Bead) { beads.DeriveHolding(hb) }
 
 // Load reads id, its parent chain, everything under it and waiting on it (and under those), and
 // the status of its parent's other children and of every blocker: the closure a write to id can
@@ -65,6 +34,19 @@ func Derive(hb *holding.Bead) {
 // more than max fully read beads is not read on: ErrTooLarge, which the caller must not take as
 // "nothing left unheld".
 func Load(ctx context.Context, bc beads.Client, dir, id string, live func(string) (string, bool), max int) (*holding.Graph, error) {
+	var g *holding.Graph
+	err := beads.ReadCustodySnapshot(ctx, bc, dir, func(ctx context.Context) error {
+		var err error
+		g, err = load(ctx, bc, dir, id, live, max)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return g, nil
+}
+
+func load(ctx context.Context, bc beads.Client, dir, id string, live func(string) (string, bool), max int) (*holding.Graph, error) {
 	l := &loader{ctx: ctx, bc: bc, dir: dir, g: holding.NewGraph(live), max: max}
 	if err := l.full([]string{id}); err != nil {
 		return nil, err
@@ -190,6 +172,10 @@ func (l *loader) list(ids []string) (map[string]beads.Bead, error) {
 			continue
 		}
 		b, err := beads.FreshShow(l.ctx, l.bc, l.dir, x)
+		// Typed provenance failures must precede the legacy local absence exception.
+		if beads.IsCrossProjectError(err) {
+			return nil, err
+		}
 		if errors.Is(err, beads.ErrNotFound) || (err == nil && b == nil) {
 			continue
 		}

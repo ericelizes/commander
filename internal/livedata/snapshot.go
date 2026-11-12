@@ -265,6 +265,7 @@ type SnapStep struct {
 	Restarts             int                     `json:"restarts,omitempty"`    // automatic restarts cmdrd made of its Operator
 	Starred              bool                    `json:"starred,omitempty"`
 	Review               string                  `json:"review,omitempty"` // PR number while in review ("?" = unknown)
+	PlaceText            string                  `json:"place_text,omitempty"`
 	// ReviewFact is what GitHub says now about the reviews this step waits on,
 	// looked up live by cmdrd rather than recorded by an agent.
 	PRRepo      string           `json:"pr_repo,omitempty"`
@@ -582,7 +583,7 @@ func snapSteps(nodes []*StepNode, now string, live LiveAgent, stage bool) []Snap
 			ExecutionMode: o.ExecutionMode, ExecutionEligible: o.ExecutionEligible, ExecutionReady: o.ExecutionReady, ExecutionReserved: o.ExecutionReserved, ExecutionCapable: o.ExecutionCapable, ExecutionAttempts: o.ExecutionAttempts, ExecutionError: o.ExecutionError,
 			PlanningPending: o.PlanningPending, PlanningCommander: o.PlanningCommander, JurisdictionRevision: o.JurisdictionRevision,
 			WorkflowCheck: o.WorkflowCheck, BeadID: o.BeadID, Title: o.Title, State: o.State, Status: o.Status, Owner: o.Owner, OwnerState: o.OwnerState,
-			OwnerWhy: o.OwnerWhy, OwnerSince: o.OwnerSince, Restarts: o.Restarts,
+			OwnerWhy: o.OwnerWhy, OwnerSince: o.OwnerSince, Restarts: o.Restarts, PlaceText: o.PlaceText,
 			Starred: o.Starred, Review: o.Review, PR: o.PR, Tickets: o.Tickets, PRRepo: o.PRRepo, Ask: o.Ask, Note: o.Note, Decision: o.Decision, SpecHash: o.SpecHash, Basis: o.Basis, PushCount: o.PushCount, PushFirst: o.PushFirst,
 			Now: o.BeadID != "" && o.BeadID == now, BlockedBy: o.BlockedBy, Until: o.Until, Gate: o.Gate, Approvers: o.Approvers,
 			Superseded: o.Superseded, Lane: o.Lane, Criteria: o.Criteria, CloseReason: o.CloseReason, FinishedTasks: o.FinishedTasks, DoneBlockers: o.DoneBlockers, Waiting: beads.WaitsText(o.Waits), ParkedUntil: o.ParkedUntil, Gates: snapGates(o.Gates, o.GateIDs),
@@ -670,6 +671,9 @@ type Source struct {
 	Live func() (alive []string, at time.Time, ok bool)
 	// Reported lists runs that ended with a report whose settle has not landed (nil = none).
 	Reported func() []SnapReported
+	// Places lists the Operators running on a paired place (the user's Mac)
+	// and what cmdrd sees of each; nil = none.
+	Places func() []SnapPlace
 	// PitchAsked is when cmdrd mailed each NoPitch ask's Manager, by
 	// "project:bead" (nil: none).
 	PitchAsked func() map[string]int64
@@ -892,6 +896,10 @@ func (s *Source) build(ctx context.Context, data Data) Snapshot {
 				data.Objectives = MarkReported(data.Objectives, live.Reported, live.operators())
 			}
 			data.Operators = LiveRuns(data.Operators, live.operators())
+			if s.Places != nil {
+				live.Places = s.Places()
+				data.Objectives = MarkPlaceOwners(data.Objectives, live.Places)
+			}
 		}
 	}
 	snap := BuildSnapshot(data, s.unread)

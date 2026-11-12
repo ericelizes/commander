@@ -1633,6 +1633,85 @@ SELECT; an explicit matching string is required, never omission-as-empty.
 Unknown versions/partial records refuse; see `TestExactDescriptionNativeOmission`
 and eval `TestRestoreNativeDescriptionScenario`.
 
+## Operators on the user's Mac (places, read-only first slice)
+
+Design `docs/plans/2026-11-09-mac-operator.md`. A **place** is a paired device (`mac:<name>`, migration 0023: `places`,
+`place_runs`, `place_comments`; `internal/place`). The Mac pulls; cmdrd never runs anything there: it sends ids, a stop
+and a mail signal, the Mac's app decides what runs. **Pairing** is the user's: the app's App menu "Pair this Mac as a
+place…" creates an Ed25519 key (sealed with Electron safeStorage in `<userData>/place-device.key`), `POST /api/places/pair`
+(api token) returns a one-time code (10 min, `$COMMANDER_HOME/place-pairing/`), and `cmdr place pair <code> --name <slug>`
+in the user's own terminal records it; `cmdr place revoke|list`. Both verbs refuse any `COMMANDER_ROLE`/
+`COMMANDER_MANAGER_ROLE` (speed bump) and are not in `/api/cmd`. **Opt in:** `internal-set-objective --run-on mac:<name>|none`
+(Operators refused; unknown/revoked place refused); `run-on:` is a reserved label and the write door refuses an agent's
+`run-on:` naming a place that is not paired. **Spawn:** `internal-spawn-operator` on a `run-on:` step (`--place` must match)
+makes the task bead as usual, then `place.RecordOffer`: an `agent_runs` row (running, no pane, no container) plus
+`place_runs` offered; no worktree, tmux or launcher. Refused before the task: Codex, `--account`, `--writes-workflow`, a
+mismatched `--place`, no closed user gate over the step (`placeGateCovers`, no warn-only); at the offer: unpaired/revoked,
+a second active run on the place. The workstream cap counts it. **Channel** (`internal/api/places.go`):
+`GET /api/places/connect` (api token, `?token=` from the app's main): challenge, hello = device public key + signature over
+nonce and key + `cmdr place revision` (any other revision refused: "update cmdr on this Mac"), welcome names the place;
+then offer/stop/mail out, fetch/accept/decline in. Accept re-checks the brief's sha256 against the offer (an edited brief
+ends the run declined) and mints the **run token** (hash only in the store, dies with the run, 12h max). Run endpoints
+take only `X-Commander-Run-Token`, never the api token: `POST /api/places/runs/<id>/comment` (write door as the run's
+Operator role, idempotent by client id; `report:true` marks it reported), `mail` (to the run's Manager only), `GET mail`
+(the role's unread, read from am only when signalled, then marked read), `heartbeat` (refusals become one bead comment,
+usage events go to `chat/place-usage.jsonl`, `usage_limit` ends it stopped/usage_limit and sends stop), `exit`.
+Accept also re-reads the step's `run-on:` label and, for a prod-gate run, the gate (closed `kind:gate`, approver user,
+scope sha == the `scope_sha` the Mac's dialog showed), else the run ends declined (`stillAllowed`). Run comments go to bd
+as `comments add <bead> -- <text>` (a leading dash stays text).
+`POST /api/places/offer|stop` (api token) re-send a recorded offer / stop a run; `cmdr place revoke` stops through it
+(store end as fallback), a run swept as died is sent a stop, and the Mac stops its process group on a heartbeat 401
+(a dead token: revoked, died, expired); mail to a place Operator defers (`wake.ErrPlaceOperator`), never a local window; `internal-mail --interrupt` to a place
+run stops it (Operators refused). **Lifecycle** (`place.Service.Sweep`, cmdrd's minute loop): live within 2 min of a beat,
+unreachable 2-15 min (Manager mailed once, not Broken), died after 15 min (an offer nobody answered: declined); ended runs
+settle through `runSettler.settlePlace`: exited with a report = finished (Manager to close), anything else back to the
+Manager with `operator-died`, **never restarted**; no worktree to freeze. The quiet watch skips place runs. Board: snapshot
+`live.places[]`, step `place_text` = the row's why and the workflow step's text ("Operator working on mac:laptop",
+"Waiting for the user to start the run on mac:laptop", "Operator on mac:laptop unreachable 4 min"). **On the Mac**
+(`app/electron/place-runner.ts`, `place-main.ts`; macOS only, only once paired, `COMMANDER_PLACE_RUNNER=off` disables;
+needs `cmdr app install`): each offer is fetched, its brief hash checked, shown in a native dialog (Cancel default,
+10 min = Cancel), then the user's own claude starts from a fixed template (`buildLaunch`: `-p` bootstrap from bead fields,
+`--allowedTools Bash,Read,Grep,Glob,TodoWrite`, edit/web/Task tools disallowed, `--strict-mcp-config`, settings in
+`runs/<id>.launch/` with the guard before every tool and the mail hook, cwd `runs/<id>/` 0700, no API key or config-dir
+env, `cmdr place prompt` as the role prompt). One run at a time; heartbeats every 30s; stop, a usage limit or quitting
+(asked first) ends its process group: a run never outlives the app (if the app dies, heartbeats stop and cmdrd settles it).
+**Guard** `cmdr internal-operator-guard --role R --place read-only` (`operatorguard.ClassifyPlace[Tool]`), fails closed. It does not parse shell: `lexPlace` (`place_lex.go`) accepts only text bash/zsh can expand nothing in (plain chars and quotes; no braces, globs, `$`, backticks, escapes, `#`, parens, keywords, `~` other than a leading unquoted `~`/`~/`, unquoted here-doc end words, `<<<`, `&`), so its words are the shell's argv (`TestLexPlaceMatchesTheShell` diffs random lines against real bash, and zsh when installed); parent traversal (`..` path components) and `env` wrappers are refused before normalization/unwrapping; paths are resolved (tilde, joined to the run dir, cleaned, existing-prefix symlinks) before the dir check; a line naming `COMMANDER_PLACE_` is refused; curl/wget take an allow-list of read flags. Then:
+pure reads (Manager guard read lists, no network; no cd/pushd, export/unset or variable assignments, no `~name`,
+attached short-option paths judged, no `$` in text sent to the server; `cmdr place` verbs run bare and a report file
+must be in the run dir, whose `<runs>/<run id>` private shape the report verb also checks) or a CLI + read subcommand from the user's `~/.commander/place-policy.toml`
+(`read_dirs`, `[[cli]] name/read/production`; production only with `COMMANDER_PROD_GATE`), paths inside the run dir or a
+read_dir, writes only into the run dir; refused: installs, sudo, launchd, defaults, Keychain, SSH, interpreters/shells,
+claude/codex, osascript/open, writes, non-GET network, credential/browser/policy paths, edit/Task/web/MCP tools; refusals
+in `logs/place-refusals.jsonl`, sent with the next beat. A connection is bound to its pairing (device key + paired_at): every frame but ping, offers and mail signals re-read the place and a revoked or re-paired one is retired (`Conn.Gone`, the socket ends; the minute sweep retires them too); test `TestRevokedConnectionTakesNothingAfterARepair`. The run verbs send the token only to the URL the app pinned in `<runs>/<id>.launch/place-url` (0600; `pinnedPlaceURL`, test `TestPlaceRunVerbsTalkOnlyToTheRecordedServer`). **Mac verbs:** `cmdr place report --file <run dir file>|comment
+--text|mail --subject --body` and `cmdr internal-mail-hook --role R --place` use only the run env the app sets
+(`COMMANDER_PLACE_URL/TOKEN/RUN/DIR`). Not built yet: the live first slice (needs install + pairing by the user), a
+Settings > Places page, mail signals pushed over the channel (the hook asks at each tool call; cmdrd reads am only when
+signalled). Tests: `internal/store` `TestPlace*`/`TestInsertPlaceOffer*`, `internal/place` (all), `internal/api`
+`TestPlace*`/`TestDoorRefusesRunOn*`/`TestDoorComment*`, `cmd/cmdr` `TestPlace*`/`TestCheckRunOn`/`TestSpawnOperator_*Place*`/
+`TestStopPlaceRuns`, `internal/operatorguard` `TestClassifyPlace*`, `internal/daemon` `TestSettlePlace*`, `internal/livedata`
+`TestBoardPlaceOperator`, `app/electron/place-runner.test.ts`, eval `TestPlaceRunScenario` (`scenarios/place-run.json`,
+real cmdr binary, real API, fake Mac `internal/place/placetest`).
+The shared `applyDoor` also retains core intent custody and live-owner checks:
+`TestPlaceIntegrationDoorIntentCustody` covers refusal for an agent and the
+user's holder-first Manager receipt, response holders and pending board patches.
+
+In active PostgreSQL orchestration, the daemon discovers paired Macs every 15
+seconds and advertises one `place:mac:<name>` execution slot per device. These
+slots claim only ready beads requiring `mac`, retain the global/workstream caps,
+and respect an optional `run-on:` label. VM slots do not advertise `mac`.
+The worker binds its canonical claim into `RecordOffer`; no host process starts.
+An unlabeled Mac bead may use its bound place slot at acceptance; explicit
+place labels still must match. The existing Mac app dialog, Claude-only launch,
+read-only policy and per-run token remain required. Reports cross the write door
+with the recorded immutable run/session, and PostgreSQL reconciles the result
+and exit atomically. Missing reports create an inspection result; no exit closes
+the bead or automatically redispatches its ready intent. Canonical runs skip the
+legacy Manager settlement. Tests: `TestPostgresMacSlotAdmission`,
+`TestPostgresMacDiscovery`, and `TestPostgresMacExecutionScenario`
+(`tests/evals/scenarios/mac-execution.json`, private PostgreSQL, paired fake Mac,
+real guarded CLI, harmless simulated Operator and canonical bead result).
+This source path does not establish a real Mac install, pairing or release.
+
 ## Workstream Overview
 
 The default workstream/track view is Overview, with Workflow as a second tab.
@@ -2229,3 +2308,50 @@ incompatible placement, dependency cycles and newly unheld work; evidence failur
 refuse. No wrappers, Manager changes, gate/card/journal or run-provenance edits.
 See `docs/cli/ordinary-place.md` for limits and coverage (`TestOrdinaryPlace*`,
 private-handler eval `scenarios/ordinary-place.json`).
+Cross-project custody source boundary: CLI closure and HTTP intent planning refuse
+`beads.CrossProjectError` while preserving local-read fail-open behavior. Optional
+`CustodySnapshotReader` binds closure reads and receipt locality checks to one
+snapshot; foreign receipts refuse before comments or writes. This is prerequisite
+source boundary; the composed PG adapter supports qualified dependencies. See
+[the boundary and remaining coordinated work](docs/architecture/cross-project-custody-boundary.md).
+Tests: `TestCrossProjectCustodyCLI`, `TestCrossProjectCustodyForeignReceipt`,
+private HTTP eval `TestCrossProjectCustodyScenario`
+(`scenarios/cross-project-custody-boundary.json`).
+
+Qualified PostgreSQL dependency SOURCE CANDIDATE: see
+[qualified lifecycle](docs/architecture/qualified-postgres-lifecycle.md).
+Canonical runtime migrations 1–3 remain unchanged. Additive migration 4 retains
+reserved Mac places SQL (158f0064); 5 adds qualified graphs. Canonical 0–5
+converge under one transaction; historical b6a345cb 2/3 refuse by lineage/shape.
+See docs/architecture/mac-runtime-composition.md.
+No live apply/install/ship is authorized by source tests. Explicit `internal-dep --project SOURCE --target-project TARGET`
+passes expected endpoints to the transaction; ID-only clients remain unchanged.
+Native coverage is `TestPostgresQualified*` in beads/store/livedata/cmdr and
+`tests/evals/scenarios/qualified-postgres-lifecycle.json`. Foreign custody release
+rolls back without foreign receipts, including writes lacking Intent.
+Scoped review bootstrap: `workflow own-run --project P --project-dir ROOT --task T`
+verifies immutable launcher identity against the current PostgreSQL active claim,
+returning only the own run; read-only connections, no schema initialization or legacy
+fallback. `review-exec --context-file FILE` (repeatable) preserves independent context
+hashes; `--private-git` redirects transient objects into sealed run scratch without
+changing sandbox permissions. Finite controller acceptance remains INCOMPLETE/source
+not assessed. See [docs/cli/scoped-review-bootstrap.md](docs/cli/scoped-review-bootstrap.md).
+Explicit gate cancellation: `internal-gate withdraw --project P --bead G
+--expected-state open --generation N --reason R --instruction CITATION --dry-run`
+returns `expected_snapshot`; repeat without dry-run and with
+`--expected-snapshot HASH`. Owning Manager/Commander/user only. Intent-before-write
+exact retries retain scope/pitches/journal, defer with distinct `withdrawn`, and
+remove only the active ask. Every nonclosed incoming waiter/child (parked and
+superseded included), execution holder, answered/approved gate and stale snapshot
+refuses. Withdrawn never grants workflow/production approval, including after a
+later close. Fresh checks are not backend CAS. See `docs/cli/gate-withdrawal.md`;
+`TestGateWithdraw*`, private-handler `TestGateWithdrawalScenario`
+(`scenarios/gate-withdrawal.json`).
+
+Populated PostgreSQL upgrades to schema 5 drain deferred constraint events before
+qualified-custody DDL and check its dependency backfill immediately within the
+same locked transaction. Shipped migration SQL remains frozen. Lineage attestation
+also refuses extra columns, constraints and triggers on managed tables while
+allowing unrelated tables. `postgres_populated_upgrade_test.go` covers populated
+schema 3→5, preserved custody/progress and these addition boundaries; its mutation
+matrix lives in `tests/evals/scenarios/postgres-migration/populated-upgrade.json`.

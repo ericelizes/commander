@@ -41,6 +41,10 @@ func OpenOwnRunReader(ctx context.Context, statePath string) (*Store, error) {
 		db.Close()
 		return nil, errors.New("own-run requires available supported PostgreSQL schema; no initialization or fallback")
 	}
+	if err = validatePostgresLineage(ctx, db, version); err != nil {
+		db.Close()
+		return nil, errors.New("own-run PostgreSQL schema shape unsupported; explicit recovery required")
+	}
 	return &Store{db: db, postgres: true}, nil
 }
 

@@ -18,6 +18,41 @@ type SnapLive struct {
 	Operators []string `json:"operators"` // live Operators, by owner-label name
 	// Reported are runs that ended with a final report and whose settle has not landed.
 	Reported []SnapReported `json:"reported,omitempty"`
+	// Places are the Operators on a paired place (the user's Mac), judged by
+	// heartbeats, not tmux.
+	Places []SnapPlace `json:"places,omitempty"`
+}
+
+// SnapPlace is one Operator run on a paired place.
+type SnapPlace struct {
+	Operator string `json:"operator"` // by owner-label name
+	Place    string `json:"place"`    // mac:<name>
+	State    string `json:"state"`    // offered | live | unreachable | died
+	Text     string `json:"text"`     // what the board says: "Operator working on mac:laptop", "Operator on mac:laptop unreachable 4 min"
+}
+
+// MarkPlaceOwners gives each open step a place Operator holds the words cmdrd
+// has for that run. An unreachable run is not Broken: it is still the
+// Operator's until cmdrd settles it.
+func MarkPlaceOwners(rows []ObjectiveRow, places []SnapPlace) []ObjectiveRow {
+	if len(places) == 0 {
+		return rows
+	}
+	by := make(map[string]SnapPlace, len(places))
+	for _, p := range places {
+		by[beads.OwnerLabelName(p.Operator)] = p
+	}
+	rows = slices.Clone(rows)
+	for i := range rows {
+		r := &rows[i]
+		if r.Status == "closed" || r.Status == beads.StatusDeferred || !strings.HasPrefix(r.Owner, "operator-") {
+			continue
+		}
+		if p, ok := by[beads.OwnerLabelName(r.Owner)]; ok {
+			r.PlaceText = p.Text
+		}
+	}
+	return rows
 }
 
 // SnapReported is one Operator run that ended on its own with a final report,

@@ -135,7 +135,8 @@ func realDir(d string) string {
 func runInternalDep(args []string, stdout, stderr *os.File) int {
 	fs := flag.NewFlagSet("internal-dep", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	projectName := fs.String("project", "", "project slug")
+	projectName := fs.String("project", "", "expected source project slug")
+	targetName := fs.String("target-project", "", "expected registered target project slug (PostgreSQL only)")
 	if err := fs.Parse(args); err != nil {
 		emitErr(stderr, fmt.Sprintf("parse flags: %v", err))
 		return 1
@@ -153,14 +154,31 @@ func runInternalDep(args []string, stdout, stderr *os.File) int {
 	ctx, cancel := context.WithTimeout(context.Background(), beadWriteTimeout)
 	defer cancel()
 	bc := newBeadsClientFn()
-	for _, id := range rest[1:] {
-		if err := checkNotGateEdge(ctx, bc, project.Path, id, "internal-dep "+rest[0], rest[0] == "rm"); err != nil {
+	targetDir := project.Path
+	if *targetName != "" {
+		if !beads.PostgresConfigured() {
+			emitErr(stderr, "qualified dependencies require PostgreSQL")
+			return 1
+		}
+		target, err := resolveProject(*targetName)
+		if err != nil {
+			emitErr(stderr, err.Error())
+			return 1
+		}
+		targetDir = target.Path
+	}
+	for i, id := range rest[1:] {
+		checkDir := project.Path
+		if i == 1 {
+			checkDir = targetDir
+		}
+		if err := checkNotGateEdge(ctx, bc, checkDir, id, "internal-dep "+rest[0], rest[0] == "rm"); err != nil {
 			emitErr(stderr, err.Error())
 			return 1
 		}
 	}
 	if rest[0] == "add" {
-		if rest[1] == rest[2] || dependsOn(ctx, bc, project.Path, rest[2], rest[1]) {
+		if rest[1] == rest[2] || dependsOn(ctx, bc, targetDir, rest[2], rest[1]) {
 			emitErr(stderr, fmt.Sprintf("%s cannot wait on %s: %s already waits on %s (or they are the same bead), so the edge would be a cycle and neither could ever start", rest[1], rest[2], rest[2], rest[1]))
 			return 1
 		}
@@ -188,19 +206,31 @@ func runInternalDep(args []string, stdout, stderr *os.File) int {
 			emitErr(stderr, err.Error()+"; nothing was removed")
 			return 1
 		}
-		if err := newBeadsClientFn().RemoveDep(ctx, project.Path, rest[1], rest[2]); err != nil {
+		if err := writeDependency(ctx, bc, project.Path, targetDir, *targetName != "", rest[0], rest[1], rest[2]); err != nil {
 			emitErr(stderr, err.Error())
 			return 1
 		}
 		fmt.Fprintf(stdout, "%s no longer waits on %s\n", rest[1], rest[2])
 		return 0
 	}
-	if err := newBeadsClientFn().DependOn(ctx, project.Path, rest[1], rest[2]); err != nil {
+	if err := writeDependency(ctx, bc, project.Path, targetDir, *targetName != "", rest[0], rest[1], rest[2]); err != nil {
 		emitErr(stderr, err.Error())
 		return 1
 	}
 	fmt.Fprintf(stdout, "%s now waits on %s\n", rest[1], rest[2])
 	return 0
+}
+
+// writeDependency keeps legacy Client identities unchanged; only the explicit
+// qualified command carries expected project paths to the guarded PG writer.
+func writeDependency(ctx context.Context, bc beads.Client, source, target string, qualified bool, op, from, to string) error {
+	if qualified {
+		return beads.QualifiedDependency(ctx, source, target, op, from, to)
+	}
+	if op == "rm" {
+		return bc.RemoveDep(ctx, source, from, to)
+	}
+	return bc.DependOn(ctx, source, from, to)
 }
 
 // runInternalPhase sets a Task's commander phase (`bd set-state <id> cmdr=<phase>`).
@@ -304,6 +334,7 @@ var reservedLabelPrefixes = []struct{ prefix, verb string }{
 	{"owner:", "cmdr internal-set-objective --owner"},
 	{"proposed:", "cmdr proposals accept|overrule (Commander)"},
 	{"prod-gate:", "cmdr internal-spawn-operator --prod-gate"},
+	{"run-on:", "cmdr internal-set-objective --run-on"},
 	{"auto-respawn:", "cmdrd"},
 	{"crash-respawn:", "cmdrd"},
 	{"operator-died", "cmdrd"},

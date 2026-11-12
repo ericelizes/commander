@@ -1,0 +1,21 @@
+{
+  "name": "Populated canonical runtime upgrades and managed shape boundaries",
+  "tests": [
+    "TestPostgresPopulatedSchemaThreeToFive",
+    "TestPostgresManagedTableAdditionsRefused",
+    "TestPostgresUnrelatedObjectsAllowed"
+  ],
+  "steps": [
+    "construct shipped schema 3",
+    "populate tasks, dependency and live run claim",
+    "OpenPostgres upgrades atomically to schema 5",
+    "verify dependency target backfill and retained claim/progress",
+    "reject extra managed columns, constraints and triggers",
+    "allow unrelated extra objects"
+  ],
+  "managed_additions": {
+    "column": "ALTER TABLE execution_slots ADD COLUMN x text",
+    "constraint": "ALTER TABLE execution_slots ADD CONSTRAINT extra_check CHECK (true)",
+    "trigger": "CREATE TRIGGER extra_trigger AFTER INSERT ON execution_slots FOR EACH ROW EXECUTE FUNCTION commander_state_event()"
+  }
+}

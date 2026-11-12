@@ -1131,6 +1131,8 @@ func (b board) managerState(ws SnapWorkstream, agent SnapAgent, live line) line 
 		}
 		if held != nil {
 			l.why = held.why()
+		} else if len(steps) > 0 && steps[0].PlaceText != "" {
+			l.why = steps[0].PlaceText // on the user's Mac: live, waiting for the dialog, or unreachable
 		}
 		return l
 	}

@@ -28,6 +28,9 @@ var expectedTables = []string{
 	"objective_tasks",
 	"objectives",
 	"pitches",
+	"place_comments",
+	"place_runs",
+	"places",
 	"projects",
 	"tui_state",
 	"usage_scan",
@@ -92,8 +95,8 @@ func TestOpen_SetsUserVersionToLatest(t *testing.T) {
 	if err := s.DB().QueryRow("PRAGMA user_version").Scan(&v); err != nil {
 		t.Fatalf("PRAGMA user_version: %v", err)
 	}
-	if v != 22 {
-		t.Errorf("user_version: got %d, want 22", v)
+	if v != 23 {
+		t.Errorf("user_version: got %d, want 23", v)
 	}
 }
 
