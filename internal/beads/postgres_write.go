@@ -431,7 +431,7 @@ func pgWrite(ctx context.Context, q store.Querier, pid int64, args []string) ([]
 		_, e = q.ExecContext(ctx, `INSERT INTO bead_dependencies(project_id,issue_id,depends_on_id,type) VALUES(?,?,?,?) ON CONFLICT DO NOTHING`, pid, from, to, kind)
 		return nil, e
 	}
-	if verb == "update" && f.has("--parent") {
+	if verb == "update" || verb == "close" || verb == "set-state" || verb == "label" {
 		if _, e = q.ExecContext(ctx, `SELECT pg_advisory_xact_lock(?)`, pid); e != nil {
 			return nil, e
 		}
