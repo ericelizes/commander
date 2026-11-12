@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -92,6 +93,27 @@ func TestPromptNamesTheReaderAsYou(t *testing.T) {
 	}
 	if got := (&Describer{}).prompt("none"); got != promptFor("none") {
 		t.Fatal("no name, no extra sentence")
+	}
+}
+
+func TestWrittenLinesSurviveARestart(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "status-lines.json")
+	answer := func(_ context.Context, _, _, _ string, out any) error {
+		raw, _ := json.Marshal(map[string]string{"description": "merge the dashboard?", "signal": "none"})
+		return json.Unmarshal(raw, out)
+	}
+	d := &Describer{CachePath: path, Call: answer}
+	d.Describe("p:ws", "user", "decision", "Needs you:", "facts v1")
+	job, _ := d.next()
+	if !d.write(context.Background(), job) {
+		t.Fatal("not written")
+	}
+	restarted := &Describer{CachePath: path, Call: answer}
+	if text, _, ok := restarted.Describe("p:ws", "user", "decision", "Needs you:", "facts v2"); !ok || text != "Merge the dashboard?" {
+		t.Fatalf("after a restart: %q %v", text, ok)
+	}
+	if _, _, ok := restarted.Describe("p:ws", "agent", "executing", "Working:", "facts v3"); ok {
+		t.Fatal("a kept line was shown for another state")
 	}
 }
 

@@ -526,7 +526,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 			worker := &statusclassify.Worker{Store: d.store, Engine: d.chat, Home: d.home}
 			go worker.Run(ctx)
 			if d.live != nil && d.orchestrationMode == "active" {
-				describer := &statusclassify.Describer{Worker: worker, UserName: config.UserName(d.cfg), OnReady: func() { d.store.NotifyStateChanged(context.Background()) }}
+				describer := &statusclassify.Describer{Worker: worker, UserName: config.UserName(d.cfg), CachePath: filepath.Join(d.home, "status-lines.json"), OnReady: func() { d.store.NotifyStateChanged(context.Background()) }}
 				d.live.Describe = describer.Describe
 				go describer.Run(ctx)
 			}

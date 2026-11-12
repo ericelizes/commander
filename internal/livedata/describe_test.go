@@ -78,6 +78,14 @@ func TestFactsSayABlockedLineWaitsInsteadOfWorking(t *testing.T) {
 	}
 }
 
+func TestPlaceholderForABlockedLineSaysItWaits(t *testing.T) {
+	row := nextactor.Row{Lead: nextactor.Result{Actor: nextactor.Agent, Reason: "blocked:executing", Via: []string{"Merge and install the batch"}}}
+	notReady := func(key, actor, reason, opener, facts string) (string, string, bool) { return "", "", false }
+	if got := describeRow(notReady, "p:t", row, "facts", "After “Merge and install the batch”: working on “Merge and install the batch”"); got != "Waiting for “Merge and install the batch”" {
+		t.Fatalf("%q", got)
+	}
+}
+
 func TestPlaceholderHasNoLabel(t *testing.T) {
 	if got := placeholder("Needs you: merge it? (blocking “Middle step”)"); got != "Merge it?" {
 		t.Fatalf("%q", got)
