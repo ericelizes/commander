@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"log"
 	"strings"
 	"sync"
@@ -29,6 +30,9 @@ type Describer struct {
 	mu      sync.Mutex
 	done    map[string]described
 	tried   map[string]time.Time // last failed attempt per row: the retry floor
+	calls   int                  // Describe calls since the last summary
+	written int                  // descriptions written since the last summary
+	failed  int                  // failed attempts since the last summary
 	pending map[string]describeJob
 	wake    chan struct{}
 }
@@ -59,10 +63,15 @@ func (d *Describer) Describe(key, actor, reason, opener, facts string) (text, si
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.init()
+	d.calls++
 	got, have := d.done[key]
 	if have && got.hash == hash {
 		return got.text, got.signal, true
 	}
+	if _, queued := d.pending[key]; !queued && (!have || got.state != state) {
+		log.Printf("status describer: queued %s (%s/%s)", key, actor, reason)
+	}
+	d.calls++
 	d.pending[key] = describeJob{key: key, actor: actor, reason: reason, opener: opener, facts: facts, hash: hash}
 	if d.wake != nil {
 		select {
@@ -86,6 +95,8 @@ func (d *Describer) Run(ctx context.Context) {
 	}
 	t := time.NewTicker(10 * time.Second)
 	defer t.Stop()
+	summary := time.NewTicker(10 * time.Minute)
+	defer summary.Stop()
 	for ctx.Err() == nil {
 		for {
 			job, ok := d.next()
@@ -101,6 +112,11 @@ func (d *Describer) Run(ctx context.Context) {
 			return
 		case <-d.wake:
 		case <-t.C:
+		case <-summary.C:
+			d.mu.Lock()
+			log.Printf("status describer: last 10 min: %d lookups, %d written, %d failed; %d rows described, %d pending", d.calls, d.written, d.failed, len(d.done), len(d.pending))
+			d.calls, d.written, d.failed = 0, 0, 0
+			d.mu.Unlock()
 		}
 	}
 }
@@ -146,11 +162,14 @@ func (d *Describer) write(ctx context.Context, job describeJob) bool {
 			d.pending[job.key] = job // retry after the floor
 		}
 		d.tried[job.key] = d.now()
+		d.failed++
 		d.mu.Unlock()
+		log.Printf("status describer: %s not written: %v", job.key, e)
 		return false
 	}
 	text, ok := finishDescription(job.opener, answer.Description)
 	if !ok {
+		log.Printf("status describer: %s returned an empty description", job.key)
 		return false
 	}
 	signal := answer.Signal
@@ -159,6 +178,7 @@ func (d *Describer) write(ctx context.Context, job describeJob) bool {
 	}
 	d.mu.Lock()
 	d.done[job.key] = described{hash: job.hash, state: job.actor + "|" + job.reason + "|" + job.opener, text: text, signal: signal, at: d.now()}
+	d.written++
 	d.mu.Unlock()
 	return true
 }
@@ -166,14 +186,26 @@ func (d *Describer) write(ctx context.Context, job describeJob) bool {
 // ask runs one description on the first account with budget, like a classification.
 func (d *Describer) ask(ctx context.Context, key, instruction, input string, out any) error {
 	w := d.Worker
-	for _, account := range w.candidates() {
+	candidates := w.candidates()
+	if len(candidates) == 0 {
+		return errors.New("no connected small-model account (all signed out, out of usage or cooling down)")
+	}
+	var reasons []string
+	for _, account := range candidates {
 		model := "gpt-6-luna"
 		if account.Runtime == "claude" {
 			model = "haiku"
 		}
-		reserve := key + ":" + account.Runtime + ":" + account.Name
+		// Reservation keys are unique per row: one per attempt, so a row whose
+		// facts come back (a restart, a state flipping back) is never refused.
+		reserve := fmt.Sprintf("%s:%s:%s:%d", key, account.Runtime, account.Name, time.Now().UnixNano())
 		allowed, e := w.Store.ReserveClassification(ctx, reserve, account.Runtime, account.Name, model, w.monthlyTokens())
-		if e != nil || !allowed {
+		if e != nil {
+			reasons = append(reasons, account.Runtime+":"+account.Name+" reservation failed: "+e.Error())
+			continue
+		}
+		if !allowed {
+			reasons = append(reasons, account.Runtime+":"+account.Name+" over the monthly budget")
 			continue
 		}
 		rctx, cancel := context.WithTimeout(ctx, 45*time.Second)
@@ -194,9 +226,9 @@ func (d *Describer) ask(ctx context.Context, key, instruction, input string, out
 		}
 		w.cooldown[account.Runtime+":"+account.Name] = time.Now().Add(5 * time.Minute)
 		w.mu.Unlock()
-		log.Printf("status describer: %s account unavailable; trying another", account.Runtime)
+		reasons = append(reasons, account.Runtime+":"+account.Name+" failed: "+e.Error())
 	}
-	return errors.New("no small-model account available")
+	return errors.New(strings.Join(reasons, "; "))
 }
 
 var describeSchema = map[string]any{"type": "object", "properties": map[string]any{

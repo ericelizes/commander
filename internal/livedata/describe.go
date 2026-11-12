@@ -18,6 +18,9 @@ type DescribeFunc func(key, actor, reason, opener, facts string) (text, signal s
 // description for its current state and facts, when one is ready.
 func applyDescriptions(describe DescribeFunc, snap *Snapshot, d *Display) {
 	if describe == nil || snap.OrchestrationMode != "active" {
+		describeSkipped.Do(func() {
+			log.Printf("livedata: descriptions skipped (describer wired: %v, mode: %q)", describe != nil, snap.OrchestrationMode)
+		})
 		return
 	}
 	byKey := map[string]*SnapWorkstream{}
@@ -186,6 +189,8 @@ func findWorkstreamStep(snap Snapshot, id string) (SnapStep, bool) {
 
 // disagreements: rows the rules call working while the classifier reads the
 // agents' activity as blocked or waiting for review. Logged once an hour each.
+var describeSkipped sync.Once
+
 var disagreements = struct {
 	sync.Mutex
 	at map[string]time.Time
