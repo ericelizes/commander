@@ -937,7 +937,7 @@ func (d *Daemon) startAPI(ctx context.Context) {
 func (d *Daemon) apiOptions(token string) api.Options {
 	src := d.live
 	lin := linearsync.New(linearsync.Options{Home: d.home})
-	return api.Options{Token: token, Source: withBoards(d.home, src.Snapshot, &sprintFeed{lin: lin}), Linear: lin, Run: api.ExecRunner(cmdrPath()), AppDir: appDir(), AppDevURL: appDevURL(), Tabs: &api.Tabs{Store: d.store}, Pitches: d.store, LiveData: src.Last, Interval: time.Second, Chat: d.chat, ShotsDir: filepath.Join(d.home, "shots"), ConfigPath: filepath.Join(d.home, "config.toml"), MailToRole: mailUserToRole, WaitingMail: livedata.NewUnreadListFunc(d.store), UsageByAgent: d.store.UsageByAgent, Update: d.newUpdater(), LiveOwner: d.liveOwner}
+	return api.Options{Token: token, Source: withBoards(d.home, src.Snapshot, &sprintFeed{lin: lin}), Linear: lin, Run: api.ExecRunner(cmdrPath()), AppDir: appDir(), AppDevURL: appDevURL(), Tabs: &api.Tabs{Store: d.store}, Pitches: d.store, LiveData: src.Last, FinishBoard: src.FinishBoard, Interval: time.Second, Chat: d.chat, ShotsDir: filepath.Join(d.home, "shots"), ConfigPath: filepath.Join(d.home, "config.toml"), MailToRole: mailUserToRole, WaitingMail: livedata.NewUnreadListFunc(d.store), UsageByAgent: d.store.UsageByAgent, Update: d.newUpdater(), LiveOwner: d.liveOwner}
 }
 
 // appDir is the built app renderer the API serves at /app/:
