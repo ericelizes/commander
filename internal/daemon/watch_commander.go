@@ -148,7 +148,7 @@ func (w opWatch) commanderPass(ctx context.Context, now time.Time, checkins map[
 	snap, ok := w.latest()
 	if snap.Degraded != nil {
 		// The snapshot is stale or empty: a check-in built on it would lie.
-		w.degraded.raise(ctx, "cannot read state: "+snap.Degraded.Reason)
+		w.degraded.readFailure(ctx, snap.Degraded.Reason, snap.Degraded.Timeout)
 		return
 	}
 	if !ok {
