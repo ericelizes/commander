@@ -174,6 +174,14 @@ func TestClosingGateAsksOnlyWithItsCard(t *testing.T) {
 	if r := Decide(gate, ctx); r.Actor != Done || r.Text != "Complete" {
 		t.Fatalf("closing gate once the rest is finished: %+v", r)
 	}
+	gate.NeedsUser, gate.UserAsk = true, "Is it done?"
+	if r := Decide(gate, ctx); r.Actor != User || r.Text != "Needs you: Is it done?" {
+		t.Fatalf("an open confirmation card became Complete: %+v", r)
+	}
+	gate.ReadyToClose = false
+	if r := Decide(gate, ctx); r.Actor != User {
+		t.Fatalf("an explicit card was hidden by closing-gate classification: %+v", r)
+	}
 	if row := Rollup([]Result{{Actor: Done, Reason: "ready_to_close"}, {Actor: Agent, Reason: "executing", Who: "a"}}); row.Lead.Actor != Agent {
 		t.Fatalf("open work leads over Complete: %+v", row)
 	}

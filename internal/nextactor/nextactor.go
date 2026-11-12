@@ -234,12 +234,13 @@ func own(b Bead, ctx Context) Result {
 			text += ": " + b.HoldReason
 		}
 		return Result{Actor: None, Reason: "paused", Text: text}
+	// An open card is still a user move, including the final confirmation.
+	case b.NeedsUser:
+		return Result{Actor: User, Reason: "decision", Text: "Needs you: " + firstNonEmpty(b.UserAsk, b.Title)}
 	case b.ClosingGate && b.ReadyToClose:
 		return Result{Actor: Done, Reason: "ready_to_close", Text: "Complete"}
 	case b.ClosingGate:
 		return Result{Actor: None, Reason: "closing", Text: "Complete once the rest is finished"}
-	case b.NeedsUser:
-		return Result{Actor: User, Reason: "decision", Text: "Needs you: " + firstNonEmpty(b.UserAsk, b.Title)}
 	case b.PendingQuestions > 0 || b.QuestionWaiting:
 		return commanderOwed(b, ctx, "answer_question", "answer an agent's question", 0)
 	case b.LaunchFailed:
