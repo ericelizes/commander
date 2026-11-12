@@ -541,6 +541,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 				d.live.Describe = describer.Describe
 				go describer.Run(ctx)
 				go d.runClosingSweep(ctx)
+				go d.runPRLinker(ctx)
 			}
 		}
 		go chat.RunCaptureSweep(ctx, d.home, time.Hour)
