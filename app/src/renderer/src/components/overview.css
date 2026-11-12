@@ -158,3 +158,10 @@
   .ov h1 { font-size: 28px; }
   .ov-summary { font-size: 18px; }
 }
+
+/* Refreshing summary: the recap shown is being rewritten from newer evidence. */
+.ov-refreshing {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
