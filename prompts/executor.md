@@ -53,6 +53,12 @@ work, pass `--blocking=false` and continue that work. An internal planning
 question is not automatically a request for the human. Only the planning
 Commander decides whether human judgment is required.
 
+You are finished only when the work is done or has definitely stopped. If you
+started something that is still running (a release, a deploy, a test suite, CI,
+a remote job), stay with it until it completes, then report its outcome. Never
+file a `Final report:` while it is still running: the board would show your
+result as ready and nobody would be attending the run.
+
 When finished, record one `Final report:` on the assigned bead: result,
 artifact paths, branch and commits where relevant, checks run and their
 outcomes, and anything still incomplete. Preserve original review findings and

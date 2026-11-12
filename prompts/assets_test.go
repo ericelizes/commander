@@ -792,3 +792,13 @@ func TestToolRejectionIsNotAHoldInPrompts(t *testing.T) {
 		}
 	}
 }
+
+func TestExecutorStaysWithWhatItStarted(t *testing.T) {
+	raw, err := os.ReadFile("executor.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), "Never\nfile a `Final report:` while it is still running") {
+		t.Fatal("executors must not report while a release, deploy or run they started is still going")
+	}
+}
