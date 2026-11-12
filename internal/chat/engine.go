@@ -1405,7 +1405,10 @@ func (e *Engine) InterruptForMail(ctx context.Context, role, by string) error {
 	}
 	fellBack, err := e.interrupt(ctx, role, func(c *chatRole, p *process) {
 		c.mu.Lock()
-		p.stopping, p.noteStop = true, true
+		// An explicit Stop wins even when this timeout was already waiting.
+		if c.proc == p && c.meta.Running {
+			p.stopping, p.noteStop = true, true
+		}
 		c.mu.Unlock()
 	})
 	if err != nil {
@@ -1652,12 +1655,20 @@ func sessionSuggestions(raw json.RawMessage) json.RawMessage {
 
 // Stop ends role's process and keeps it stopped (cmdrd will not resume it).
 func (e *Engine) Stop(ctx context.Context, role string) error {
-	c, p, err := e.live(role)
+	c, err := e.chat(role)
 	if err != nil {
 		return err
 	}
 	c.mu.Lock()
+	p := c.proc
+	if p == nil {
+		c.mu.Unlock()
+		return ErrNotRunning
+	}
+	// A mail timeout may already have armed an expected-exit restart.
+	// Cancel it under the same lock used by the timeout to arm it.
 	c.meta.Running = false
+	p.noteStop = false
 	_ = writeMeta(e.logDir(), c.role, c.meta)
 	c.mu.Unlock()
 	return e.stopProcess(ctx, c, p)
