@@ -5,6 +5,7 @@ import { useSmoothText } from '../../../features/chat/thread/streaming'
 import { useStore } from '../store'
 import { askKey, findTrack, openNested, plainTitle } from '../viewmodel'
 import { diagramFor } from './DerivedDiagram'
+import { Spinner } from './Glyphs'
 import { SourceReader, type Evidence, type Tone } from './OverviewSource'
 import './overview.css'
 
@@ -273,13 +274,12 @@ export function Overview({ ws, row, track, onWorkflow, onTrack }: {
         </section>}
         <section aria-label="Recap">
           {shown ? <div>
-            {(result?.stale || degraded) && !draftOn && <p className="ov-warning">Earlier recap. Current status and decisions above take precedence.</p>}
+            {(result?.stale || result?.state === 'updating') && !draftOn && <p className="ov-muted ov-refreshing" role="status"><Spinner size={10} /> Refreshing summary…</p>}
             <p className="ov-summary">{cite(shown.summary)}</p>
             {shown.changes.length > 0 && <><h2>What changed</h2><ul>{shown.changes.map((c, i) => <li key={i}>{cite(c)}</li>)}</ul></>}
             {shown.next.length > 0 && <><h2>What happens next</h2><ul>{shown.next.map((c, i) => <li key={i}>{cite(c)}</li>)}</ul></>}
           </div> : <p className="ov-muted" role="status">{waitText(result, degraded, !!error)}</p>}
           {shown && result?.state === 'retrying' && <p className="ov-warning">{waitText(result, false, false)}</p>}
-          {result?.state === 'updating' && shown && <p className="ov-muted ov-writing" role="status">{draftOn ? 'Writing the recap…' : 'Updating the recap from newer evidence…'}</p>}
         </section>
         {below.length > 0 && <section aria-label="Workstreams under this one"><h2>Across this workstream</h2><div className="ov-tracks">{below.map((t) => <button type="button" key={t.bead_id} onClick={() => onTrack(t.bead_id)}><strong>{plainTitle(t.title)}</strong><span data-tone={toneOf(t.kind)}>{t.text}</span></button>)}</div></section>}
         <footer className="ov-footer">
