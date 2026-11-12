@@ -22,7 +22,7 @@ beforeEach(() => {
   Object.assign(t06, { state: 'in-progress', steps: closeAll(t06.steps), owner: undefined })
   done.needs_you = done.needs_you.filter((n) => !n.bead_id.startsWith('example-app-t06'))
   // cmdrd's board for it: nothing open.
-  done.display = { ...done.display!, asks: done.display!.asks.filter((a) => !a.key.includes('example-app-t06')), workstreams: done.display!.workstreams.map((w) => (w.bead_id === 'example-app-t06' ? { ...w, kind: 'quiet', text: 'Nothing to do', flag: 0 } : w)) }
+  done.display = { ...done.display!, asks: done.display!.asks.filter((a) => !a.key.includes('example-app-t06')), workstreams: done.display!.workstreams.map((w) => (w.bead_id === 'example-app-t06' ? { ...w, kind: 'done', text: 'Complete', flag: 0 } : w)) }
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
