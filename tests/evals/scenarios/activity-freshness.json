@@ -1,0 +1,11 @@
+{
+  "name": "activity-freshness",
+  "description": "Shared Navigator/Overview warning preserves rows and decisions across connected stalled, unchanged healthy, failed load and recovery frames.",
+  "stale_seconds": 45,
+  "cases": [
+    { "name": "connected-stalled", "age": 60, "error": false, "warning": true },
+    { "name": "unchanged-healthy", "age": 1, "error": false, "warning": false },
+    { "name": "failed-load", "age": 1, "error": true, "warning": true },
+    { "name": "recovery", "age": 0, "error": false, "warning": false }
+  ]
+}

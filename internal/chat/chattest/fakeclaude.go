@@ -222,6 +222,22 @@ func (f *fake) turn(text string) int {
 	result := "success"
 	reason := "completed"
 	switch {
+	case strings.Contains(text, "fresh provider conversation"):
+		f.textBlock("", "continued prepared work after usage fallback", 0, false)
+	case strings.Contains(text, "usagelimit") && f.cost == 0 && checkpointUsageFixture(f.dir):
+		f.toolTurn("AskUserQuestion", map[string]any{"questions": []any{map[string]any{"question": "Continue?", "header": "Continue", "multiSelect": false, "options": []any{map[string]any{"label": "yes", "description": "Continue"}, map[string]any{"label": "no", "description": "Wait"}}}}}, nil)
+	case strings.Contains(text, "usagelimit"):
+		f.emit(map[string]any{"type": "rate_limit_event", "rate_limit_info": map[string]any{"status": "rejected", "rateLimitType": "five_hour",
+			"resetsAt": 4102444800, "overageStatus": "rejected", "isUsingOverage": false,
+			"unifiedWindows": map[string]any{"five_hour": map[string]any{"utilization": 1.0, "resetsAt": 4102444800}, "seven_day": map[string]any{"utilization": 0.4, "resetsAt": 4102444800}}}})
+		msg := f.nextMsg()
+		f.emit(map[string]any{"type": "assistant", "error": "rate_limit", "message": map[string]any{"id": msg, "role": "assistant", "model": "<synthetic>",
+			"content": []any{map[string]any{"type": "text", "text": "You've hit your limit · resets 3pm"}}}})
+		f.cost += 0.01
+		f.persist(text)
+		f.emit(map[string]any{"type": "result", "subtype": "success", "is_error": true, "terminal_reason": "completed",
+			"result": "You've hit your limit · resets 3pm", "total_cost_usd": f.cost, "num_turns": 1, "duration_ms": 5})
+		return -1
 	case strings.Contains(text, "native-report"):
 		f.cost += 0.01
 		f.emit(map[string]any{"type": "result", "subtype": "success", "is_error": false, "result": "Prepared changes; tests passed. Commander review is required.", "total_cost_usd": f.cost, "num_turns": 1, "duration_ms": 5})
@@ -257,18 +273,6 @@ func (f *fake) turn(text string) int {
 	case strings.Contains(text, "compact"):
 		f.emit(map[string]any{"type": "system", "subtype": "compact_boundary", "compact_metadata": map[string]any{"trigger": "manual", "pre_tokens": 1000, "post_tokens": 100}})
 		f.textBlock("", "compacted", 0, false)
-	case strings.Contains(text, "usagelimit"):
-		f.emit(map[string]any{"type": "rate_limit_event", "rate_limit_info": map[string]any{"status": "rejected", "rateLimitType": "five_hour",
-			"resetsAt": 4102444800, "overageStatus": "rejected", "isUsingOverage": false,
-			"unifiedWindows": map[string]any{"five_hour": map[string]any{"utilization": 1.0, "resetsAt": 4102444800}, "seven_day": map[string]any{"utilization": 0.4, "resetsAt": 4102444800}}}})
-		msg := f.nextMsg()
-		f.emit(map[string]any{"type": "assistant", "error": "rate_limit", "message": map[string]any{"id": msg, "role": "assistant", "model": "<synthetic>",
-			"content": []any{map[string]any{"type": "text", "text": "You've hit your limit · resets 3pm"}}}})
-		f.cost += 0.01
-		f.persist(text)
-		f.emit(map[string]any{"type": "result", "subtype": "success", "is_error": true, "terminal_reason": "completed",
-			"result": "You've hit your limit · resets 3pm", "total_cost_usd": f.cost, "num_turns": 1, "duration_ms": 5})
-		return -1
 	case strings.Contains(text, "ratelimit"):
 		f.emit(map[string]any{"type": "rate_limit_event", "rate_limit_info": map[string]any{"status": "allowed", "rateLimitType": "five_hour", "utilization": 0.5,
 			"unifiedWindows": map[string]any{"five_hour": map[string]any{"utilization": 0.5, "resetsAt": 4102444800}, "seven_day": map[string]any{"utilization": 0.2, "resetsAt": 4102444800}}}})
@@ -404,4 +408,10 @@ func (f *fake) longText(deaf bool) bool {
 	f.emit(map[string]any{"type": "assistant", "message": map[string]any{"id": msg, "role": "assistant", "content": []any{map[string]any{"type": "text", "text": "long done"}}}})
 	f.stream("", msg, map[string]any{"type": "content_block_stop", "index": 0})
 	return true
+}
+
+// checkpointUsageFixture opts the private multi-run fixture into a question before exhaustion.
+func checkpointUsageFixture(dir string) bool {
+	_, err := os.Stat(filepath.Join(dir, "checkpoint-usage"))
+	return err == nil
 }

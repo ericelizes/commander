@@ -24,7 +24,7 @@ var DefaultAgentAccounts = map[string][]string{
 }
 
 // AgentAccounts is the account order of every kind: the first account with
-// usage left is used. An entry is a provider ("claude" = any Claude account,
+// usage left is used, followed by any other connected account (d82). An entry is a provider ("claude" = any Claude account,
 // "codex") or one account's name. A kind with nothing saved gets its default.
 func (s *Store) AgentAccounts(ctx context.Context) (map[string][]string, error) {
 	out := map[string][]string{}

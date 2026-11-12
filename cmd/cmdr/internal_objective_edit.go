@@ -173,6 +173,11 @@ func runInternalSetObjective(args []string, stdout, stderr *os.File) int {
 		writes := beads.NewStateWrite(newBeadsClientFn())
 		var bc beads.Client = writes
 		result := internalObjectiveEditResult{BeadID: *beadID, Status: *status}
+		if *state == beads.StateNeedsUser || *decisionArg != "" {
+			if b, err := bc.Show(ctx, dir, *beadID); err == nil && b != nil && beads.IsClosingGate(b.Labels) {
+				return result, fmt.Errorf("%s is a Confirm done step: it never gets a card; the sidebar shows Complete on it once everything else is finished", *beadID)
+			}
+		}
 		if (*state == beads.StateInProgress || *status == "in_progress") && !*writesWorkflow {
 			if err := requireWorkflowGate(ctx, bc, dir, *beadID, stderr); err != nil {
 				return result, err

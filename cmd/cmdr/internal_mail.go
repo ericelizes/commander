@@ -134,8 +134,17 @@ func runInternalMail(args []string, stdout, stderr *os.File) int {
 		return 0
 	}
 
-	toRoles = rerouteOperatorMail(ctx, st, *from, toRoles, *importance, stderr)
-	toRoles, ccRole, movedTo, rerouteRun := rerouteStaleManager(ctx, st, *from, toRoles, stderr)
+	toRoles, activeRouting, err := routeActiveExecutionMail(ctx, st, *from, toRoles)
+	if err != nil {
+		emitErr(stderr, err.Error())
+		return 1
+	}
+	var ccRole, movedTo string
+	var rerouteRun int64
+	if !activeRouting {
+		toRoles = rerouteOperatorMail(ctx, st, *from, toRoles, *importance, stderr)
+		toRoles, ccRole, movedTo, rerouteRun = rerouteStaleManager(ctx, st, *from, toRoles, stderr)
+	}
 	var routeNotes strings.Builder
 	toRoles, err = ownedDeliveryRecipients(ctx, st, amProjectKey, toRoles, io.MultiWriter(stderr, &routeNotes))
 	if err != nil {
@@ -145,7 +154,9 @@ func runInternalMail(args []string, stdout, stderr *os.File) int {
 	if routeNotes.Len() > 0 {
 		*body += "\n\n" + routeNotes.String()
 	}
-	startMissingManagers(ctx, st, amProjectKey, toRoles, stderr)
+	if !activeRouting {
+		startMissingManagers(ctx, st, amProjectKey, toRoles, stderr)
+	}
 
 	if err := sendRoleMail(ctx, st, client, amProjectKey, *from, toRoles, *subject, *body, agentmail.SendOptions{
 		Importance:  *importance,

@@ -1,6 +1,7 @@
+import { ActivityFreshness } from './ActivityFreshness'
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ChevronDown } from 'lucide-react'
-import { splitTickets } from '../../../features/linear/Ticket'
+import { LinearMark, splitTickets } from '../../../features/linear/Ticket'
 import { MyProgress, progressWorkstreams } from '../../../features/linear/MyProgress'
 import { AllClear } from './AllClear'
 import { useAgentRows } from './SettingsModal'
@@ -53,7 +54,6 @@ const HOLD_MS = 60_000
 interface Lift { node: NavNode; x: number; y: number; drop: Drop | null; lineY: number }
 
 export function Navigator() {
-  const conn = useStore((s) => s.conn)
   const completed = useStore((s) => s.completed)
   const snapshot = useStore((s) => s.snapshot)
   const nowSec = useStore((s) => s.nowSec)
@@ -195,9 +195,7 @@ export function Navigator() {
   }, [cursor])
 
   const working = useAgentRows().filter((r) => r.state === 'working').length
-  if (snapshot?.storage === 'postgres' && conn !== 'live') return <nav className="nav" aria-label="Navigator"><p role="status">Live state unavailable. Reconnecting…</p></nav>
-  if (snapshot?.degraded) return <nav className="nav" aria-label="Navigator"><p role="status">Live state unavailable. {snapshot.degraded.reason}</p></nav>
-  if (!vm || !snapshot) return <NavSkeleton />
+  if (!vm || !snapshot) return <><ActivityFreshness /><NavSkeleton /></>
   const selKey = selected.kind === 'commander' || selected.kind === 'progress' ? 'commander' : selected.key
   // The row that is open is the one lit: a nested row when it can be seen, else the top-level row it sits in.
   // An open decision lights the row it sits in, the one its Overview is showing.
@@ -216,6 +214,7 @@ export function Navigator() {
 
   return (
     <nav className="nav" aria-label="Navigator">
+      <ActivityFreshness />
       <MyProgress workstreams={progress} onOpen={() => useStore.getState().select({ kind: 'progress' })} />
       <div className={`nav-tabs${tab === 'all' ? ' on-right' : ''}`} role="tablist">
         <button
@@ -326,7 +325,7 @@ function Workstream({ w, tracks, folded, onToggle, selected, cursor, mod }: { w:
   const progress = w.milestones ?? w.progress
   const progressLabel = `${progress.done}/${progress.total} ${w.milestones ? 'stages' : 'tasks'} completed`
   return (
-    <div className={`ws${w.tracks.length ? ' has-tracks' : ''}${w.kind === 'quiet' ? ' can-complete' : ''}${leaving ? ' is-leaving' : ''}${lifted === w.key ? ' is-lifted' : ''}`}>
+    <div className={`ws${w.tracks.length ? ' has-tracks' : ''}${leaving ? ' is-leaving' : ''}${lifted === w.key ? ' is-lifted' : ''}`}>
       {w.tracks.length > 0 && (
         <button
           type="button"
@@ -358,6 +357,7 @@ function Workstream({ w, tracks, folded, onToggle, selected, cursor, mod }: { w:
                 {w.starred && <span className="star">★ </span>}
                 {splitTickets(w.title).text}
               </span>
+              <LinearTag project={w.project} bead={w.bead_id} title={w.title} />
               {showOwner && <PlanningOwner owner={w.planning_commander} />}
               {w.why && <span className="ws-state-why" title={w.why} aria-label={w.why}>⚠</span>}
             </div>
@@ -366,7 +366,6 @@ function Workstream({ w, tracks, folded, onToggle, selected, cursor, mod }: { w:
           </div>
         </div>
       </button>
-      {w.kind === 'quiet' && <CompleteButton project={w.project} bead={w.bead_id} title={w.title} />}
       {!folded && tracks.length > 0 && (
         <div className="ws-tracks" role="group" aria-label={`Workstreams under ${w.title}`}>
           {tracks.map((t) => (
@@ -376,6 +375,36 @@ function Workstream({ w, tracks, folded, onToggle, selected, cursor, mod }: { w:
       )}
     </div>
   )
+}
+
+// LinearTag is the Linear logo on a row whose workstream has Linear tickets (in
+// its title or its ticket: labels); hovering lists them.
+function LinearTag({ project, bead, title }: { project: string; bead: string; title: string }) {
+  const labelled = useStore((s) => {
+    for (const ws of s.snapshot?.workstreams ?? []) {
+      if (ws.project !== project) continue
+      if (ws.bead_id === bead) return ws.tickets
+      const step = findStep(ws.steps ?? [], bead)
+      if (step) return step.tickets
+    }
+    return undefined
+  })
+  const tickets = [...new Set([...splitTickets(title).tickets, ...(labelled ?? [])])]
+  if (tickets.length === 0) return null
+  return (
+    <span className="row-linear" title={`Linear: ${tickets.join(', ')}`} aria-label={`Linear tickets: ${tickets.join(', ')}`}>
+      <LinearMark />
+    </span>
+  )
+}
+
+function findStep(steps: SnapStep[], id: string): SnapStep | undefined {
+  for (const s of steps) {
+    if (s.bead_id === id) return s
+    const below = findStep(s.children ?? [], id)
+    if (below) return below
+  }
+  return undefined
 }
 
 function PlanningOwner({ owner }: { owner?: string }) {
@@ -404,12 +433,13 @@ function TrackRow({ t, n, wsKey, parentOwner }: { t: BoardTrack; n: number; wsKe
   const project = t.key.slice(0, t.key.length - t.bead_id.length - 1)
   const children = t.children ?? []
   return (
-    <div className={`track-wrap${t.kind === 'quiet' ? ' can-complete' : ''}${leaving ? ' is-leaving' : ''}${lifted === t.key ? ' is-lifted' : ''}`}>
+    <div className={`track-wrap${leaving ? ' is-leaving' : ''}${lifted === t.key ? ' is-lifted' : ''}`}>
       <button className={`row track-row${openNested === t.bead_id ? ' selected' : ''}`} aria-current={openNested === t.bead_id || undefined} data-nav-key={t.key} onClick={() => useStore.getState().openWorkflow(wsKey, t.bead_id)} title={t.title}>
         <div className="row-body">
           <div className="row-head">
             <span className="rank track-rank">{n}{t.letter}</span>
             <span className="row-title">{splitTickets(t.title).text}</span>
+            <LinearTag project={project} bead={t.bead_id} title={t.title} />
             {t.planning_commander !== parentOwner && <PlanningOwner owner={t.planning_commander} />}
           </div>
           <StateLine kind={t.kind} text={t.text} agents={t.working} age={age(t.since, nowSec)}
@@ -418,7 +448,6 @@ function TrackRow({ t, n, wsKey, parentOwner }: { t: BoardTrack; n: number; wsKe
           {t.why && <span className="ws-state-why" title={t.why} aria-label={t.why}>⚠</span>}
         </div>
       </button>
-      {t.kind === 'quiet' && <CompleteButton project={project} bead={t.bead_id} title={t.title} />}
       {children.length > 0 && (
         <button type="button" className={`track-fold${open ? '' : ' folded'}`} aria-expanded={open} aria-label={`${open ? 'Hide' : 'Show'} ${children.length} workstreams under ${t.title}`} onClick={() => toggleOpen(t.key)}>
           <ChevronDown size={13} strokeWidth={2} aria-hidden />
@@ -436,7 +465,7 @@ function TrackRow({ t, n, wsKey, parentOwner }: { t: BoardTrack; n: number; wsKe
 // CompleteButton closes a workstream the user has finished. It shows
 // only when nothing under it is open, and only this click closes it; the row
 // reads Completed at once, before the board catches up.
-function CompleteButton({ project, bead, title }: { project: string; bead: string; title: string }) {
+export function CompleteButton({ project, bead, title }: { project: string; bead: string; title: string }) {
   const apis = useApis()
   const key = `${project}:${bead}`
   const error = useStore((s) => s.completeError[key] ?? '')

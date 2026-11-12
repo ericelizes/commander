@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"regexp"
+	"strconv"
 	"unicode/utf8"
 )
 
@@ -37,37 +38,17 @@ func PartialRecap(buf string) Recap {
 		key   string
 	}
 	var (
-		r      Recap
-		stack  []frame
-		last   string
-		inStr  bool
-		esc    bool
-		strAt  int
-		claims = map[string]int{}
+		r     Recap
+		stack []frame
+		last  string
+		inStr bool
+		esc   bool
+		strAt int
 	)
 	add := func(sec string, sent Sentence) {
-		if sec == "summary" {
-			r.Summary.Sentences = append(r.Summary.Sentences, sent)
-			return
+		if c := claimOf(&r, sec); c != nil {
+			c.Sentences = append(c.Sentences, sent)
 		}
-		list := &r.Changes
-		if sec == "next" {
-			list = &r.Next
-		} else if sec != "changes" {
-			return
-		}
-		for len(*list) < claims[sec] {
-			*list = append(*list, Claim{})
-		}
-		if n := claims[sec]; n > 0 {
-			(*list)[n-1].Sentences = append((*list)[n-1].Sentences, sent)
-		}
-	}
-	section := func() string {
-		if len(stack) > 0 {
-			return stack[0].key
-		}
-		return ""
 	}
 	for i := 0; i < len(buf); i++ {
 		c := buf[i]
@@ -93,9 +74,6 @@ func PartialRecap(buf string) Recap {
 			}
 		case '{', '[':
 			stack = append(stack, frame{open: c, start: i})
-			if c == '{' && len(stack) == 3 && section() != "summary" {
-				claims[section()]++
-			}
 		case '}', ']':
 			if len(stack) == 0 {
 				return r
@@ -123,13 +101,52 @@ func PartialRecap(buf string) Recap {
 		}
 		top := stack[n-1]
 		sec := stack[0].key
-		if top.open == '{' && ((sec == "summary" && n == 4) || ((sec == "changes" || sec == "next") && n == 5)) {
+		if top.open == '{' && n == 4 && claimOf(&r, sec) != nil {
 			if text := openText(buf[top.start:]); text != "" {
 				add(sec, Sentence{Text: text, Sources: []string{}, Partial: true})
 			}
 		}
 	}
+	scalars(buf, &r)
 	return r
+}
+
+// claimOf is the cited part a top-level key names, or nil.
+func claimOf(r *Recap, key string) *Claim {
+	switch key {
+	case "problem":
+		return &r.Problem
+	case "problem_impact":
+		return &r.ProblemImpact
+	case "solution":
+		return &r.Solution
+	case "impact":
+		return &r.Impact
+	case "scope_detail":
+		return &r.ScopeDetail
+	case "risk_detail":
+		return &r.RiskDetail
+	}
+	return nil
+}
+
+var (
+	problemTypeKey = regexp.MustCompile(`"problem_type"\s*:\s*"([a-z]+)"`)
+	scopeKey       = regexp.MustCompile(`"scope"\s*:\s*"([A-Za-z]+)"`)
+	riskKey        = regexp.MustCompile(`"risk"\s*:\s*(\d+)\s*[,}]`)
+)
+
+// scalars reads the type, scope and risk a draft has finished writing.
+func scalars(buf string, r *Recap) {
+	if m := problemTypeKey.FindStringSubmatch(buf); m != nil {
+		r.ProblemType = m[1]
+	}
+	if m := scopeKey.FindStringSubmatch(buf); m != nil {
+		r.Scope = m[1]
+	}
+	if m := riskKey.FindStringSubmatch(buf); m != nil {
+		r.Risk, _ = strconv.Atoi(m[1])
+	}
 }
 
 var highSurrogate = regexp.MustCompile(`^[dD][89abAB][0-9a-fA-F]{2}$`)
@@ -208,16 +225,8 @@ func onlyKnown(r Recap, in Input) Recap {
 		}
 		return out
 	}
-	out := Recap{Summary: fix(r.Summary), Changes: []Claim{}, Next: []Claim{}}
-	for _, c := range r.Changes {
-		if len(c.Sentences) > 0 {
-			out.Changes = append(out.Changes, fix(c))
-		}
-	}
-	for _, c := range r.Next {
-		if len(c.Sentences) > 0 {
-			out.Next = append(out.Next, fix(c))
-		}
-	}
+	out := r
+	out.Problem, out.ProblemImpact, out.Solution, out.Impact = fix(r.Problem), fix(r.ProblemImpact), fix(r.Solution), fix(r.Impact)
+	out.ScopeDetail, out.RiskDetail = fix(r.ScopeDetail), fix(r.RiskDetail)
 	return out
 }

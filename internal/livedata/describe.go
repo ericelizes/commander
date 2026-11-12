@@ -3,7 +3,6 @@ package livedata
 import (
 	"fmt"
 	"log"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -59,10 +58,14 @@ func describeRow(describe DescribeFunc, key string, row nextactor.Row, facts, fa
 	if row.Lead.Actor == nextactor.Done {
 		return fallback // "Complete": the app shows the Complete button
 	}
-	text, signal, ok := describe(key, string(row.Lead.Actor), row.Lead.Reason, Opener(row.Lead), facts)
+	actor := string(row.Lead.Actor)
+	if waitsOnAnotherStep(row.Lead) {
+		actor = "waiting_on_step"
+	}
+	text, signal, ok := describe(key, actor, row.Lead.Reason, Opener(row.Lead), facts)
 	if !ok {
 		if via := row.Lead.Via; len(via) > 0 && row.Lead.Actor != nextactor.User && row.Lead.Actor != nextactor.Stuck {
-			return "Waiting for " + "“" + shortTitle(via[len(via)-1]) + "”"
+			return "Waiting for: " + via[len(via)-1]
 		}
 		return placeholder(fallback)
 	}
@@ -75,26 +78,19 @@ func describeRow(describe DescribeFunc, key string, row nextactor.Row, facts, fa
 // placeholder is the rule-based line shown until the model's line is ready:
 // no blocking chain and no "Needs you:" label, like the written lines.
 func placeholder(text string) string {
-	text = quotedTitle.ReplaceAllStringFunc(withoutChain(text), func(q string) string {
-		return "“" + shortTitle(strings.Trim(q, "“”")) + "”"
-	})
+	text = withoutChain(text)
+	for _, p := range [][2]string{{"Working on “", "Agent: "}, {"Starting an agent on “", "Starting an agent: "}, {"Waiting for “", "Waiting for: "}} {
+		if rest, ok := strings.CutPrefix(text, p[0]); ok {
+			text = p[1] + rest
+		}
+	}
+	text = strings.NewReplacer("“", "", "”", "").Replace(text)
 	if rest := strings.TrimPrefix(text, "Needs you: "); rest != text && rest != "" {
 		r := []rune(rest)
 		r[0] = unicode.ToUpper(r[0])
 		text = string(r)
 	}
 	return text
-}
-
-var quotedTitle = regexp.MustCompile(`“[^”]+”`)
-
-// shortTitle is a step title cut to its first six words.
-func shortTitle(title string) string {
-	words := strings.Fields(title)
-	if len(words) <= 6 {
-		return title
-	}
-	return strings.Join(words[:6], " ") + "…"
 }
 
 // withoutChain drops the blocking chain from a rule-based line: "After “X”:
@@ -120,6 +116,9 @@ func withoutChain(text string) string {
 
 // Opener is the fixed start of a row's description, set by its state.
 func Opener(r nextactor.Result) string {
+	if waitsOnAnotherStep(r) {
+		return "Waiting:"
+	}
 	switch r.Actor {
 	case nextactor.User:
 		return "Needs you:"

@@ -3,6 +3,7 @@ package livedata
 import (
 	"context"
 	"github.com/example-user/commander/internal/beads"
+	"strings"
 
 	"github.com/example-user/commander/internal/store"
 )
@@ -145,6 +146,19 @@ func attachExecutionState(ctx context.Context, st *store.Store, rows []Objective
 	return control.Mode, nil
 }
 
+func usageCapacityLine(ws SnapWorkstream) (line, bool) {
+	candidates := []SnapStep{{ExecutionMode: ws.ExecutionMode, ExecutionReady: ws.ExecutionReady, ExecutionEligible: ws.ExecutionEligible, ExecutionError: ws.ExecutionError}}
+	for s := range stepValues(ws.Steps) {
+		candidates = append(candidates, s)
+	}
+	for _, s := range candidates {
+		if s.ExecutionReady && s.ExecutionEligible && s.ExecutionMode == "active" && strings.HasPrefix(s.ExecutionError, store.UsageCapacityError) {
+			return line{kind: "stalled", text: s.ExecutionError}, true
+		}
+	}
+	return line{}, false
+}
+
 func executionQueueLine(ws SnapWorkstream) (line, bool) {
 	candidates := []SnapStep{{ExecutionMode: ws.ExecutionMode, ExecutionReady: ws.ExecutionReady, ExecutionEligible: ws.ExecutionEligible, ExecutionReserved: ws.ExecutionReserved, ExecutionCapable: ws.ExecutionCapable, ExecutionAttempts: ws.ExecutionAttempts, ExecutionError: ws.ExecutionError}}
 	for s := range stepValues(ws.Steps) {
@@ -159,6 +173,9 @@ func executionQueueLine(ws SnapWorkstream) (line, bool) {
 		}
 		if s.ExecutionMode == "off" {
 			return line{kind: "waiting", text: "Ready; automatic execution is disabled"}, true
+		}
+		if strings.HasPrefix(s.ExecutionError, store.UsageCapacityError) {
+			return line{kind: "stalled", text: s.ExecutionError}, true
 		}
 		if s.ExecutionAttempts >= 5 && s.ExecutionError != "" {
 			return line{kind: "stalled", text: "Execution launch needs repair: " + s.ExecutionError}, true

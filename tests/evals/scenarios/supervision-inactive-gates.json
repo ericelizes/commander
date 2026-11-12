@@ -1,0 +1,13 @@
+{
+  "goal": "Preserve open gates in audit state while suppressing progress obligations for inactive guarded work",
+  "cases": [
+    {"name":"closed stage", "stage":"closed", "ancestor":"open", "parent":"", "inactive":true},
+    {"name":"deferred stage", "stage":"deferred", "ancestor":"open", "parent":"", "inactive":true},
+    {"name":"closed stage ancestor", "stage":"open", "ancestor":"closed", "parent":"", "inactive":true},
+    {"name":"deferred stage ancestor", "stage":"open", "ancestor":"deferred", "parent":"", "inactive":true},
+    {"name":"closed gate ancestor", "stage":"open", "ancestor":"open", "parent":"closed", "inactive":true},
+    {"name":"deferred gate ancestor", "stage":"open", "ancestor":"open", "parent":"deferred", "inactive":true},
+    {"name":"open stage", "stage":"open", "ancestor":"open", "parent":"", "inactive":false}
+  ],
+  "runners": ["internal/store:TestPostgresSupervisionInactiveGates", "internal/supervision:TestInactiveGateObligations"]
+}

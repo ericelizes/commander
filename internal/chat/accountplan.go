@@ -9,7 +9,7 @@ import (
 )
 
 // Commander treats a chosen account as a preference. At a limit it can use
-// any connected account, regardless of provider, and retains that preference.
+// any connected account within an explicit runtime pin, retaining preference.
 func planChatStart(home, role string, fresh bool, usage map[string]Usage, now time.Time, hooksReady func() bool, order []string) (managerPlan, error) {
 	if !IsCommanderRole(role) {
 		return planManagerStart(home, role, fresh, usage, now, hooksReady)
@@ -27,12 +27,14 @@ func planChatStart(home, role string, fresh bool, usage map[string]Usage, now ti
 	preferred.Account = want
 	accounts := Accounts(home, usage, now)
 	candidates := OrderAccounts(order, accounts)
-	// Explicit runtime choices remain preferences; automatic fallback is retried
-	// in the saved order when that preferred account becomes available again.
+	// Account order is preference; an explicit runtime pin constrains fallback.
 	if pin != "" || (cur.Runtime == RuntimeClaude && want != "default") {
 		candidates = append([]Provider{preferred}, candidates...)
 	}
 	for _, p := range candidates {
+		if pin != "" && p.Runtime != pin {
+			continue
+		}
 		if !AccountAvailable(p, accounts, now, hooksReady) {
 			continue
 		}

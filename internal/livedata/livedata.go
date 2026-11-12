@@ -27,6 +27,8 @@ import (
 // Partial loads are tolerated: any per-source error is captured in LoadErr
 // and whatever populated successfully is still returned.
 type Data struct {
+	PlanningUsage map[string]string
+
 	OrchestrationMode  string
 	CanonicalSnapshot  *Snapshot `json:"canonical_snapshot,omitempty"` // shared projection for terminal consumers
 	workstreams        []Workstream
@@ -198,6 +200,10 @@ type FleetMetrics struct {
 // Deps is what Load reads. Scrape, when set, reads live agent states off the
 // chat panes; it is optional so tests and headless callers skip tmux.
 type Deps struct {
+	// UsageCapacity reads provider evidence without starting model processes.
+	UsageCapacity func() string
+	PlanningUsage func(string) string
+
 	projectRows *projectRowsCache
 	Store       *store.Store
 	Beads       beads.Client
@@ -303,6 +309,28 @@ func Load(ctx context.Context, deps Deps) Data {
 	}
 	lap(&out.Phases.Beads)
 	mode, executionErr := attachExecutionState(ctx, deps.Store, out.Objectives)
+	if mode == "active" && deps.UsageCapacity != nil {
+		cause := deps.UsageCapacity()
+		if cause != "" {
+			for i := range out.Objectives {
+				row := &out.Objectives[i]
+				if row.ExecutionReady && row.ExecutionEligible {
+					row.ExecutionError = store.UsageCapacityError + cause
+				}
+			}
+		}
+	}
+	if mode == "active" && deps.PlanningUsage != nil {
+		out.PlanningUsage = map[string]string{}
+		for _, row := range out.Objectives {
+			if row.PlanningCommander == "" {
+				continue
+			}
+			if _, seen := out.PlanningUsage[row.PlanningCommander]; !seen {
+				out.PlanningUsage[row.PlanningCommander] = deps.PlanningUsage(row.PlanningCommander)
+			}
+		}
+	}
 	out.OrchestrationMode = mode
 	if executionErr != nil && out.LoadErr == nil {
 		out.LoadErr = executionErr

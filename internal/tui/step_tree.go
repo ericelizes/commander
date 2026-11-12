@@ -50,8 +50,14 @@ func stepRows(ws workstream, expanded bool, anim animState, working bool) []pane
 			text += "  #" + strings.TrimPrefix(o.Review, "?")
 			text = strings.TrimSuffix(text, "  #")
 		}
-		if o.Owner != "" && o.Owner != root.Owner {
+		if o.Owner != "" && o.Owner != root.Owner && anim.truth == nil {
 			text += "  → " + o.Owner
+		}
+		if anim.truth != nil {
+			current := anim.truth.scope(store.WorkstreamKey{ProjectID: ws.project.ID, BeadID: o.BeadID})
+			if strings.HasPrefix(current.text, store.UsageCapacityError) {
+				text += "  · " + current.text
+			}
 		}
 		if collapsedNote != "" {
 			text += lipgloss.NewStyle().Foreground(widgets.T.TextMuted).Render("  · " + collapsedNote)

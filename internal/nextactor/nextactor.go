@@ -76,6 +76,8 @@ type Bead struct {
 	PlanningPending     bool
 
 	PlanningCommander string
+	UsageCapacity     string // eligible queued execution exhausted connected accounts
+	PlanningUsage     string // recorded planner runtime cannot serve this move
 }
 
 // Context supplies what the decision needs beyond one bead.
@@ -208,6 +210,9 @@ func decide(b Bead, ctx Context, seen map[string]bool, depth int) Result {
 		return Result{Actor: None, Reason: "children", Text: "Carried by its steps", Bead: b.ID}
 	}
 	if b.ReadyQueued {
+		if b.UsageCapacity != "" {
+			return Result{Actor: Stuck, Reason: "usage_capacity", Text: b.UsageCapacity, Bead: b.ID}
+		}
 		if b.NoCapableSlot {
 			return Result{Actor: Stuck, Reason: "no_capable_slot", Text: "Stuck: no agent slot can run " + quoted(b.Title), Bead: b.ID}
 		}
@@ -234,12 +239,13 @@ func own(b Bead, ctx Context) Result {
 			text += ": " + b.HoldReason
 		}
 		return Result{Actor: None, Reason: "paused", Text: text}
+	// An open card is still a user move, including the final confirmation.
+	case b.NeedsUser:
+		return Result{Actor: User, Reason: "decision", Text: "Needs you: " + firstNonEmpty(b.UserAsk, b.Title)}
 	case b.ClosingGate && b.ReadyToClose:
 		return Result{Actor: Done, Reason: "ready_to_close", Text: "Complete"}
 	case b.ClosingGate:
 		return Result{Actor: None, Reason: "closing", Text: "Complete once the rest is finished"}
-	case b.NeedsUser:
-		return Result{Actor: User, Reason: "decision", Text: "Needs you: " + firstNonEmpty(b.UserAsk, b.Title)}
 	case b.PendingQuestions > 0 || b.QuestionWaiting:
 		return commanderOwed(b, ctx, "answer_question", "answer an agent's question", 0)
 	case b.LaunchFailed:
@@ -343,6 +349,9 @@ func blockers(b Bead, ctx Context, seen map[string]bool, depth int) (Result, boo
 // commanderOwed is a move the planning Commander owes: its own while it is in a
 // turn or within the grace after going idle, stuck once it sits idle longer.
 func commanderOwed(b Bead, ctx Context, reason, what string, since int64) Result {
+	if b.PlanningUsage != "" && (reason == "plan" || reason == "wait_over") {
+		return Result{Actor: Stuck, Reason: "planning_usage", Text: b.PlanningUsage, Bead: b.ID}
+	}
 	who := firstNonEmpty(b.PlanningCommander, "commander")
 	busy, idleSince := false, int64(0)
 	if ctx.Commander != nil {

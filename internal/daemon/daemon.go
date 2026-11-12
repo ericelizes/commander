@@ -321,7 +321,7 @@ func New() (*Daemon, error) {
 			return chatEngine.CapacityFailures()
 		},
 		OnSnapshot:  func(snap *livedata.Snapshot) { checkPlans(health, snap); checkStuck(health, snap, time.Now()) },
-		Deps:        livedata.Deps{Store: st, Beads: reads, Scrape: livedata.ScrapeAgentStates},
+		Deps:        livedata.Deps{Store: st, Beads: reads, Scrape: livedata.ScrapeAgentStates, UsageCapacity: func() string { return chat.UsageCapacityCause(home, time.Now()) }, PlanningUsage: func(role string) string { return chat.PlanningUsageCause(home, role, time.Now()) }},
 		UnreadEvery: 5 * time.Second, // Unread is set below from the waker's inbox reads
 		WaitsChecked: func() time.Time {
 			if waits == nil {
@@ -566,6 +566,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 				d.live.Describe = describer.Describe
 				go describer.Run(ctx)
 				go d.runClosingSweep(ctx)
+				go d.runPRLinker(ctx)
 			}
 		}
 		go chat.RunCaptureSweep(ctx, d.home, time.Hour)

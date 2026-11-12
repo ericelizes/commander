@@ -1,0 +1,12 @@
+{
+  "cases": [
+    {"name":"gate wait", "kind":"needs", "actor":"user", "reason":"blocked:decision", "want":false},
+    {"name":"running dependency", "kind":"working", "actor":"agent", "reason":"blocked:executing", "who":"operator-running", "want":false},
+    {"name":"external wait", "kind":"waiting", "actor":"external", "reason":"blocked:wait:review", "want":false},
+    {"name":"paused dependency", "kind":"quiet", "actor":"none", "reason":"blocked:paused", "want":false},
+    {"name":"gate displayed as working", "kind":"working", "actor":"user", "reason":"blocked:decision", "want":true, "words":"Eric's card"},
+    {"name":"planner displayed as waiting", "kind":"waiting", "actor":"commander", "reason":"blocked:plan", "who":"commander", "want":true, "words":"planning Commander commander"},
+    {"name":"running agent displayed as quiet", "kind":"quiet", "actor":"agent", "reason":"blocked:executing", "who":"operator-running", "want":true, "words":"agent operator-running"},
+    {"name":"unresolved dependency", "kind":"quiet", "actor":"none", "reason":"dependency", "want":true, "words":"planning Commander (commander)"}
+  ]
+}

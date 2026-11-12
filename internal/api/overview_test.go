@@ -213,11 +213,12 @@ func TestOverviewStreamsDraftThenRecap(t *testing.T) {
 	s := New(Options{Token: "token", Source: func(context.Context) livedata.Snapshot {
 		return livedata.Snapshot{Workstreams: []livedata.SnapWorkstream{overviewFixture()}}
 	}, OverviewGenerate: func(ctx context.Context, in overview.Input) (overview.Recap, error) {
-		overview.ProgressOf(ctx)(overview.Recap{Summary: overview.Claim{Sentences: []overview.Sentence{{Text: "Started."}}}})
+		overview.ProgressOf(ctx)(overview.Recap{Problem: overview.Claim{Sentences: []overview.Sentence{{Text: "Started."}}}})
 		close(step)
 		<-release
 		id := in.Evidence[0].ID
-		return overview.Recap{Summary: overview.Claim{Sentences: []overview.Sentence{{Text: "Done.", Sources: []string{id}}}}}, nil
+		one := overview.Claim{Sentences: []overview.Sentence{{Text: "Done.", Sources: []string{id}}}}
+		return overview.Recap{ProblemType: "feature", Problem: one, ProblemImpact: one, Solution: one, Impact: one, Scope: "Small", ScopeDetail: one, Risk: 1, RiskDetail: one}, nil
 	}})
 	s.Refresh(context.Background())
 	srv := httptest.NewServer(s.Handler())
@@ -238,7 +239,7 @@ func TestOverviewStreamsDraftThenRecap(t *testing.T) {
 			break
 		}
 		states = append(states, res.State)
-		if res.Draft != nil && len(res.Draft.Summary.Sentences) == 1 {
+		if res.Draft != nil && len(res.Draft.Problem.Sentences) == 1 {
 			if !sawDraft {
 				<-step
 				close(release)

@@ -7,9 +7,13 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/example-user/commander/internal/beads"
@@ -172,7 +176,108 @@ func buildOverviewInput(snap livedata.Snapshot, ws *livedata.SnapWorkstream, q o
 		}
 	}
 	in.Evidence = append(in.Evidence, overviewMessages(home, ws.ManagerRole, q.TrackID)...)
+	in.Evidence = append(in.Evidence, overviewPRSizes(*ws, q.TrackID)...)
 	return in, true
+}
+
+// prSizeLookup reads a pull request's size line from GitHub ("" when it cannot);
+// tests replace it.
+var prSizeLookup = ghPRSize
+
+// prSizeTTL is how long a pull request's size is reused before GitHub is asked again.
+const prSizeTTL = 10 * time.Minute
+
+var prSizes = struct {
+	sync.Mutex
+	m map[string]prSizeEntry
+}{m: map[string]prSizeEntry{}}
+
+type prSizeEntry struct {
+	at   time.Time
+	text string
+}
+
+var repoName = regexp.MustCompile(`^[\w.-]+/[\w.-]+$`)
+
+// overviewPRSizes is the size of every pull request in the scope (the
+// workstream, or one nested workstream), so the recap's Scope can say how big
+// the change is.
+func overviewPRSizes(ws livedata.SnapWorkstream, track string) []overview.Evidence {
+	steps := ws.Steps
+	if track != "" {
+		steps = nil
+		var find func([]livedata.SnapStep)
+		find = func(list []livedata.SnapStep) {
+			for _, st := range list {
+				if st.BeadID == track {
+					steps = []livedata.SnapStep{st}
+					return
+				}
+				find(st.Children)
+			}
+		}
+		find(ws.Steps)
+	}
+	seen := map[string]bool{}
+	var out []overview.Evidence
+	var walk func([]livedata.SnapStep)
+	walk = func(list []livedata.SnapStep) {
+		for _, st := range list {
+			repo := st.PRRepo
+			if repo == "" {
+				repo = ws.Repo
+			}
+			for _, ref := range st.PR {
+				n, err := strconv.Atoi(strings.TrimPrefix(ref, "#"))
+				key := fmt.Sprintf("%s#%d", repo, n)
+				if err != nil || seen[key] || !repoName.MatchString(repo) {
+					continue
+				}
+				seen[key] = true
+				if text := cachedPRSize(repo, n); text != "" {
+					out = append(out, overview.Evidence{ID: fmt.Sprintf("pr-size-%d", n), Label: fmt.Sprintf("Pull request #%d size (GitHub)", n), Text: text})
+				}
+			}
+			walk(st.Children)
+		}
+	}
+	walk(steps)
+	return out
+}
+
+func cachedPRSize(repo string, n int) string {
+	key := fmt.Sprintf("%s#%d", repo, n)
+	prSizes.Lock()
+	if e, ok := prSizes.m[key]; ok && time.Since(e.at) < prSizeTTL {
+		prSizes.Unlock()
+		return e.text
+	}
+	prSizes.Unlock()
+	text := prSizeLookup(repo, n)
+	prSizes.Lock()
+	prSizes.m[key] = prSizeEntry{at: time.Now(), text: text}
+	prSizes.Unlock()
+	return text
+}
+
+func ghPRSize(repo string, n int) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "gh", "pr", "view", strconv.Itoa(n), "-R", repo, "--json", "title,state,additions,deletions,changedFiles").Output()
+	if err != nil {
+		return ""
+	}
+	var pr struct {
+		Title        string `json:"title"`
+		State        string `json:"state"`
+		Additions    int    `json:"additions"`
+		Deletions    int    `json:"deletions"`
+		ChangedFiles int    `json:"changedFiles"`
+	}
+	if json.Unmarshal(out, &pr) != nil {
+		return ""
+	}
+	return fmt.Sprintf("Pull request #%d in %s (%s, %s): +%d / -%d lines across %d files", n, repo, pr.Title, strings.ToLower(pr.State), pr.Additions, pr.Deletions, pr.ChangedFiles)
 }
 
 func overviewInput(ws livedata.SnapWorkstream, track string) (overview.Input, bool) {

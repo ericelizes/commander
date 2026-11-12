@@ -4,7 +4,9 @@ package execution
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"github.com/example-user/commander/internal/chat"
 	"log"
 	"strings"
 	"sync"
@@ -194,7 +196,11 @@ func (w *Worker) PassSlot(ctx context.Context, slot string) error {
 	if e != nil {
 		cleanupCtx, stop := context.WithTimeout(context.Background(), 5*time.Second)
 		defer stop()
-		if release := w.Store.FailExecutionClaim(cleanupCtx, *claim, strings.TrimSpace(e.Error()), w.now()); release != nil {
+		releaseClaim := w.Store.FailExecutionClaim
+		if errors.Is(e, chat.ErrNoUsage) {
+			releaseClaim = w.Store.WaitExecutionUsage
+		}
+		if release := releaseClaim(cleanupCtx, *claim, strings.TrimSpace(e.Error()), w.now()); release != nil {
 			return fmt.Errorf("launch: %v; retained claim: %w", e, release)
 		}
 	}

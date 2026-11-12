@@ -146,6 +146,23 @@ func (s *Server) Refresh(ctx context.Context) bool {
 func (s *Server) refreshLocked(ctx context.Context) bool {
 	s.loadStarted = time.Now()
 	snap := s.opts.Source(ctx)
+	complete := ctx.Err() == nil && snap.Degraded == nil && snap.Error == "" && !snap.KeptLastGood && !snap.PreserveVersion
+	// Publish load evidence even when content is unchanged or a failed read
+	// retains the previous rows. Connection pings are never load evidence.
+	defer func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if complete {
+			s.cur.LoadCompletedAt = time.Now()
+		}
+		s.cur.LoadError = !complete
+		for ch := range s.subs {
+			select {
+			case ch <- struct{}{}:
+			default:
+			}
+		}
+	}()
 	if s.opts.StateStore != nil && (ctx.Err() != nil || snap.Degraded != nil || snap.KeptLastGood || snap.PreserveVersion) {
 		now := time.Now()
 		if s.failingSince.IsZero() {
@@ -191,6 +208,7 @@ func (s *Server) refreshLocked(ctx context.Context) bool {
 		s.pending = map[string]pendingPatch{}
 	}
 	snap = livedata.Patched(snap, s.pendingPatches(), time.Now().Unix(), s.opts.FinishBoard)
+	snap.LoadCompletedAt, snap.LoadError = s.cur.LoadCompletedAt, s.cur.LoadError
 	h := contentHash(snap)
 	if s.version > 0 && h == s.hash {
 		return false
@@ -200,12 +218,6 @@ func (s *Server) refreshLocked(ctx context.Context) bool {
 	}
 	snap.Version = s.version
 	s.cur, s.hash = snap, h
-	for ch := range s.subs {
-		select {
-		case ch <- struct{}{}:
-		default: // already pending: the client will read the latest anyway
-		}
-	}
 	return true
 }
 
@@ -303,6 +315,7 @@ func (s *Server) patchNow(after map[string]livedata.StepPatch) {
 // contentHash ignores the fields that change on every load.
 func contentHash(s livedata.Snapshot) [32]byte {
 	s.Version, s.GeneratedAt = 0, time.Time{}
+	s.LoadCompletedAt, s.LoadError = time.Time{}, false
 	raw, _ := json.Marshal(s)
 	return sha256.Sum256(raw)
 }
@@ -503,8 +516,8 @@ func (s *Server) serveSnapshot(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, status, snap)
 }
 
-// Event is one WebSocket message. Type is "snapshot" for now; more kinds
-// (chat streams) can be added without breaking clients.
+// Event is a full snapshot WebSocket frame. Unchanged content uses a separate
+// freshness frame carrying load_completed_at and load_error only.
 type Event struct {
 	Type     string            `json:"type"`
 	Snapshot livedata.Snapshot `json:"snapshot"`
@@ -526,15 +539,24 @@ func (s *Server) serveEvents(w http.ResponseWriter, r *http.Request) {
 
 	var sent uint64
 	var sentHash [32]byte
+	var sentLoad time.Time
+	var sentError bool
 	send := func() error {
 		snap := s.current(ctx)
 		hash := contentHash(snap)
 		if snap.Version == sent && hash == sentHash {
-			return nil // a notification for the version this client already has
+			if snap.LoadCompletedAt.Equal(sentLoad) && snap.LoadError == sentError {
+				return nil
+			}
+			sentLoad, sentError = snap.LoadCompletedAt, snap.LoadError
+			wctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			defer cancel()
+			return wsjson.Write(wctx, c, map[string]any{"type": "freshness", "load_completed_at": sentLoad, "load_error": sentError})
 		}
 		wctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 		sent, sentHash = snap.Version, hash
+		sentLoad, sentError = snap.LoadCompletedAt, snap.LoadError
 		return wsjson.Write(wctx, c, Event{Type: "snapshot", Snapshot: snap})
 	}
 	if send() != nil {

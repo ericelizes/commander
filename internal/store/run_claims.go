@@ -99,18 +99,24 @@ func claimRun(ctx context.Context, q Querier, r AgentRun) (int64, error) {
 			var sourceSession, sourceAgent string
 			var sourceProject int64
 			var sourceBead string
-			var sourceDriver, sourceRuntime, sourceAccount string
-			if e := q.QueryRowContext(ctx, `SELECT execution_driver,execution_runtime,execution_account FROM agent_runs WHERE id=?`, sourceRun).Scan(&sourceDriver, &sourceRuntime, &sourceAccount); e != nil {
+			var sourceDriver, sourceRuntime, sourceAccount, sourceWorktree string
+			var sourceUsage bool
+			if e := q.QueryRowContext(ctx, `SELECT execution_driver,execution_runtime,execution_account,status='native-error' AND EXISTS(SELECT 1 FROM bead_comments c WHERE c.project_id=r.project_id AND c.bead_id=r.task_bead_id AND c.run_id=r.id AND c.id='native-exit:'||r.id::text AND c.fact_kind='native-usage-limit'),COALESCE(worktree_path,'') FROM agent_runs r WHERE id=?`, sourceRun).Scan(&sourceDriver, &sourceRuntime, &sourceAccount, &sourceUsage, &sourceWorktree); e != nil {
 				return e
 			}
-			if r.ExecutionDriver == "native" && sourceDriver == "native" && (r.ExecutionRuntime != sourceRuntime || r.ExecutionAccount != sourceAccount) {
+			var checkpoint bool
+			if e := q.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM bead_questions q JOIN bead_tasks b ON b.project_id=q.project_id AND b.id=q.bead_id WHERE q.run_id=? AND q.blocking AND q.state='pending' AND q.plan_revision=b.plan_revision)`, sourceRun).Scan(&checkpoint); e != nil {
+				return e
+			}
+			usageRecovery := !checkpoint && sourceUsage && sourceDriver == "native" && r.ExecutionDriver == "native"
+			if !usageRecovery && r.ExecutionDriver == "native" && sourceDriver == "native" && (r.ExecutionRuntime != sourceRuntime || r.ExecutionAccount != sourceAccount) {
 				return errors.New("native checkpoint provider/account binding changed without a validated handoff")
 			}
 
 			if e := q.QueryRowContext(ctx, `SELECT project_id,task_bead_id,agent_name,opencode_session_id FROM agent_runs WHERE id=?`, sourceRun).Scan(&sourceProject, &sourceBead, &sourceAgent, &sourceSession); e != nil {
 				return e
 			}
-			if sourceProject != r.ProjectID || sourceBead != r.TaskBeadID || sourceSession != r.OpencodeSessionID || strings.ReplaceAll(sourceAgent, ".", "-") != strings.ReplaceAll(r.AgentName, ".", "-") {
+			if sourceProject != r.ProjectID || sourceBead != r.TaskBeadID || (!usageRecovery && sourceSession != r.OpencodeSessionID) || (usageRecovery && (sourceSession == r.OpencodeSessionID || sourceWorktree != r.WorktreePath.String)) || strings.ReplaceAll(sourceAgent, ".", "-") != strings.ReplaceAll(r.AgentName, ".", "-") {
 				return errors.New("resumed run does not match its checkpoint identity")
 			}
 		}

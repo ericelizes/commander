@@ -761,9 +761,9 @@ both code and knowledge tasks. Replacement-identity tests reject old observation
 and exit receipts. Frontend tests reject stale nested working flags, planning
 chat activity and wrong-project/non-run entries. New shared account ordering is
 wired through PostgreSQL, settings, planning engine and fresh execution worker;
-bound checkpoint continuations retain their recorded provider. Fresh executions
-cannot escape a saved order to an unlisted account when its preferred provider is
-unavailable or cannot support the task.
+bound checkpoint continuations retain their recorded provider. Saved account lists are ordered preferences (d82): try them first, then any
+connected account with usage left. Explicit runtime pins and user pauses remain
+constraints; no available eligible account produces a visible capacity error.
 
 This is not cutover proof. The detached cockpit smoke renders an isolated empty
 fleet; full populated PostgreSQL cockpit validation, old-process attestation and

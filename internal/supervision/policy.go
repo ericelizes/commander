@@ -67,6 +67,13 @@ func Decide(f store.SupervisionFact, now time.Time) Decision {
 		d.CheckAfter = 15 * time.Second
 		return d
 	}
+	// An unfinished gate can outlive the work it guarded. Keep it visible and
+	// preserve decisions, but do not demand progress or a completed outcome.
+	if f.GateInactive {
+		d.Reason = "gate_inactive"
+		d.Description = "Guarded work is closed or deferred"
+		return d
+	}
 	// The shared next-actor decision (what the sidebar shows) gates every nudge:
 	// a move that is the user's, someone external's, nobody's, or already in an
 	// agent's hands is observed, never delivered. Only Commander-owed or stuck

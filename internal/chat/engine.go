@@ -110,6 +110,10 @@ type Engine struct {
 
 // WaitResumed blocks until the chats running before a restart have been picked
 // back up once, so a request cannot start a second process on one of them.
+// agentNice is the CPU priority (nice) execution agents run at: they get all
+// the CPU nobody else wants, never ahead of cmdrd or the database.
+const agentNice = 10
+
 func (e *Engine) WaitResumed(ctx context.Context) error {
 	e.mu.Lock()
 	ch := e.resumed
@@ -715,7 +719,7 @@ func (e *Engine) startHost(spec Spec, resume bool, lock *sessionLock) (*hostConn
 		binary, args = bridge, CodexBridgeArgs(spec, e.opts.Home)
 	}
 	cfg := hostConfig{InitialPrompt: spec.ExecutionInitialPrompt, Sock: sock, Binary: binary, Args: args, Cwd: spec.Cwd,
-		Info: hostInfo{ExecutionRunID: spec.ExecutionRunID, Role: spec.Role, SessionID: spec.SessionID, Model: spec.Model, Cwd: spec.Cwd, Resumed: resume, StartedAt: e.opts.Now()}}
+		Info: hostInfo{Runtime: spec.Runtime, Account: spec.Account, ExecutionRunID: spec.ExecutionRunID, Role: spec.Role, SessionID: spec.SessionID, Model: spec.Model, Cwd: spec.Cwd, Resumed: resume, StartedAt: e.opts.Now()}}
 	if spec.ExecutionRunID > 0 {
 		cfg.ExitReceiptPath = nativeExitPath(e.opts.Home, spec.Role, spec.ExecutionRunID)
 		if err := os.MkdirAll(filepath.Dir(cfg.ExitReceiptPath), 0700); err != nil {
@@ -758,6 +762,11 @@ func (e *Engine) startHost(spec Spec, resume bool, lock *sessionLock) (*hostConn
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	if err := cmd.Start(); err != nil {
 		return nil, nil, fmt.Errorf("chat: start chat host: %w", err)
+	}
+	if strings.HasPrefix(spec.Role, "operator-") {
+		// An execution agent's builds and tests inherit this priority, so cmdrd,
+		// the database and the planning chats keep the CPU when agents test at once.
+		_ = syscall.Setpriority(syscall.PRIO_PROCESS, cmd.Process.Pid, agentNice)
 	}
 	lock.handoff()
 	exited := make(chan struct{})

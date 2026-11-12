@@ -13,7 +13,7 @@ import (
 // resume path. Missing or replaced native state requires explicit recovery;
 // never silently mint a fresh conversation and call it the same session.
 func validateCheckpointSession(req SpawnRequest, agent, sessionFile, sessionID string) error {
-	if req.ResumeSourceRunID == 0 {
+	if req.ResumeSourceRunID == 0 || req.UsageRecovery {
 		return nil
 	}
 	if !req.Resume || req.ResumeSessionID == "" || sessionID != req.ResumeSessionID || (req.ResumeDriver != "native" && readSessionFile(sessionFile) != req.ResumeSessionID) {
@@ -61,7 +61,7 @@ func checkpointSessionID(req SpawnRequest, sessionFile string) string {
 // saved thread. Native source paths do not depend on derived chat metadata.
 // Never overwrite another conversation's thread while promoting this context.
 func prepareNativeCheckpoint(req SpawnRequest, agent string) error {
-	if req.ResumeSourceRunID == 0 || req.Runtime != chat.RuntimeCodex {
+	if req.UsageRecovery || req.ResumeSourceRunID == 0 || req.Runtime != chat.RuntimeCodex {
 		return nil
 	}
 	target := chat.NativeCodexThreadFile(agentrt.CommanderHome(), agent, req.ResumeSessionID)

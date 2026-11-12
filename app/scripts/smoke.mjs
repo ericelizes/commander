@@ -84,6 +84,13 @@ const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/cs
 // A fake cmdrd for --offline: the first /api/events gets the fixture, then the
 // socket drops and every later attempt is refused, so the page goes offline.
 let served = false
+const freshnessSockets = new Set()
+function sendFrame(socket, value) {
+  const payload = Buffer.from(JSON.stringify(value))
+  const len = payload.length
+  const head = len < 126 ? Buffer.from([0x81, len]) : Buffer.from([0x81, 126, len >> 8, len & 255])
+  socket.write(Buffer.concat([head, payload]))
+}
 function fakeEvents(req, socket) {
   if (served && !fake) {
     socket.end('HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\n\r\n')
@@ -104,6 +111,10 @@ function fakeEvents(req, socket) {
     head.writeBigUInt64BE(BigInt(len), 2)
   }
   socket.write(Buffer.concat([head, payload]))
+  if (fake && argv.includes('--freshness')) {
+    freshnessSockets.add(socket)
+    socket.on('close', () => freshnessSockets.delete(socket))
+  }
   if (!fake) setTimeout(() => socket.destroy(), 400)
 }
 
@@ -112,6 +123,17 @@ const isWrite = (method, path) => method !== 'GET' && method !== 'HEAD' && !(met
 
 const server = createServer((req, res) => {
   const path = decodeURIComponent(new URL(req.url, 'http://x').pathname)
+  // Explicit fake-only test control; never forwarded to a real daemon.
+  if (fake && argv.includes('--freshness') && path === '/__smoke/freshness') {
+    const cases = JSON.parse(readFileSync(resolve('../tests/evals/scenarios/activity-freshness.json'), 'utf8')).cases
+    const name = new URL(req.url, 'http://x').searchParams.get('case')
+    const c = cases.find((c) => c.name === name)
+    if (!c) { res.writeHead(400).end(); return }
+    const frame = { type: 'freshness', load_completed_at: new Date(Date.now() - c.age * 1000).toISOString(), load_error: c.error }
+    for (const socket of freshnessSockets) sendFrame(socket, frame)
+    res.writeHead(200).end(JSON.stringify(c))
+    return
+  }
   // The allow-list below is for reads, and the browser's 404 line names no method: a write is seen here.
   if (isWrite(req.method, path)) notePageError(`${req.method} ${path}: the fake cmdrd takes no writes`)
   if (fake && path === '/api/linear') {

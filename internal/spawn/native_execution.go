@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"path/filepath"
 
 	"github.com/example-user/commander/internal/agentrt"
 	"github.com/example-user/commander/internal/chat"
@@ -29,8 +30,18 @@ func (s *Spawner) spawnNativeClaim(ctx context.Context, req SpawnRequest, agent,
 	if s.nativeExecution == nil {
 		return nil, errors.New("claimed execution requires the run-bound native runtime")
 	}
+	// Git reports the physical worktree path on takeover. Record that same
+	// identity at first admission, including installations whose .worktrees
+	// directory is a symlink to .worktrees.noindex.
+	if workspace != "" {
+		resolved, err := filepath.EvalSymlinks(workspace)
+		if err != nil {
+			return nil, fmt.Errorf("resolve native workspace: %w", err)
+		}
+		workspace = resolved
+	}
 	sid := agentrt.NewClaudeSessionID()
-	if req.Resume {
+	if req.Resume && !req.UsageRecovery {
 		sid = checkpointSessionID(req, sessionFile)
 		if sid == "" {
 			return nil, errors.New("native execution checkpoint has no retained session")

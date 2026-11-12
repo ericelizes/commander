@@ -87,6 +87,7 @@ type Spawner struct {
 type SpawnRequest struct {
 	AgentAccounts               []string // saved order for a fresh execution; bound resumes use their recorded provider
 	ExecutionClaimToken         string   // generic scheduler's durable startup reservation
+	UsageRecovery               bool     // new provider session after a physically exited usage-limited run
 	ResumeSourceRunID           int64
 	ResumeDriver, ResumeAccount string
 	ResumeSessionID             string
