@@ -256,10 +256,10 @@ func TestBoardTracks(t *testing.T) {
 	if r.Tracks[1].Text != "Working on w.2.2 · then: workflow approved" {
 		t.Fatalf("track B %q", r.Tracks[1].Text)
 	}
-	// Finished and parked tracks are not sub-rows; without tracks there are none.
+	// Parked tracks remain visible; closed tracks stay history.
 	steps := append(tracked(), st("w.3", asTrack, closedStep), st("w.4", asTrack, func(s *SnapStep) { s.Status = statusDeferred }))
 	s.Workstreams[0].Steps = steps
-	if r := Board(s, caseNow).Workstreams[0]; len(r.Tracks) != 2 {
+	if r := Board(s, caseNow).Workstreams[0]; len(r.Tracks) != 3 || r.Tracks[2].Text != "Paused" {
 		t.Fatalf("tracks %+v", r.Tracks)
 	}
 	plain := tracked()

@@ -1,0 +1,6 @@
+{
+  "workstreams": [{"n":1,"project":"demo","bead_id":"demo-w","title":"Delivery","status":"open","state":"in-progress","steps":[
+    {"bead_id":"demo-w.1","title":"Paused outcome","track":true,"status":"deferred","state":"not-started","children":[{"bead_id":"demo-w.1.confirm","title":"Confirm done","gate":true,"closing_gate":true,"approvers":["user"],"status":"open","state":"not-started"}]},
+    {"bead_id":"demo-w.2","title":"Awaiting confirmation","track":true,"status":"open","state":"in-progress","children":[{"bead_id":"demo-w.2.1","title":"Delivery verified","status":"closed","state":"done"},{"bead_id":"demo-w.2.confirm","title":"Confirm done","gate":true,"closing_gate":true,"approvers":["user"],"status":"open","state":"needs-user"}]}
+  ]}]
+}

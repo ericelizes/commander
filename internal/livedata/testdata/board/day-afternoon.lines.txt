@@ -3,7 +3,8 @@
 2 Sign-in: Working on dependency audit green · Sign-in change waiting on #2.1 (dependency audit green) (0% done, no gates, 2 working)
   2.1 Shared dependency: Working on dependency audit green (0% done, 1 working)
   2.2 Sign-in change: Waiting on #2.1 (dependency audit green) (0% done, for 15m)
+  2.3 Parked track: Paused (0% done)
 3 Finished plan: Nothing to do (100% done, no gates)
-4 Long history: Waiting for CI (93% done, no gates, for 10m)
+4 Long history: Waiting for CI (88% done, no gates, for 10m)
 Needs you (1):
   #1 Sign off early? (Parallel work)

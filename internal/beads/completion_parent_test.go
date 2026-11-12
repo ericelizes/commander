@@ -87,3 +87,39 @@ func TestPostgresCloseConcurrentParentMutation(t *testing.T) {
 		})
 	}
 }
+
+func TestPostgresCloseComposesWithConfirmDone(t *testing.T) {
+	c, dir, _ := postgresBeads(t)
+	ctx := context.Background()
+	parent, e := c.Create(ctx, dir, "Outcome", CreateOptions{Labels: []string{"kind:objective", "kind:workstream"}, Silent: true})
+	if e != nil {
+		t.Fatal(e)
+	}
+	confirm, e := c.Create(ctx, dir, "Confirm done", CreateOptions{Parent: parent, Labels: []string{"kind:objective", GateLabel, "approver:user", ClosingGateLabel}, Silent: true})
+	if e != nil {
+		t.Fatal(e)
+	}
+	if e = c.Close(ctx, dir, parent); e == nil {
+		t.Fatal("open Confirm done was bypassed")
+	}
+	if e = c.Close(ctx, dir, confirm); e != nil {
+		t.Fatal(e)
+	}
+	if e = c.Close(ctx, dir, parent); e != nil {
+		t.Fatal(e)
+	}
+	if _, e = c.Create(ctx, dir, "Late child", CreateOptions{Parent: parent, Silent: true}); e == nil {
+		t.Fatal("child created after parent closed")
+	}
+	wait := (Wait{Kind: WaitReview, Ref: "reviewer-a", Since: time.Now()}).Label()
+	if _, _, e = postgresRun(ctx, dir, []string{"update", parent, "--add-label", wait}); e == nil {
+		t.Fatal("review wait added after parent closed")
+	}
+	fresh, e := c.Create(ctx, dir, "Fresh outcome", CreateOptions{Silent: true})
+	if e != nil {
+		t.Fatal(e)
+	}
+	if _, _, e = postgresRun(ctx, dir, []string{"update", fresh, "--status", "closed", "--add-label", wait}); e == nil {
+		t.Fatal("same-write review wait bypassed close check")
+	}
+}
