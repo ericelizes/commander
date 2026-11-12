@@ -55,7 +55,7 @@ func TestTrackOnTheSameMoveAsItsRowDoesNotRepeatIt(t *testing.T) {
 	lead := nextactor.Result{Actor: nextactor.User, Reason: "decision", Bead: "gate"}
 	other := nextactor.Result{Actor: nextactor.Agent, Reason: "executing", Bead: "run"}
 	s := activeBoardFixture()
-	d := Display{Workstreams: []BoardRow{{Key: "p:root", Actor: &nextactor.Row{Lead: lead}, Tracks: []BoardTrack{
+	d := Display{Workstreams: []BoardRow{{Key: "p:root", N: 1, Actor: &nextactor.Row{Lead: lead}, Tracks: []BoardTrack{
 		{Key: "p:t1", BeadID: "t1", Actor: &nextactor.Row{Lead: lead}},
 		{Key: "p:t2", BeadID: "t2", Actor: &nextactor.Row{Lead: other}, Text: "Working on it"},
 	}}}}
@@ -63,7 +63,7 @@ func TestTrackOnTheSameMoveAsItsRowDoesNotRepeatIt(t *testing.T) {
 		return opener + " written", "", true
 	}
 	applyDescriptions(describe, &s, &d)
-	if got := d.Workstreams[0].Tracks[0].Text; got != "Needs you: same as above" {
+	if got := d.Workstreams[0].Tracks[0].Text; got != "Needs you: same question as row 1" {
 		t.Fatalf("track repeating its row: %q", got)
 	}
 	if got := d.Workstreams[0].Tracks[1].Text; got != "Working: written" {

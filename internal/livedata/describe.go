@@ -40,7 +40,7 @@ func applyDescriptions(describe DescribeFunc, snap *Snapshot, d *Display) {
 			for j := range ts {
 				t := &ts[j]
 				if t.Actor != nil && r.Actor.Lead.Bead != "" && t.Actor.Lead.Bead == r.Actor.Lead.Bead && t.Actor.Lead.Actor == r.Actor.Lead.Actor {
-					t.Text = Opener(t.Actor.Lead) + " same as above"
+					t.Text = sameAsRow(t.Actor.Lead, r.N)
 				} else if t.Actor != nil {
 					steps := []SnapStep{}
 					if st, ok := stepByID(ws.Steps, t.BeadID); ok {
@@ -67,6 +67,19 @@ func describeRow(describe DescribeFunc, key string, row nextactor.Row, facts, fa
 }
 
 // Opener is the fixed start of a row's description, set by its state.
+// sameAsRow is a track's line when it waits on the very move its row shows:
+// it names that row instead of repeating it.
+func sameAsRow(lead nextactor.Result, n int) string {
+	row := "the row above"
+	if n > 0 {
+		row = fmt.Sprintf("row %d", n)
+	}
+	if lead.Actor == nextactor.User {
+		return Opener(lead) + " same question as " + row
+	}
+	return Opener(lead) + " same as " + row
+}
+
 func Opener(r nextactor.Result) string {
 	switch r.Actor {
 	case nextactor.User:
