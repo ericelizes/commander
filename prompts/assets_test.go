@@ -261,7 +261,7 @@ func TestRenewingStaleWorkflowStepsInLeadPrompt(t *testing.T) {
 
 func TestStandingDecisionD9InPrompts(t *testing.T) {
 	for file, needles := range map[string][]string{
-		"lead.md":          {"every PR needs three review beads before merging", "cmdr workflow plug pr-review", "cmdr workflow bind-writers", "Never mark a PR **reviewed** clean while", "Devin comments are unanswered", "adversarial-only", "one bounded independent challenge", "at most one recovery per failure cause", "never call unavailable execution a source NOT CLEAN"},
+		"lead.md":          {"PR-review blocks are optional planning tools", "cmdr workflow plug pr-review", "cmdr workflow bind-writers", "Never mark a PR **reviewed** clean while", "Devin comments are unanswered", "adversarial-only", "one bounded independent challenge", "at most one recovery per failure cause", "never call unavailable execution a source NOT CLEAN"},
 		"operator-code.md": {"read-only on the code", "primary and adversarial reviewers are different", "compound-engineering:ce-code-review", "depth:auto", "when policy requires", "not a supported skill", "execution=blocked", "coverage=partial", "another primary roster", "at most one recovery per failure", "The writer answers every Devin comment"},
 	} {
 		body, err := templateFS.ReadFile(file)

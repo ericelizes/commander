@@ -142,11 +142,8 @@ func TestWorkflowReview_StandaloneMergedGateReachesTheRule(t *testing.T) {
 	seedStage(mem, "pr:1234")
 	mem.Seed(beads.Bead{ID: "g1", Title: "w.1: gate merged", Labels: []string{"kind:gate", "gate-of:" + beads.EscapeLabel("w.1"), "gate-name:merged", "verifier:user"}})
 	got := reviewFindings(t, mem, &fakeHeads{state: "OPEN", head: "head1"})
-	if len(got) != 1 || got[0].Check != "MERGE_REVIEW_REQUIRED" || got[0].Bead != "g1" {
-		t.Fatalf("open PR: %+v", got)
-	}
-	if !strings.Contains(got[0].Fix, "--parent w.1 --before g1 --pr "+reviewedPR) {
-		t.Fatalf("fix names the stage and its PR: %q", got[0].Fix)
+	if len(got) != 0 {
+		t.Fatalf("optional review: %+v", got)
 	}
 	// The stage's PR is merged: the gate is history.
 	if got := reviewFindings(t, mem, &fakeHeads{state: "MERGED", head: "head1"}); len(got) != 0 {
@@ -164,8 +161,8 @@ func TestWorkflowReview_PlainPRStepHasNoFinding(t *testing.T) {
 	}
 	mem.Seed(beads.Bead{ID: "w.3", Title: "Widget service PR 1234 merged", Labels: []string{"kind:objective", "pr:1234"}})
 	got := reviewFindings(t, mem, &fakeHeads{state: "OPEN", head: "head1"})
-	if len(got) != 1 || got[0].Bead != "w.3" || got[0].Check != "MERGE_REVIEW_REQUIRED" {
-		t.Fatalf("merge step: %+v", got)
+	if len(got) != 0 {
+		t.Fatalf("optional review: %+v", got)
 	}
 }
 
@@ -192,7 +189,7 @@ func TestWorkflowReview_RealLabelsResolveThroughTheProjectRepo(t *testing.T) {
 			t.Fatalf("%s merged: %+v", label, got)
 		}
 		got := reviewFindings(t, mem, &fakeHeads{state: "OPEN", head: "head1"})
-		if len(got) != 1 || !strings.Contains(got[0].Fix, reviewedPR) {
+		if len(got) != 0 {
 			t.Fatalf("%s open: %+v", label, got)
 		}
 	}
@@ -436,14 +433,8 @@ func TestWorkflowReview_ALaterStepBesideAFoldedBlockIsToldWhatWorks(t *testing.T
 	mem.Seed(beads.Bead{ID: "w.4", Title: "Fix merged to main", ParentID: "w", Labels: []string{"kind:objective", "pr:1234"}})
 	mem.Edges = append(mem.Edges, beads.Dep{IssueID: "w.4", DependsOnID: "w.3.1", Type: "blocks"})
 	got := reviewFindings(t, mem, &fakeHeads{state: "OPEN", head: "head1"})
-	if len(got) != 1 || got[0].Bead != "w.4" || got[0].Check != "MERGE_REVIEW_REQUIRED" {
-		t.Fatalf("findings: %+v", got)
-	}
-	if strings.Contains(got[0].Fix, "workflow plug") || strings.Contains(got[0].Why, "workflow plug") {
-		t.Fatalf("offers a refused plug: %+v", got[0])
-	}
-	if !strings.Contains(got[0].Fix, "--bead w.4 --review none") || !strings.Contains(got[0].Why, "w.3.1") || !strings.Contains(got[0].Why, "retitle it without the word merge") {
-		t.Fatalf("fix: %+v", got[0])
+	if len(got) != 0 {
+		t.Fatalf("optional review: %+v", got)
 	}
 }
 

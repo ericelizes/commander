@@ -148,21 +148,6 @@ func TestSettleBlockRefusesBeforeAnyWrite(t *testing.T) {
 		{name: "Operator", role: "operator-x", gh: mergedGH("MERGED", false), want: "Operators cannot"},
 		{name: "another Manager", role: "manager-other", gh: mergedGH("MERGED", false), want: "belongs to manager-B"},
 		{name: "short reason", role: "manager-B", reason: "merged", gh: mergedGH("MERGED", false), want: "15+"},
-		{name: "target with another live PR", role: "manager-B", want: "still has a live PR",
-			gh: func(_ context.Context, args ...string) ([]byte, error) {
-				state := "MERGED"
-				if args[2] != testPR {
-					state = "OPEN"
-				}
-				return json.Marshal(map[string]string{"headRefOid": "head9", "state": state})
-			},
-			edit: func(mem *beads.MemClient) {
-				for _, b := range mem.Beads {
-					if b.ID == "M" {
-						b.Labels = append(b.Labels, "pr:o/other#7")
-					}
-				}
-			}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			mem, res := settleProject(t)
@@ -313,5 +298,21 @@ func TestSettleBlockScenario(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// An unrelated tracked PR does not create a second mandatory review workflow.
+func TestSettleBlockIgnoresUnplannedPR(t *testing.T) {
+	mem, res := settleProject(t)
+	mem.SetLabel(context.Background(), "/d", "M", "pr:o/other#7", true)
+	pinWorkflowGH(t, func(ctx context.Context, args ...string) ([]byte, error) {
+		if len(args) > 2 && args[2] != testPR {
+			t.Fatalf("read unrelated PR: %v", args)
+		}
+		return mergedGH("MERGED", false)(ctx, args...)
+	})
+	t.Setenv("COMMANDER_ROLE", "manager-B")
+	if code, _, errOut := settleBlock(t, res.Container, settleReason); code != 0 {
+		t.Fatal(errOut)
 	}
 }

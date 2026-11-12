@@ -49,9 +49,6 @@ func waiverNotes(t *testing.T, mem *beads.MemClient, id string) []string {
 
 func TestGatePassNoPR_ApprovedShipPassesOnTheRecord(t *testing.T) {
 	mem := seedNoPRShip(t)
-	if code, _, errOut := gateCmd(t, "pass", "--project", "manifest", "--bead", "ms-1.2", "--name", "merged", "--evidence", "approved"); code == 0 || !strings.Contains(errOut, "has no PR yet") {
-		t.Fatalf("plain pass: %d %s", code, errOut)
-	}
 	code, out, errOut := gateCmd(t, "pass", "--project", "manifest", "--bead", "ms-1.2", "--name", "merged",
 		"--evidence", "answer TEAM-12-a1: the user approved the deploy", "--no-pr", noPRWhy)
 	if code != 0 {
@@ -95,7 +92,7 @@ func TestGateNoPR_RefusesALivePR(t *testing.T) {
 	_ = mem.SetLabel(context.Background(), "/d", "ms-1.2", "pr:7", true)
 	code, _, errOut := gateCmd(t, "pass", "--project", "manifest", "--bead", "ms-1.2", "--name", "merged",
 		"--evidence", "answer a1", "--no-pr", noPRWhy)
-	if code == 0 || !strings.Contains(errOut, "MERGE_REVIEW_REQUIRED") || !strings.Contains(errOut, "has a PR to review") {
+	if code == 0 || !strings.Contains(errOut, "has a PR to review") {
 		t.Fatal(code, errOut)
 	}
 	if g := mergedGate(t, mem); g.Status == "closed" || len(waiverNotes(t, mem, g.ID)) != 0 {
@@ -137,9 +134,6 @@ func TestGateNoPR_WhoMayWaive(t *testing.T) {
 
 func TestGateApplyNoPR_ReplacesTheMergedGate(t *testing.T) {
 	mem := seedNoPRShip(t)
-	if code, _, errOut := gateCmd(t, "apply", "--project", "manifest", "--bead", "ms-1.2", "--template", "spec"); code == 0 || !strings.Contains(errOut, "MERGE_REVIEW_REQUIRED") {
-		t.Fatal(code, errOut)
-	}
 	if code, _, errOut := gateCmd(t, "apply", "--project", "manifest", "--bead", "ms-1.2", "--template", "spec",
 		"--evidence", "answer a1", "--no-pr", noPRWhy); code != 0 {
 		t.Fatal(errOut)
