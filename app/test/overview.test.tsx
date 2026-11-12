@@ -146,8 +146,9 @@ describe('Overview', () => {
   it('marks stale narrative and keeps live state visible while the reader retries', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ ...result, stale: true, state: 'retrying' }), { status: 200 })))
     render(<Overview ws={ws} row={row} onWorkflow={vi.fn()} onTrack={vi.fn()} />)
-    expect(await screen.findByText(/Earlier recap/)).toBeInTheDocument()
+    expect(await screen.findByText('Refreshing summary…')).toHaveAttribute('role', 'status')
     expect(screen.getByText('Verifying the dashboard')).toBeInTheDocument()
+    expect(screen.queryByText(/Earlier recap/)).toBeNull()
     expect(screen.getByText(/Trying again shortly/)).toBeInTheDocument()
   })
   it('says what it waits for while the board loads and never reads unavailable', async () => {
@@ -206,7 +207,7 @@ describe('Overview', () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(body, { status: 200 })))
     render(<Overview ws={ws} row={row} onWorkflow={vi.fn()} onTrack={vi.fn()} />)
     expect(await screen.findByText(/The button is/)).toBeInTheDocument()
-    expect(screen.getByText('Writing the recap…')).toBeInTheDocument()
+    expect(screen.queryByText('Writing the recap…')).toBeNull()
     finish()
     expect(await screen.findByText(/The dashboard button is published/)).toBeInTheDocument()
     expect(screen.queryByText('Writing the recap…')).toBeNull()
