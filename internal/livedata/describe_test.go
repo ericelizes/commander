@@ -26,7 +26,7 @@ func TestDescriptionsReplaceTheDeterministicLineOnlyWhenReady(t *testing.T) {
 		return opener + " two agents run the parity suite", "", true
 	}
 	applyDescriptions(describe, &s, &d)
-	if d.Workstreams[0].Text != fallback {
+	if d.Workstreams[0].Text != placeholder(fallback) {
 		t.Fatal("the deterministic line was replaced before a description was ready")
 	}
 	if got.actor != "agent" || got.opener != "Working:" || !strings.Contains(got.facts, "running the parity suite") || strings.Contains(got.facts, "minute") {
@@ -81,7 +81,7 @@ func TestFactsSayABlockedLineWaitsInsteadOfWorking(t *testing.T) {
 func TestPlaceholderForABlockedLineSaysItWaits(t *testing.T) {
 	row := nextactor.Row{Lead: nextactor.Result{Actor: nextactor.Agent, Reason: "blocked:executing", Via: []string{"Merge and install the batch"}}}
 	notReady := func(key, actor, reason, opener, facts string) (string, string, bool) { return "", "", false }
-	if got := describeRow(notReady, "p:t", row, "facts", "After “Merge and install the batch”: working on “Merge and install the batch”"); got != "Waiting for “Merge and install the batch”" {
+	if got := describeRow(notReady, "p:t", row, "facts", "After “Merge and install the batch”: working on “Merge and install the batch”"); got != "Waiting for: Merge and install the batch" {
 		t.Fatalf("%q", got)
 	}
 }
@@ -89,10 +89,10 @@ func TestPlaceholderForABlockedLineSaysItWaits(t *testing.T) {
 func TestPlaceholderTrimsLongTitles(t *testing.T) {
 	row := nextactor.Row{Lead: nextactor.Result{Actor: nextactor.Agent, Reason: "blocked:executing", Via: []string{"Rebuild the QA Hub reporting-fix release on current prod and count errors"}}}
 	notReady := func(key, actor, reason, opener, facts string) (string, string, bool) { return "", "", false }
-	if got := describeRow(notReady, "p:t", row, "facts", ""); got != "Waiting for “Rebuild the QA Hub reporting-fix release…”" {
+	if got := describeRow(notReady, "p:t", row, "facts", ""); got != "Waiting for: Rebuild the QA Hub reporting-fix release on current prod and count errors" {
 		t.Fatalf("%q", got)
 	}
-	if got := placeholder("Working on “Verify every Nov 9 wrong-state case is impossible on the installed Commander”"); got != "Working on “Verify every Nov 9 wrong-state case…”" {
+	if got := placeholder("Working on “Verify every Nov 9 wrong-state case is impossible on the installed Commander”"); got != "Agent: Verify every Nov 9 wrong-state case is impossible on the installed Commander" {
 		t.Fatalf("%q", got)
 	}
 }
