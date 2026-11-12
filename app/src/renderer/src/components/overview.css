@@ -16,7 +16,7 @@
 /* The overview reads as a document: serif for what is written, the app's sans
    for what is operated (buttons, times, pills, citations). */
 .ov-pane {
-  --serif: 'Lora', 'Iowan Old Style', Charter, Georgia, 'Times New Roman', serif;
+  --serif: Charter, 'Bitstream Charter', 'Iowan Old Style', Georgia, serif;
   position: relative;
   height: 100%;
   overflow: hidden;
@@ -31,7 +31,7 @@
 .ov ul { padding-left: 20px; margin: 10px 0; }
 .ov li { padding: 0 0 12px 4px; text-wrap: pretty; }
 .ov li::marker { color: var(--ink-4); }
-.ov-summary { font-size: 18px; line-height: 1.65; }
+.ov-summary { font-size: inherit; line-height: inherit; }
 .ov button { font: inherit; cursor: pointer; }
 .ov button:focus-visible, .ov a:focus-visible, .ov-reader button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
@@ -89,7 +89,7 @@
 .ov-tracks span[data-tone='agent'] { color: var(--ok); }
 .ov-tracks span[data-tone='waiting'] { color: var(--attn); }
 
-.ov-footer { display: flex; flex-wrap: wrap; gap: 10px 18px; margin-top: 44px; padding-top: 18px; border-top: 1px solid var(--hairline); font: 500 13px/1.5 var(--font); }
+.ov-footer { display: flex; flex-wrap: wrap; gap: 10px 18px; margin-top: 32px; font: 500 13px/1.5 var(--font); }
 .ov-footer a, .ov .ov-footer button { color: var(--accent); text-decoration: none; background: none; border: 0; padding: 0; }
 .ov-footer a:hover, .ov .ov-footer button:hover { text-decoration: underline; }
 .ov-footer > span { color: var(--ink-3); font-weight: 400; font-size: 12.5px; width: 100%; }
@@ -156,7 +156,6 @@
 @media (max-width: 650px) {
   .ov { padding: 28px 20px 40px; }
   .ov h1 { font-size: 28px; }
-  .ov-summary { font-size: 18px; }
 }
 
 /* Refreshing summary: the recap shown is being rewritten from newer evidence. */

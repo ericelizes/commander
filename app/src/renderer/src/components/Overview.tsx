@@ -101,7 +101,7 @@ function toneOf(kind?: LineKind): Tone {
   return 'quiet'
 }
 
-export function Overview({ ws, row, track, onWorkflow, onTrack }: {
+export function Overview({ ws, row, track, onTrack }: {
   ws: SnapWorkstream; row: BoardRow; track?: string; onWorkflow: () => void; onTrack: (id: string) => void
 }) {
   const snapshot = useStore((s) => s.snapshot)!
@@ -284,8 +284,6 @@ export function Overview({ ws, row, track, onWorkflow, onTrack }: {
         {below.length > 0 && <section aria-label="Workstreams under this one"><h2>Across this workstream</h2><div className="ov-tracks">{below.map((t) => <button type="button" key={t.bead_id} onClick={() => onTrack(t.bead_id)}><strong>{plainTitle(t.title)}</strong><span data-tone={toneOf(t.kind)}>{t.text}</span></button>)}</div></section>}
         <footer className="ov-footer">
           {ws.repo && /^[\w.-]+\/[\w.-]+$/.test(ws.repo) && artifacts.map((p) => <a key={p} href={`https://github.com/${ws.repo}/pull/${p}`} target="_blank" rel="noreferrer">PR #{p} ↗</a>)}
-          <button type="button" onClick={onWorkflow}>View workflow</button>
-          <span>{result?.recap?.generated_at && !draftOn && `Recap written ${new Date(result.recap.generated_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}. `}State recorded {new Date(snapshot.generated_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}.</span>
         </footer>
       </article>
     </div>
