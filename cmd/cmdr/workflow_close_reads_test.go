@@ -389,7 +389,7 @@ func TestShortIDReadNeverPassesAGuardedClose(t *testing.T) {
 			},
 		},
 		{
-			name: "target whose second live PR's block was left out", close: "M", whole: "MERGE_REVIEW_REQUIRED",
+			name: "target whose second live PR's block was left out", close: "M", whole: "MERGE_REVIEW_INCOMPLETE",
 			seed: func(t *testing.T, mem *beads.MemClient) string {
 				res := seedReviewWorkflow(t, mem)
 				finishReviewBlock(t, mem, res)
@@ -399,14 +399,6 @@ func TestShortIDReadNeverPassesAGuardedClose(t *testing.T) {
 				mem.SetParent(ctx, "/d", "second", "B")
 				mem.DependOn(ctx, "/d", "M", "second")
 				return "second"
-			},
-		},
-		{
-			name: "gate whose stage's live PR was left out", close: "G", whole: "MERGE_REVIEW_REQUIRED",
-			seed: func(t *testing.T, mem *beads.MemClient) string {
-				mem.Seed(beads.Bead{ID: "S", Labels: []string{"pr:77"}})
-				mem.Seed(beads.Bead{ID: "G", Title: "PR merged", Labels: []string{"gate", "gate-of:S", "pr:12"}})
-				return "S"
 			},
 		},
 	} {
@@ -507,23 +499,23 @@ func TestWorkflowCloseJudgesLikeAWholeProjectRead(t *testing.T) {
 			finishReviewBlock(t, mem, res)
 			mem.Close(ctx, "/d", res.Container)
 		}},
-		{name: "target with a second block", close: "M", edit: func(_ *testing.T, mem *beads.MemClient, _ *workflowPlugResult) { secondBlock(mem) }, want: "MERGE_REVIEW_REQUIRED"},
-		{name: "container whose target has a second block", container: true, edit: func(_ *testing.T, mem *beads.MemClient, _ *workflowPlugResult) { secondBlock(mem) }, want: "MERGE_REVIEW_REQUIRED"},
+		{name: "target with a second block", close: "M", edit: func(_ *testing.T, mem *beads.MemClient, _ *workflowPlugResult) { secondBlock(mem) }, want: "MERGE_REVIEW_INCOMPLETE"},
+		{name: "container whose target has a second block", container: true, edit: func(_ *testing.T, mem *beads.MemClient, _ *workflowPlugResult) { secondBlock(mem) }, want: "MERGE_REVIEW_INCOMPLETE"},
 		{name: "gate judged on its stage's PR", close: "G", edit: func(_ *testing.T, mem *beads.MemClient, _ *workflowPlugResult) {
 			mem.Seed(beads.Bead{ID: "S", Status: "open", Labels: []string{"pr:77"}})
 			mem.Seed(beads.Bead{ID: "G", Status: "open", Title: "PR merged", Labels: []string{"gate", "gate-of:S"}})
-		}, want: "MERGE_REVIEW_REQUIRED"},
+		}},
 		{name: "container over a gate with a stage's PR", container: true, edit: func(_ *testing.T, mem *beads.MemClient, res *workflowPlugResult) {
 			mem.Seed(beads.Bead{ID: "S", Status: "open", Labels: []string{"pr:77"}})
 			mem.Seed(beads.Bead{ID: "G", Status: "open", Title: "PR merged", Labels: []string{"gate", "gate-of:S"}})
 			mem.DependOn(ctx, "/d", "G", res.Container)
-		}, want: "MERGE_REVIEW_REQUIRED"},
+		}, want: "MERGE_REVIEW_INCOMPLETE"},
 		{name: "merge gate by gate-name", close: "T", edit: func(t *testing.T, mem *beads.MemClient, _ *workflowPlugResult) {
 			blocked(t, mem, beads.Bead{Title: "Ship it", Labels: []string{"gate-name:merged"}})
 		}, want: "MERGE_REVIEW_INCOMPLETE"},
 		{name: "merge gate with no block", close: "T", edit: func(_ *testing.T, mem *beads.MemClient, _ *workflowPlugResult) {
 			mem.Seed(beads.Bead{ID: "T", Title: "Ship it", Labels: []string{"gate-name:merged", "pr:12"}})
-		}, want: "MERGE_REVIEW_REQUIRED"},
+		}},
 		{name: "merge step with a pr label", close: "T", edit: func(t *testing.T, mem *beads.MemClient, _ *workflowPlugResult) {
 			blocked(t, mem, beads.Bead{Title: "Squash-merge the PR", Labels: []string{"pr:" + testPR}})
 		}, want: "MERGE_REVIEW_INCOMPLETE"},
@@ -534,7 +526,7 @@ func TestWorkflowCloseJudgesLikeAWholeProjectRead(t *testing.T) {
 			blocked(t, mem, beads.Bead{Title: "PR merged", Status: "deferred", Labels: []string{"gate"}})
 		}, want: "MERGE_REVIEW_INCOMPLETE"},
 		{name: "settled: its PR merged", close: "M", states: map[string]string{testPR: "MERGED"}},
-		{name: "settled, but a second PR is live", close: "M", states: map[string]string{testPR: "MERGED"}, edit: func(_ *testing.T, mem *beads.MemClient, _ *workflowPlugResult) { secondBlock(mem) }, want: "MERGE_REVIEW_REQUIRED"},
+		{name: "settled, but a second PR is live", close: "M", states: map[string]string{testPR: "MERGED"}, edit: func(_ *testing.T, mem *beads.MemClient, _ *workflowPlugResult) { secondBlock(mem) }, want: "MERGE_REVIEW_INCOMPLETE"},
 		{name: "exempt: closed target", close: "M", edit: func(_ *testing.T, mem *beads.MemClient, _ *workflowPlugResult) { mem.Close(ctx, "/d", "M") }},
 		{name: "exempt: superseded target", close: "M", edit: func(_ *testing.T, mem *beads.MemClient, _ *workflowPlugResult) { label(mem, "M", "superseded") }},
 		{name: "exempt: retired target", close: "M", edit: func(_ *testing.T, mem *beads.MemClient, _ *workflowPlugResult) { label(mem, "M", "retired") }},

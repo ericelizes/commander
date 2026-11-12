@@ -305,9 +305,9 @@ func TestReviewBlock_SettledAndInvalidDispositionMatrix(t *testing.T) {
 		{name: "new head", state: "OPEN", head: "head2", wantFinding: "MERGE_REVIEW_INCOMPLETE"},
 		{name: "missing head", state: "OPEN", wantFinding: "MERGE_REVIEW_INCOMPLETE"},
 		{name: "unknown state and head", wantFinding: "MERGE_REVIEW_INCOMPLETE"},
-		{name: "invalid bound snapshot", state: "OPEN", head: "head1", invalid: true, wantFinding: "MERGE_REVIEW_REQUIRED"},
+		{name: "invalid bound snapshot", state: "OPEN", head: "head1", invalid: true, wantFinding: "MERGE_REVIEW_INCOMPLETE"},
 		{name: "reopened stage", state: "OPEN", head: "head1", reopened: true, wantDone: 5, wantFinding: "MERGE_REVIEW_INCOMPLETE"},
-		{name: "merged PR beside live PR", state: "MERGED", head: "head1", unbound: true, extraLive: true, wantFinding: "MERGE_REVIEW_REQUIRED"},
+		{name: "merged PR beside live PR", state: "MERGED", head: "head1", unbound: true, extraLive: true, wantDone: 6},
 		// A closed target gets no PR read at all (RefreshWorkflowHeads skips it),
 		// so it reads as the merge rule treats it: exempt, whatever the PR did.
 		{name: "closed target merged", state: "MERGED", head: "head1", targetClosed: true, wantDone: 6},

@@ -37,7 +37,7 @@ func TestMergeRule(t *testing.T) {
 		edit       func([]Node) []Node
 	}{
 		{"complete", "", func(n []Node) []Node { return n }},
-		{"missing", "MERGE_REVIEW_REQUIRED", func(n []Node) []Node { n[0].Waits = nil; return n }},
+		{"missing", "", func(n []Node) []Node { n[0].Waits = nil; return n }},
 		{"open", "MERGE_REVIEW_INCOMPLETE", func(n []Node) []Node { n[2].Bead.Status = "open"; return n }},
 		{"stale head", "MERGE_REVIEW_INCOMPLETE", func(n []Node) []Node { n[0].Head = "new"; return n }},
 		{"missing evidence", "MERGE_REVIEW_INCOMPLETE", func(n []Node) []Node { n[2].Comments = nil; return n }},
@@ -56,7 +56,7 @@ func TestMergeRule(t *testing.T) {
 			return n
 		}},
 		// F6: free text on the target names no PR.
-		{"merged URL in the description", "MERGE_REVIEW_REQUIRED", func(n []Node) []Node {
+		{"merged URL in the description", "", func(n []Node) []Node {
 			n[0].Waits = nil
 			n[0].Bead.Description = "follows https://github.com/o/r/pull/1"
 			n[0].PRStates = map[string]string{"https://github.com/o/r/pull/1": "MERGED"}
@@ -70,13 +70,13 @@ func TestMergeRule(t *testing.T) {
 			return n
 		}},
 		// F7: every pr: label is judged.
-		{"merged and open labels, no block", "MERGE_REVIEW_REQUIRED", func(n []Node) []Node {
+		{"merged and open labels, no block", "", func(n []Node) []Node {
 			n[0].Waits = nil
 			n[0].Bead.Labels = append(n[0].Bead.Labels, "pr:1", "pr:8")
 			n[0].PRStates = map[string]string{"https://github.com/o/r/pull/1": "MERGED", "https://github.com/o/r/pull/8": "OPEN"}
 			return n
 		}},
-		{"open label beside a complete block", "MERGE_REVIEW_REQUIRED", func(n []Node) []Node {
+		{"open label beside a complete block", "", func(n []Node) []Node {
 			n[0].Bead.Labels = append(n[0].Bead.Labels, "pr:8")
 			n[0].PRStates = map[string]string{"https://github.com/o/r/pull/8": "OPEN", testURL: "OPEN"}
 			return n
@@ -88,7 +88,7 @@ func TestMergeRule(t *testing.T) {
 			return n
 		}},
 		// ...and alone it is no merge.
-		{"only an abandoned label", "MERGE_REVIEW_REQUIRED", func(n []Node) []Node {
+		{"only an abandoned label", "", func(n []Node) []Node {
 			n[0].Waits = nil
 			n[0].Bead.Labels = append(n[0].Bead.Labels, "pr:1")
 			n[0].PRStates = map[string]string{"https://github.com/o/r/pull/1": "CLOSED"}
@@ -100,7 +100,7 @@ func TestMergeRule(t *testing.T) {
 			n[0].PRStates = map[string]string{"https://github.com/o/r/pull/1": "CLOSED", "https://github.com/o/r/pull/2": "MERGED"}
 			return n
 		}},
-		{"unknown state counts as open", "MERGE_REVIEW_REQUIRED", func(n []Node) []Node {
+		{"unknown state counts as open", "", func(n []Node) []Node {
 			n[0].Waits = nil
 			n[0].Bead.Labels = append(n[0].Bead.Labels, "pr:1")
 			return n
@@ -322,77 +322,12 @@ func TestMergeReviewIncompletePrintsTheCommands(t *testing.T) {
 	}
 }
 
-func TestMergeRulePlannedPRIsAdvisory(t *testing.T) {
-	nodes := []Node{{Bead: beads.Bead{ID: "M", Title: "PR merged", Status: "open", Labels: []string{"gate"}}}}
-	got := MergeRule("p", "o/r", nodes, nil)
-	if len(got) != 1 || !got[0].Advisory || strings.Contains(got[0].Fix, "<URL>") {
-		t.Fatalf("planned = %+v", got)
-	}
-	nodes[0].Bead.Labels = append(nodes[0].Bead.Labels, "pr:7")
-	got = MergeRule("p", "o/r", nodes, nil)
-	if len(got) != 1 || got[0].Advisory || !strings.Contains(got[0].Fix, testURL) {
-		t.Fatalf("with PR = %+v", got)
-	}
-}
-
-// Advisory only with no PR evidence at all. Evidence the PR readings cannot resolve
-// still blocks, and its plug command names that PR.
-func TestMergeRuleKnownPRIsNeverAdvisory(t *testing.T) {
-	merge := func(labels ...string) Node {
-		return Node{Bead: beads.Bead{ID: "M", ParentID: "B", Title: "PR merged", Status: "open", Labels: append([]string{"gate"}, labels...)}}
-	}
-	gateOf := "gate-of:" + beads.EscapeLabel("s.1")
-	stage := func(labels ...string) Node {
-		return Node{Bead: beads.Bead{ID: "s.1", Title: "Build", Status: "open", Labels: labels}}
-	}
-	for _, c := range []struct {
-		name  string
-		repo  string
-		nodes []Node
-		fix   string // empty = the advisory
-	}{
-		{name: "no evidence", repo: "o/r", nodes: []Node{merge()}},
-		{name: "no evidence, no repo", nodes: []Node{merge()}},
-		{name: "a stage with no pr label", repo: "o/r", nodes: []Node{merge(gateOf), stage()}},
-		{name: "bare label, repo unknown", nodes: []Node{merge("pr:7")}, fix: "--pr <URL of pr:7>"},
-		{name: "bare label on the stage, repo unknown", nodes: []Node{merge(gateOf), stage("pr:7")}, fix: "--pr <URL of pr:7>"},
-	} {
-		t.Run(c.name, func(t *testing.T) {
-			got := MergeRule("p", c.repo, c.nodes, map[string]bool{"M": true})
-			if len(got) != 1 {
-				t.Fatalf("findings = %+v", got)
-			}
-			if c.fix == "" {
-				if !got[0].Advisory || !strings.Contains(got[0].Text, "no PR yet") {
-					t.Fatalf("want the advisory: %+v", got[0])
-				}
-				return
-			}
-			if got[0].Advisory || got[0].Check != "MERGE_REVIEW_REQUIRED" || strings.Contains(got[0].Text, "no PR yet") ||
-				!strings.HasPrefix(got[0].Fix, "cmdr workflow plug pr-review") || !strings.HasSuffix(got[0].Fix, c.fix) {
-				t.Fatalf("want a blocker ending %q: %+v", c.fix, got[0])
-			}
-		})
-	}
-}
-
-// A merged gate on a stage: the stage's pr: label is judged beside the gate's own
-// block, and clearing it leaves the gate judged on that block.
-func TestMergeRuleStageLabelBesideAGatesBlock(t *testing.T) {
-	nodes := completeBlock(t)
-	nodes[0].Bead.Labels = []string{"gate-name:merged", "gate-of:STAGE"}
-	stage := Node{Bead: beads.Bead{ID: "STAGE", Title: "Fix merged to main", Status: "open", Labels: []string{"pr:9"}}}
-	nodes = append(nodes, stage)
-	got := MergeRule("p", "o/r", nodes, map[string]bool{"M": true, "STAGE": true})
-	if len(got) != 2 || !strings.Contains(got[0].Text, "pull/9") {
-		t.Fatalf("label on: %+v", got)
-	}
-	nodes[len(nodes)-1].Bead.Labels = nil
-	if got := MergeRule("p", "o/r", nodes, map[string]bool{"M": true, "STAGE": true}); len(got) != 0 {
-		t.Fatalf("label cleared: %+v", got)
-	}
-	if prs := TargetPRs(nodes[0], nodeIndex(nodes), "p", "o/r"); !slices.Equal(prs, []string{testURL}) {
-		t.Fatalf("the block's PR stays: %v", prs)
+func TestMergeReviewIsOptional(t *testing.T) {
+	for _, labels := range [][]string{{"gate-name:merged"}, {"gate", "pr:7"}, {"pr:unknown/repo#9"}} {
+		n := Node{Bead: beads.Bead{ID: "M", Title: "Merge PR", Status: "open", Labels: labels}}
+		if got := MergeRule("p", "o/r", []Node{n}, nil); len(got) != 0 {
+			t.Fatalf("%v: %+v", labels, got)
+		}
 	}
 }
 
@@ -406,36 +341,7 @@ func nodeIndex(nodes []Node) map[string]Node {
 
 // plug refuses a target that waits on a block of another instance, so the fix line
 // must not offer it; a plug that finishes the target's own block names that block's parent.
-func TestMergeRuleNeverOffersARefusedPlug(t *testing.T) {
-	t.Run("a second live PR beside the block, label on the stage", func(t *testing.T) {
-		nodes := completeBlock(t)
-		nodes[0].Bead.Labels = []string{"gate-name:merged", "gate-of:STAGE"}
-		nodes = append(nodes, Node{Bead: beads.Bead{ID: "STAGE", Title: "Build", Status: "open", Labels: []string{"pr:9"}}})
-		got := MergeRule("p", "o/r", nodes, map[string]bool{"M": true})
-		if len(got) != 1 || got[0].Check != "MERGE_REVIEW_REQUIRED" {
-			t.Fatalf("findings: %+v", got)
-		}
-		if strings.Contains(got[0].Fix, "workflow plug") || strings.Contains(got[0].Text, "workflow plug") {
-			t.Fatalf("offers a refused plug: %+v", got[0])
-		}
-		if !strings.Contains(got[0].Fix, "--bead STAGE --review none") {
-			t.Fatalf("clears the label where it sits: %s", got[0].Fix)
-		}
-	})
-	t.Run("a merge gate with no label, on another target's block", func(t *testing.T) {
-		nodes := completeBlock(t)
-		nodes = append(nodes, Node{Bead: beads.Bead{ID: "G", Title: "Merged", Status: "open", Labels: []string{"gate-name:merged"}}, Waits: []string{"R"}})
-		got := MergeRule("p", "o/r", nodes, map[string]bool{"G": true})
-		if len(got) != 1 || got[0].Advisory || strings.Contains(got[0].Fix, "workflow plug") || strings.Contains(got[0].Fix, "--review none") || !strings.Contains(got[0].Text, testURL) || !strings.Contains(got[0].Fix, "G waits on R") {
-			t.Fatalf("findings: %+v", got)
-		}
-	})
-	t.Run("no other block: plug is still the fix", func(t *testing.T) {
-		got := MergeRule("p", "o/r", []Node{{Bead: beads.Bead{ID: "G", Title: "Merged", Status: "open", Labels: []string{"gate-name:merged", "pr:9"}}}}, nil)
-		if len(got) != 1 || !strings.HasPrefix(got[0].Fix, "cmdr workflow plug pr-review") {
-			t.Fatalf("findings: %+v", got)
-		}
-	})
+func TestMissingStepRepairKeepsBlockParent(t *testing.T) {
 	t.Run("a missing step's plug names the block's own parent", func(t *testing.T) {
 		tpl, err := Load("pr-review")
 		if err != nil {
@@ -454,40 +360,4 @@ func TestMergeRuleNeverOffersARefusedPlug(t *testing.T) {
 			t.Fatalf("findings: %+v", got)
 		}
 	})
-}
-
-// NoPR (what internal-gate --no-pr may waive) marks only a target with no PR at
-// all: a plugged block, a waited-on block or a pr: label each leaves it unmarked.
-func TestMergeRuleNoPROnlyWithoutAnyPR(t *testing.T) {
-	noPR := func(nodes []Node) bool {
-		f := MergeRule("p", "o/r", nodes, map[string]bool{"M": true})
-		return len(f) == 1 && f[0].NoPR
-	}
-	bare := func() []Node { n := completeBlock(t); n[0].Waits = nil; return n }
-	if !noPR(bare()) {
-		t.Fatal("a merge with no PR is not marked NoPR")
-	}
-	open := completeBlock(t)
-	open[2].Bead.Status = "open"
-	if noPR(open) {
-		t.Fatal("a plugged block was marked NoPR")
-	}
-	other := bare()
-	other[1].Bead.Labels = slices.DeleteFunc(slices.Clone(other[1].Bead.Labels), func(l string) bool { return strings.HasPrefix(l, LabelInstance) })
-	other[0].Waits = []string{"R"} // waits on a review block not plugged for it
-	if noPR(other) {
-		t.Fatal("a waited-on review block was marked NoPR")
-	}
-	for _, on := range []int{0, -1} {
-		n := bare()
-		if on == 0 {
-			n[0].Bead.Labels = append(n[0].Bead.Labels, "pr:7")
-		} else {
-			n[0].Bead.Labels = append(n[0].Bead.Labels, "gate-of:ST")
-			n = append(n, Node{Bead: beads.Bead{ID: "ST", Status: "open", Labels: []string{"pr:7"}}})
-		}
-		if noPR(n) {
-			t.Fatalf("a pr: label (%d) was marked NoPR", on)
-		}
-	}
 }

@@ -169,16 +169,12 @@ func (f flow) reviewBlock(s SnapStep) *ReviewBlock {
 // display gets no PR facts for it, so nothing else could say so.
 func (f flow) reviewSettled(s SnapStep) bool {
 	nodes := workflowInput(f.ws)
-	byID := map[string]workflowtemplate.Node{}
-	for _, n := range nodes {
-		byID[n.Bead.ID] = n
-	}
 	for _, n := range nodes {
 		if slices.Contains(n.Waits, s.BeadID) && workflowtemplate.PluggedBefore(s.WorkflowCheck.Bead, n.Bead.ID, f.ws.Project) {
 			if n.Bead.Status == "closed" {
 				return true
 			}
-			return workflowtemplate.Settled(workflowtemplate.TargetPRs(n, byID, f.ws.Project, f.ws.Repo), n.PRStates)
+			return workflowtemplate.Settled([]string{workflowtemplate.BlockPR(s.WorkflowCheck.Bead)}, n.PRStates)
 		}
 	}
 	return false
