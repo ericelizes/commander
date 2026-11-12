@@ -508,9 +508,9 @@ export function openTracks(ws: SnapWorkstream): SnapStep[] {
   return openTracksIn(ws.steps)
 }
 
-/** openNested is every open nested workstream, at any depth, each before its children. */
-export function openNested(ws: SnapWorkstream): SnapStep[] {
-  const walk = (steps: SnapStep[] | undefined): SnapStep[] => openTracksIn(steps).flatMap((s) => [s, ...walk(s.children)])
+/** Visible nested workstreams, each before its children; active progress can exclude paused subtrees. */
+export function openNested(ws: SnapWorkstream, includePaused = true): SnapStep[] {
+  const walk = (steps: SnapStep[] | undefined): SnapStep[] => openTracksIn(steps).filter((s) => includePaused || !parked(s)).flatMap((s) => [s, ...walk(s.children)])
   return walk(ws.steps)
 }
 
