@@ -17,7 +17,15 @@ func fixture() Input {
 	return Input{Scope: "p:w", Goal: "Ship dashboards", Evidence: []Evidence{{ID: "pr", Label: "PR", Text: "PR open; apply pending"}}}
 }
 func valid() Recap {
-	return Recap{Summary: Claim{Sentences: []Sentence{{Text: "The PR is open.", Sources: []string{"pr"}}, {Text: "The infrastructure apply is still pending.", Sources: []string{"pr"}}}}}
+	one := func(text string) Claim { return Claim{Sentences: []Sentence{{Text: text, Sources: []string{"pr"}}}} }
+	return Recap{
+		ProblemType: "feature",
+		Problem:     Claim{Sentences: []Sentence{{Text: "The PR is open.", Sources: []string{"pr"}}, {Text: "The infrastructure apply is still pending.", Sources: []string{"pr"}}}},
+		Solution:    one("A pull request adds the dashboards."),
+		Impact:      one("Teams see their apps at a glance."),
+		Scope:       "Small", ScopeDetail: one("One pull request."),
+		Risk: 2, RiskDetail: one("Read-only dashboards."),
+	}
 }
 func waitReady(t *testing.T, c *Cache, in Input) Result {
 	t.Helper()
@@ -93,17 +101,17 @@ func TestReaderFailureIsBoundedAndDoesNotInventRecap(t *testing.T) {
 }
 func TestReaderCannotCiteInventedEvidence(t *testing.T) {
 	r := valid()
-	r.Summary.Sentences[1].Sources = []string{"made-up"}
+	r.Problem.Sentences[1].Sources = []string{"made-up"}
 	if Validate(r, fixture()) == nil {
 		t.Fatal("accepted invented source")
 	}
 	r = valid()
-	r.Next = []Claim{{Sentences: []Sentence{{Text: "Approve deployment", Sources: nil}}}}
+	r.Impact = Claim{Sentences: []Sentence{{Text: "Approve deployment", Sources: nil}}}
 	if Validate(r, fixture()) == nil {
 		t.Fatal("accepted uncited action")
 	}
 	r = valid()
-	r.Summary.Sentences[0].Sources = []string{"pr", "pr", "pr", "pr"}
+	r.Problem.Sentences[0].Sources = []string{"pr", "pr", "pr", "pr"}
 	if Validate(r, fixture()) == nil {
 		t.Fatal("accepted a pile of sources on one sentence")
 	}
@@ -167,8 +175,8 @@ func TestPromptRequiresEveryNamedThingToBeExplained(t *testing.T) {
 		}
 	}
 	// The explanation sentences must fit the schema the reader is held to.
-	if !strings.Contains(Prompt, "up to 4 short sentences") {
-		t.Fatal("summary budget leaves no room to explain what is named")
+	if !strings.Contains(Prompt, "1-2 sentences on the REAL problem") {
+		t.Fatal("the pitch must say what the real problem is")
 	}
 }
 
@@ -186,5 +194,25 @@ func TestPromptLeadsWithOutcomesNotReviewMechanics(t *testing.T) {
 func TestPromptMarksCodeLikeText(t *testing.T) {
 	if !strings.Contains(Prompt, "wrap code-like text") {
 		t.Fatal("the recap prompt must ask for code-like text in backticks")
+	}
+}
+
+func TestPitchNeedsTypeScopeAndRisk(t *testing.T) {
+	in := fixture()
+	r := valid()
+	if err := Validate(r, in); err != nil {
+		t.Fatal(err)
+	}
+	for _, broken := range []func(*Recap){
+		func(r *Recap) { r.ProblemType = "chore" },
+		func(r *Recap) { r.Scope = "Huge" },
+		func(r *Recap) { r.Risk = 11 },
+		func(r *Recap) { r.RiskDetail = Claim{} },
+	} {
+		b := valid()
+		broken(&b)
+		if Validate(b, in) == nil {
+			t.Fatalf("accepted %+v", b)
+		}
 	}
 }

@@ -13,22 +13,22 @@ import (
 	"github.com/example-user/commander/internal/testguard"
 )
 
-const partialJSON = `{"summary":{"sentences":[{"text":"The PR is \"open\".","sources":["pr"]},{"text":"Second sent`
+const partialJSON = `{"problem":{"sentences":[{"text":"The PR is \"open\".","sources":["pr"]},{"text":"Second sent`
 
 func TestPartialRecapKeepsOnlyFinishedSentences(t *testing.T) {
 	r := PartialRecap(partialJSON)
-	if len(r.Summary.Sentences) != 2 || r.Summary.Sentences[0].Text != `The PR is "open".` || r.Summary.Sentences[0].Partial {
+	if len(r.Problem.Sentences) != 2 || r.Problem.Sentences[0].Text != `The PR is "open".` || r.Problem.Sentences[0].Partial {
 		t.Fatal(r)
 	}
-	if p := r.Summary.Sentences[1]; !p.Partial || p.Text != "Second sent" || len(p.Sources) != 0 {
+	if p := r.Problem.Sentences[1]; !p.Partial || p.Text != "Second sent" || len(p.Sources) != 0 {
 		t.Fatal(p)
 	}
-	full := `{"summary":{"sentences":[{"text":"A.","sources":["pr"]}]},"changes":[{"sentences":[{"text":"B.","sources":["pr"]},{"text":"C.","sources":["pr"]}]},{"sentences":[{"text":"D.","sources":["x"]}]}],"next":[{"sentences":[{"text":"E.","sources":[]}]}]}`
+	full := `{"problem_type":"bug","problem":{"sentences":[{"text":"A.","sources":["pr"]}]},"solution":{"sentences":[{"text":"B.","sources":["pr"]},{"text":"C.","sources":["pr"]}]},"impact":{"sentences":[{"text":"D.","sources":["x"]}]},"scope":"Small","risk":3,"risk_detail":{"sentences":[{"text":"E.","sources":[]}]}}`
 	r = PartialRecap(full)
-	if len(r.Changes) != 2 || len(r.Changes[0].Sentences) != 2 || len(r.Changes[1].Sentences) != 1 || len(r.Next) != 1 || r.Next[0].Sentences[0].Text != "E." {
+	if len(r.Solution.Sentences) != 2 || len(r.Impact.Sentences) != 1 || len(r.RiskDetail.Sentences) != 1 || r.RiskDetail.Sentences[0].Text != "E." || r.ProblemType != "bug" || r.Scope != "Small" || r.Risk != 3 {
 		t.Fatalf("%+v", r)
 	}
-	if got := onlyKnown(r, fixture()); len(got.Changes[1].Sentences[0].Sources) != 0 || len(got.Changes[0].Sentences[0].Sources) != 1 {
+	if got := onlyKnown(r, fixture()); len(got.Impact.Sentences[0].Sources) != 0 || len(got.Solution.Sentences[0].Sources) != 1 {
 		t.Fatalf("%+v", got)
 	}
 }
@@ -51,7 +51,7 @@ func TestCacheShowsDraftWhileWritingAndSignalsChange(t *testing.T) {
 		t.Fatal("no change signal")
 	}
 	r := c.Get(in)
-	if r.State != "updating" || r.Draft == nil || len(r.Draft.Summary.Sentences) != 2 {
+	if r.State != "updating" || r.Draft == nil || len(r.Draft.Problem.Sentences) != 2 {
 		t.Fatalf("%+v", r)
 	}
 	close(release)
@@ -74,9 +74,9 @@ func TestClaudeStreamsDraftThenResult(t *testing.T) {
 	script := `#!/bin/sh
 cat >/dev/null
 echo '{"type":"stream_event","event":{"type":"content_block_start","content_block":{"type":"tool_use"}}}'
-echo '{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"{\"summary\":{\"sentences\":[{\"text\":\"Open.\",\"sources\":[\"pr\"]}"}}}'
-echo '{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"]},\"changes\":[],\"next\":[]}"}}}'
-echo '{"type":"result","is_error":false,"structured_output":{"summary":{"sentences":[{"text":"Open.","sources":["pr"]}]},"changes":[],"next":[]}}'
+echo '{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"{\"problem\":{\"sentences\":[{\"text\":\"Open.\",\"sources\":[\"pr\"]}"}}}'
+echo '{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"]}}"}}}'
+echo '{"type":"result","is_error":false,"structured_output":{"problem":{"sentences":[{"text":"Open.","sources":["pr"]}]}}}'
 `
 	if err := os.WriteFile(filepath.Join(dir, "claude"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
@@ -85,10 +85,10 @@ echo '{"type":"result","is_error":false,"structured_output":{"summary":{"sentenc
 	var drafts []Recap
 	ctx := WithProgress(context.Background(), func(d Recap) { drafts = append(drafts, d) })
 	r, err := Claude(nil)(ctx, fixture())
-	if err != nil || len(r.Summary.Sentences) != 1 {
+	if err != nil || len(r.Problem.Sentences) != 1 {
 		t.Fatal(r, err)
 	}
-	if len(drafts) != 2 || len(drafts[0].Summary.Sentences) != 1 {
+	if len(drafts) != 2 || len(drafts[0].Problem.Sentences) != 1 {
 		t.Fatalf("%+v", drafts)
 	}
 }
@@ -132,14 +132,14 @@ func TestChangedEvidenceWaitsOutTheCooldownAndDraftCarriesItsOwnEvidence(t *test
 func TestFirstDeltaPublishesPartialDraftAndDraftsAreNonNil(t *testing.T) {
 	in := Input{Evidence: []Evidence{{ID: "a"}}}
 	// The first sentence shows as it is written, marked partial.
-	if p := PartialRecap(`{"summary":{"sentences":[{"text":"Half wri`); len(p.Summary.Sentences) != 1 || !p.Summary.Sentences[0].Partial {
+	if p := PartialRecap(`{"problem":{"sentences":[{"text":"Half wri`); len(p.Problem.Sentences) != 1 || !p.Problem.Sentences[0].Partial {
 		t.Fatalf("first partial sentence: %+v", p)
 	}
-	if p := PartialRecap(`{"summary":{"sentences":[{"te`); len(p.Summary.Sentences) != 0 {
+	if p := PartialRecap(`{"problem":{"sentences":[{"te`); len(p.Problem.Sentences) != 0 {
 		t.Fatalf("no text yet: %+v", p)
 	}
 	// A sentence citing only unknown ids still encodes arrays, never null.
-	d := onlyKnown(PartialRecap(`{"summary":{"sentences":[{"text":"x","sources":["zz"]}]},"changes":[],"next":[]}`), in)
+	d := onlyKnown(PartialRecap(`{"problem":{"sentences":[{"text":"x","sources":["zz"]}]}}`), in)
 	b, _ := json.Marshal(d)
 	if strings.Contains(string(b), "null") {
 		t.Fatalf("draft encodes null: %s", b)
@@ -148,14 +148,14 @@ func TestFirstDeltaPublishesPartialDraftAndDraftsAreNonNil(t *testing.T) {
 
 // Every prefix of the answer yields text that only grows, one character at a time.
 func TestPartialRecapStreamsCharacterByCharacter(t *testing.T) {
-	full := `{"summary":{"sentences":[{"text":"Caf\u00e9 \"ok\" done.","sources":["pr"]}]},"changes":[{"sentences":[{"text":"Next one","sources":[]}]}],"next":[]}`
+	full := `{"problem":{"sentences":[{"text":"Caf\u00e9 \"ok\" done.","sources":["pr"]}]},"solution":{"sentences":[{"text":"Next one","sources":[]}]}}`
 	prev := ""
 	grew := 0
 	for i := 1; i <= len(full); i++ {
 		r := PartialRecap(full[:i])
 		cur := ""
-		if n := len(r.Summary.Sentences); n > 0 {
-			cur = r.Summary.Sentences[0].Text
+		if n := len(r.Problem.Sentences); n > 0 {
+			cur = r.Problem.Sentences[0].Text
 		}
 		if !strings.HasPrefix(cur, prev) || len([]rune(cur))-len([]rune(prev)) > 1 {
 			t.Fatalf("at %d: %q after %q", i, cur, prev)
@@ -169,8 +169,8 @@ func TestPartialRecapStreamsCharacterByCharacter(t *testing.T) {
 		t.Fatalf("%q grew %d", prev, grew)
 	}
 	r := PartialRecap(full[:strings.Index(full, `"Next one"`)+5])
-	if len(r.Changes) != 1 || len(r.Changes[0].Sentences) != 1 || r.Changes[0].Sentences[0].Text != "Next" || !r.Changes[0].Sentences[0].Partial {
-		t.Fatalf("%+v", r.Changes)
+	if len(r.Solution.Sentences) != 1 || r.Solution.Sentences[0].Text != "Next" || !r.Solution.Sentences[0].Partial {
+		t.Fatalf("%+v", r.Solution)
 	}
 }
 
@@ -181,14 +181,14 @@ func TestPartialRecapHoldsAHighSurrogateBack(t *testing.T) {
 	bs := `\`
 	emoji := bs + "u" + "d83d" + bs + "u" + "de00"
 	for _, text := range []string{"Hi " + emoji + " there", "Hi " + string(rune(0x1F600)) + " there"} {
-		full := `{"summary":{"sentences":[{"text":"` + text + `","sources":[]}]}}`
+		full := `{"problem":{"sentences":[{"text":"` + text + `","sources":[]}]}}`
 		for i := 1; i <= len(full); i++ {
 			r := PartialRecap(full[:i])
-			if n := len(r.Summary.Sentences); n > 0 && strings.ContainsRune(r.Summary.Sentences[0].Text, 0xFFFD) {
-				t.Fatalf("at %d: %q", i, r.Summary.Sentences[0].Text)
+			if n := len(r.Problem.Sentences); n > 0 && strings.ContainsRune(r.Problem.Sentences[0].Text, 0xFFFD) {
+				t.Fatalf("at %d: %q", i, r.Problem.Sentences[0].Text)
 			}
 		}
-		if got := PartialRecap(full).Summary.Sentences[0].Text; got != "Hi "+string(rune(0x1F600))+" there" {
+		if got := PartialRecap(full).Problem.Sentences[0].Text; got != "Hi "+string(rune(0x1F600))+" there" {
 			t.Fatalf("%q", got)
 		}
 	}
