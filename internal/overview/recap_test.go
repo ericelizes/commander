@@ -66,6 +66,19 @@ func TestCacheOwnsOneReaderAndMarksChangedEvidenceStale(t *testing.T) {
 		t.Fatal("stale recap lost original citations", r)
 	}
 }
+func TestRecapWaitsForTheCommanderTurnToEnd(t *testing.T) {
+	var calls atomic.Int32
+	c := New(func(context.Context, Input) (Recap, error) { calls.Add(1); return valid(), nil })
+	in := fixture()
+	in.Hold = true
+	c.Get(in)
+	waitReady(t, c, in) // no recap yet: the first one is written even mid-turn
+	in.Evidence[0].Text = "PR now merged"
+	if r := c.Get(in); r.State != "ready" || calls.Load() != 1 {
+		t.Fatalf("rewrote mid-turn: %+v calls %d", r, calls.Load())
+	}
+}
+
 func TestReaderFailureIsBoundedAndDoesNotInventRecap(t *testing.T) {
 	var calls atomic.Int32
 	c := New(func(context.Context, Input) (Recap, error) { calls.Add(1); return Recap{}, errors.New("provider down") })

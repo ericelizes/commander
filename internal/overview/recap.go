@@ -26,6 +26,9 @@ type Input struct {
 	Scope    string     `json:"scope"`
 	Goal     string     `json:"goal"`
 	Evidence []Evidence `json:"evidence"`
+	// Hold keeps an existing recap while its Commander is mid-turn: each new
+	// message would otherwise restart the rewrite. Not part of the hash.
+	Hold bool `json:"-"`
 }
 
 // Sentence is the unit of citation, so a reader can check each statement
@@ -138,7 +141,7 @@ func (c *Cache) Get(in Input) Result {
 	if same {
 		e.err = "" // the evidence is back to what the recap shows: nothing to retry
 	}
-	if !same && !e.pending && !c.busy && (e.attempt.IsZero() || now.Sub(e.attempt) >= wait) {
+	if !same && !e.pending && !c.busy && !(in.Hold && e.recap != nil) && (e.attempt.IsZero() || now.Sub(e.attempt) >= wait) {
 		e.pending = true
 		e.attempt = now
 		e.err = ""

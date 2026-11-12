@@ -17,6 +17,7 @@ import (
 	"github.com/example-user/commander/internal/claudeacct"
 	"github.com/example-user/commander/internal/livedata"
 	"github.com/example-user/commander/internal/overview"
+	"github.com/example-user/commander/internal/store"
 )
 
 type overviewRequest struct {
@@ -87,6 +88,7 @@ func (s *Server) serveOverview(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 404, map[string]string{"error": "nested workstream not found in this workstream"})
 		return
 	}
+	in.Hold = snap.Agents[ws.ManagerRole].State == store.AgentWorking
 	if !q.Stream {
 		writeJSON(w, http.StatusOK, s.overviews.Get(in))
 		return
