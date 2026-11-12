@@ -47,6 +47,9 @@ func WorkstreamTickets(ws SnapWorkstream) []WorkstreamTicket {
 		out = append(out, WorkstreamTicket{ID: id})
 	}
 	for _, t := range openTracks(ws) {
+		if parked(t) {
+			continue
+		}
 		working := workingOperators(SnapWorkstream{Steps: []SnapStep{t}}) > 0
 		for _, id := range append(TitleTickets(t.Title), t.Tickets...) {
 			out = append(out, WorkstreamTicket{ID: id, OnTrack: true, Working: working})
