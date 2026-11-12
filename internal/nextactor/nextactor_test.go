@@ -139,6 +139,23 @@ func TestDependencyChainsResolveToTheirRoot(t *testing.T) {
 	if r.Actor != User || r.Reason != "blocked:decision" || r.Text != "Needs you: approve it (blocking “Middle step”)" || strings.Count(r.Text, "blocking") != 1 {
 		t.Fatalf("chain text: %+v", r)
 	}
+	asked := map[string]Bead{
+		"fixes":    {ID: "fixes", Title: "Prepare fixes", Status: "open", HasOpenChildren: true, Children: []string{"registry", "later"}, Waits: []beads.Wait{{Kind: beads.WaitUser}}},
+		"registry": {ID: "registry", Title: "Restore registry access", Status: "open", NeedsUser: true, UserAsk: "can the owner restore access?"},
+		"later":    {ID: "later", Title: "Validate", Status: "open", BlockedBy: []string{"registry"}},
+		"quiet":    {ID: "quiet", Title: "Prepare rollout", Status: "open", HasOpenChildren: true, Children: []string{"later2"}, Waits: []beads.Wait{{Kind: beads.WaitUser}}},
+		"later2":   {ID: "later2", Title: "Validate again", Status: "open", Waits: []beads.Wait{{Kind: beads.WaitCI, PR: 4}}},
+	}
+	actx := ctxWith(true, 0, asked)
+	if r := Decide(asked["fixes"], actx); r.Actor != None || r.Reason != "children" {
+		t.Fatalf("a parent whose child holds the question is carried by it: %+v", r)
+	}
+	if r := Decide(Bead{ID: "next", Title: "Review", Status: "open", BlockedBy: []string{"fixes"}}, actx); r.Actor != User || r.Bead != "registry" {
+		t.Fatalf("behind a parent whose child holds the question: %+v", r)
+	}
+	if r := Decide(asked["quiet"], actx); r.Actor != Commander || r.Reason != "record_question" || r.Bead != "quiet" {
+		t.Fatalf("a parent waiting on the user with no question anywhere: %+v", r)
+	}
 	if r := Decide(graph["loop-a"], ctx); r.Actor == "" {
 		t.Fatal("a dependency cycle produced no decision")
 	}

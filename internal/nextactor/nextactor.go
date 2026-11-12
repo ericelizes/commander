@@ -151,6 +151,39 @@ func resolveOnce(b Bead, ctx Context, seen map[string]bool, depth int) Result {
 	return best
 }
 
+// childAsksUser: some open step below b has a question for the user.
+func childAsksUser(b Bead, ctx Context, seen map[string]bool, depth int) bool {
+	if depth >= maxChainDepth || seen[b.ID] {
+		return false
+	}
+	seen[b.ID] = true
+	defer delete(seen, b.ID)
+	for _, id := range b.Children {
+		if child, ok := ctx.Lookup(id); ok && !seen[id] && resolve(child, ctx, seen, depth+1).Actor == User {
+			return true
+		}
+	}
+	return false
+}
+
+func userWait(b Bead) *beads.Wait {
+	for i := range b.Waits {
+		if b.Waits[i].Kind == beads.WaitUser {
+			return &b.Waits[i]
+		}
+	}
+	return nil
+}
+
+// recordQuestion: b waits on the user but nothing recorded says what for, so
+// writing it down is the planning Commander's move, not a decision the user
+// can make.
+func recordQuestion(b Bead, ctx Context) Result {
+	r := commanderOwed(b, ctx, "record_question", "write down what "+quoted(b.Title)+" needs from you", unix(userWait(b).Since))
+	r.Bead = b.ID
+	return r
+}
+
 func decide(b Bead, ctx Context, seen map[string]bool, depth int) Result {
 	r := own(b, ctx)
 	if r.Actor != "" {
@@ -166,6 +199,9 @@ func decide(b Bead, ctx Context, seen map[string]bool, depth int) Result {
 		}
 	}
 	if b.HasOpenChildren {
+		if userWait(b) != nil && strings.TrimSpace(b.UserAsk) == "" && ctx.Lookup != nil && !childAsksUser(b, ctx, seen, depth) {
+			return recordQuestion(b, ctx)
+		}
 		return Result{Actor: None, Reason: "children", Text: "Carried by its steps", Bead: b.ID}
 	}
 	if b.ReadyQueued {
@@ -232,9 +268,11 @@ func waits(b Bead, ctx Context) Result {
 		switch {
 		case w.Kind == beads.WaitUser:
 			if strings.TrimSpace(b.UserAsk) == "" {
-				// Nothing recorded says what the user is asked: writing it down is
-				// the planning Commander's move, not a decision the user can make.
-				return commanderOwed(b, ctx, "record_question", "write down what "+quoted(b.Title)+" needs from you", unix(w.Since))
+				if b.HasOpenChildren {
+					// The question may sit on a step below; decide looks there.
+					continue
+				}
+				return recordQuestion(b, ctx)
 			}
 			return Result{Actor: User, Reason: "waiting_user", Since: unix(w.Since), Text: "Needs you: " + b.UserAsk}
 		case beads.IsManagerHandoff(w):
