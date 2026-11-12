@@ -8,10 +8,11 @@ import { Navigator } from '../src/renderer/src/components/Navigator'
 
 afterEach(() => { cleanup(); localStorage.clear() })
 
-it('names root ownership and nested overrides, and reflects a returned jurisdiction', () => {
+it('names root ownership only when more than one Commander owns rows, nested overrides, and reflects a returned jurisdiction', () => {
   const s = JSON.parse(readFileSync(join(__dirname, 'fixtures/snapshot.json'), 'utf8')) as Snapshot
   const root = s.display!.workstreams[0]
   root.planning_commander = 'commander'
+  s.display!.workstreams[1].planning_commander = 'commander-other'
   root.tracks = [{key:root.key+'.urgent',bead_id:'nested-urgent',letter:'.1',title:'Urgent work',kind:'waiting',text:'Commander to plan the next action',since:0,progress:{done:0,total:1},working:0,planning_commander:'commander-urgent'}]
   localStorage.clear()
   localStorage.setItem('nav.tab','all')
@@ -25,4 +26,10 @@ it('names root ownership and nested overrides, and reflects a returned jurisdict
   useStore.setState({snapshot:returned})
   view.rerender(<Navigator />)
   expect(screen.queryByLabelText('Responsible Commander: commander-urgent')).not.toBeInTheDocument()
+  // One Commander owning every row needs no label.
+  const single = structuredClone(returned)
+  single.display!.workstreams[1].planning_commander = 'commander'
+  useStore.setState({snapshot:single})
+  view.rerender(<Navigator />)
+  expect(screen.queryByLabelText('Responsible Commander: commander')).not.toBeInTheDocument()
 })

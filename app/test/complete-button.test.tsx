@@ -1,4 +1,4 @@
-// A workstream with nothing open shows Complete; the click closes it through
+// A finished workstream (kind done) shows Complete in its state line; the click closes it through
 // /api/cmd and the row reads Completed before the board catches up.
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -21,8 +21,8 @@ beforeEach(() => {
   const t06 = done.workstreams.find((w) => w.bead_id === 'example-app-t06')!
   Object.assign(t06, { state: 'in-progress', steps: closeAll(t06.steps), owner: undefined })
   done.needs_you = done.needs_you.filter((n) => !n.bead_id.startsWith('example-app-t06'))
-  // cmdrd's board for it: nothing open.
-  done.display = { ...done.display!, asks: done.display!.asks.filter((a) => !a.key.includes('example-app-t06')), workstreams: done.display!.workstreams.map((w) => (w.bead_id === 'example-app-t06' ? { ...w, kind: 'quiet', text: 'Nothing to do', flag: 0 } : w)) }
+  // cmdrd's board for it: done, nothing open.
+  done.display = { ...done.display!, asks: done.display!.asks.filter((a) => !a.key.includes('example-app-t06')), workstreams: done.display!.workstreams.map((w) => (w.bead_id === 'example-app-t06' ? { ...w, kind: 'done', text: 'Ready to complete', flag: 0 } : w)) }
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {

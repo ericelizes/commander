@@ -31,7 +31,7 @@ type overviewRequest struct {
 	Project string `json:"project"`
 	BeadID  string `json:"bead_id"`
 	TrackID string `json:"track_id"`
-	// Part is the tab asking: "status" (default) or "pitch".
+	// Part is what to write: "" (the whole page), "status" or "pitch".
 	Part string `json:"part"`
 	// Stream asks for newline-delimited results: one per change while the recap is
 	// being written, ending when it is ready (or is waiting on something).
@@ -183,7 +183,7 @@ func buildOverviewInput(snap livedata.Snapshot, ws *livedata.SnapWorkstream, q o
 	in.Evidence = append(in.Evidence, overviewMessages(home, ws.ManagerRole, q.TrackID)...)
 	in.Evidence = append(in.Evidence, overviewPRSizes(*ws, q.TrackID)...)
 	in.Evidence = append(in.Evidence, overviewLinearTickets(home, *ws, q.TrackID)...)
-	in.Part = "status"
+	in.Part = q.Part // "" = the whole page, status and pitch, in one generation
 	if q.Part == "pitch" {
 		// The pitch is scoping: it reads what the work is, not what moved a
 		// minute ago, and is rewritten at most hourly.
@@ -196,7 +196,9 @@ func buildOverviewInput(snap livedata.Snapshot, ws *livedata.SnapWorkstream, q o
 		}
 		in.Evidence = kept
 	}
-	in.Scope += ":" + in.Part
+	if in.Part != "" {
+		in.Scope += ":" + in.Part
+	}
 	now := time.Now()
 	for i := range in.Evidence {
 		in.Evidence[i].Text = livedata.HumanTimes(in.Evidence[i].Text, now)
@@ -664,4 +666,49 @@ func fetchLinearTicket(home, id string) string {
 	}
 	is := data.Data.Issue
 	return fmt.Sprintf("%s (%s): %s\n%s", is.Identifier, is.State.Name, is.Title, trimOverview(is.Description, 6000))
+}
+
+// WarmOverviews keeps every workstream's and nested workstream's Overview
+// written (the whole page, one generation), so opening one never waits on a blank page. The cache
+// only rewrites what changed, a few at a time.
+func (s *Server) WarmOverviews(ctx context.Context) {
+	t := time.NewTicker(2 * time.Minute)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+		snap, ok := s.overviewSnapshot()
+		if !ok || snap.Degraded != nil {
+			continue
+		}
+		home := filepath.Dir(s.opts.ConfigPath)
+		if s.opts.Chat != nil {
+			home = s.opts.Chat.Home()
+		}
+		for i := range snap.Workstreams {
+			ws := &snap.Workstreams[i]
+			if ws.Status == "closed" {
+				continue
+			}
+			scopes := []string{""}
+			var walk func([]livedata.SnapStep)
+			walk = func(steps []livedata.SnapStep) {
+				for _, st := range steps {
+					if st.Track && st.Status != "closed" {
+						scopes = append(scopes, st.BeadID)
+					}
+					walk(st.Children)
+				}
+			}
+			walk(ws.Steps)
+			for _, track := range scopes {
+				if in, ok := buildOverviewInput(snap, ws, overviewRequest{Project: ws.Project, BeadID: ws.BeadID, TrackID: track}, home); ok {
+					s.overviews.Get(in)
+				}
+			}
+		}
+	}
 }

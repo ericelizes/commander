@@ -3,7 +3,7 @@ import { flushSync } from 'react-dom'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BoardRow, Snapshot, SnapWorkstream } from '../src/shared/snapshot'
-import { Overview, overviewAsks, overviewTickets, type RecapResult } from '../src/renderer/src/components/Overview'
+import { Overview, OverviewPage, overviewAsks, overviewTickets, WorkstreamHeader, type RecapResult } from '../src/renderer/src/components/Overview'
 import { SourceReader, sourcePage } from '../src/renderer/src/components/OverviewSource'
 import { InspectorColumn } from '../src/renderer/src/components/InspectorColumn'
 import { ConfirmDialog } from '../src/renderer/src/components/ConfirmDialog'
@@ -19,7 +19,7 @@ const row: BoardRow = { n: 1, key: 'p:w', project: 'p', bead_id: 'w', title: ws.
   { key: 'b', bead_id: 'track-b', letter: 'B', title: 'Payroll', kind: 'working', text: 'Payroll migrating', since: 0, progress: { done: 0, total: 1 }, working: 1 },
 ] }
 const snap: Snapshot = { version: 1, generated_at: new Date().toISOString(), projects: [], workstreams: [ws], needs_you: [], agents: {}, fleet: {} as Snapshot['fleet'], unread: {}, display: { commander: { kind: 'idle', text: '', since: 0, unread: 0 }, asks: [], workstreams: [row] } }
-const result: RecapResult = { state: 'ready', stale: false, evidence: [{ id: 'apply', label: 'Terraform state', text: 'Manual apply remains pending in two workspaces.' }], recap: { generated_at: new Date().toISOString(), summary: { sentences: [{ text: 'The dashboard button is published; the infrastructure apply is still pending.', sources: ['apply'] }] }, changes: [], next: [{ sentences: [{ text: 'Verify access after the apply completes.', sources: ['apply'] }] }] } }
+const result: RecapResult = { state: 'ready', stale: false, evidence: [{ id: 'apply', label: 'Terraform state', text: 'Manual apply remains pending in two workspaces.' }], recap: { generated_at: new Date().toISOString(), now: { sentences: [{ text: 'The dashboard button is published; the infrastructure apply is still pending.', sources: ['apply'] }] }, next: { sentences: [{ text: 'Verify access after the apply completes.', sources: ['apply'] }] } } }
 
 beforeEach(() => {
   useIntegrations.setState({ linearTeam: 'TEAM' }) // the titles' ticket prefix
@@ -30,7 +30,7 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); useIntegrations.setState({ l
 
 describe('Overview', () => {
   it('renders a null or empty streaming draft without throwing', async () => {
-    const draft = { state: 'updating', stale: false, evidence: [], draft: { summary: { sentences: null }, changes: null, next: null } }
+    const draft = { state: 'updating', stale: false, evidence: [], draft: { now: { sentences: null }, recent: null, next: null } }
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => new Response(JSON.stringify(String(input).includes('/api/overview') ? draft : { project_id: 1, ws: 'w', active_id: 0, tabs: [] }), { status: 200 })))
     render(<InspectorColumn />)
     expect(await screen.findByRole('article', { name: 'Workstream overview' })).toBeInTheDocument()
@@ -45,59 +45,47 @@ describe('Overview', () => {
     useStore.getState().setSnapshot({ ...snap, version: 2 })
     expect(screen.getByRole('tab', { name: 'Workflow' })).toHaveAttribute('aria-selected', 'true')
   })
+  it('is one page: its parts in order with a contents list, one summary for both, one loader', async () => {
+    const asked: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (_: RequestInfo | URL, init?: RequestInit) => { asked.push(JSON.parse(String(init?.body)).part); return new Response(JSON.stringify({ ...result, stale: true }), { status: 200 }) }))
+    const parts = () => screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent!.trim()).filter((t) => t === 'Current status' || t === 'Pitch')
+    render(<OverviewPage ws={ws} row={row} onWorkflow={vi.fn()} onTrack={vi.fn()} />)
+    await screen.findByText(/The dashboard button is published/)
+    expect(parts()).toEqual(['Current status', 'Pitch'])
+    expect(within(screen.getByRole('navigation', { name: 'On this page' })).getAllByRole('button').map((b) => b.textContent!.trim())).toEqual(['Current status', 'Pitch'])
+    expect(new Set(asked)).toEqual(new Set(['']))
+    expect(screen.getAllByText(/Refreshing summary/)).toHaveLength(1)
+  })
   it('shows the tickets under a clean title, a workstream counting its open tracks', () => {
     const carrying: SnapWorkstream = { ...ws, title: 'Ship dashboards (TEAM-1)', steps: [{ ...ws.steps![0], title: 'Dashboards (TEAM-2)' }, { ...ws.steps![1], tickets: ['TEAM-3'] }] }
     expect(overviewTickets(carrying)).toEqual(['TEAM-1', 'TEAM-2', 'TEAM-3'])
     expect(overviewTickets(carrying, 'track-a')).toEqual(['TEAM-2'])
-    render(<Overview ws={carrying} row={{ ...row, title: carrying.title }} onWorkflow={vi.fn()} onTrack={vi.fn()} />)
+    render(<WorkstreamHeader ws={carrying} row={{ ...row, title: carrying.title }} />)
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Ship dashboards$/)
     expect(screen.getByText(/TEAM-1/)).toBeInTheDocument()
   })
-  it('shows cited narrative, real artifact links and supporting evidence', async () => {
+  it('shows the narrative and real artifact links, with no citation numbers', async () => {
     render(<Overview ws={ws} row={row} onWorkflow={vi.fn()} onTrack={vi.fn()} />)
     expect(await screen.findByText(/The dashboard button is published/)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'PR #3399 ↗' })).toHaveAttribute('href', 'https://github.com/org/repo/pull/3399')
-    fireEvent.click(screen.getAllByRole('button', { name: 'Evidence: Terraform state' })[0])
-    const reader = screen.getByRole('dialog', { name: 'Supporting evidence' })
-    expect(within(reader).getByText('Manual apply remains pending in two workspaces.')).toBeInTheDocument()
-    fireEvent.keyDown(window, { key: 'Escape' })
-    expect(screen.queryByRole('dialog', { name: 'Supporting evidence' })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Evidence/ })).toBeNull()
   })
-  it('shows a source on hover, keeps it while the pointer is on it, and a click pins it', async () => {
-    render(<Overview ws={ws} row={row} onWorkflow={vi.fn()} onTrack={vi.fn()} />)
-    const mark = (await screen.findAllByRole('button', { name: 'Evidence: Terraform state' }))[0]
-    fireEvent.mouseEnter(mark)
-    const popup = await screen.findByRole('dialog', { name: 'Supporting evidence' })
-    expect(within(popup).queryByRole('button', { name: 'Close source' })).toBeNull()
-    fireEvent.mouseLeave(mark)
-    fireEvent.mouseEnter(popup)
-    await new Promise((r) => setTimeout(r, 260))
-    expect(screen.getByRole('dialog', { name: 'Supporting evidence' })).toBeInTheDocument()
-    fireEvent.mouseLeave(popup)
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Supporting evidence' })).toBeNull())
-    fireEvent.click(mark)
-    fireEvent.mouseLeave(mark)
-    await new Promise((r) => setTimeout(r, 260))
-    expect(within(screen.getByRole('dialog', { name: 'Supporting evidence' })).getByRole('button', { name: 'Close source' })).toBeInTheDocument()
-    fireEvent.mouseDown(document.body)
-    expect(screen.queryByRole('dialog', { name: 'Supporting evidence' })).toBeNull()
-  })
-  it('cites each sentence with its own sources, one number per source', async () => {
-    const two = { ...result, evidence: [...result.evidence, { id: 'pr', label: 'The PR', text: 'Open.' }], recap: { ...result.recap!, summary: { sentences: [{ text: 'The button is published.', sources: ['pr'] }, { text: 'The apply is pending.', sources: ['apply'] }] }, next: [{ sentences: [{ text: 'Verify access.', sources: ['apply'] }] }] } }
+  it('reads each cited sentence clean, without source numbers', async () => {
+    const two = { ...result, evidence: [...result.evidence, { id: 'pr', label: 'The PR', text: 'Open.' }], recap: { ...result.recap!, now: { sentences: [{ text: 'The button is published.', sources: ['pr'] }, { text: 'The apply is pending.', sources: ['apply'] }] }, next: { sentences: [{ text: 'Verify access.', sources: ['apply'] }] } } }
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(two), { status: 200 })))
     render(<Overview ws={ws} row={row} onWorkflow={vi.fn()} onTrack={vi.fn()} />)
     await screen.findByText(/The button is/)
-    expect(screen.getByText(/The button is/).closest('p')!.textContent).toBe('The button is published.1 The apply is pending.2')
-    expect(screen.getAllByRole('button', { name: 'Evidence: Terraform state' }).map((b) => b.textContent)).toEqual(['2', '2'])
+    expect(screen.getByText(/The button is/).closest('p')!.textContent).toBe('The button is published. The apply is pending.')
+    expect(screen.queryByRole('button', { name: /Evidence/ })).toBeNull()
   })
   it('still reads a recap from a daemon that sends one block of sources', async () => {
-    const old = { ...result, recap: { ...result.recap!, summary: { text: 'Old recap sentence.', sources: ['apply'] }, next: [] } }
+    const old = { ...result, recap: { ...result.recap!, now: { text: 'Old recap sentence.', sources: ['apply'] }, next: undefined } }
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(old), { status: 200 })))
     render(<Overview ws={ws} row={row} onWorkflow={vi.fn()} onTrack={vi.fn()} />)
     expect(await screen.findByText(/Old recap/)).toBeInTheDocument()
   })
-  it('keeps the live status when nothing needs the user, without an empty attention block', () => {
-    render(<Overview ws={ws} row={row} onWorkflow={vi.fn()} onTrack={vi.fn()} />)
+  it('keeps the live status in the header when nothing needs the user, without an empty attention block', () => {
+    render(<><WorkstreamHeader ws={ws} row={row} /><Overview ws={ws} row={row} onWorkflow={vi.fn()} onTrack={vi.fn()} /></>)
     expect(screen.getByText('Verifying the dashboard')).toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'Needs you' })).toBeNull()
   })
@@ -137,32 +125,33 @@ describe('Overview', () => {
   })
   it('distinguishes a stalled agent from a user decision', () => {
     render(<Overview ws={ws} row={{ ...row, kind: 'stalled', working: 0, text: 'Operator stopped without reporting' }} onWorkflow={vi.fn()} onTrack={vi.fn()} />)
-    expect(screen.getByRole('heading', { name: 'Recovery needed' })).toBeInTheDocument()
     expect(screen.getByText('No decision is requested from you. Agent recovery is needed.')).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Status' })).toHaveClass('ov-stalled')
+    expect(screen.queryByRole('region', { name: 'Needs you' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Answer this' })).toBeNull()
   })
-  it('marks stale narrative and keeps live state visible while the reader retries', async () => {
+  it('keeps a stale recap on screen under the loader while the reader retries', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ ...result, stale: true, state: 'retrying' }), { status: 200 })))
     render(<Overview ws={ws} row={row} onWorkflow={vi.fn()} onTrack={vi.fn()} />)
-    expect(await screen.findByText(/Earlier recap/)).toBeInTheDocument()
-    expect(screen.getByText('Verifying the dashboard')).toBeInTheDocument()
-    expect(screen.getByText(/Trying again shortly/)).toBeInTheDocument()
+    expect(await screen.findByText(/The dashboard button is published/)).toBeInTheDocument()
+    expect(screen.getByText(/Refreshing summary/)).toBeInTheDocument()
   })
-  it('says what it waits for while the board loads and never reads unavailable', async () => {
+  it('shows the one loader while the board loads and never reads unavailable', async () => {
     const waiting = { state: 'waiting', stale: false, evidence: [], waiting_for: 'the board to finish loading (cmdrd is still reading its first snapshot)' }
     const calls: number[] = []
     vi.stubGlobal('fetch', vi.fn(async () => { calls.push(1); return calls.length === 1 ? new Response(JSON.stringify(waiting), { status: 200 }) : new Response('x', { status: 503 }) }))
     render(<Overview ws={ws} row={row} onWorkflow={vi.fn()} onTrack={vi.fn()} />)
-    expect(await screen.findByText(/Waiting for the board to finish loading/)).toBeInTheDocument()
+    await waitFor(() => expect(calls.length).toBeGreaterThan(0))
+    expect(screen.getByText(/Refreshing summary/)).toBeInTheDocument()
     expect(screen.queryByText(/unavailable/i)).toBeNull()
   })
-  it('streams a sentence in word by word, never redrawing what shows, and cites it once finished', async () => {
+  it('streams a sentence in word by word, never redrawing what shows, and settles it once finished', async () => {
     const enc = new TextEncoder()
-    const frame = (text: string, partial: boolean) => JSON.stringify({ state: 'updating', stale: false, evidence: result.evidence, draft: { summary: { sentences: [{ text, sources: partial ? [] : ['apply'], partial }] } } }) + '\n'
+    const frame = (text: string, partial: boolean) => JSON.stringify({ state: 'updating', stale: false, evidence: result.evidence, draft: { now: { sentences: [{ text, sources: partial ? [] : ['apply'], partial }] } } }) + '\n'
     let ctl!: ReadableStreamDefaultController<Uint8Array>
     const body = new ReadableStream<Uint8Array>({ start(c) { ctl = c } })
     vi.stubGlobal('fetch', vi.fn(async () => new Response(body, { status: 200 })))
-    render(<Overview ws={ws} row={row} onWorkflow={vi.fn()} onTrack={vi.fn()} />)
+    const { container } = render(<Overview ws={ws} row={row} onWorkflow={vi.fn()} onTrack={vi.fn()} />)
     ctl.enqueue(enc.encode(frame('The dashboard ', true)))
     const first = await screen.findByText('The')
     expect(screen.queryByRole('button', { name: /Evidence/ })).toBeNull()
@@ -171,13 +160,15 @@ describe('Overview', () => {
     expect(screen.getByText('The')).toBe(first) // the drawn word is the same node, not redrawn
     expect(screen.queryByRole('button', { name: /Evidence/ })).toBeNull()
     ctl.enqueue(enc.encode(frame('The dashboard button is published.', false)))
-    expect(await screen.findByRole('button', { name: /Evidence: Terraform state/ })).toBeInTheDocument()
+    await waitFor(() => expect(container.querySelector('.ov-cited')).toHaveTextContent('published.'))
+    expect(screen.queryByRole('button', { name: /Evidence/ })).toBeNull()
     ctl.close()
   })
-  it('paces and fades a refresh draft that takes the place of an earlier recap', async () => {
+  it('keeps an earlier recap on screen while a rewrite is written, then swaps the new one in whole', async () => {
     const enc = new TextEncoder()
     const earlier = JSON.stringify({ ...result, state: 'updating' }) + '\n'
-    const frame = (text: string) => JSON.stringify({ state: 'updating', stale: false, evidence: result.evidence, recap: result.recap, draft: { summary: { sentences: [{ text, sources: [], partial: true }] } } }) + '\n'
+    const frame = (text: string) => JSON.stringify({ state: 'updating', stale: false, evidence: result.evidence, recap: result.recap, draft: { now: { sentences: [{ text, sources: [], partial: true }] } } }) + '\n'
+    const rewritten = { ...result, recap: { ...result.recap!, generated_at: new Date(Date.now() + 1000).toISOString(), now: { sentences: [{ text: 'Zebra crossings are painted.', sources: ['apply'] }] } } }
     let ctl!: ReadableStreamDefaultController<Uint8Array>
     const body = new ReadableStream<Uint8Array>({ start(c) { ctl = c } })
     vi.stubGlobal('fetch', vi.fn(async () => new Response(body, { status: 200 })))
@@ -185,16 +176,17 @@ describe('Overview', () => {
     ctl.enqueue(enc.encode(earlier))
     expect(await screen.findByText(/The dashboard button is published/)).toBeInTheDocument()
     ctl.enqueue(enc.encode(frame('Zebra crossings are now ')))
-    const zebra = await screen.findByText('Zebra')
-    expect(zebra).toHaveClass('ct-fade-word') // a fresh word fades in, even where an earlier sentence stood
-    ctl.enqueue(enc.encode(frame('Zebra crossings are now painted on every street of the town')))
-    await screen.findByText(/town/)
-    expect(screen.getByText('Zebra')).toBe(zebra)
-    for (const w of container.querySelectorAll('.ov-streaming span')) expect(w).toHaveClass('ct-fade-word')
+    await new Promise((r) => setTimeout(r, 50))
+    expect(screen.queryByText(/Zebra/)).toBeNull()
+    expect(screen.getByText(/The dashboard button is published/)).toBeInTheDocument()
+    ctl.enqueue(enc.encode(JSON.stringify(rewritten) + '\n'))
+    expect(await screen.findByText(/Zebra crossings are/)).toBeInTheDocument()
+    expect(screen.queryByText(/The dashboard button is published/)).toBeNull()
+    expect(container.querySelector('.ov-streaming')).toBeNull()
     ctl.close()
   })
   it('streams the recap in as it is written', async () => {
-    const draft = { state: 'updating', stale: true, evidence: result.evidence, draft: { summary: { sentences: [{ text: 'The button is published.', sources: ['apply'] }] } } }
+    const draft = { state: 'updating', stale: true, evidence: result.evidence, draft: { now: { sentences: [{ text: 'The button is published.', sources: ['apply'] }] } } }
     const enc = new TextEncoder()
     let finish: () => void = () => {}
     const body = new ReadableStream<Uint8Array>({ start(c) {
@@ -204,10 +196,10 @@ describe('Overview', () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(body, { status: 200 })))
     render(<Overview ws={ws} row={row} onWorkflow={vi.fn()} onTrack={vi.fn()} />)
     expect(await screen.findByText(/The button is/)).toBeInTheDocument()
-    expect(screen.getByText('Writing the recap…')).toBeInTheDocument()
+    expect(screen.queryByText(/Refreshing summary/)).toBeNull() // the draft stands in for the loader
     finish()
     expect(await screen.findByText(/The dashboard button is published/)).toBeInTheDocument()
-    expect(screen.queryByText('Writing the recap…')).toBeNull()
+    expect(screen.queryByText(/The button is/)).toBeNull()
   })
 })
 

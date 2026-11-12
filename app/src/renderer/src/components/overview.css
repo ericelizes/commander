@@ -238,3 +238,28 @@
 /* A rewritten summary swaps in whole with a quick fade. */
 .ov-fade { animation: ov-fade-in .28s ease-out; }
 @keyframes ov-fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* One page: the text column and, beside it, a sticky contents list. */
+.ov-layout { display: flex; align-items: flex-start; gap: 48px; }
+.ov-layout .ov { flex: 0 1 820px; min-width: 0; }
+.ov-toc { position: sticky; top: 24px; flex: 0 0 180px; margin-top: 28px; display: flex; flex-direction: column; gap: 2px; font: 500 13px/1.4 var(--font); }
+.ov-toc-title { font: 600 11px/1.4 var(--font); letter-spacing: .05em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 6px; }
+.ov-toc button { display: flex; align-items: center; gap: 7px; border: 0; background: none; padding: 4px 0; color: var(--ink-2); text-align: left; cursor: pointer; }
+.ov-toc button:hover { color: var(--ink); }
+.ov-toc svg { color: var(--ink-3); }
+@media (max-width: 1100px) { .ov-toc { display: none; } }
+
+/* The page reads as one document, centered: I. and II. for its parts, 1. 2. 3.
+   for the sections in each, numbered as they appear. */
+.ov-layout { justify-content: center; max-width: 1180px; margin: 0 auto; padding: 0 24px; }
+.ov-layout .ov { padding-left: 0; padding-right: 0; }
+.ov-layout .ov { counter-reset: part; }
+.ov .ov-sec { counter-reset: sub; }
+.ov .ov-sec > .ov-section-title::before { counter-increment: part; content: counter(part, upper-roman) ". "; color: var(--ink-3); font-weight: 600; margin-right: 2px; }
+.ov .ov-sec > .ov-section-title { font: 700 24px/1.25 var(--serif); margin: 0 0 18px; }
+.ov .ov-sec > .ov-section-title svg { display: none; }
+.ov h3.ov-sub::before { counter-increment: sub; content: counter(sub) ". "; color: var(--ink-3); }
+.ov h3.ov-sub { font: 650 18px/1.35 var(--serif); margin: 26px 0 8px; }
+.ov .ov-sec .ov-status-story > h3.ov-sub:first-child, .ov .ov-sec .ov-fade > h3.ov-sub:first-child { margin-top: 4px; }
+.ov .ov-field, .ov .ov-fields li { font-size: 16px; line-height: 1.65; }
+.ov .ov-divider { margin: 40px 0 34px; }

@@ -3,7 +3,7 @@
 // A selected NEEDS YOU ask adds a tab for its pitch beside them; it never
 // replaces them.
 
-import { Activity, Lightbulb, Workflow as WorkflowIcon } from 'lucide-react'
+import { Workflow as WorkflowIcon } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { NeedsYouItem } from '../../../features/decisions'
 import { InspectorPane, openInPanel, type InspectorWindow, type PinnedTab } from '../../../features/inspector'
@@ -14,7 +14,7 @@ import { useStore } from '../store'
 import { useAppDown } from './StartScreen'
 import { focusOf, PitchView, SavedPitchView } from './PitchView'
 import { DerivedDiagram, diagramFor } from './DerivedDiagram'
-import { Overview, OverviewBoundary, WorkstreamHeader } from './Overview'
+import { OverviewBoundary, WorkstreamHeader, OverviewPage } from './Overview'
 import type { FocusTarget } from './FocusHeader'
 import type { SnapWorkstream } from '../../../shared/snapshot'
 import { askKey, findTrack, trackTitle, wsKey } from '../viewmodel'
@@ -147,15 +147,8 @@ export function InspectorColumn() {
     if (flow) {
       tabs.push({
         id: 'overview',
-        title: 'Current status',
-        icon: <Activity size={13} aria-hidden />,
-        content: <OverviewBoundary key={`o${flow.key}`}><Overview part="status" ws={flow.ws} row={flow.boardRow} track={flow.track} onWorkflow={() => setActivePinned('workflow')} onTrack={(id) => useStore.getState().openWorkflow(flow.row, id)} /></OverviewBoundary>,
-      })
-      tabs.push({
-        id: 'pitch',
-        title: 'Pitch',
-        icon: <Lightbulb size={13} aria-hidden />,
-        content: <OverviewBoundary key={`p${flow.key}`}><Overview part="pitch" ws={flow.ws} row={flow.boardRow} track={flow.track} onWorkflow={() => setActivePinned('workflow')} onTrack={(id) => useStore.getState().openWorkflow(flow.row, id)} /></OverviewBoundary>,
+        title: 'Overview',
+        content: <OverviewBoundary key={`o${flow.key}`}><OverviewPage ws={flow.ws} row={flow.boardRow} track={flow.track} onWorkflow={() => setActivePinned('workflow')} onTrack={(id) => useStore.getState().openWorkflow(flow.row, id)} /></OverviewBoundary>,
       })
       tabs.push({
         id: 'workflow',
@@ -198,7 +191,7 @@ export function InspectorColumn() {
       <PitchView key={item.bead_id} item={item} />
     )
   }
-  const shownPinned = narrow && chatTab ? 'chat' : ((activePinned === 'workflow' || activePinned === 'overview' || activePinned === 'pitch') && !flow) ? null : activePinned
+  const shownPinned = narrow && chatTab ? 'chat' : ((activePinned === 'workflow' || activePinned === 'overview') && !flow) ? null : activePinned
   const onPinned = (id: string | null) => {
     useStore.getState().setChatTab(id === 'chat')
     if (id !== 'chat') setActivePinned(id)

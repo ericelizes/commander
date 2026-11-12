@@ -1,3 +1,4 @@
+import { Activity, Lightbulb } from 'lucide-react'
 import { Component, Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { BoardRow, BoardTrack, LineKind, SnapStep, SnapWorkstream, Snapshot } from '../../../shared/snapshot'
 import { splitTickets, TicketPills } from '../../../features/linear/Ticket'
@@ -167,7 +168,6 @@ export function WorkstreamHeader({ ws, row, track }: { ws: SnapWorkstream; row: 
   const tickets = overviewTickets(ws, track)
   return (
     <header className="ws-header">
-      <div className="ws-header-label">Workstream {row.n}{nested?.letter ?? ''}</div>
       <h1>{splitTickets(title).text}</h1>
       {(nested ?? row).text && (nested ?? row).kind !== 'done' && <p className="ws-header-line">{(nested ?? row).text}</p>}
       {tickets.length > 0 && <div className="ov-tickets"><TicketPills tickets={tickets} progress={(nested ?? row).milestones ?? (nested ?? row).progress} /></div>}
@@ -176,9 +176,37 @@ export function WorkstreamHeader({ ws, row, track }: { ws: SnapWorkstream; row: 
 }
 
 // Overview is one tab of the workstream: its current status, or its pitch.
-export function Overview({ ws, row, track, onTrack, part = 'status' }: {
-  ws: SnapWorkstream; row: BoardRow; track?: string; onWorkflow: () => void; onTrack: (id: string) => void; part?: 'status' | 'pitch'
-}) {
+type OverviewProps = { ws: SnapWorkstream; row: BoardRow; track?: string; onWorkflow: () => void; onTrack: (id: string) => void }
+
+// OverviewPage is the workstream's one Overview page: Current status and the
+// Pitch as sections, with a contents list beside them to jump between.
+export function OverviewPage(props: OverviewProps) {
+  const order: ('status' | 'pitch')[] = ['status', 'pitch']
+  const scroll = useRef<HTMLDivElement>(null)
+  const go = (part: string) => scroll.current?.querySelector(`#ov-sec-${part}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  return (
+    <div className="ov-pane">
+      <div className="ov-scroll" ref={scroll}>
+        <div className="ov-layout">
+          <article className="ov" aria-label="Workstream overview">
+            {order.map((part, i) => <Fragment key={part}>{i > 0 && <hr className="ov-divider" />}<Overview {...props} part={part} embedded first={i === 0} /></Fragment>)}
+          </article>
+          <nav className="ov-toc" aria-label="On this page">
+            <div className="ov-toc-title">On this page</div>
+            {order.map((part) => (
+              <button type="button" key={part} onClick={() => go(part)}>
+                {part === 'status' ? <><Activity size={13} aria-hidden /> Current status</> : <><Lightbulb size={13} aria-hidden /> Pitch</>}
+              </button>
+            ))}
+          </nav>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Overview is one part of the workstream's page: its current status, or its pitch.
+export function Overview({ ws, row, track, onTrack, part = 'status', embedded = false, first = true }: OverviewProps & { part?: 'status' | 'pitch'; embedded?: boolean; first?: boolean }) {
   const snapshot = useStore((s) => s.snapshot)!
   const cfg = useStore((s) => s.config)
   const conn = useStore((s) => s.conn)
@@ -246,7 +274,7 @@ export function Overview({ ws, row, track, onTrack, part = 'status' }: {
       try {
         const r = await fetch(`${cfg.apiUrl}/api/overview`, {
           method: 'POST', headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ project: ws.project, bead_id: ws.bead_id, track_id: track ?? '', part, stream: true }), signal: controller.signal,
+          body: JSON.stringify({ project: ws.project, bead_id: ws.bead_id, track_id: track ?? '', part: embedded ? '' : part, stream: true }), signal: controller.signal,
         })
         if (!r.ok) throw new Error('not ready')
         const take = (line: string) => {
@@ -284,12 +312,12 @@ export function Overview({ ws, row, track, onTrack, part = 'status' }: {
     }
     void loop()
     return () => { cancelled = true; clearTimeout(timer); controller?.abort() }
-  }, [cfg, ws.project, ws.bead_id, track, degraded, part])
+  }, [cfg, ws.project, ws.bead_id, track, degraded, part, embedded])
 
   // While the reader is writing, its draft stands in for the earlier recap.
   // Only a first summary streams in; a rewrite of one already shown keeps the old
   // one on screen and swaps in whole when it is done.
-  const draftOn = result?.state === 'updating' && !result.recap && !!result.draft?.now && sentencesOf(result.draft.now).length > 0
+  const draftOn = result?.state === 'updating' && !result.recap && ((!!result.draft?.now && sentencesOf(result.draft.now).length > 0) || (!!result.draft?.problem && sentencesOf(result.draft.problem).length > 0))
   const shown: Pitch | undefined = draftOn ? result!.draft : result?.recap
 
   // One number per source across the whole recap, so a source cited twice reads
@@ -330,13 +358,12 @@ export function Overview({ ws, row, track, onTrack, part = 'status' }: {
   const pendingDecision = asks.length === 0 && (target.kind === 'needs' || (!track && row.flag > 0))
   const noAsk = pendingDecision ? 'A decision is recorded, but its details are not available yet.' : 'No decision is requested from you. Agent recovery is needed.'
 
-  return (
-    <div className="ov-pane">
-    <div className="ov-scroll" onScroll={() => setSource((s) => (s?.pinned ? s : null))}>
-      <article className="ov" aria-label="Workstream overview">
+  const body = (
+      <>
         {/* Status: what is true right now, and what needs you. */}
-        {part === 'status' && <section className={`ov-status${asks.length ? ' ov-needs' : ''}${stalled ? ' ov-stalled' : ''}`} aria-label="Status">
-          {(!shown || result?.stale || result?.state === 'updating' || result?.state === 'retrying') && !draftOn && <Refreshing />}
+        {part === 'status' && <section id="ov-sec-status" className={`ov-sec ov-status${asks.length ? ' ov-needs' : ''}${stalled ? ' ov-stalled' : ''}`} aria-label="Status">
+          {embedded && <h2 className="ov-section-title"><Activity size={18} aria-hidden /> Current status</h2>}
+          {!(embedded && !first) && (!shown || result?.stale || result?.state === 'updating' || result?.state === 'retrying') && !draftOn && <Refreshing />}
           {target.kind === 'done' ? (
             <div className="ov-confirm">
               <h3>Confirm this workstream is complete?</h3>
@@ -356,23 +383,24 @@ export function Overview({ ws, row, track, onTrack, part = 'status' }: {
           {asks.length === 0 && (pendingDecision || stalled) && <p>{noAsk}</p>}
           {shown && (hasText(shown.goal) || hasText(shown.now) || hasText(shown.recent) || hasText(shown.next)) && <div className="ov-status-story ov-fade" key={result?.recap?.generated_at ?? 'draft'}>
             {hasText(shown.goal) && <>
-              <h3>Goal</h3>
+              <h3 className="ov-sub">Goal</h3>
               <p className="ov-field">{cite(shown.goal)}</p>
               {hasText(shown.progress) && <p className="ov-field"><b>Progress:</b> {cite(shown.progress)}</p>}
             </>}
-            {hasText(shown.now) && <><h3>Right now</h3><p className="ov-field">{cite(shown.now)}</p></>}
-            {hasText(shown.recent) && <><h3>Done lately</h3><ul className="ov-fields">{sentencesOf(shown.recent!).map((s, i) => <li key={i}><StreamSentence s={s} done={cited} live={draftOn} /></li>)}</ul></>}
-            {hasText(shown.next) && <><h3>Up next</h3><ul className="ov-fields">{sentencesOf(shown.next!).map((s, i) => <li key={i}><StreamSentence s={s} done={cited} live={draftOn} /></li>)}</ul></>}
+            {hasText(shown.now) && <><h3 className="ov-sub">Right now</h3><p className="ov-field">{cite(shown.now)}</p></>}
+            {hasText(shown.recent) && <><h3 className="ov-sub">Done lately</h3><ul className="ov-fields">{sentencesOf(shown.recent!).map((s, i) => <li key={i}><StreamSentence s={s} done={cited} live={draftOn} /></li>)}</ul></>}
+            {hasText(shown.next) && <><h3 className="ov-sub">Up next</h3><ul className="ov-fields">{sentencesOf(shown.next!).map((s, i) => <li key={i}><StreamSentence s={s} done={cited} live={draftOn} /></li>)}</ul></>}
           </div>}
         </section>}
         {/* The pitch: what this is and why it matters, after the status. */}
-        {part === 'pitch' && <section className="ov-pitch" aria-label="Pitch">
-          {(!shown || result?.state === 'updating' || result?.state === 'retrying') && !draftOn && <Refreshing />}
+        {part === 'pitch' && <section id="ov-sec-pitch" className="ov-sec ov-pitch" aria-label="Pitch">
+          {embedded && <h2 className="ov-section-title"><Lightbulb size={18} aria-hidden /> Pitch</h2>}
+          {!(embedded && !first) && (!shown || result?.state === 'updating' || result?.state === 'retrying') && !draftOn && <Refreshing />}
           {shown ? <div className="ov-fade" key={result?.recap?.generated_at ?? 'draft'}>
             {/* Each section appears once it has words, so a summary being written
                 builds top to bottom instead of showing empty headings early. */}
             {hasText(shown.problem) && <>
-              <h3>Problem</h3>
+              <h3 className="ov-sub">Problem</h3>
               <p className="ov-field">{cite(shown.problem)}</p>
               <ul className="ov-fields">
                 {shown.problem_type && <li><b>Type:</b> {typeNames[shown.problem_type] ?? shown.problem_type}</li>}
@@ -380,14 +408,14 @@ export function Overview({ ws, row, track, onTrack, part = 'status' }: {
               </ul>
             </>}
             {(hasText(shown.solution) || hasText(shown.impact)) && <>
-              <h3>Solution</h3>
+              <h3 className="ov-sub">Solution</h3>
               <ul className="ov-fields">
                 {hasText(shown.solution) && <li><b>Description:</b> {cite(shown.solution)}</li>}
                 {hasText(shown.impact) && <li><b>Impact:</b> {cite(shown.impact)}</li>}
               </ul>
             </>}
             {(hasText(shown.scope_detail) || hasText(shown.risk_detail)) && <>
-              <h3>Appetite</h3>
+              <h3 className="ov-sub">Appetite</h3>
               <ul className="ov-fields">
                 {hasText(shown.scope_detail) && <li><b>Scope:</b> {shown.scope && <>{scopeDot[shown.scope] ?? ''} {shown.scope}. </>}{cite(shown.scope_detail)}</li>}
                 {hasText(shown.risk_detail) && <li><b>Risk:</b> {riskDot(shown.risk ?? 0)} {shown.risk ?? 0}/10. {cite(shown.risk_detail)}</li>}
@@ -399,9 +427,16 @@ export function Overview({ ws, row, track, onTrack, part = 'status' }: {
         {part === 'status' && <footer className="ov-footer">
           {ws.repo && /^[\w.-]+\/[\w.-]+$/.test(ws.repo) && artifacts.map((p) => <a key={p} href={`https://github.com/${ws.repo}/pull/${p}`} target="_blank" rel="noreferrer">PR #{p} ↗</a>)}
         </footer>}
-      </article>
+      </>
+  )
+  const reader = source && <SourceReader source={source.evidence} anchor={source.anchor} pinned={source.pinned} titles={stepTitles} onClose={closeSource} onEnter={cancelHover} onLeave={hoverClose} />
+  if (embedded) return <>{body}{reader}</>
+  return (
+    <div className="ov-pane">
+    <div className="ov-scroll" onScroll={() => setSource((s) => (s?.pinned ? s : null))}>
+      <article className="ov" aria-label="Workstream overview">{body}</article>
     </div>
-    {source && <SourceReader source={source.evidence} anchor={source.anchor} pinned={source.pinned} titles={stepTitles} onClose={closeSource} onEnter={cancelHover} onLeave={hoverClose} />}
+    {reader}
     </div>
   )
 }

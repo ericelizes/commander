@@ -925,6 +925,7 @@ func (d *Daemon) startAPI(ctx context.Context) {
 		opts.Interval = 30 * time.Second
 	}
 	srv := api.New(opts)
+	go srv.WarmOverviews(ctx)
 	port := 0
 	if d.cfg != nil {
 		port = d.cfg.API.Port
