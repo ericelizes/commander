@@ -134,6 +134,12 @@ function Words({ text, settled }: { text: string; settled: number }) {
 // recap's place) starts over: while the draft is live it is paced and faded
 // from its first character, never shown whole up to the old length.
 export function StreamSentence({ s, done, live = false }: { s: Sentence; done: (s: Sentence) => React.ReactNode; live?: boolean }) {
+  if (!live && !s.partial) return <>{done(s)}</>
+  return <LiveSentence s={s} done={done} />
+}
+
+function LiveSentence({ s, done }: { s: Sentence; done: (s: Sentence) => React.ReactNode }) {
+  const live = true
   const prev = useRef(s.text)
   const restarts = useRef(0)
   if (!s.text.startsWith(prev.current)) restarts.current++
@@ -282,7 +288,9 @@ export function Overview({ ws, row, track, onTrack, part = 'status' }: {
   }, [cfg, ws.project, ws.bead_id, track, degraded])
 
   // While the reader is writing, its draft stands in for the earlier recap.
-  const draftOn = result?.state === 'updating' && !!result.draft?.now && sentencesOf(result.draft.now).length > 0
+  // Only a first summary streams in; a rewrite of one already shown keeps the old
+  // one on screen and swaps in whole when it is done.
+  const draftOn = result?.state === 'updating' && !result.recap && !!result.draft?.now && sentencesOf(result.draft.now).length > 0
   const shown: Pitch | undefined = draftOn ? result!.draft : result?.recap
 
   // One number per source across the whole recap, so a source cited twice reads
@@ -348,7 +356,7 @@ export function Overview({ ws, row, track, onTrack, part = 'status' }: {
             </div>
           ))}
           {asks.length === 0 && (pendingDecision || stalled) && <p>{noAsk}</p>}
-          {shown && (hasText(shown.goal) || hasText(shown.now) || hasText(shown.recent) || hasText(shown.next)) && <div className="ov-status-story">
+          {shown && (hasText(shown.goal) || hasText(shown.now) || hasText(shown.recent) || hasText(shown.next)) && <div className="ov-status-story ov-fade" key={result?.recap?.generated_at ?? 'draft'}>
             {hasText(shown.goal) && <>
               <h3>Goal</h3>
               <p className="ov-field">{cite(shown.goal)}</p>
@@ -362,7 +370,7 @@ export function Overview({ ws, row, track, onTrack, part = 'status' }: {
         {/* The pitch: what this is and why it matters, after the status. */}
         {part === 'pitch' && <section className="ov-pitch" aria-label="Pitch">
           {(!shown || result?.stale || result?.state === 'updating' || result?.state === 'retrying') && !draftOn && <Refreshing />}
-          {shown ? <div>
+          {shown ? <div className="ov-fade" key={result?.recap?.generated_at ?? 'draft'}>
             {/* Each section appears once it has words, so a summary being written
                 builds top to bottom instead of showing empty headings early. */}
             {hasText(shown.problem) && <>
