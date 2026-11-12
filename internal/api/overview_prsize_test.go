@@ -7,7 +7,10 @@ import (
 	"github.com/example-user/commander/internal/livedata"
 )
 
-func init() { prSizeLookup = func(string, int) string { return "" } }
+func init() {
+	prSizeLookup = func(string, int) string { return "" }
+	linearTicketLookup = func(string, string) string { return "" }
+}
 
 func TestOverviewPRSizesAreRecapEvidence(t *testing.T) {
 	calls := 0
@@ -27,5 +30,21 @@ func TestOverviewPRSizesAreRecapEvidence(t *testing.T) {
 	overviewPRSizes(ws, "w.2")
 	if calls != 1 {
 		t.Fatalf("a pull request size is cached, asked %d times", calls)
+	}
+}
+
+func TestOverviewReadsTheScopesLinearTickets(t *testing.T) {
+	linearTicketLookup = func(home, id string) string { return id + " (In Progress): target p95 <= 2s" }
+	defer func() { linearTicketLookup = func(string, string) string { return "" } }()
+	ws := livedata.SnapWorkstream{Title: "QA Hub", Steps: []livedata.SnapStep{
+		{BeadID: "qa.6", Title: "Speed up worklists (ENGCHA-5198)", Track: true},
+		{BeadID: "qa.7", Title: "Backups", Tickets: []string{"ENGCHA-5197"}},
+	}}
+	ev := overviewLinearTickets("", ws, "qa.6")
+	if len(ev) != 1 || ev[0].ID != "linear-ENGCHA-5198" || !strings.Contains(ev[0].Text, "p95 <= 2s") {
+		t.Fatalf("track evidence %+v", ev)
+	}
+	if all := overviewLinearTickets("", ws, ""); len(all) != 2 {
+		t.Fatalf("workstream evidence %+v", all)
 	}
 }

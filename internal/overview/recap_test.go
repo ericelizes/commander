@@ -231,3 +231,27 @@ func TestStatusListsMayBeEmptyButNowMayNot(t *testing.T) {
 		t.Fatal("a recap without its now line was accepted")
 	}
 }
+
+func TestEachPartHasItsOwnPromptSchemaAndChecks(t *testing.T) {
+	st, pi := PromptFor(Prompt, "status"), PromptFor(Prompt, "pitch")
+	if !strings.Contains(st, "CURRENT STATUS") || strings.Contains(st, "problem_impact:") || !strings.Contains(st, "EXPLAIN EVERYTHING") {
+		t.Fatalf("status prompt:\n%s", st)
+	}
+	if !strings.Contains(pi, "PITCH") || strings.Contains(pi, "now: ONE short sentence") || !strings.Contains(pi, "EXPLAIN EVERYTHING") {
+		t.Fatalf("pitch prompt:\n%s", pi)
+	}
+	in := fixture()
+	in.Part = "status"
+	if err := Validate(Recap{Now: valid().Now}, in); err != nil {
+		t.Fatalf("a status-only recap: %v", err)
+	}
+	in.Part = "pitch"
+	r := valid()
+	r.Now = Claim{}
+	if err := Validate(r, in); err != nil {
+		t.Fatalf("a pitch-only recap: %v", err)
+	}
+	if req := readerSchema(Input{Part: "status"})["required"].([]string); len(req) != 5 || req[0] != "goal" {
+		t.Fatalf("status schema %v", req)
+	}
+}
