@@ -50,12 +50,9 @@ func recordHumanApproval(t *testing.T, st *store.Store, ctx context.Context, pid
 }
 
 func TestPostgresPlanCannotEraseHumanDirectionThroughRawWrites(t *testing.T) {
-	_, dir, _, ctx, _, held, gate, work := humanAuthorityFixture(t)
+	_, dir, _, ctx, _, _, gate, work := humanAuthorityFixture(t)
 	for _, op := range [][]string{
-		{"update", held, "--remove-label", "hold"},
-		{"update", held, "--labels", "kind:objective"},
-		{"close", gate}, {"delete", gate}, {"update", gate, "--status", "deferred"},
-		{"update", gate, "--remove-label", NeedsUserLabel},
+		{"close", gate}, {"delete", gate}, {"update", gate, "--status", "closed"},
 		{"update", gate, "--remove-label", "verifier:user"},
 		{"update", gate, "--add-label", DecisionAnsweredLabel},
 		{"create", "Invented approval", "--labels", DecisionAnsweredLabel},
@@ -68,30 +65,83 @@ func TestPostgresPlanCannotEraseHumanDirectionThroughRawWrites(t *testing.T) {
 	}
 }
 
-func TestPostgresPlanHumanApprovalIsBoundToOneRestrictionGeneration(t *testing.T) {
-	_, dir, st, ctx, pid, held, _, _ := humanAuthorityFixture(t)
-	recordHumanApproval(t, st, ctx, pid, held, "1")
-	if _, _, e := postgresRun(ctx, dir, []string{"update", held, "--remove-label", "hold"}); e != nil {
-		t.Fatal("recorded approval could not release its hold", e)
-	}
-	// A new hold is new direction. Replaying the old journal must not renew it.
+func allowCompletion(ctx context.Context) context.Context {
+	return WithCompletionValidator(ctx, func(context.Context, store.Querier, int64, string) error { return nil })
+}
+
+// The planning Commander keeps the board true without a recorded answer: it
+// lifts holds, drops stale cards, rewires and parks or retires steps and gates.
+func TestPostgresPlanCommanderKeepsTheBoardTrue(t *testing.T) {
+	c, dir, _, ctx, _, held, gate, work := humanAuthorityFixture(t)
+	ctx = allowCompletion(ctx)
 	user := WithDoorEnv(context.Background(), nil)
-	if _, _, e := postgresRun(user, dir, []string{"update", held, "--add-label", "hold"}); e != nil {
+	fresh, e := c.Create(user, dir, "Fresh release approval", CreateOptions{Labels: []string{GateLabel, "kind:gate", NeedsUserLabel, "approver:user", "verifier:user"}, Silent: true})
+	if e != nil {
 		t.Fatal(e)
 	}
-	old := store.NeedsResolution{ProjectID: pid, BeadID: held, Generation: "1", AnswerID: "answer-1", Action: "approve", Approved: true}
-	if e := st.SaveNeedsResolution(ctx, old, "Approve"); e != nil {
-		t.Fatal(e)
-	}
-	if _, _, e := postgresRun(ctx, dir, []string{"update", held, "--remove-label", "hold"}); e == nil {
-		t.Fatal("replayed answer released a later hold")
-	}
-	recordHumanApproval(t, st, ctx, pid, held, "2")
-	if _, _, e := postgresRun(ctx, dir, []string{"update", held, "--remove-label", "hold"}); e != nil {
-		t.Fatal("new approval could not release new hold", e)
+	for _, op := range [][]string{
+		{"update", held, "--remove-label", "hold"},
+		{"update", held, "--add-label", "hold"},
+		{"update", held, "--labels", "kind:objective"},
+		{"update", held, "--add-label", "hold"},
+		{"dep", "add", work, held},
+		{"dep", "remove", work, held},
+		{"close", held},
+		{"update", gate, "--remove-label", NeedsUserLabel},
+		{"dep", "add", work, fresh},
+		{"dep", "remove", work, gate},
+		{"close", gate, "--reason", "superseded by a fresh approval"},
+		{"update", fresh, "--status", StatusDeferred},
+	} {
+		if _, _, e := postgresRun(ctx, dir, op); e != nil {
+			t.Fatalf("Commander could not keep the board true: %v: %v", op, e)
+		}
 	}
 }
 
+// Retiring is not approving: a gate closed without a withdrawn or superseded
+// marker reads as passed, and a retired gate must not release its waiters.
+func TestPostgresPlanCommanderCannotPassUserGate(t *testing.T) {
+	_, dir, _, ctx, _, _, gate, work := humanAuthorityFixture(t)
+	ctx = allowCompletion(ctx)
+	for _, op := range [][]string{
+		{"close", gate, "--reason", "superseded"},
+		{"update", gate, "--status", "closed", "--add-label", "retired"},
+		{"dep", "remove", work, gate},
+	} {
+		if _, _, e := postgresRun(ctx, dir, op); e == nil {
+			t.Fatalf("retiring released the work waiting on a user gate: %v", op)
+		}
+	}
+	if _, _, e := postgresRun(ctx, dir, []string{"update", work, "--status", StatusDeferred}); e != nil {
+		t.Fatal(e)
+	}
+	if _, _, e := postgresRun(ctx, dir, []string{"close", gate}); e == nil {
+		t.Fatal("Commander passed a user gate by closing it")
+	}
+	if _, _, e := postgresRun(ctx, dir, []string{"close", gate, "--reason", "withdrawn: the release is cancelled"}); e != nil {
+		t.Fatal("Commander could not withdraw a gate nothing waits on", e)
+	}
+}
+
+// Execution agents are not planners: they keep the strict rules.
+func TestPostgresPlanExecutionCannotEditHumanDirection(t *testing.T) {
+	for _, env := range [][]string{{"COMMANDER_ROLE=operator-release"}, {"COMMANDER_ROLE=commander", "COMMANDER_RUN_ID=1", "COMMANDER_RUN_SESSION=s"}} {
+		_, dir, _, _, _, held, gate, work := humanAuthorityFixture(t)
+		ctx := allowCompletion(WithDoorEnv(context.Background(), env))
+		for _, op := range [][]string{
+			{"update", held, "--remove-label", "hold"},
+			{"close", held},
+			{"update", gate, "--remove-label", NeedsUserLabel},
+			{"dep", "remove", work, gate},
+			{"close", gate, "--reason", "superseded"},
+		} {
+			if _, _, e := postgresRun(ctx, dir, op); e == nil {
+				t.Fatalf("%v edited human direction: %v", env, op)
+			}
+		}
+	}
+}
 func TestPostgresPlanCanApplyRecordedGateAnswerButCannotReuseItAfterReopen(t *testing.T) {
 	_, dir, st, ctx, pid, _, gate, _ := humanAuthorityFixture(t)
 	// This test isolates human authority. API integration tests run the real
@@ -156,45 +206,53 @@ func TestPostgresPlanDroppedGateDoesNotReleaseDependentExecution(t *testing.T) {
 	}
 }
 
-func TestPostgresPlanCannotMoveOrFinishWorkOutOfAncestorHold(t *testing.T) {
-	c, dir, _, ctx, _, held, _, work := humanAuthorityFixture(t)
+func TestPostgresPlanCommanderMayMoveOrFinishWorkUnderHold(t *testing.T) {
+	c, dir, _, ctx, _, held, _, _ := humanAuthorityFixture(t)
+	ctx = allowCompletion(ctx)
 	user := WithDoorEnv(context.Background(), nil)
 	child, e := c.Create(user, dir, "Held child", CreateOptions{Parent: held, Silent: true})
 	if e != nil {
 		t.Fatal(e)
 	}
-	if _, _, e = postgresRun(ctx, dir, []string{"update", child, "--parent", work}); e == nil {
-		t.Fatal("moving child escaped ancestor hold")
+	other, e := c.Create(user, dir, "Stale child", CreateOptions{Parent: held, Silent: true})
+	if e != nil {
+		t.Fatal(e)
 	}
-	if _, _, e = postgresRun(ctx, dir, []string{"close", child}); e == nil {
-		t.Fatal("finishing child bypassed ancestor hold")
+	free, e := c.Create(user, dir, "Unheld parent", CreateOptions{Silent: true})
+	if e != nil {
+		t.Fatal(e)
+	}
+	if _, _, e = postgresRun(ctx, dir, []string{"update", child, "--parent", free}); e != nil {
+		t.Fatal("Commander could not move work out from under a hold", e)
+	}
+	if _, _, e = postgresRun(ctx, dir, []string{"close", other, "--reason", "superseded"}); e != nil {
+		t.Fatal("Commander could not retire stale work under a hold", e)
 	}
 }
-
 func TestPostgresPlanHumanApprovalDoesNotCoverExpandedScope(t *testing.T) {
 	for _, change := range []string{"new-brief", "new-pr"} {
 		t.Run(change, func(t *testing.T) {
-			_, dir, st, ctx, pid, held, _, _ := humanAuthorityFixture(t)
-			recordHumanApproval(t, st, ctx, pid, held, "1")
+			_, dir, st, ctx, pid, _, gate, _ := humanAuthorityFixture(t)
+			ctx = allowCompletion(ctx)
+			recordHumanApproval(t, st, ctx, pid, gate, "1")
 			if change == "new-brief" {
-				if _, _, e := postgresRun(ctx, dir, []string{"update", held, "--description", "Expanded goal requirements"}); e != nil {
+				if _, _, e := postgresRun(ctx, dir, []string{"update", gate, "--description", "Expanded release requirements"}); e != nil {
 					t.Fatal(e)
 				}
 			} else {
-				if _, _, e := postgresRun(ctx, dir, []string{"update", held, "--add-label", "pr:999"}); e != nil {
+				if _, _, e := postgresRun(ctx, dir, []string{"update", gate, "--add-label", "pr:999"}); e != nil {
 					t.Fatal(e)
 				}
 			}
-			if _, _, e := postgresRun(ctx, dir, []string{"update", held, "--remove-label", "hold"}); e == nil {
+			if _, _, e := postgresRun(ctx, dir, []string{"close", gate}); e == nil {
 				t.Fatalf("approval authorized expanded scope: %s", change)
 			}
 		})
 	}
 }
-
 func TestPostgresPlanHumanRefusalRollsBackWholeBatch(t *testing.T) {
-	c, dir, _, ctx, _, held, _, work := humanAuthorityFixture(t)
-	b, e := c.Show(ctx, dir, held)
+	c, dir, _, ctx, _, _, gate, work := humanAuthorityFixture(t)
+	b, e := c.Show(ctx, dir, gate)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -202,17 +260,16 @@ func TestPostgresPlanHumanRefusalRollsBackWholeBatch(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	basis := PlanBasis{JurisdictionRevision: 1, Beads: map[string]int64{held: b.PlanRevision, work: other.PlanRevision}}
-	result := postgresApplyOps(WithPlanBasis(ctx, &basis), dir, [][]string{{"update", work, "--title", "Must roll back"}, {"update", held, "--remove-label", "hold"}})
+	basis := PlanBasis{JurisdictionRevision: 1, Beads: map[string]int64{gate: b.PlanRevision, work: other.PlanRevision}}
+	result := postgresApplyOps(WithPlanBasis(ctx, &basis), dir, [][]string{{"update", work, "--title", "Must roll back"}, {"close", gate}})
 	if result.Exit == 0 {
-		t.Fatal("batch erased a human hold")
+		t.Fatal("batch passed a user gate")
 	}
 	after, e := c.Show(ctx, dir, work)
 	if e != nil || after.Title != other.Title {
 		t.Fatal("rejected batch leaked earlier mutation", e)
 	}
 }
-
 func TestPostgresPlanAnswerCannotApproveChangedQuestionScope(t *testing.T) {
 	_, dir, st, ctx, pid, held, _, _ := humanAuthorityFixture(t)
 	question := `{"question":"Release the existing hold?","options":[{"label":"Approve","approves":true}]}`

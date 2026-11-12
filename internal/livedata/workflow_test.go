@@ -177,3 +177,36 @@ func checkWorkflows(t *testing.T, d Display) {
 		}
 	}
 }
+
+// A card is the user's move only once what it waits on is done: until then
+// the step reads as waiting on its blocker, never Needs you.
+func TestWorkflow_CardWaitsOnItsBlocker(t *testing.T) {
+	var fx struct {
+		Now      int64    `json:"now"`
+		Snapshot Snapshot `json:"snapshot"`
+	}
+	raw, err := os.ReadFile("testdata/workflow/gates.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(raw, &fx); err != nil {
+		t.Fatal(err)
+	}
+	for i := range fx.Snapshot.Workstreams {
+		if s := findSnapStep(fx.Snapshot.Workstreams[i].Steps, "lab-ops.3"); s != nil {
+			s.State = "needs-user"
+		}
+	}
+	fx.Snapshot.NeedsYou = append(fx.Snapshot.NeedsYou, NeedsYou{Project: "lab", BeadID: "lab-ops.3", Title: "Announce the new keys"})
+	for _, r := range Board(fx.Snapshot, fx.Now).Workstreams {
+		if r.Key != "lab:lab-ops" {
+			continue
+		}
+		s := findStep(r.Workflow.Steps, "lab-ops.3")
+		if s == nil || s.Kind != "waiting" || s.Text != "Waiting on rotate the lab keys" {
+			t.Fatalf("blocked card = %+v, want waiting on its blocker", s)
+		}
+		return
+	}
+	t.Fatal("no row lab:lab-ops")
+}
