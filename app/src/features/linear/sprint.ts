@@ -2,9 +2,10 @@ import { create } from 'zustand'
 import { useEffect } from 'react'
 import { useStore } from '../../renderer/src/store'
 
-export interface LinearIssue { id: string; title: string; status_name: string; status_type: string; url: string; added_at?: string; completed_at?: string }
+export interface LinearIssue { id: string; team?: string; title: string; status_name: string; status_type: string; url: string; added_at?: string; completed_at?: string }
 export interface Cycle { name: string; start?: string; end?: string }
-export interface Sprint { state: string; cycle?: Cycle | null; key: 'saved' | 'not set'; issues: LinearIssue[]; fetched_at?: string; stale_since?: string }
+export interface TeamSprint { team: string; state: string; cycle?: Cycle | null; fetched_at?: string; stale_since?: string }
+export interface Sprint { teams?: TeamSprint[]; state: string; cycle?: Cycle | null; key: 'saved' | 'not set'; issues: LinearIssue[]; fetched_at?: string; stale_since?: string }
 export const useSprint = create<{ data: Sprint | null }>(() => ({ data: null }))
 
 const reads = new WeakMap<object, { last: number; pending?: Promise<Sprint | null> }>()
@@ -16,7 +17,7 @@ export function refreshLinearSprint(config: object) {
   refresh.dispatchEvent(new Event('refresh'))
 }
 
-// One lazy read every 30s while the app is visible; cmdrd re-reads Linear at most once a minute.
+// One lazy read every 30s while the app is visible; cmdrd caches each merged read for 30s.
 export function useLinearSprint() {
   const config = useStore((s) => s.config)
   useEffect(() => {

@@ -14,7 +14,7 @@ import (
 	"github.com/example-user/commander/internal/linearapi"
 )
 
-const TTL = time.Minute
+const TTL = 30 * time.Second
 const query = `query($team: String!) {
  teams(filter: {key: {eq: $team}}, first: 1) { nodes {
  activeCycle { name startsAt endsAt issues(first: 250, filter: {assignee: {isMe: {eq: true}}}) {
@@ -29,6 +29,7 @@ type Cycle struct {
 	End   string `json:"end"`
 }
 type Issue struct {
+	Team       string `json:"team"`
 	ID         string `json:"id"`
 	Title      string `json:"title"`
 	StatusName string `json:"status_name"`
@@ -39,12 +40,17 @@ type Issue struct {
 	// HasWorkstream is resolved by the app against its current snapshot.
 	HasWorkstream bool `json:"has_workstream"`
 }
+type TeamResponse struct {
+	Team string `json:"team"`
+	Response
+}
 type Response struct {
-	State      string     `json:"state"`
-	Cycle      *Cycle     `json:"cycle"`
-	Issues     []Issue    `json:"issues"`
-	FetchedAt  *time.Time `json:"fetched_at"`
-	StaleSince *time.Time `json:"stale_since,omitempty"`
+	Teams      []TeamResponse `json:"teams,omitempty"`
+	State      string         `json:"state"`
+	Cycle      *Cycle         `json:"cycle"`
+	Issues     []Issue        `json:"issues"`
+	FetchedAt  *time.Time     `json:"fetched_at"`
+	StaleSince *time.Time     `json:"stale_since,omitempty"`
 }
 type Options struct {
 	Home     string
@@ -59,6 +65,7 @@ type Client struct {
 	expires  time.Time
 	flight   chan struct{}
 	keyStamp keyStamp
+	teams    map[string]Response
 }
 
 type keyStamp struct {
@@ -84,6 +91,13 @@ func New(opts Options) *Client {
 	return &Client{opts: opts}
 }
 func clone(r Response) Response {
+	if r.Teams != nil {
+		teams := make([]TeamResponse, len(r.Teams))
+		for i, t := range r.Teams {
+			teams[i] = TeamResponse{Team: t.Team, Response: clone(t.Response)}
+		}
+		r.Teams = teams
+	}
 	r.Issues = append([]Issue{}, r.Issues...)
 	if r.Cycle != nil {
 		c := *r.Cycle
@@ -145,7 +159,7 @@ func (c *Client) Get(ctx context.Context) Response {
 	now := c.opts.Now()
 	if r.State == "ok" {
 		r.FetchedAt = &now
-	} else if r.State == "bad_key" || r.State == "unreachable" {
+	} else if len(r.Teams) == 0 && (r.State == "bad_key" || r.State == "unreachable") {
 		r.Cycle, r.Issues, r.FetchedAt = c.cached.Cycle, c.cached.Issues, c.cached.FetchedAt
 		if r.FetchedAt != nil {
 			r.StaleSince = c.cached.StaleSince
@@ -166,14 +180,79 @@ func (c *Client) fetch(ctx context.Context) Response {
 		r.State = "off"
 		return r
 	}
-	team := ""
-	if local.Integrations.Linear.Team != nil {
-		team = strings.TrimSpace(*local.Integrations.Linear.Team)
-	}
-	if team == "" {
+	if len(local.Integrations.Linear.Teams) == 0 {
 		r.State = "off"
 		return r
 	}
+	if c.teams == nil {
+		c.teams = map[string]Response{}
+	}
+	r.State = "ok"
+	results := make([]Response, len(local.Integrations.Linear.Teams))
+	var wg sync.WaitGroup
+	for i, team := range local.Integrations.Linear.Teams {
+		wg.Add(1)
+		go func(i int, team string) {
+			defer wg.Done()
+			defer func() {
+				if recover() != nil {
+					results[i] = Response{State: "unreachable", Issues: []Issue{}}
+				}
+			}()
+			results[i] = c.fetchTeam(ctx, team)
+		}(i, team)
+	}
+	wg.Wait()
+	for i, team := range local.Integrations.Linear.Teams {
+		next := results[i]
+		now := c.opts.Now()
+		old := c.teams[team]
+		if next.State == "ok" {
+			next.FetchedAt = &now
+		} else if next.State == "bad_key" || next.State == "unreachable" {
+			next.Cycle, next.Issues, next.FetchedAt = old.Cycle, old.Issues, old.FetchedAt
+			if next.FetchedAt != nil {
+				next.StaleSince = old.StaleSince
+				if next.StaleSince == nil {
+					next.StaleSince = &now
+				}
+			}
+		}
+		if next.State != "ok" {
+			r.State = next.State
+		}
+		c.teams[team] = next
+		r.Teams = append(r.Teams, TeamResponse{Team: team, Response: next})
+		r.Issues = append(r.Issues, next.Issues...)
+		if i == 0 && next.Cycle != nil {
+			cy := *next.Cycle
+			r.Cycle = &cy
+		}
+	}
+	if r.State != "ok" {
+		for _, t := range r.Teams {
+			if t.State == "ok" {
+				r.State = "partial"
+				break
+			}
+		}
+	}
+	// Only expose a common cycle when every team's boundaries and name agree.
+	for _, t := range r.Teams {
+		if t.Cycle == nil || r.Cycle == nil || *t.Cycle != *r.Cycle {
+			r.Cycle = nil
+			break
+		}
+	}
+	if len(r.Teams) == 1 {
+		r.FetchedAt = r.Teams[0].FetchedAt
+		r.StaleSince = r.Teams[0].StaleSince
+	}
+	return r
+}
+
+func (c *Client) fetchTeam(ctx context.Context, team string) Response {
+	r := Response{State: "unreachable", Issues: []Issue{}}
 	key, err := ReadKey(c.opts.Home)
 	if err != nil {
 		r.State = "bad_key"
@@ -227,7 +306,7 @@ func (c *Client) fetch(ctx context.Context) Response {
 		}
 		r.Cycle = &Cycle{Name: cy.Name, Start: cy.StartsAt, End: cy.EndsAt}
 		for _, i := range cy.Issues.Nodes {
-			r.Issues = append(r.Issues, Issue{ID: i.Identifier, Title: i.Title, URL: i.URL, StatusName: i.State.Name, StatusType: i.State.Type, AddedAt: i.AddedToCycleAt, DoneAt: i.CompletedAt})
+			r.Issues = append(r.Issues, Issue{Team: team, ID: i.Identifier, Title: i.Title, URL: i.URL, StatusName: i.State.Name, StatusType: i.State.Type, AddedAt: i.AddedToCycleAt, DoneAt: i.CompletedAt})
 		}
 	}
 	// Decode first as well so JSON escape sequences cannot hide an echoed key.
@@ -247,4 +326,21 @@ func (c *Client) fetch(ctx context.Context) Response {
 	}
 	r.State = "ok"
 	return r
+}
+
+// FreshIssues excludes stale team data from automated status checks.
+func (r Response) FreshIssues() []Issue {
+	if len(r.Teams) == 0 {
+		if r.State == "ok" {
+			return r.Issues
+		}
+		return nil
+	}
+	var issues []Issue
+	for _, t := range r.Teams {
+		if t.State == "ok" {
+			issues = append(issues, t.Issues...)
+		}
+	}
+	return issues
 }
