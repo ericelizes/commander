@@ -1,5 +1,5 @@
 // Web links open in the app's own browser (the right panel), signed in there,
-// wherever they are: a pitch, a card, a report. Cmd/Ctrl/Shift-click still
+// wherever they are: a pitch, a card, a report, except in a chat. Cmd/Ctrl/Shift-click still
 // opens the system browser on purpose.
 
 import { hasConnections, openInPanel } from '../../features/inspector'
@@ -9,6 +9,8 @@ export function routeLinksToPanel(doc: Document = document): () => void {
     if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
     const a = (e.target as Element | null)?.closest?.('a[href]') as HTMLAnchorElement | null
     if (!a || !/^https?:/.test(a.href) || !hasConnections()) return
+    // A chat link opens in the system browser (its own target=_blank).
+    if (a.closest('.cmdr-chat')) return
     e.preventDefault()
     openInPanel(a.href, a.textContent?.trim() || undefined)
   }
