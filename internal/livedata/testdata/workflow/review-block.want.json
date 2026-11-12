@@ -53,7 +53,7 @@
       "id": "w.9.4",
       "title": "Adversarial review by a different reviewer",
       "kind": "working",
-      "text": "Operator working"
+      "text": "Agent working"
      },
      {
       "id": "w.9.5",
@@ -110,7 +110,7 @@
        "step": "adversarial-review",
        "title": "Adversarial review by a different reviewer",
        "kind": "working",
-       "text": "Operator working",
+       "text": "Agent working",
        "verifier": "review-clean"
       },
       {

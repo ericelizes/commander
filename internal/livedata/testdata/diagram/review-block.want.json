@@ -76,7 +76,7 @@
        "step": "adversarial-review",
        "title": "Adversarial review by a different reviewer",
        "kind": "working",
-       "text": "Operator working",
+       "text": "Agent working",
        "verifier": "review-clean"
       },
       {

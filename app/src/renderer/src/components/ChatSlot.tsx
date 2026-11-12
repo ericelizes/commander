@@ -68,7 +68,7 @@ const chatHost: ChatHost = {
     if (role === 'cmdrd') return 'Commander'
     const owner = managerOfRole(useStore.getState().snapshot, role)
     if (owner) return `${owner.title} Manager`
-    if (role.startsWith('operator-')) return `Operator ${role.replace(/^operator-(op-)?/, '')}`
+    if (role.startsWith('operator-')) return `Agent ${role.replace(/^operator-(op-)?/, '')}`
     return role
   },
   Graph: ChatGraph,

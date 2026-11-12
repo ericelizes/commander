@@ -21,7 +21,7 @@ Report exports (lab-bex)
     [Operators] Export live in production: Not started (lab-bex.2.5) after lab-bex.2.4
 
   Finance sign-off on the export format (lab-bex.3)
-    [Operators] Sample file drafted: Operator working (lab-bex.3.1)
+    [Operators] Sample file drafted: Agent working (lab-bex.3.1)
   ▶ [You] Pick the file naming scheme: Needs you (lab-bex.3.4)
     [Reviewers, finance team] Finance team reviewed the sample: Not started (lab-bex.3.2) after lab-bex.3.1
     [You] [gate, you] Greenlight the export format: Not reached (lab-bex.3.3) after lab-bex.3.2, lab-bex.3.4

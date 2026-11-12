@@ -268,7 +268,7 @@ type SnapStep struct {
 	Owner                string                  `json:"owner,omitempty"`
 	OwnerState           string                  `json:"owner_state,omitempty"` // its Operator: working | finished (exited, reported) | died (exited, step still open)
 	OwnerWhy             string                  `json:"owner_why,omitempty"`   // why, when cmdrd corrected the claim against what runs or settled a death
-	OwnerSince           int64                   `json:"owner_since,omitempty"` // unix s its Operator stopped, when known
+	OwnerSince           int64                   `json:"owner_since,omitempty"` // unix s its Agent stopped, when known
 	Restarts             int                     `json:"restarts,omitempty"`    // automatic restarts cmdrd made of its Operator
 	Starred              bool                    `json:"starred,omitempty"`
 	Review               string                  `json:"review,omitempty"` // PR number while in review ("?" = unknown)
@@ -957,7 +957,7 @@ func (s *Source) build(ctx context.Context, data Data) Snapshot {
 	}
 	snap.Live = live
 	if s.Deps.Store != nil && s.Deps.Store.IsPostgres() && liveRead != nil && live == nil {
-		snap.Degraded = &SnapDegraded{Reason: "Operator process activity could not be verified"}
+		snap.Degraded = &SnapDegraded{Reason: "Agent process activity could not be verified"}
 	}
 	if s.ManagerCapacity != nil {
 		snap.ManagerCapacity = s.ManagerCapacity()

@@ -212,7 +212,7 @@ func (f flow) leafBaseLine(s SnapStep) line {
 		return line{kind: "stalled", text: "Agent finished, step not closed: the Manager's move", since: s.OwnerSince, why: s.OwnerWhy}
 	}
 	if (strings.HasPrefix(s.Owner, "operator-") && stepAlive(s)) || liveTask(s) {
-		return line{kind: "working", text: "Operator working"}
+		return line{kind: "working", text: "Agent working"}
 	}
 	if f.ws.NowStep == s.BeadID && agentBusy(f.manager, f.hasManager) {
 		return line{kind: "working", text: "Manager working", since: f.manager.Since}

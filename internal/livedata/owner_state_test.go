@@ -68,7 +68,7 @@ func TestMarkOperatorOwners_RunningRunClaimsOwnerlessTask(t *testing.T) {
 	rows := []ObjectiveRow{{BeadID: "p-1.2", ProjectID: pid, Status: "in_progress", State: beads.StateInProgress}}
 	got := MarkOperatorOwners(ctx, st, []store.Project{{ID: pid, Name: "p"}}, rows)
 	if got[0].Owner != "operator-op-x-p-1-2" || got[0].OwnerState != OwnerWorking {
-		t.Fatalf("owner %q state %q, want the running Operator working", got[0].Owner, got[0].OwnerState)
+		t.Fatalf("owner %q state %q, want the running Agent working", got[0].Owner, got[0].OwnerState)
 	}
 	if v := OpenBeadInvariant(MarkLiveOwners(got, LiveOperators{"operator-op-x-p-1-2": true}), nil); len(v) != 0 {
 		t.Fatalf("fresh Operator reads broken: %+v", v)

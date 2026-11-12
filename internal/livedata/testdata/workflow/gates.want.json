@@ -6,7 +6,7 @@
     "id": "lab-ops.1",
     "title": "Rotate the lab keys",
     "kind": "working",
-    "text": "Operator working"
+    "text": "Agent working"
    },
    {
     "id": "lab-ops.2",
@@ -100,7 +100,7 @@
       "id": "lab-t06.3.2",
       "title": "Restore the test VM",
       "kind": "working",
-      "text": "Operator working"
+      "text": "Agent working"
      },
      {
       "id": "lab-t06.3.3",

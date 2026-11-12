@@ -8,10 +8,10 @@ Hub import (lab-hub)
         [Operators] Importer built: Done (lab-hub.1.2.2)
         [Operators] Importer tests green: Done (lab-hub.1.2.3)
         [Operators] Backfill script built: Done (lab-hub.1.2.4)
-      ▶ [Operators] Importer PR open: Operator working (lab-hub.1.2.5) after lab-hub.1.2.4
+      ▶ [Operators] Importer PR open: Agent working (lab-hub.1.2.5) after lab-hub.1.2.4
         [Automatic, CI, runs on each push to the PR] CI green on the importer PR: Waiting for CI (lab-hub.1.2.6) after lab-hub.1.2.5
         [Reviewers, reviewer-a] [gate, reviewer-a] Importer PR approved: Not reached (lab-hub.1.2.7) after lab-hub.1.2.6
             passes when: The reviewer approves the PR on GitHub.
         [You] [gate, you] Greenlight running the backfill: Not reached (lab-hub.1.2.8) after lab-hub.1.2.7
             passes when: The user says run it.
-        [Operators] Backfill verified: Operator working (lab-hub.1.2.9) after lab-hub.1.2.8
+        [Operators] Backfill verified: Agent working (lab-hub.1.2.9) after lab-hub.1.2.8

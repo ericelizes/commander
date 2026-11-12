@@ -15,7 +15,7 @@ import (
 func TestWrongOnScreenCollectsEveryMismatch(t *testing.T) {
 	d := livedata.Display{
 		Workstreams: []livedata.BoardRow{
-			{Key: "p:a", N: 1, Title: "Jobs (TEAM-1)", Kind: "working", Working: 0, Why: "Operator is no longer running and has not reported", Progress: livedata.Progress{Done: 2, Total: 4}},
+			{Key: "p:a", N: 1, Title: "Jobs (TEAM-1)", Kind: "working", Working: 0, Why: "Agent is no longer running and has not reported", Progress: livedata.Progress{Done: 2, Total: 4}},
 			{Key: "p:b", N: 2, Title: "Logs (TEAM-2)", Kind: "working", Working: 1},
 		},
 		Asks: []livedata.BoardAsk{{Key: "ask:x", Rank: 2, WsKey: "p:b", Text: "Approve the sign-in?", StaleWhy: "The spec changed since this was asked"}},

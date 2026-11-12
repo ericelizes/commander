@@ -72,7 +72,7 @@
         "id": "lab-hub.1.2.5",
         "title": "Importer PR open",
         "kind": "working",
-        "text": "Operator working",
+        "text": "Agent working",
         "lane": "agents",
         "actor": "operators",
         "after": [
@@ -125,7 +125,7 @@
         "id": "lab-hub.1.2.9",
         "title": "Backfill verified",
         "kind": "working",
-        "text": "Operator working",
+        "text": "Agent working",
         "lane": "agents",
         "actor": "operators",
         "after": [
