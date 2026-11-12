@@ -87,7 +87,7 @@ func TestTooLongAnswerIsRewrittenOnceBeforeCutting(t *testing.T) {
 }
 
 func TestShortenDropsATrailingClauseBeforeCutting(t *testing.T) {
-	if got := shorten("stop staging or all Notify, unblocking the rollout plan", 34); got != "stop staging or all Notify" {
+	if got := shorten("stop staging or all Notify, unblocking the rollout plan", 30); got != "stop staging or all Notify" {
 		t.Fatalf("%q", got)
 	}
 }

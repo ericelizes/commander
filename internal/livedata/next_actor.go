@@ -54,11 +54,9 @@ func actorLine(row nextactor.Row) line {
 		nextactor.External:  "waiting",
 		nextactor.None:      "quiet",
 	}[row.Lead.Actor]
-	why := ""
-	if len(row.Lead.Via) > 0 {
-		why = "via " + strings.Join(row.Lead.Via, " ← ")
-	}
-	return line{kind: kind, text: row.Summary(), since: row.Lead.Since, why: why}
+	// "why" draws a warning icon in the sidebar; a blocking chain is not a
+	// warning (it stays on the row's Actor for anyone who wants it).
+	return line{kind: kind, text: row.Summary(), since: row.Lead.Since}
 }
 
 func (b board) actorContext(project string, pid int64, commander string) nextactor.Context {
