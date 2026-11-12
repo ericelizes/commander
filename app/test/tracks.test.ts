@@ -22,10 +22,10 @@ describe('tracks', () => {
 
 
 
-  it('a finished or parked track is not a sub-row', () => {
+  it('a parked track stays visible while a closed track is hidden', () => {
     const w = tracked()
     w.steps.push(s('w.3', { track: true, state: 'done', status: 'closed' }), s('w.4', { track: true, status: 'deferred' }))
-    expect(openTracks(w).map((t) => t.bead_id)).toEqual(['w.1', 'w.2'])
+    expect(openTracks(w).map((t) => t.bead_id)).toEqual(['w.1', 'w.2', 'w.4'])
   })
 
 

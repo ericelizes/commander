@@ -2,6 +2,9 @@ package beads
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"strings"
 
 	"github.com/example-user/commander/internal/store"
 )
@@ -18,6 +21,42 @@ func WithCompletionValidator(ctx context.Context, v CompletionValidator) context
 func pgCheckCompletion(ctx context.Context, q store.Querier, pid int64, id, oldStatus, newStatus string, retired bool) error {
 	if newStatus != "closed" || oldStatus == "closed" {
 		return nil
+	}
+	// All close callers, including roleless and legacy callers, share these
+	// invariants. pgWrite holds the project graph lock before reading the bead.
+	var raw []byte
+	if err := q.QueryRowContext(ctx, `SELECT labels FROM bead_tasks WHERE project_id=? AND id=? AND deleted_at IS NULL`, pid, id).Scan(&raw); err != nil {
+		return err
+	}
+	var labels []string
+	if err := json.Unmarshal(raw, &labels); err != nil {
+		return err
+	}
+	for _, w := range WaitsOf(labels) {
+		if w.Kind == WaitReview {
+			return fmt.Errorf("cannot close %s: Waiting for review (%s); record the required review first", id, w.Ref)
+		}
+	}
+	rows, err := q.QueryContext(ctx, `SELECT DISTINCT b.id FROM bead_tasks b WHERE b.project_id=? AND b.deleted_at IS NULL AND b.status NOT IN ('closed','tombstone') AND (b.parent_id=? OR EXISTS (SELECT 1 FROM bead_dependencies d WHERE d.project_id=b.project_id AND d.issue_id=b.id AND d.depends_on_id=? AND d.type='parent-child')) ORDER BY b.id`, pid, id, id)
+	if err != nil {
+		return err
+	}
+	var unfinished []string
+	for rows.Next() {
+		var child string
+		if err = rows.Scan(&child); err != nil {
+			rows.Close()
+			return err
+		}
+		unfinished = append(unfinished, child)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return err
+	}
+	if len(unfinished) > 0 {
+		return fmt.Errorf("cannot close %s: unfinished children (%s); finish them first (deferred work is unfinished)", id, strings.Join(unfinished, ", "))
 	}
 	active, e := pgActiveExecution(ctx, q)
 	if e != nil || !active {
