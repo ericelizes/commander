@@ -15,6 +15,28 @@ function replay(queued: boolean, terminalReason = 'aborted_streaming') {
   return reduceAll(initialState(), new EngineMapper().map(frames, 'commander'))
 }
 
+describe('one marker for a stopped turn', () => {
+  const base = { role: 'commander', session_id: 's', source: 'live' }
+  const run = (withDivider: boolean) => reduceAll(initialState(), new EngineMapper().map([
+    { ...base, seq: 1, kind: 'user_message', uuid: 'u1', origin: 'user', text: 'recap please' },
+    { ...base, seq: 2, kind: 'text_delta', message_id: 'm1', text: 'Working' },
+    ...(withDivider ? [{ ...base, seq: 3, kind: 'notice', subtype: 'interrupted' }] : []),
+    { ...base, seq: 4, kind: 'turn_result', result: { subtype: 'error_during_execution', terminal_reason: 'aborted_streaming', duration_ms: 12000 } },
+  ], 'commander'))
+
+  it('marks the stopped turn as already shown when the Interrupted divider is there', () => {
+    const state = run(true)
+    const turn = Object.values(state.items).find(it => it.type === 'turn')
+    expect(turn && turn.type === 'turn' && turn.shownAsInterrupted).toBe(true)
+  })
+
+  it('leaves the stopped turn to draw the divider itself when none came', () => {
+    const state = run(false)
+    const turn = Object.values(state.items).find(it => it.type === 'turn')
+    expect(turn && turn.type === 'turn' && !turn.shownAsInterrupted).toBe(true)
+  })
+})
+
 describe('Codex aborted turns', () => {
   it('shows a stopped reply even when no assistant text or tools arrived', () => {
     const state = replay(false)
