@@ -5,14 +5,12 @@ import { ArrowLeft, ArrowRight } from 'lucide-react'
 import { isMac } from '../host'
 import { useStore } from '../store'
 import { useChatTarget } from './ChatSlot'
-import { FocusHeader } from './FocusHeader'
 import { modelName } from '../../../features/chat/modelName'
 import { WorkstreamCommander } from './WorkstreamCommander'
 import { wsKey } from '../viewmodel'
 import { commanderScope } from '../jurisdiction'
 
 export function TopBar({ left, chat }: { left: number; chat: number }) {
-  const focus = useStore((s) => s.focus)
   const page = useStore((s) => s.selected.kind === 'progress')
   const focused = useStore((s) => s.selected.kind !== 'commander' && s.selected.kind !== 'progress')
   const narrow = useStore((s) => s.narrow)
@@ -47,7 +45,7 @@ export function TopBar({ left, chat }: { left: number; chat: number }) {
           <span className="app-top-title">Progress</span>
         </div>
       )}
-      {showFocus && <div className="app-top-pane">{focus && <FocusHeader target={focus} />}{jurisdiction && <WorkstreamCommander key={`${jurisdiction.projectId}:${jurisdiction.beadId}`} {...jurisdiction} />}</div>}
+      {showFocus && <div className="app-top-pane">{jurisdiction && <WorkstreamCommander key={`${jurisdiction.projectId}:${jurisdiction.beadId}`} {...jurisdiction} />}</div>}
       {showChat && !page && (
         <div className="app-top-pane app-top-chat">
           <span className="app-top-title">{chatTitle}</span>
