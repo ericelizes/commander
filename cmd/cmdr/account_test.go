@@ -224,7 +224,7 @@ func TestOperatorProviderRefusesARunStoppedButNotSettled(t *testing.T) {
 	}
 	var out, errOut bytes.Buffer
 	code := runInternalOperatorProvider([]string{"operator-op-a-ws1-1", "--account", "work"}, &out, &errOut)
-	if code == 0 || !strings.Contains(errOut.String(), "'Operator stopped' mail") {
+	if code == 0 || !strings.Contains(errOut.String(), "'Agent stopped' mail") {
 		t.Fatalf("exit %d: %s", code, errOut.String())
 	}
 	if len(runs.closed) != 0 || len(*ended) != 0 || len(sp.reqs) != 0 {

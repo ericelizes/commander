@@ -40,7 +40,7 @@ func TestBoardWorkflow(t *testing.T) {
 			t.Errorf("workflow 1 lacks %q:\n%s", want, got)
 		}
 	}
-	if got := run("lab-t06.3"); !strings.Contains(got, "▶ Restore the test VM: Operator working (lab-t06.3.2)") {
+	if got := run("lab-t06.3"); !strings.Contains(got, "▶ Restore the test VM: Agent working (lab-t06.3.2)") {
 		t.Errorf("track workflow:\n%s", got)
 	}
 }
