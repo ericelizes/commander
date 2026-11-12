@@ -37,7 +37,7 @@ var settleCloseBlock = func(project, block, reason string) error {
 // step it closes records only that the PR merged at its head and the review was
 // not completed. Steps already closed keep their evidence as it is.
 func settleWorkflowBlock(ctx context.Context, bc beads.Client, dir, project, blockID, reason string) (*workflowSettleResult, error) {
-	if callerIsOperator("") {
+	if callerIsOperator("") || workflowExecutionCaller() {
 		return nil, fmt.Errorf("settling a review block belongs to the owning Manager, Commander or the user; Operators cannot settle it")
 	}
 	reason = strings.Join(strings.Fields(reason), " ")
@@ -60,14 +60,8 @@ func settleWorkflowBlock(ctx context.Context, bc beads.Client, dir, project, blo
 	if err != nil {
 		return nil, err
 	}
-	if role := os.Getenv("COMMANDER_ROLE"); role != "" && role != "commander" {
-		owners, err := workflowOwnerRoles(ctx, bc, dir, blockID, root)
-		if err != nil {
-			return nil, err
-		}
-		if !roleAmong(role, owners) {
-			return nil, fmt.Errorf("settling %s belongs to %s, Commander or the user", blockID, owners[0])
-		}
+	if err := authorizeWorkflowOwner(ctx, bc, dir, *b, root, "settling "+blockID, true); err != nil {
+		return nil, err
 	}
 	pr := workflowtemplate.BlockPR(*b)
 	h, err := workflowtemplate.ReadHead(ctx, workflowGH, pr)
@@ -180,7 +174,7 @@ func settleOrder(t *workflowtemplate.Template) []workflowtemplate.Step {
 
 // runWorkflowSettleBlock: `workflow settle-block --project P --block B --reason R`.
 func runWorkflowSettleBlock(args []string, stdout, stderr *os.File) int {
-	if callerIsOperator("") {
+	if callerIsOperator("") || workflowExecutionCaller() {
 		emitErr(stderr, "settling a review block belongs to the owning Manager, Commander or the user; Operators cannot settle it")
 		return 1
 	}

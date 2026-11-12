@@ -5,8 +5,7 @@
       "block": false,
       "head": "head1",
       "state": "OPEN",
-      "expected": "MERGE_REVIEW_REQUIRED",
-      "fix": "cmdr workflow plug pr-review"
+      "expected": ""
     },
     {
       "name": "unfinished review",
@@ -125,8 +124,7 @@
       "invalid": true,
       "head": "head1",
       "state": "OPEN",
-      "expected": "MERGE_REVIEW_REQUIRED",
-      "fix": "cmdr workflow plug pr-review"
+      "expected": "MERGE_REVIEW_INCOMPLETE"
     },
     {
       "name": "closed unmerged PR still needs bound checks",

@@ -84,6 +84,12 @@ func TestPostgresPlanCompletionUsesFreshSharedVerifier(t *testing.T) {
 	}
 	ts := httptest.NewServer(New(Options{Token: testToken, StateStore: st, WorkflowGH: gh}).Handler())
 	defer ts.Close()
+	insert("optional-merge", "root", "Merge PR", "", []string{"kind:gate", "gate-name:merged", "verifier:operator", "pr:42"})
+	beforeOptional := calls
+	_, optional := postWrite(t, ts.URL, testToken, beads.DoorRequest{Dir: dir, Args: []string{"close", "optional-merge"}, NoWait: true, Env: []string{"COMMANDER_ROLE=commander"}})
+	if optional.Exit != 0 || calls != beforeOptional {
+		t.Fatalf("unplanned PR review prevented merge close: %+v, GitHub calls %d", optional, calls-beforeOptional)
+	}
 	single := beads.DoorRequest{Dir: dir, Args: []string{"close", "ci"}, NoWait: true, Env: []string{"COMMANDER_ROLE=commander"}}
 	_, out := postWrite(t, ts.URL, testToken, single)
 	if out.Exit == 0 || !strings.Contains(out.Error, "CI") {
@@ -251,7 +257,7 @@ func TestPostgresPlanCompletionUsesFreshSharedVerifier(t *testing.T) {
 	if out.Exit == 0 || !strings.Contains(out.Error, "unpassed gate") {
 		t.Fatalf("stage bypassed its own approval gate: %+v", out)
 	}
-	for _, args := range [][]string{{"delete", "waiver-stage"}, {"update", "waiver-stage", "--add-label", "retired"}, {"update", "waiver-gate", "--add-label", "retired"}, {"update", "waiver-gate", "--remove-label", "verifier:operator"}, {"close", "waiver-gate"}} {
+	for _, args := range [][]string{{"delete", "waiver-stage"}, {"update", "waiver-stage", "--add-label", "retired"}, {"update", "waiver-gate", "--remove-label", "verifier:operator"}} {
 		single.Args = args
 		_, out = postWrite(t, ts.URL, testToken, single)
 		if out.Exit == 0 {
@@ -318,12 +324,7 @@ func TestPostgresPlanCompletionUsesFreshSharedVerifier(t *testing.T) {
 	if out.Exit != 0 {
 		t.Fatalf("typed retirement refused: %+v", out)
 	}
-	single.CompletionWaivers = nil
-	single.Args = []string{"close", "retire-gate"}
-	_, out = postWrite(t, ts.URL, testToken, single)
-	if out.Exit == 0 {
-		t.Fatalf("a retirement marker was mistaken for passing proof: %+v", out)
-	}
+
 	single.CompletionWaivers = []beads.CompletionWaiver{retirement}
 	single.Args = []string{"close", "retire-gate"}
 	_, out = postWrite(t, ts.URL, testToken, single)

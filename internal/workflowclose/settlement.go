@@ -10,7 +10,7 @@ import (
 )
 
 // checkSettlement accepts an explicit unreviewed settlement only when its
-// recorded identity and every guarded PR still match fresh merged facts. It
+// recorded identity and the block PR still match fresh merged facts. It
 // never emits passing review evidence or manufactures a writer binding.
 func (v Verifier) checkSettlement(ctx context.Context, bc beads.Client, dir, project string, n, block workflowtemplate.Node, instance, step string) (bool, error) {
 	if !workflowtemplate.IsReviewBlock(block.Bead) {
@@ -46,15 +46,11 @@ func (v Verifier) checkSettlement(ctx context.Context, bc beads.Client, dir, pro
 	return true, nil
 }
 func (v Verifier) SettledTargets(ctx context.Context, nodes []workflowtemplate.Node, project, repo string, block beads.Bead) error {
-	byID := map[string]workflowtemplate.Node{}
-	for _, n := range nodes {
-		byID[n.Bead.ID] = n
-	}
 	for _, n := range nodes {
 		if !slices.Contains(n.Waits, block.ID) || !workflowtemplate.PluggedBefore(block, n.Bead.ID, project) || n.Bead.Status == "closed" {
 			continue
 		}
-		prs := workflowtemplate.TargetPRs(n, byID, project, repo)
+		prs := []string{workflowtemplate.BlockPR(block)}
 		states := map[string]string{}
 		for _, pr := range prs {
 			h, err := workflowtemplate.ReadHead(ctx, v.gh(), pr)

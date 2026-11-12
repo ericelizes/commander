@@ -1,7 +1,7 @@
 {
   "Comment": "A stage that ships with no PR (a deploy on a VM) and its merged gate, run through the real cmdr against a real bd. Each case gets its own stage and gate. Role 'owner' is the workstream's own Manager.",
   "Cases": [
-    {"Name": "a plain pass still refuses a merge with no PR", "Verb": "pass", "Role": "", "Evidence": "answer TEAM-12-a1", "Exit": 1, "Stderr": "has no PR yet", "After": "open"},
+    {"Name": "a plain pass closes a merge without a review block", "Verb": "pass", "Role": "", "Evidence": "answer TEAM-12-a1", "Exit": 0, "After": "closed"},
     {"Name": "the user passes it with the approval on the record", "Verb": "pass", "Role": "", "NoPR": "deploy on a VM, nothing to merge", "Evidence": "answer TEAM-12-a1: the user approved the deploy", "Exit": 0, "After": "closed", "Notes": 1},
     {"Name": "the owning Manager passes it", "Verb": "pass", "Role": "owner", "NoPR": "deploy on a VM, nothing to merge", "Evidence": "answer TEAM-12-a2", "Exit": 0, "After": "closed", "Notes": 1},
     {"Name": "the owning Manager removes it", "Verb": "rm", "Role": "owner", "NoPR": "deploy on a VM, nothing to merge", "Evidence": "answer TEAM-12-a3", "Exit": 0, "After": "gone", "Notes": 1},

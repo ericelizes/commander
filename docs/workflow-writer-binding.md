@@ -1,8 +1,12 @@
 # Explicit writers for PR review
 
 Use the standalone binary built from the implementation branch. This does not
-require installing Commander or restarting cmdrd. The owning Manager runs these
-commands; an Operator must hand the recipe back to that Manager.
+require installing Commander or restarting cmdrd. The owning planning Commander runs these
+commands on PostgreSQL (the owning Manager on legacy backends). Other Commanders
+and Operators are refused, including execution sessions borrowing a planning role.
+
+PR-review blocks are optional. A merge title or `pr:` label does not require one.
+When a block is plugged, its writer and current-head checks still apply.
 
 1. Run the existing `workflow plug pr-review --project P --parent B --before M --pr URL`
    command with the same parameters. Its JSON `container` is the existing review
@@ -10,7 +14,7 @@ commands; an Operator must hand the recipe back to that Manager.
 2. Read the original implementation and actual fix writers' commit reports.
    Select all writer task IDs relevant to this PR diff. Review task IDs are not
    writers merely because they live under the review block. No graph scan can
-   replace this Manager selection.
+   replace this explicit selection.
 3. Read the current full SHA with `gh pr view URL --json headRefOid --jq .headRefOid`.
    Bind the selection (include every original/fix writer, comma-separated):
 

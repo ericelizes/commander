@@ -1,0 +1,18 @@
+{
+  "schema": "optional-pr-review@v1",
+  "runner": "cmd/cmdr:TestOptionalPRReviewScenario",
+  "cases": [
+    {
+      "name": "merge gate without PR",
+      "label": ""
+    },
+    {
+      "name": "merge gate tracking PR",
+      "label": "pr:7"
+    },
+    {
+      "name": "merge gate tracking cross repository PR",
+      "label": "pr:acme/widgets#7"
+    }
+  ]
+}

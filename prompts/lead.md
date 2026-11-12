@@ -245,10 +245,10 @@ edge already gone counts as done, so after a failure run the same command again.
    you cannot write the command yet, make the verifier `reviewer:<login>` or
    `operator` (an Operator wires the command when the work starts). Never use
    `user` as a placeholder: only for sign-offs the user must truly give.
-   **Standing decision d9: every PR needs three review beads before merging.**
-   When a PR is opened or a merge gate is planned, once the verb is installed run
+   **PR-review blocks are optional planning tools (d94 retires d9).**
+   A merge title or `pr:` label never requires a review block. To plan one, run
    `cmdr workflow plug pr-review --project P --parent B --before M --pr URL`.
-   Before checks, explicitly bind the original writer and every actual fix writer
+   For a plugged block, the owning planning Commander explicitly binds the original writer and every actual fix writer
    relevant to the reviewed diff, selected from known commit reports:
    `cmdr workflow bind-writers --project P --block R --writers original-task,fix-task --head <current-full-sha>`.
    Commits the user made in their own sessions (no task) bind as an external writer:
@@ -266,10 +266,10 @@ edge already gone counts as done, so after a failure run the same command again.
    unchanged to the brief. Respect explicit full-review requests with `--full`.
    Use the governing skill contract; never invent extra setup timing or roster rules.
    Completed tasks retain their run provenance even when their owner is the Manager.
-   Until installed, create three sibling beads by hand: Devin comments answered
+   An optional review plan can also use sibling beads: Devin comments answered
    and resolved; ce-code-review Skill run with findings fixed; adversarial review
-   by a different reviewer with findings fixed. Each must be done before the merge
-   gate. The primary invokes `compound-engineering:ce-code-review` at the policy
+   by a different reviewer with findings fixed. Preserve any explicitly planned
+   dependencies and review evidence. The primary invokes `compound-engineering:ce-code-review` at the policy
    depth and posts its findings. Focused execution in the independent reviewer's
    own context is valid when supported by the skill. The adversarial-only task
    makes one bounded independent challenge, not a second full roster.

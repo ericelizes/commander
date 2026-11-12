@@ -143,19 +143,19 @@ func TestWorkflowApproveDoorRefusesMissingBlock(t *testing.T) {
 		}
 	}
 }
-func TestWorkflowMergedGatePassRefusesMissingReview(t *testing.T) {
+func TestWorkflowMergedGatePassWithoutReview(t *testing.T) {
 	mem := setupGateProject(t)
 	code, _, errOut := gateCmd(t, "add", "--project", "manifest", "--bead", "ms-1.2", "--name", "merged", "--check", "PR merged", "--verifier", "user")
 	if code != 0 {
 		t.Fatal(errOut)
 	}
 	code, _, errOut = gateCmd(t, "pass", "--project", "manifest", "--bead", "ms-1.2", "--name", "merged", "--evidence", "done")
-	if code == 0 || !strings.Contains(errOut, "MERGE_REVIEW_REQUIRED") {
+	if code != 0 {
 		t.Fatal(code, errOut)
 	}
 	for _, b := range mem.Beads {
-		if hasLabel(b.Labels, "gate-name:merged") && b.Status == "closed" {
-			t.Fatal("gate closed")
+		if hasLabel(b.Labels, "gate-name:merged") && b.Status != "closed" {
+			t.Fatal("gate did not close")
 		}
 	}
 }
@@ -343,9 +343,6 @@ func TestWorkflowCloseLabelSwapIsRecorded(t *testing.T) {
 		stdout, stderr, _ := withTempOutputFiles(t)
 		return runInternalCloseObjective([]string{"--project", "manifest", "--bead", "ms-1.9", "--reason", "merged"}, stdout, stderr)
 	}
-	if closeGate() == 0 {
-		t.Fatal("a live PR's merged gate closed")
-	}
 	if code, _ := runReviewNone(t, "ms-1.9"); code == 0 {
 		t.Fatal("the swap's first step needed no reason")
 	}
@@ -383,15 +380,15 @@ func TestWorkflowClosePlainPRStepClosesWithNoGitHub(t *testing.T) {
 
 // Work about merging is not the merge: an ordinary pr: step closes with its PR open.
 
-// The board reads a merge with no tracked PR as advice; closing it stays refused.
-func TestWorkflowCloseRefusesAPlannedMergeWithNoPR(t *testing.T) {
+// A merge without a tracked PR or review block closes normally.
+func TestWorkflowClosePlannedMergeWithoutReview(t *testing.T) {
 	mem := &beads.MemClient{}
 	mem.Seed(beads.Bead{ID: "w.1", Title: "PR merged", Labels: []string{"gate", "gate-name:merged"}})
 	pinWorkflowRepo(t, "o/r")
 	var asked []string
 	pinWorkflowGH(t, prStateGH("OPEN", &asked))
 	err := checkWorkflowClose(context.Background(), mem, "/d", "p", "w.1")
-	if err == nil || !strings.Contains(err.Error(), "MERGE_REVIEW_REQUIRED") || !strings.Contains(err.Error(), "has no PR yet") {
+	if err != nil {
 		t.Fatal(err)
 	}
 }
@@ -413,15 +410,14 @@ func TestWorkflowCloseMergeWorkStepIsNoTarget(t *testing.T) {
 		pinWorkflowRepo(t, "o/r")
 		var asked []string
 		pinWorkflowGH(t, prStateGH("OPEN", &asked))
-		if err := checkWorkflowClose(context.Background(), mem, "/d", "p", "w.1"); err == nil || !strings.Contains(err.Error(), "MERGE_REVIEW_REQUIRED") {
+		if err := checkWorkflowClose(context.Background(), mem, "/d", "p", "w.1"); err != nil {
 			t.Fatalf("%q: %v", title, err)
 		}
 	}
 }
 
-// Merge titles fail closed: any merge word outside the exclusions is the merge, and
-// the refusal says how to undo a wrong match (plug, or retitle).
-func TestWorkflowCloseMergeTitlesFailClosed(t *testing.T) {
+// A merge title does not create a mandatory review workflow.
+func TestWorkflowCloseMergeTitlesDoNotRequireReview(t *testing.T) {
 	for _, title := range []string{"Squash and merge PR 12", "Review and merge PR 12", "Merge the API PR", "Merge this PR"} {
 		mem := &beads.MemClient{}
 		mem.Seed(beads.Bead{ID: "w.1", Title: title, Labels: []string{"kind:objective", "pr:12"}})
@@ -429,15 +425,13 @@ func TestWorkflowCloseMergeTitlesFailClosed(t *testing.T) {
 		var asked []string
 		pinWorkflowGH(t, prStateGH("OPEN", &asked))
 		err := checkWorkflowClose(context.Background(), mem, "/d", "p", "w.1")
-		if err == nil || !strings.Contains(err.Error(), "MERGE_REVIEW_REQUIRED") ||
-			!strings.Contains(err.Error(), "cmdr workflow plug pr-review") ||
-			!strings.Contains(err.Error(), "cmdr internal-update --project p --bead w.1 --title") {
+		if err != nil {
 			t.Fatalf("%q: %v", title, err)
 		}
 	}
 }
 
-// A step whose title says it is the merge needs a block while its PR is unmerged.
+// A merge step can close with its PR open and no review block.
 func TestWorkflowCloseMergeTitledPRStep(t *testing.T) {
 	mem := &beads.MemClient{}
 	mem.Seed(beads.Bead{ID: "w.2", Title: "Widget service PR 1234 merged", Labels: []string{"kind:objective", "pr:1234"}})
@@ -445,7 +439,7 @@ func TestWorkflowCloseMergeTitledPRStep(t *testing.T) {
 	var asked []string
 	pinWorkflowGH(t, prStateGH("OPEN", &asked))
 	err := checkWorkflowClose(context.Background(), mem, "/d", "p", "w.2")
-	if err == nil || !strings.Contains(err.Error(), "MERGE_REVIEW_REQUIRED") {
+	if err != nil {
 		t.Fatalf("unmerged: %v", err)
 	}
 	pinWorkflowGH(t, prStateGH("MERGED", &asked))
@@ -493,7 +487,7 @@ func TestWorkflowCloseMergedExemptionJudgesTheBlocksPR(t *testing.T) {
 		pinWorkflowRepo(t, "o/r")
 		pinWorkflowGH(t, statesGH)
 		err := checkWorkflowClose(context.Background(), mem, "/d", "p", "G")
-		if err == nil || !strings.Contains(err.Error(), "MERGE_REVIEW_REQUIRED") {
+		if err != nil {
 			t.Fatalf("%v", err)
 		}
 	})
@@ -629,14 +623,13 @@ func TestWorkflowCloseBlockForAnotherPRIsRequired(t *testing.T) {
 	var asked []string
 	pinWorkflowGH(t, prStateGH("OPEN", &asked))
 	err := checkWorkflowClose(context.Background(), mem, "/d", "p", "M")
-	if err == nil || !strings.Contains(err.Error(), "MERGE_REVIEW_REQUIRED") {
+	if err == nil || !strings.Contains(err.Error(), "MERGE_REVIEW_INCOMPLETE") {
 		t.Fatal(err)
 	}
 }
 
 // #5: the door and graph check read one PR for each label and give one answer.
 func TestWorkflowMergedExemptionDoorAndGraphAgree(t *testing.T) {
-	const url = "https://github.com/o/r/pull/1234"
 	cases := []struct{ name, id string }{
 		{"own bare label", "own"},
 		{"own repo label", "cross"},
@@ -654,13 +647,13 @@ func TestWorkflowMergedExemptionDoorAndGraphAgree(t *testing.T) {
 				var asked []string
 				pinWorkflowGH(t, prStateGH(state, &asked))
 				doorErr := checkWorkflowClose(context.Background(), mem, "/d", "p", c.id)
-				if len(asked) == 0 || asked[0] != url {
+				if len(asked) != 0 {
 					t.Fatalf("door asked about %v", asked)
 				}
 				if state == "MERGED" && doorErr != nil {
 					t.Fatalf("merged PR refused: %v", doorErr)
 				}
-				if state == "OPEN" && (doorErr == nil || !strings.Contains(doorErr.Error(), "MERGE_REVIEW_REQUIRED")) {
+				if doorErr != nil {
 					t.Fatalf("open PR: %v", doorErr)
 				}
 				node := func(id string) *workflowtemplate.Node {
@@ -782,15 +775,15 @@ func TestGateRmAndApplyOnAMergeGateGoThroughTheDoor(t *testing.T) {
 	if code, _, errOut := gateCmd(t, "add", "--project", "manifest", "--bead", "ms-1.2", "--name", "merged", "--check", "PR merged", "--verifier", "user"); code != 0 {
 		t.Fatal(errOut)
 	}
-	if code, _, errOut := gateCmd(t, "rm", "--project", "manifest", "--bead", "ms-1.2", "--name", "merged"); code == 0 || !strings.Contains(errOut, "MERGE_REVIEW_REQUIRED") {
+	if code, _, errOut := gateCmd(t, "rm", "--project", "manifest", "--bead", "ms-1.2", "--name", "merged"); code != 0 {
 		t.Fatal(code, errOut)
 	}
-	if code, _, errOut := gateCmd(t, "apply", "--project", "manifest", "--bead", "ms-1.2", "--template", "spec"); code == 0 || !strings.Contains(errOut, "MERGE_REVIEW_REQUIRED") {
+	if code, _, errOut := gateCmd(t, "apply", "--project", "manifest", "--bead", "ms-1.2", "--template", "spec"); code != 0 {
 		t.Fatal(code, errOut)
 	}
 	for _, b := range mem.Beads {
-		if hasLabel(b.Labels, "gate-name:merged") && (b.Status == "closed" || hasLabel(b.Labels, "retired")) {
-			t.Fatal("the merge gate was retired")
+		if hasLabel(b.Labels, "gate-name:merged") && (b.Status != "closed" && !hasLabel(b.Labels, "retired")) {
+			t.Fatal("the merge gate was not retired")
 		}
 	}
 	// Any other gate comes off as before.
@@ -888,12 +881,8 @@ func TestWorkflowCloseMistakenReviewLabelOnALaterStep(t *testing.T) {
 		t.Fatalf("the greenlight's own block covers its label: %v", err)
 	}
 	err := checkWorkflowClose(ctx, mem, "/d", "p", "L")
-	if err == nil || !strings.Contains(err.Error(), "MERGE_REVIEW_REQUIRED") {
+	if err != nil {
 		t.Fatalf("the later step is not covered by another target's block: %v", err)
-	}
-	// The fix line offers what works: plug refuses L while it waits on M's block.
-	if strings.Contains(err.Error(), "workflow plug") || !strings.Contains(err.Error(), "--bead L --review none") {
-		t.Fatalf("fix line: %v", err)
 	}
 	applyReview(ctx, mem, "/d", "L", "none", "the label belongs to M", false)
 	if err := checkWorkflowClose(ctx, mem, "/d", "p", "L"); err != nil {

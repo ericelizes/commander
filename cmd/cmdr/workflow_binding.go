@@ -97,7 +97,7 @@ type externalWriterSpec struct {
 }
 
 func bindWorkflowWriters(ctx context.Context, bc beads.Client, dir, project, blockID, head string, tasks []string, external *externalWriterSpec) (*workflowtemplate.WriterBinding, error) {
-	if callerIsOperator("") {
+	if callerIsOperator("") || workflowExecutionCaller() {
 		return nil, fmt.Errorf("writer selection belongs to the owning Manager; Operators cannot bind writers")
 	}
 	bc = freshReader(bc)
@@ -115,18 +115,8 @@ func bindWorkflowWriters(ctx context.Context, bc beads.Client, dir, project, blo
 	if err != nil {
 		return nil, err
 	}
-	// Agents may bind only as an owning Manager (the block's nearest owner or one
-	// above it; the root's alone while nested Managers are off). A human CLI has no role.
-	// Commander may also bind the user's own commits as an external writer, never
-	// task writers (those stay the owning Manager's choice).
-	if role := os.Getenv("COMMANDER_ROLE"); role != "" && !(external != nil && len(tasks) == 0 && role == "commander") {
-		owners, err := workflowOwnerRoles(ctx, bc, dir, blockID, root)
-		if err != nil {
-			return nil, err
-		}
-		if !roleAmong(role, owners) {
-			return nil, fmt.Errorf("writer selection belongs to %s", owners[0])
-		}
+	if err := authorizeWorkflowOwner(ctx, bc, dir, *b, root, "writer selection", external != nil && len(tasks) == 0); err != nil {
+		return nil, err
 	}
 	if external != nil && external.Author != workflowtemplate.ExternalAuthorUser {
 		return nil, fmt.Errorf("--external-writer must be %q (the user's own sessions)", workflowtemplate.ExternalAuthorUser)
@@ -259,7 +249,7 @@ func sameExternal(a, b *workflowtemplate.ExternalWriter) bool {
 }
 
 func runWorkflowBindWriters(args []string, stdout, stderr *os.File) int {
-	if callerIsOperator("") {
+	if callerIsOperator("") || workflowExecutionCaller() {
 		emitErr(stderr, "writer selection belongs to the owning Manager; Operators cannot bind writers")
 		return 1
 	}

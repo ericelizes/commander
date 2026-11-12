@@ -298,7 +298,7 @@ func (v Verifier) settleHint(ctx context.Context, project string, seen settleSee
 	if h, err := workflowtemplate.ReadHead(ctx, v.gh(), seen.pr); err != nil || h.State != "MERGED" {
 		return refused
 	}
-	return fmt.Errorf("%w. %s merged outside the review: if it will not be reviewed, the owning Manager settles the block (closes its open steps as settled, not reviewed, keeping earlier checks): cmdr workflow settle-block --project %s --block %s --reason '<why the review was not completed>'", refused, seen.pr, project, seen.block)
+	return fmt.Errorf("%w. %s merged outside the review: if it will not be reviewed, the owning planning Commander settles the block (closes its open steps as settled, not reviewed, keeping earlier checks): cmdr workflow settle-block --project %s --block %s --reason '<why the review was not completed>'", refused, seen.pr, project, seen.block)
 }
 
 func (v Verifier) checkOnce(ctx context.Context, bc beads.Client, dir, project, id string, seen *settleSeen, w *NoPRWaiver) error {
@@ -309,11 +309,10 @@ func (v Verifier) checkOnce(ctx context.Context, bc beads.Client, dir, project, 
 	if b == nil {
 		return fmt.Errorf("cannot verify missing bead %s", id)
 	}
-	target := workflowtemplate.Node{Bead: *b}
 	step := workflowtemplate.Label(*b, workflowtemplate.LabelStep)
 	managed := workflowtemplate.Label(*b, workflowtemplate.LabelTemplate) != ""
 	repo := v.repo(dir)
-	if !managed && !workflowtemplate.MergeTarget(target) {
+	if !managed && !workflowtemplate.MergeTarget(workflowtemplate.Node{Bead: *b}) {
 		held, err := workflowtemplate.BlockPluggedBefore(ctx, bc, dir, project, *b)
 		if err != nil {
 			return err
@@ -552,18 +551,41 @@ func (v Verifier) checkOnce(ctx context.Context, bc beads.Client, dir, project, 
 	for _, n := range nodes {
 		byID[n.Bead.ID] = n
 	}
+	if w != nil && !managed {
+		held, err := workflowtemplate.BlockPluggedBefore(ctx, bc, dir, project, *b)
+		if err != nil {
+			return err
+		}
+		if !held {
+			if namesPR(*b) {
+				return fmt.Errorf("--no-pr refused: the gate's own check names a PR")
+			}
+			for _, n := range nodes {
+				if (n.Bead.ID == id || n.Bead.ID == beads.UnescapeLabel(workflowtemplate.Label(*b, "gate-of:"))) && len(workflowtemplate.LabelPRs(n.Bead, repo)) > 0 {
+					return fmt.Errorf("--no-pr refused: this one has a PR to review")
+				}
+			}
+			return bc.AddComment(ctx, dir, id, w.Comment())
+		}
+	}
 	prs := map[string]string{}
 	for i := range nodes {
 		if !scope[nodes[i].Bead.ID] {
 			continue
 		}
-		pr := workflowtemplate.TargetPR(nodes[i], byID, project, repo)
+		pr := ""
+		for _, dep := range nodes[i].Waits {
+			if block, ok := byID[dep]; ok && workflowtemplate.PluggedBefore(block.Bead, nodes[i].Bead.ID, project) {
+				pr = workflowtemplate.BlockPR(block.Bead)
+				break
+			}
+		}
 		if pr == "" {
 			continue
 		}
 		prs[nodes[i].Bead.ID] = pr
 		nodes[i].PRStates = map[string]string{}
-		for _, other := range append([]string{pr}, workflowtemplate.TargetPRs(nodes[i], byID, project, repo)...) {
+		for _, other := range []string{pr} {
 			if _, read := nodes[i].PRStates[other]; read {
 				continue
 			}
@@ -603,7 +625,7 @@ func (v Verifier) checkOnce(ctx context.Context, bc beads.Client, dir, project, 
 			return fmt.Errorf("PR head changed during merge review check; retry")
 		}
 		finding := "pr-review topology and current-head evidence checked"
-		if workflowtemplate.Settled(workflowtemplate.TargetPRs(n, byID, project, repo), n.PRStates) {
+		if workflowtemplate.Settled([]string{pr}, n.PRStates) {
 			finding = "PR merged: the review block was not checked"
 		}
 		e := workflowtemplate.Evidence{Instance: workflowtemplate.Label(byID[id].Bead, workflowtemplate.LabelInstance), Step: "merge-rule", Verifier: "merge-review", PR: pr, Head: h.SHA, Finding: finding}

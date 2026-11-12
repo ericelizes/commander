@@ -274,75 +274,25 @@ func MergeRule(project, repo string, nodes []Node, scope map[string]bool) []Find
 		if !Candidate(m, byID, project) {
 			continue
 		}
-		prs := TargetPRs(m, byID, project, repo)
-		pr := TargetPR(m, byID, project, repo)
-		label := prLabel(m, byID)
-		if pr == "" && label == "" {
-			out = append(out, Finding{Check: "MERGE_REVIEW_REQUIRED", Target: m.Bead.ID, Advisory: true, NoPR: true,
-				Text: fmt.Sprintf("MERGE_REVIEW_REQUIRED: %s has no PR yet; add its pr: label and plug the pr-review block when the PR exists", m.Bead.ID),
-				Fix:  "Once the PR exists, add its pr: label and plug the pr-review block before merging"})
-			continue
-		}
-		if Settled(prs, m.PRStates) {
-			continue
-		}
-		var block *Node
 		blocks := pluggedBlocks(m, byID, project)
-		if len(blocks) == 1 {
-			block = &blocks[0]
-		}
-		covered := ""
-		if block != nil {
-			covered = BlockPR(block.Bead)
-			pr = covered
-		}
-		// One block reviews one PR: any other live PR needs its own.
-		uncovered := ""
-		for _, p := range prs {
-			if s := m.PRStates[p]; s != "MERGED" && s != "CLOSED" && p != covered && uncovered == "" {
-				uncovered = p
-			}
-		}
-		parent := m.Bead.ParentID
-		if parent == "" {
-			parent = stageOf(m.Bead)
-		}
-		if block != nil {
-			parent = block.Bead.ParentID // Its key has this parent: plug finishes it, any other is a second block.
-		}
-		if parent == "" {
-			parent = "<B>"
-		}
-		plugPR := pr
-		if uncovered != "" {
-			plugPR = uncovered
-		}
-		if plugPR == "" && label != "" {
-			plugPR = "<URL of " + label + ">" // A label no repo resolves: known, but no URL to print.
-		}
-		if plugPR == "" {
-			plugPR = "<URL>"
-		}
-		fix := fmt.Sprintf("cmdr workflow plug pr-review --project %s --parent %s --before %s --pr %s", project, parent, m.Bead.ID, plugPR)
-		text := fmt.Sprintf("MERGE_REVIEW_REQUIRED: %s needs the pr-review template before it. Fix: %s", m.Bead.ID, fix)
-		if other := otherBlock(m, byID, Key(Params{Project: project, Parent: parent, Before: m.Bead.ID, PR: plugPR})); other != "" {
-			fix = refusedPlugFix(m, byID, project, repo, other, plugPR)
-			text = fmt.Sprintf("MERGE_REVIEW_REQUIRED: %s has no pr-review block for %s, and plug refuses a second block while it waits on %s, a block for another PR or bead. Fix: %s", m.Bead.ID, plugPR, other, fix)
-		}
-		if !MergeGate(m) && len(blocks) == 0 {
-			// Matched by its title alone: say how to undo a wrong match.
-			text += fmt.Sprintf(". If %s is not the merge of its PR, retitle it without the word merge: cmdr internal-update --project %s --bead %s --title '<title>'", m.Bead.ID, project, m.Bead.ID)
-		}
-		required := func() {
-			out = append(out, Finding{Check: "MERGE_REVIEW_REQUIRED", Target: m.Bead.ID, Text: text, Fix: fix})
-		}
-		if block == nil || uncovered != "" {
-			required()
+		// PR labels and merge titles never require a review workflow. Only an
+		// explicitly plugged block participates in review completion checks.
+		if len(blocks) == 0 {
 			continue
 		}
+		if len(blocks) > 1 {
+			out = append(out, Finding{Check: "MERGE_REVIEW_INCOMPLETE", Target: m.Bead.ID, Text: fmt.Sprintf("MERGE_REVIEW_INCOMPLETE: %s waits on multiple plugged review blocks; resolve the explicitly planned blocks", m.Bead.ID)})
+			continue
+		}
+		block := &blocks[0]
+		pr := BlockPR(block.Bead)
+		if Settled([]string{pr}, m.PRStates) {
+			continue
+		}
+		fix := fmt.Sprintf("cmdr workflow plug pr-review --project %s --parent %s --before %s --pr %s", project, block.Bead.ParentID, m.Bead.ID, pr)
 		t, err := Definition(block.Bead)
 		if err != nil {
-			required()
+			out = append(out, Finding{Check: "MERGE_REVIEW_INCOMPLETE", Target: m.Bead.ID, Block: block.Bead.ID, Text: fmt.Sprintf("MERGE_REVIEW_INCOMPLETE: %s has an invalid review block %s: %v", m.Bead.ID, block.Bead.ID, err)})
 			continue
 		}
 		key := Label(block.Bead, LabelInstance)

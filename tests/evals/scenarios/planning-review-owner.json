@@ -1,0 +1,15 @@
+{
+ "schema":"planning-review-owner@v1",
+ "runner":"cmd/cmdr:TestPlanningReviewOwnerScenario",
+ "cases":[
+  {"role":"commander","owner":"commander","ok":true},
+  {"role":"commander-peer","owner":"commander-peer","ok":true},
+  {"role":"operator-fix","owner":"commander","ok":false},
+  {"role":"commander-peer","owner":"commander","ok":false},
+  {"role":"commander","owner":"commander-peer","ok":false},
+  {"role":"manager-B","owner":"commander","ok":false},
+  {"role":"commander","owner":"commander","run":"123","ok":false},
+  {"role":"commander","owner":"commander","session":"sid","ok":false},
+  {"role":"commander","owner":"commander","manager":"manager-B","ok":false}
+ ]
+}
