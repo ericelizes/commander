@@ -208,13 +208,13 @@ func boardEntries(d Display, now int64, role string, ages bool) []boardturn.Entr
 		} else if t, ok := nestedScope(w.Tracks, role); ok {
 			// A nested Manager sees its own subtree: the row stands for it.
 			w.Tracks = t.Children
-			w.Title, w.Kind, w.Text, w.Since, w.Working, w.Progress, w.Why = w.Title+" › "+t.Title, t.Kind, t.Text, t.Since, t.Working, t.Progress, t.Why
+			w.Title, w.Kind, w.Text, w.Since, w.Working, w.Milestones, w.Why = w.Title+" › "+t.Title, t.Kind, t.Text, t.Since, t.Working, t.Milestones, t.Why
 			w.Gate = nil
 			mine = append(mine, w)
 		}
 	}
 	for _, w := range mine {
-		pct := doneText(w.Progress, w.Text)
+		pct := doneText(w.Milestones, w.Text)
 		gate := "no gates"
 		if w.Gate != nil {
 			gate = "next gate: " + w.Gate.Title + ", approved by " + w.Gate.Who
@@ -228,7 +228,7 @@ func boardEntries(d Display, now int64, role string, ages bool) []boardturn.Entr
 			Text: w.Title + ": " + w.Text + meta(w.Since, w.Working, parts...) + whyOf(w.Why)})
 		for _, t := range w.AllTracks() {
 			out = append(out, boardturn.Entry{ID: id + t.Letter, Label: "#" + id + t.Letter, Kind: t.Kind, BeadID: t.BeadID, Track: true,
-				Text: t.Title + ": " + t.Text + meta(t.Since, t.Working, doneText(t.Progress, t.Text)) + whyOf(t.Why)})
+				Text: t.Title + ": " + t.Text + meta(t.Since, t.Working, doneText(t.Milestones, t.Text)) + whyOf(t.Why)})
 		}
 	}
 	for _, a := range d.Asks {

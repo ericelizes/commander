@@ -378,6 +378,9 @@ func (b board) trackLevel(ws SnapWorkstream, steps []SnapStep, prefix string, ma
 		own := b.trackLine(ws, t, manager, hasManager, b.asksIn(ws.Project, t))
 		kids := b.trackLevel(ws, t.Children, number, manager, hasManager, pickingUp, byTrack)
 		l := rollUp(pickingUp(own), kids, ownOpen(t.Children))
+		if parked(t) {
+			l = line{kind: "quiet", text: "Paused"}
+		}
 		for _, id := range append(chain, t.BeadID) {
 			byTrack[id] = l
 		}
@@ -1326,7 +1329,7 @@ func openTracks(ws SnapWorkstream) []SnapStep { return openTracksIn(ws.Steps) }
 func openTracksIn(steps []SnapStep) []SnapStep {
 	var out []SnapStep
 	for _, s := range steps {
-		if s.Track && !parked(s) && !s.Superseded && !stepClosed(s) {
+		if s.Track && !s.Superseded && !stepClosed(s) {
 			out = append(out, s)
 		}
 	}
