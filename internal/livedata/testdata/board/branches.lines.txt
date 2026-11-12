@@ -50,9 +50,10 @@
   43.2 Beta: Needs you: Beta choice (0% done)
 44 one track beside open work: Waiting for CI (0% done, no gates, 2 working, for 30s)
   44.1 Deploy script: Waiting for CI (0% done, for 30s)
-45 closed and parked tracks: Stalled (33% done, no gates) · why: Automation failure: no live worker or recorded next action. Owner: manager-w45. Next: inspect current evidence and record the next guarded recovery action on w45.3. Commander owns escalation if recovery fails.
-  45.1 Live track: Stalled (0% done) · why: Automation failure: no live worker or recorded next action. Owner: manager-w45. Next: inspect current evidence and record the next guarded recovery action on w45.3. Commander owns escalation if recovery fails.
-  45.2 Second live track: Nothing to do (100% done)
+45 closed and parked tracks: Stalled (50% done, no gates) · why: Automation failure: no live worker or recorded next action. Owner: manager-w45. Next: inspect current evidence and record the next guarded recovery action on w45.3. Commander owns escalation if recovery fails.
+  45.1 Parked track: Paused (100% done)
+  45.2 Live track: Stalled (0% done) · why: Automation failure: no live worker or recorded next action. Owner: manager-w45. Next: inspect current evidence and record the next guarded recovery action on w45.3. Commander owns escalation if recovery fails.
+  45.3 Second live track: Nothing to do (100% done)
 46 tracks wait on your gate: Needs you: Greenlight starting the reviews (0% done, next gate: Greenlight starting the reviews, approved by you, ⚑ 1, for 2h)
   46.1 Review A: Needs you: Greenlight starting the reviews (0% done, for 2h)
   46.2 Review B: Needs you: Greenlight starting the reviews (0% done, for 2h)
