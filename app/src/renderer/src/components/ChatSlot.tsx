@@ -11,7 +11,7 @@ import { ChatHostContext, ChatPane, type ChatHost, type MenuItem } from '../../.
 import { ChatGraph } from './ChatGraph'
 import { ChatWatching } from './ChatWatching'
 import { MailChip } from './MailChip'
-import { hasConnections, openInPanel } from '../../../features/inspector'
+import { hasConnections } from '../../../features/inspector'
 import { typing } from '../mailHold'
 import { captureHost } from '../pageCapture'
 import { screenContext } from '../screen'
@@ -59,12 +59,9 @@ const chatHost: ChatHost = {
   openBead: (id, tab) => useStore.getState().openLink(id, tab),
   describeBead: (id, tab) => linkLabel(useStore.getState().snapshot, id, tab),
   openBeadPage: (id, url, title) => hasConnections() && useStore.getState().openLinkPage(id, url, title),
-  // Web links open as a tab in the side panel (signed in there) when the app has one.
-  openUrl: (url) => {
-    if (!hasConnections()) return false
-    openInPanel(url)
-    return true
-  },
+  // Web links open in the system browser: the link's own target=_blank, which
+  // the app hands to the default browser.
+  openUrl: () => false,
   agentName: (role) => {
     if (role === 'user') return 'You'
     if (role === 'commander') return 'Commander'
