@@ -45,20 +45,37 @@ describe('Overview', () => {
     useStore.getState().setSnapshot({ ...snap, version: 2 })
     expect(screen.getByRole('tab', { name: 'Workflow' })).toHaveAttribute('aria-selected', 'true')
   })
-  it('is one page: its parts in order with a contents list, one summary for both, one loader', async () => {
+  it('is one page: one summary for both parts, in order, with a contents list once both have words', async () => {
     const asked: string[] = []
-    vi.stubGlobal('fetch', vi.fn(async (_: RequestInfo | URL, init?: RequestInit) => { asked.push(JSON.parse(String(init?.body)).part); return new Response(JSON.stringify({ ...result, stale: true }), { status: 200 }) }))
+    const both = { ...result, stale: true, recap: { ...result.recap!, problem: { sentences: [{ text: 'Dashboards are hard to find.', sources: [] }] } } }
+    vi.stubGlobal('fetch', vi.fn(async (_: RequestInfo | URL, init?: RequestInit) => { asked.push(JSON.parse(String(init?.body)).part); return new Response(JSON.stringify(both), { status: 200 }) }))
     const parts = () => screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent!.trim()).filter((t) => t === 'Current status' || t === 'Pitch')
     const { unmount } = render(<OverviewPage ws={ws} row={row} onWorkflow={vi.fn()} onTrack={vi.fn()} />)
     await screen.findByText(/The dashboard button is published/)
     expect(parts()).toEqual(['Current status', 'Pitch'])
     expect(within(screen.getByRole('navigation', { name: 'On this page' })).getAllByRole('button').map((b) => b.textContent!.trim())).toEqual(['Current status', 'Pitch'])
     expect(new Set(asked)).toEqual(new Set(['']))
-    expect(screen.getAllByText(/Refreshing summary/)).toHaveLength(1)
+    // a stale summary stays on screen, whole, while a newer one is written
+    expect(screen.queryByText(/Refreshing summary/)).toBeNull()
     unmount()
     render(<OverviewPage ws={{ ...ws, phase: 'scoping' }} row={row} onWorkflow={vi.fn()} onTrack={vi.fn()} />)
     await screen.findByText(/The dashboard button is published/)
     expect(parts()).toEqual(['Pitch', 'Current status'])
+  })
+  it('shows only a part that has words, and no contents list for one part', async () => {
+    render(<OverviewPage ws={ws} row={row} onWorkflow={vi.fn()} onTrack={vi.fn()} />)
+    await screen.findByText(/The dashboard button is published/)
+    expect(screen.queryByRole('heading', { name: 'Pitch' })).toBeNull()
+    expect(screen.queryByRole('navigation', { name: 'On this page' })).toBeNull()
+  })
+  it('is one loader and nothing else until the first summary has words', async () => {
+    const waiting = { state: 'updating', stale: false, evidence: [], draft: { now: { sentences: [] } } }
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(waiting), { status: 200 })))
+    render(<OverviewPage ws={ws} row={row} onWorkflow={vi.fn()} onTrack={vi.fn()} />)
+    expect(await screen.findAllByText(/Refreshing summary/)).toHaveLength(1)
+    expect(screen.queryAllByRole('heading', { level: 2 })).toHaveLength(0)
+    expect(screen.queryByRole('link', { name: /PR #/ })).toBeNull()
+    expect(screen.queryByRole('navigation', { name: 'On this page' })).toBeNull()
   })
   it('shows the tickets under a clean title, a workstream counting its open tracks', () => {
     const carrying: SnapWorkstream = { ...ws, title: 'Ship dashboards (TEAM-1)', steps: [{ ...ws.steps![0], title: 'Dashboards (TEAM-2)' }, { ...ws.steps![1], tickets: ['TEAM-3'] }] }
