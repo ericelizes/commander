@@ -71,7 +71,18 @@ func Decide(f store.SupervisionFact, now time.Time) Decision {
 	// a move that is the user's, someone external's, nobody's, or already in an
 	// agent's hands is observed, never delivered. Only Commander-owed or stuck
 	// moves continue to the delivery rules below.
-	if actor, fromChildren := actorOf(f, now); observedActor(actor.Actor) {
+	actor, fromChildren := actorOf(f, now)
+	if strings.TrimPrefix(actor.Reason, "commander_idle:") == "record_question" {
+		d.Reason, d.Action = "record_question", "wake"
+		d.Description = "Write the decision card for this wait on the user: the exact question, your recommendation and what it unblocks (" + f.Title + ")"
+		d.Target = f.PlanningCommander
+		if d.Target == "" {
+			d.Target = "commander"
+		}
+		d.CheckAfter = 15 * time.Second
+		return d
+	}
+	if observedActor(actor.Actor) {
 		d.Reason, d.Description = supervisionReason(actor, fromChildren), actor.Text
 		if d.Reason == "execution_queued" || d.Reason == "execution_starting" {
 			d.CheckAfter = 5 * time.Second

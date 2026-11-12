@@ -106,6 +106,10 @@ func (b board) actorBead(project string, pid int64, commander string, s SnapStep
 	}
 	if b.needsIDs[s.BeadID] {
 		n.NeedsUser, n.UserAsk = true, b.askText(project, s)
+	} else if s.Decision != nil && strings.TrimSpace(s.Decision.Question) != "" {
+		n.UserAsk = s.Decision.Question
+	} else if strings.TrimSpace(s.Ask) != "" {
+		n.UserAsk = s.Ask
 	}
 	for _, id := range s.BlockedBy {
 		if dep, ok := b.projectSteps[project][id]; ok && !dependencyComplete(dep) && id != s.BeadID {

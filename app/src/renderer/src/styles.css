@@ -240,7 +240,7 @@ kbd {
   padding: 0 16px;
 }
 
-.workstream-commander { position: relative; margin-left: auto; flex-shrink: 0; }
+.workstream-commander { position: relative; margin-left: auto; flex-shrink: 0; -webkit-app-region: no-drag; }
 .workstream-commander > button { border: 0; background: transparent; color: var(--ink-2); font: inherit; font-size: 12px; cursor: pointer; }
 .workstream-commander-menu { position: absolute; right: 0; top: calc(100% + 8px); min-width: 220px; padding: 6px; background: var(--sheet); border: 1px solid var(--hairline-2); border-radius: 8px; box-shadow: var(--shadow); z-index: 60; }
 .workstream-commander-menu button { display: block; width: 100%; padding: 9px; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }

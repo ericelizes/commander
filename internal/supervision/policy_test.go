@@ -50,6 +50,7 @@ func TestResponsibilityPolicyAcrossAgentCapabilities(t *testing.T) {
 			f.Labels = []string{"waiting:1700000000:ci:12"}
 		}, "observe", "dependency", "workstream-qa"},
 		{"withdrawn request is nobody's move", func(f *store.SupervisionFact) { f.Labels = []string{"withdrawn"} }, "observe", "withdrawn", "workstream-qa"},
+		{"wait on the user with no question recorded", func(f *store.SupervisionFact) { f.Labels = []string{"waiting:1700000000:user"} }, "wake", "record_question", "commander"},
 		{"review without progress", func(f *store.SupervisionFact) {
 			f.Alive = true
 			f.ResultReady = true

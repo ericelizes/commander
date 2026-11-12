@@ -13,7 +13,7 @@ func TestDescriberWritesStateSpecificLinesAndNeverShowsAStaleState(t *testing.T)
 	clock := time.Unix(1_800_000_000, 0)
 	var prompts []string
 	fail := false
-	words := "approve the refund guard so posting stops misrouting refunds"
+	words := "approve the refund guard?"
 	d := &Describer{Now: func() time.Time { return clock }, Call: func(_ context.Context, _, instruction, input string, out any) error {
 		prompts = append(prompts, instruction)
 		if fail {
@@ -64,8 +64,30 @@ func TestDescriberWritesStateSpecificLinesAndNeverShowsAStaleState(t *testing.T)
 	}
 }
 
+func TestTooLongAnswerIsRewrittenOnceBeforeCutting(t *testing.T) {
+	calls := 0
+	d := &Describer{Call: func(_ context.Context, _, _, input string, out any) error {
+		calls++
+		text := "decide whether to merge and install the reviewed Commander repair batch into main today"
+		if strings.Contains(input, "Rewrite these words") {
+			text = "merge the repair batch?"
+		}
+		raw, _ := json.Marshal(map[string]string{"description": text, "signal": "none"})
+		return json.Unmarshal(raw, out)
+	}}
+	d.init()
+	d.Describe("p:ws", "user", "decision", "Needs you:", "facts")
+	job, _ := d.next()
+	if !d.write(context.Background(), job) || calls != 2 {
+		t.Fatalf("calls %d", calls)
+	}
+	if text, _, _ := d.Describe("p:ws", "user", "decision", "Needs you:", "facts"); text != "Needs you: merge the repair batch?" || strings.Contains(text, "…") {
+		t.Fatalf("line %q", text)
+	}
+}
+
 func TestShortenDropsATrailingClauseBeforeCutting(t *testing.T) {
-	if got := shorten("decide whether to stop staging or all of Notify, unblocking the rollout plan", 60); got != "decide whether to stop staging or all of Notify" {
+	if got := shorten("stop staging or all Notify, unblocking the rollout plan", 34); got != "stop staging or all Notify" {
 		t.Fatalf("%q", got)
 	}
 }

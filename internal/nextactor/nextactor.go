@@ -231,7 +231,12 @@ func waits(b Bead, ctx Context) Result {
 		w := b.Waits[i]
 		switch {
 		case w.Kind == beads.WaitUser:
-			return Result{Actor: User, Reason: "waiting_user", Since: unix(w.Since), Text: "Needs you: " + firstNonEmpty(b.UserAsk, b.Title)}
+			if strings.TrimSpace(b.UserAsk) == "" {
+				// Nothing recorded says what the user is asked: writing it down is
+				// the planning Commander's move, not a decision the user can make.
+				return commanderOwed(b, ctx, "record_question", "write down what "+quoted(b.Title)+" needs from you", unix(w.Since))
+			}
+			return Result{Actor: User, Reason: "waiting_user", Since: unix(w.Since), Text: "Needs you: " + b.UserAsk}
 		case beads.IsManagerHandoff(w):
 			if due == nil {
 				due = &b.Waits[i]

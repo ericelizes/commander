@@ -39,7 +39,9 @@ func applyDescriptions(describe DescribeFunc, snap *Snapshot, d *Display) {
 		tracks = func(ts []BoardTrack) {
 			for j := range ts {
 				t := &ts[j]
-				if t.Actor != nil {
+				if t.Actor != nil && r.Actor.Lead.Bead != "" && t.Actor.Lead.Bead == r.Actor.Lead.Bead && t.Actor.Lead.Actor == r.Actor.Lead.Actor {
+					t.Text = Opener(t.Actor.Lead) + " same as above"
+				} else if t.Actor != nil {
 					steps := []SnapStep{}
 					if st, ok := stepByID(ws.Steps, t.BeadID); ok {
 						steps = st.Children
