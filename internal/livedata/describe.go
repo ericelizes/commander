@@ -35,7 +35,7 @@ func applyDescriptions(describe DescribeFunc, snap *Snapshot, d *Display) {
 		if r.Actor == nil || ws == nil {
 			continue
 		}
-		r.Text = describeRow(describe, r.Key, *r.Actor, rowFacts(*snap, ws.Title, "", ws.Steps, *r.Actor), r.Text)
+		r.Text = HumanTimes(describeRow(describe, r.Key, *r.Actor, rowFacts(*snap, ws.Title, "", ws.Steps, *r.Actor), r.Text), time.Now())
 		var tracks func([]BoardTrack)
 		tracks = func(ts []BoardTrack) {
 			for j := range ts {
@@ -45,7 +45,7 @@ func applyDescriptions(describe DescribeFunc, snap *Snapshot, d *Display) {
 					if st, ok := stepByID(ws.Steps, t.BeadID); ok {
 						steps = st.Children
 					}
-					t.Text = describeRow(describe, t.Key, *t.Actor, rowFacts(*snap, ws.Title, t.Title, steps, *t.Actor), t.Text)
+					t.Text = HumanTimes(describeRow(describe, t.Key, *t.Actor, rowFacts(*snap, ws.Title, t.Title, steps, *t.Actor), t.Text), time.Now())
 				}
 				tracks(t.Children)
 			}
@@ -220,7 +220,7 @@ func rowFacts(snap Snapshot, workstream, track string, steps []SnapStep, row nex
 			fmt.Fprintf(&b, "Commander is doing: %s\n", clip(a.Detail, 200))
 		}
 	}
-	return b.String()
+	return HumanTimes(b.String(), time.Now())
 }
 
 func stepByID(steps []SnapStep, id string) (SnapStep, bool) {

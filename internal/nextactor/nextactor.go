@@ -454,7 +454,7 @@ func waitWho(w beads.Wait) string {
 		return "review"
 	case beads.WaitUntil:
 		label := strings.TrimSpace(w.Ref)
-		date := w.Until.UTC().Format("Jan 2 15:04")
+		date := w.Until.UTC().Format("Jan 2 15:04") + " UTC"
 		if label == "" {
 			return date
 		}
