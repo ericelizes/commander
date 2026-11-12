@@ -7621,3 +7621,55 @@ button.xf-step.xf-open:hover {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* Failed automation stays visibly red while its Manager repairs it. */
+.ws-state.agent-stalled .ws-state-text,
+.ws-state.agent-stuck .ws-state-text { color: var(--err); font-weight: 600; }
+.ws-state.agent-stalled .ws-state-why,
+.ws-state.agent-stuck .ws-state-why { color: var(--err); }
+
+.fx .xf-step .xf-kicker.xf-top.agent-stalled,
+.fx .xf-step .xf-kicker.xf-top.agent-stuck { color: var(--err); }
+.fx .xf-step.kind-stalled,
+.fx .xf-step.kind-stuck { box-shadow: inset 0 0 0 1.5px var(--err); background: color-mix(in srgb, var(--err) 6%, var(--bg-chat)); }
+
+.ws-recovery { color: var(--err); font-size: 11px; line-height: 1.4; margin: 4px 0 0; overflow-wrap: anywhere; }
+.ws-state.agent-stalled,
+.ws-state.agent-stuck,
+.xf-state.agent-stalled,
+.xf-state.agent-stuck { --dot: var(--err); }
+
+.activity-freshness {
+  margin: 8px 12px;
+  padding: 8px;
+  color: var(--text);
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+/* Tabs read as plain tabs on the page's own background: a rule under the row,
+   the open tab underlined, lined up with the workstream title above. */
+.app .insp-strip {
+  background: transparent;
+  border-bottom: 1px solid var(--line, color-mix(in srgb, var(--text) 10%, transparent));
+  padding: 0 40px;
+  gap: 22px;
+}
+.app .insp-tabs { gap: 22px; align-self: stretch; align-items: stretch; }
+.app .insp-tab,
+.app .insp-tab:hover,
+.app .insp-tab-active,
+.app .insp-tab-active:hover {
+  height: auto;
+  padding: 0 1px;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.app .insp-tab { color: var(--text-2); font-size: 13px; }
+.app .insp-tab:hover { color: var(--text); }
+.app .insp-tab-active,
+.app .insp-tab-active:hover {
+  color: var(--text);
+  box-shadow: inset 0 -2px 0 var(--text);
+}
