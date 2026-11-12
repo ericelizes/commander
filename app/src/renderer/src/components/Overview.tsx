@@ -1,4 +1,5 @@
 import { ActivityFreshness } from './ActivityFreshness'
+import { Activity, Lightbulb } from 'lucide-react'
 import { Component, Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { BoardRow, BoardTrack, LineKind, SnapStep, SnapWorkstream, Snapshot } from '../../../shared/snapshot'
 import { splitTickets, TicketPills } from '../../../features/linear/Ticket'
@@ -30,6 +31,8 @@ export type RecapResult = {
 // Pitch is the recap as a Shape Up style pitch: the problem, the solution and
 // how big and risky it is, every sentence cited.
 type Pitch = {
+  goal?: Claim
+  progress?: Claim
   now?: Claim
   recent?: Claim
   next?: Claim
@@ -43,7 +46,9 @@ type Pitch = {
   risk?: number
   risk_detail?: Claim
 }
-const pitchClaims = (p: Pitch): Claim[] => [p.now, p.recent, p.next, p.problem, p.problem_impact, p.solution, p.impact, p.scope_detail, p.risk_detail].filter((c): c is Claim => !!c)
+const pitchClaims = (p: Pitch): Claim[] => [p.goal, p.progress, p.now, p.recent, p.next, p.problem, p.problem_impact, p.solution, p.impact, p.scope_detail, p.risk_detail].filter((c): c is Claim => !!c)
+// SHOW_SOURCES draws each sentence's evidence numbers; off, the text reads clean.
+const SHOW_SOURCES = false
 const typeNames: Record<string, string> = { bug: '🐛 Bug', performance: '⚡ Performance', feature: '✨ Feature', operations: '🛠️ Operations', request: '📨 Request' }
 const scopeDot: Record<string, string> = { Small: '🟢', Medium: '🟡', Large: '🔴' }
 const riskDot = (risk: number) => (risk <= 3 ? '🟢' : risk <= 6 ? '🟡' : '🔴')
@@ -283,12 +288,12 @@ export function Overview({ ws, row, track, onTrack }: {
         {withCode(s.text.slice(0, lastWord))}
         <span className="ov-cited">
           {withCode(s.text.slice(lastWord))}
-          <span className="ov-cites">{(s.sources ?? []).map((id) => {
+          {SHOW_SOURCES && <span className="ov-cites">{(s.sources ?? []).map((id) => {
             const e = result?.evidence.find((x) => x.id === id)
             return e ? <button key={id} type="button" className={source?.evidence.id === id ? 'is-open' : ''} aria-label={`Evidence: ${e.label}`}
               onMouseEnter={(ev) => hoverOpen(e, ev.currentTarget)} onMouseLeave={hoverClose}
               onClick={(ev) => { cancelHover(); const anchor = ev.currentTarget; setSource((s) => (s?.pinned && s.evidence.id === id ? null : { evidence: e, anchor, pinned: true })) }}>{sourceNumbers.get(id)}</button> : null
-          })}</span>
+          })}</span>}
         </span>
       </>
     )
@@ -312,7 +317,7 @@ export function Overview({ ws, row, track, onTrack }: {
         {tickets.length > 0 && <div className="ov-tickets"><TicketPills tickets={tickets} progress={target.milestones ?? target.progress} /></div>}
         {/* Status: what is true right now, and what needs you. */}
         <section className={`ov-status${asks.length ? ' ov-needs' : ''}${stalled ? ' ov-stalled' : ''}`} aria-label="Status">
-          <h2 className="ov-section-title">Current status</h2>
+          {shown && (hasText(shown.goal) || hasText(shown.now) || hasText(shown.recent) || hasText(shown.next)) && <h2 className="ov-section-title"><Activity size={18} aria-hidden /> Current status</h2>}
           {(!shown || result?.stale || result?.state === 'updating' || result?.state === 'retrying') && !draftOn && <Refreshing />}
           {target.kind === 'done' ? (
             <div className="ov-confirm">
@@ -331,7 +336,11 @@ export function Overview({ ws, row, track, onTrack }: {
             </div>
           ))}
           {asks.length === 0 && (pendingDecision || stalled) && <p>{noAsk}</p>}
-          {shown && (hasText(shown.now) || hasText(shown.recent) || hasText(shown.next)) && <div className="ov-status-story">
+          {shown && (hasText(shown.goal) || hasText(shown.now) || hasText(shown.recent) || hasText(shown.next)) && <div className="ov-status-story">
+            {hasText(shown.goal) && <ul className="ov-fields ov-target">
+              <li><b>Goal:</b> {cite(shown.goal)}</li>
+              {hasText(shown.progress) && <li><b>Where it stands:</b> {cite(shown.progress)}</li>}
+            </ul>}
             {hasText(shown.now) && <p className="ov-field">{cite(shown.now)}</p>}
             {hasText(shown.recent) && <><h3>Done lately</h3><ul className="ov-fields">{sentencesOf(shown.recent!).map((s, i) => <li key={i}><StreamSentence s={s} done={cited} live={draftOn} /></li>)}</ul></>}
             {hasText(shown.next) && <><h3>Up next</h3><ul className="ov-fields">{sentencesOf(shown.next!).map((s, i) => <li key={i}><StreamSentence s={s} done={cited} live={draftOn} /></li>)}</ul></>}
@@ -340,7 +349,7 @@ export function Overview({ ws, row, track, onTrack }: {
         {/* The pitch: what this is and why it matters, after the status. */}
         <section className="ov-pitch" aria-label="Pitch">
           {shown ? <div>
-            {hasText(shown.problem) && <><hr className="ov-divider" /><h2 className="ov-section-title">Pitch</h2></>}
+            {hasText(shown.problem) && <><hr className="ov-divider" /><h2 className="ov-section-title"><Lightbulb size={18} aria-hidden /> Pitch</h2></>}
             {/* Each section appears once it has words, so a summary being written
                 builds top to bottom instead of showing empty headings early. */}
             {hasText(shown.problem) && <>

@@ -206,3 +206,20 @@
 .ov .ov-section-title { font: 650 20px/1.3 var(--serif); color: var(--ink); margin: 0 0 12px; }
 .ov .ov-status-story { margin-top: 14px; }
 .ov .ov-status-story h3, .ov .ov-pitch h3 { font: 600 16px/1.35 var(--serif); margin: 20px 0 6px; }
+
+.ov .ov-section-title { display: flex; align-items: center; gap: 8px; }
+.ov .ov-section-title svg { color: var(--ink-3); flex: none; }
+.ov .ov-target { margin: 4px 0 12px; }
+
+/* Readability: about 70 characters a line, and clear steps from section
+   titles to subsection titles to text, with more space above a title than
+   below it. */
+.ov { max-width: 780px; font-size: 16px; line-height: 1.6; }
+.ov h1 { font-size: 30px; margin-bottom: 20px; }
+.ov .ov-section-title { font: 650 22px/1.3 var(--serif); letter-spacing: -.01em; margin: 0 0 14px; }
+.ov .ov-status-story h3, .ov .ov-pitch h3 { font: 650 18px/1.35 var(--serif); color: var(--ink); margin: 28px 0 6px; }
+.ov .ov-pitch h3:first-of-type { margin-top: 4px; }
+.ov .ov-fields { margin: 2px 0 6px; padding-left: 22px; }
+.ov .ov-fields li { padding: 0 0 6px 2px; }
+.ov .ov-field { margin: 2px 0 8px; }
+.ov .ov-divider { margin: 36px 0 30px; }
