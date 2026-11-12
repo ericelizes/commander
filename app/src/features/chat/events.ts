@@ -184,6 +184,8 @@ export interface TurnItem extends ItemBase {
   isError: boolean
   terminalReason?: string
   subtype: string
+  // An "Interrupted" divider already marks this stopped turn: no second marker.
+  shownAsInterrupted?: boolean
 }
 
 export type Item = UserItem | TextItem | ThinkingItem | ToolItem | RequestItem | SystemItem | TurnItem
@@ -552,6 +554,7 @@ function apply(d: Draft, e: ChatEvent | LocalAction): void {
           isError: e.isError,
           terminalReason: e.terminalReason,
           subtype: e.subtype,
+          shownAsInterrupted: isAborted(e.terminalReason) && interruptedThisTurn(d),
         })
       }
       d.phase = 'idle'
@@ -602,6 +605,21 @@ function apply(d: Draft, e: ChatEvent | LocalAction): void {
       if (e.code !== 0 || e.signal) sys(d, e, 'exit', 'The session stopped unexpectedly')
       return
   }
+}
+
+function isAborted(reason?: string): boolean {
+  return reason === 'aborted_streaming' || reason === 'aborted_tools'
+}
+
+// interruptedThisTurn: an "Interrupted" divider sits after the last message the
+// user sent.
+function interruptedThisTurn(d: Draft): boolean {
+  for (let i = d.order.length - 1; i >= 0; i--) {
+    const it = d.items[d.order[i]]
+    if (!it || it.type === 'user' || it.type === 'turn') return false
+    if (it.type === 'system' && it.variant === 'interrupted') return true
+  }
+  return false
 }
 
 function isInterruptedResult(s: unknown): boolean {
