@@ -86,6 +86,17 @@ func TestPlaceholderForABlockedLineSaysItWaits(t *testing.T) {
 	}
 }
 
+func TestPlaceholderTrimsLongTitles(t *testing.T) {
+	row := nextactor.Row{Lead: nextactor.Result{Actor: nextactor.Agent, Reason: "blocked:executing", Via: []string{"Rebuild the QA Hub reporting-fix release on current prod and count errors"}}}
+	notReady := func(key, actor, reason, opener, facts string) (string, string, bool) { return "", "", false }
+	if got := describeRow(notReady, "p:t", row, "facts", ""); got != "Waiting for “Rebuild the QA Hub reporting-fix release…”" {
+		t.Fatalf("%q", got)
+	}
+	if got := placeholder("Working on “Verify every Nov 9 wrong-state case is impossible on the installed Commander”"); got != "Working on “Verify every Nov 9 wrong-state case…”" {
+		t.Fatalf("%q", got)
+	}
+}
+
 func TestPlaceholderHasNoLabel(t *testing.T) {
 	if got := placeholder("Needs you: merge it? (blocking “Middle step”)"); got != "Merge it?" {
 		t.Fatalf("%q", got)
