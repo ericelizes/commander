@@ -42,15 +42,12 @@ func TestPausedConfirmDoneInIsolatedPostgresCockpit(t *testing.T) {
  (?, 'root.2', 'root', 'Paused outcome', 'deferred', '["kind:objective","kind:workstream","kind:track"]','now','now'),
  (?, 'finished', NULL, 'Ready for confirmation', 'open', '["kind:objective","kind:workstream"]','now','now'),
  (?, 'paused-root', NULL, 'Paused delivery', 'deferred', '["kind:objective","kind:workstream"]','now','now'),
- (?, 'root.1.confirm', 'root.1', 'Confirm done', 'open', '["kind:objective","gate","approver:user","closing-gate","needs-user"]','now','now'),
- (?, 'finished.confirm', 'finished', 'Confirm done', 'open', '["kind:objective","gate","approver:user","closing-gate","needs-user"]','now','now'),
- (?, 'legacy', NULL, 'Historical delivery', 'closed', '["kind:objective","kind:workstream"]','now','now')`, pid, pid, pid, pid, pid, pid, pid, pid); e != nil {
+ (?, 'root.1.1', 'root.1', 'Verified delivery', 'closed', '["kind:objective"]','now','now'),
+ (?, 'finished.1', 'finished', 'Verified delivery', 'closed', '["kind:objective"]','now','now'),
+ (?, 'root.1.confirm', 'root.1', 'Confirm done', 'open', '["kind:objective","gate","approver:user","closing-gate"]','now','now'),
+ (?, 'finished.confirm', 'finished', 'Confirm done', 'open', '["kind:objective","gate","approver:user","closing-gate"]','now','now'),
+ (?, 'legacy', NULL, 'Historical delivery', 'closed', '["kind:objective","kind:workstream"]','now','now')`, pid, pid, pid, pid, pid, pid, pid, pid, pid, pid); e != nil {
 		t.Fatal(e)
-	}
-	for _, gate := range []string{"root.1.confirm", "finished.confirm"} {
-		if e = st.UpsertNeedsYou(ctx, store.NeedsYou{ProjectID: pid, BeadID: gate, Ask: "Confirm done", Note: "Everything else is verified. Confirm this outcome is done.", Decision: `{"question":"Confirm done?","context":"Delivery verified","options":[{"label":"Done, close it","recommended":true,"approves":true},{"label":"Not yet"}]}`}); e != nil {
-			t.Fatal(e)
-		}
 	}
 	if _, e = st.SetOrchestrationControl(ctx, 1, "active", "isolated runtime cockpit"); e != nil {
 		t.Fatal(e)
@@ -115,7 +112,7 @@ func TestPausedConfirmDoneInIsolatedPostgresCockpit(t *testing.T) {
 			}
 		}
 		text, e = script("text")
-		if e == nil && strings.Contains(text, "Ready for confirmation") && strings.Contains(text, "Confirm done") && strings.Contains(text, "Paused") {
+		if e == nil && strings.Contains(text, "Ready for confirmation") && strings.Contains(text, "Complete") && strings.Contains(text, "Paused") {
 			break
 		}
 		time.Sleep(100 * time.Millisecond)
@@ -123,7 +120,7 @@ func TestPausedConfirmDoneInIsolatedPostgresCockpit(t *testing.T) {
 	if e != nil || !strings.Contains(text, "Ready for confirmation") {
 		t.Fatalf("canonical workstream did not render: %v\n%s", e, text)
 	}
-	if !strings.Contains(text, "Confirm done") || !strings.Contains(text, "Paused") || strings.Contains(text, "Historical delivery") {
+	if !strings.Contains(text, "Complete") || !strings.Contains(text, "Paused") || strings.Contains(text, "Historical delivery") {
 		t.Fatalf("canonical pending result did not render honestly:\n%s", text)
 	}
 	if strings.Contains(text, "real claude is disabled") || strings.Contains(text, "real codex is disabled") {
