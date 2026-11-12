@@ -151,7 +151,7 @@ func (d *Describer) Describe(key, actor, reason, opener, facts string) (text, si
 
 // Run writes pending descriptions one at a time until ctx ends.
 // describeWorkers is how many lines are written at once.
-const describeWorkers = 4
+const describeWorkers = 2
 
 func (d *Describer) Run(ctx context.Context) {
 	d.mu.Lock()
