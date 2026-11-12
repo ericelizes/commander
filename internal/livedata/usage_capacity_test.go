@@ -20,26 +20,26 @@ func TestUsageCapacityAppearsOnEveryAffectedRow(t *testing.T) {
 	for _, now := range []int64{1, 86400} {
 		for _, w := range s.Workstreams {
 			l := (board{s: s, now: now}).activeWorkstreamLine(w, 0)
-			if l.kind != "stalled" || l.text != cause || l.since != 0 || strings.Contains(l.text, "Commander to") {
+			if l.kind != "stuck" || l.text != cause || l.since != 0 || strings.Contains(l.text, "Commander to") {
 				t.Fatalf("affected %s hid cause: %+v", w.BeadID, l)
 			}
 		}
 	}
 	w := s.Workstreams[1]
 	w.Hold = true
-	if l := (board{s: s, now: 1}).activeWorkstreamLine(w, 0); l.text != "Paused by recorded direction" {
+	if l := (board{s: s, now: 1}).activeWorkstreamLine(w, 0); l.text != "Paused" {
 		t.Fatal(l)
 	}
 	w.Hold = false
 	w.QuestionWaiting = true
-	if l := (board{s: s, now: 1}).activeWorkstreamLine(w, 0); !strings.Contains(l.text, "decision") {
+	if l := (board{s: s, now: 1}).activeWorkstreamLine(w, 0); !strings.Contains(l.text, "answer an agent") {
 		t.Fatal(l)
 	}
 	w.QuestionWaiting = false
 	w.ExecutionError = ""
 	w.ExecutionReady = false
 	w.PlanningPending = true
-	if l := (board{s: s, now: 1}).activeWorkstreamLine(w, 0); l.text != "Commander to plan the next action" {
+	if l := (board{s: s, now: 1}).activeWorkstreamLine(w, 0); l.text != "Commander to plan the next step" {
 		t.Fatal("unaffected work got exhaustion", l)
 	}
 }
@@ -48,7 +48,7 @@ func TestPinnedPlannerUsageAppearsOnEveryDependentRow(t *testing.T) {
 	s := activeBoardFixture()
 	s.PlanningUsage = map[string]string{"commander-focused": "Claude usage exhausted; planning runtime is explicitly pinned to Claude"}
 	for _, w := range []SnapWorkstream{s.Workstreams[0], {BeadID: "other", Status: "open", PlanningCommander: "commander-focused", PlanningPending: true}} {
-		if l := (board{s: s, now: 86400}).activeWorkstreamLine(w, 0); !strings.Contains(l.text, "usage exhausted") || l.since != 0 || l.kind != "stalled" {
+		if l := (board{s: s, now: 86400}).activeWorkstreamLine(w, 0); !strings.Contains(l.text, "usage exhausted") || l.since != 0 || l.kind != "stuck" {
 			t.Fatal(l)
 		}
 	}
@@ -59,7 +59,7 @@ func TestPinnedPlannerUsageAppearsOnEveryDependentRow(t *testing.T) {
 	w.ExecutionReady = true
 	w.ExecutionEligible = true
 	w.ExecutionCapable = true
-	if l := (board{s: s, now: 86400}).activeWorkstreamLine(w, 0); l.text != "Queued for available execution capacity" {
+	if l := (board{s: s, now: 86400}).activeWorkstreamLine(w, 0); l.text != "Queued for the next free agent" {
 		t.Fatal("planner usage blocked independently authorized work", l)
 	}
 }

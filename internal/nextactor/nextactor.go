@@ -341,7 +341,7 @@ func blockers(b Bead, ctx Context, seen map[string]bool, depth int) (Result, boo
 // commanderOwed is a move the planning Commander owes: its own while it is in a
 // turn or within the grace after going idle, stuck once it sits idle longer.
 func commanderOwed(b Bead, ctx Context, reason, what string, since int64) Result {
-	if b.PlanningUsage != "" {
+	if b.PlanningUsage != "" && (reason == "plan" || reason == "wait_over") {
 		return Result{Actor: Stuck, Reason: "planning_usage", Text: b.PlanningUsage, Bead: b.ID}
 	}
 	who := firstNonEmpty(b.PlanningCommander, "commander")

@@ -105,7 +105,7 @@ func (b board) actorBead(project string, pid int64, commander string, s SnapStep
 	if n.PlanningCommander == "" {
 		n.PlanningCommander = commander
 	}
-	if cause := b.s.PlanningUsage[n.PlanningCommander]; cause != "" {
+	if cause := b.s.PlanningUsage[n.PlanningCommander]; s.PlanningPending && cause != "" {
 		n.PlanningUsage = store.UsageCapacityError + cause
 	}
 	if s.ExecutionReady && s.ExecutionEligible && s.ExecutionMode == "active" && strings.HasPrefix(s.ExecutionError, store.UsageCapacityError) {
