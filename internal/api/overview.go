@@ -177,6 +177,10 @@ func buildOverviewInput(snap livedata.Snapshot, ws *livedata.SnapWorkstream, q o
 	}
 	in.Evidence = append(in.Evidence, overviewMessages(home, ws.ManagerRole, q.TrackID)...)
 	in.Evidence = append(in.Evidence, overviewPRSizes(*ws, q.TrackID)...)
+	now := time.Now()
+	for i := range in.Evidence {
+		in.Evidence[i].Text = livedata.HumanTimes(in.Evidence[i].Text, now)
+	}
 	return in, true
 }
 

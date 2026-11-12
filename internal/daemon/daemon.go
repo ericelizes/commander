@@ -528,6 +528,11 @@ func (d *Daemon) Run(ctx context.Context) error {
 			if d.live != nil && d.orchestrationMode == "active" {
 				describer := &statusclassify.Describer{Worker: worker, UserName: config.UserName(d.cfg), CachePath: filepath.Join(d.home, "status-lines.json"), OnReady: func() { d.store.NotifyStateChanged(context.Background()) }}
 				d.live.Describe = describer.Describe
+				if d.cfg != nil {
+					if loc, err := d.cfg.User.Location(); err == nil {
+						livedata.SetUserLocation(loc)
+					}
+				}
 				go describer.Run(ctx)
 				go d.runClosingSweep(ctx)
 				go d.runPRLinker(ctx)
