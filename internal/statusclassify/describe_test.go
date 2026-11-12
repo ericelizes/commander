@@ -31,14 +31,14 @@ func TestDescriberWritesStateSpecificLinesAndNeverShowsAStaleState(t *testing.T)
 		t.Fatal("pending description was not written")
 	}
 	text, _, ok := d.Describe("p:ws", "user", "decision", "Needs you:", "facts v1")
-	if !ok || text != "Needs you: "+words || strings.Count(text, "Needs you:") != 1 {
+	if !ok || text != "Approve the refund guard?" || strings.Contains(text, "Needs you") {
 		t.Fatalf("written line %q", text)
 	}
-	if !strings.Contains(prompts[0], "say exactly what they must decide") {
+	if !strings.Contains(prompts[0], "It is the reader's move") {
 		t.Fatal("the user prompt was not chosen by the state")
 	}
 	// Same state, new facts: the old line stays while the new one is written.
-	if text, _, ok := d.Describe("p:ws", "user", "decision", "Needs you:", "facts v2"); !ok || text != "Needs you: "+words {
+	if text, _, ok := d.Describe("p:ws", "user", "decision", "Needs you:", "facts v2"); !ok || text != "Approve the refund guard?" {
 		t.Fatal("a same-state line was dropped while its refresh is pending")
 	}
 	// New state: never the old line.
@@ -59,7 +59,7 @@ func TestDescriberWritesStateSpecificLinesAndNeverShowsAStaleState(t *testing.T)
 	if d.write(context.Background(), job) {
 		t.Fatal("a failed call reported a description")
 	}
-	if text, _, ok := d.Describe("p:ws", "user", "decision", "Needs you:", "facts v1"); !ok || text != "Needs you: "+words {
+	if text, _, ok := d.Describe("p:ws", "user", "decision", "Needs you:", "facts v1"); !ok || text != "Approve the refund guard?" {
 		t.Fatal("a failed call erased the last good line")
 	}
 }
@@ -69,7 +69,7 @@ func TestTooLongAnswerIsRewrittenOnceBeforeCutting(t *testing.T) {
 	d := &Describer{Call: func(_ context.Context, _, _, input string, out any) error {
 		calls++
 		text := "decide whether to merge and install the reviewed Commander repair batch into main today"
-		if strings.Contains(input, "Rewrite these words") {
+		if strings.Contains(input, "Rewrite this status") {
 			text = "merge the repair batch?"
 		}
 		raw, _ := json.Marshal(map[string]string{"description": text, "signal": "none"})
@@ -81,7 +81,7 @@ func TestTooLongAnswerIsRewrittenOnceBeforeCutting(t *testing.T) {
 	if !d.write(context.Background(), job) || calls != 2 {
 		t.Fatalf("calls %d", calls)
 	}
-	if text, _, _ := d.Describe("p:ws", "user", "decision", "Needs you:", "facts"); text != "Needs you: merge the repair batch?" || strings.Contains(text, "…") {
+	if text, _, _ := d.Describe("p:ws", "user", "decision", "Needs you:", "facts"); text != "Merge the repair batch?" || strings.Contains(text, "…") {
 		t.Fatalf("line %q", text)
 	}
 }
@@ -107,21 +107,25 @@ func TestShortenDropsATrailingClauseBeforeCutting(t *testing.T) {
 	}
 }
 
-func TestFinishDescriptionKeepsOneOpeningAndRejectsJunk(t *testing.T) {
-	if got, ok := finishDescription("Working:", "Working: QA Hub parity tests"); !ok || got != "Working: QA Hub parity tests" {
-		t.Fatalf("%q", got)
+func TestFinishDescriptionDropsLabelsAndRejectsJunk(t *testing.T) {
+	cases := map[string]string{
+		"Working: QA Hub parity tests":            "QA Hub parity tests",
+		"Needs you: merge the dashboard?":         "Merge the dashboard?",
+		"Waiting on CI #3592: unit tests":         "Unit tests",
+		"agent resolving the Navigator conflict.": "Agent resolving the Navigator conflict",
+		"Commander reviewing the SIGINT fix":      "Commander reviewing the SIGINT fix",
+		"“QA Hub parity tests”":                   "QA Hub parity tests",
 	}
-	if got, _ := finishDescription("Needs you:", "Choose platform access or wait?"); got != "Needs you: choose platform access or wait?" {
-		t.Fatalf("capital after the opening: %q", got)
-	}
-	if got, _ := finishDescription("Working:", "QA Hub parity tests"); got != "Working: QA Hub parity tests" {
-		t.Fatalf("acronym lowered: %q", got)
+	for in, want := range cases {
+		if got, ok := finishDescription("Working:", in); !ok || got != want {
+			t.Fatalf("%q -> %q, want %q", in, got, want)
+		}
 	}
 	if _, ok := finishDescription("Working:", "   "); ok {
 		t.Fatal("empty accepted")
 	}
 	long := strings.Repeat("parity tests ", 12)
-	if got, ok := finishDescription("Working:", long); !ok || len([]rune(got)) > len("Working: ")+maxDescriptionWords+1 || !strings.HasSuffix(got, "…") {
+	if got, ok := finishDescription("Working:", long); !ok || len([]rune(got)) > maxDescriptionWords+1 || !strings.HasSuffix(got, "…") {
 		t.Fatalf("an overlong answer was not shortened: %q", got)
 	}
 	for _, actor := range []string{"user", "stuck", "agent", "commander", "external", "none"} {

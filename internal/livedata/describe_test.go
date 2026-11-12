@@ -66,6 +66,15 @@ func TestEveryTrackGetsItsOwnLine(t *testing.T) {
 	}
 }
 
+func TestPlaceholderHasNoLabel(t *testing.T) {
+	if got := placeholder("Needs you: merge it? (blocking “Middle step”)"); got != "Merge it?" {
+		t.Fatalf("%q", got)
+	}
+	if got := placeholder("Needs you"); got != "Needs you" {
+		t.Fatalf("a bare label stays: %q", got)
+	}
+}
+
 func TestPlaceholderDropsTheBlockingChain(t *testing.T) {
 	cases := map[string]string{
 		"After “Merge the batch”: working on “Prepare the Mac install”":     "Working on “Prepare the Mac install”",
