@@ -376,6 +376,47 @@ func (v Verifier) checkOnce(ctx context.Context, bc beads.Client, dir, project, 
 		if settled, settleErr := v.checkSettlement(ctx, bc, dir, project, n, block, instance, step); settled || settleErr != nil {
 			return settleErr
 		}
+		if verifier == "review-report" {
+			report := ""
+			for _, c := range n.Comments {
+				if strings.HasPrefix(strings.TrimSpace(c.Text), workflowtemplate.ReportMarker) {
+					report = c.Text
+				}
+			}
+			e, err := workflowtemplate.VerifyReport(ctx, v.gh(), workflowtemplate.BlockPR(block.Bead), instance, step, report)
+			if err != nil {
+				return err
+			}
+			return bc.AddComment(ctx, dir, id, e.Comment())
+		}
+		// Only a review proof needs the writer binding: it keeps reviewers apart from writers.
+		if !workflowtemplate.NeedsProof(verifier) {
+			e, err := workflowtemplate.Verify(ctx, v.gh(), nil, verifier, workflowtemplate.BlockPR(block.Bead), instance, step, nil)
+			if err != nil {
+				return err
+			}
+			if verifier == "head-current" {
+				for _, other := range nodes {
+					if workflowtemplate.Label(other.Bead, workflowtemplate.LabelInstance) != instance {
+						continue
+					}
+					sid := workflowtemplate.Label(other.Bead, workflowtemplate.LabelStep)
+					if sid == "" || sid == step {
+						continue
+					}
+					v := ""
+					for _, s := range tpl.Steps {
+						if s.ID == sid {
+							v = s.Verifier
+						}
+					}
+					if other.Bead.Status != "closed" || !workflowtemplate.HasEvidence(other, instance, sid, v, e.PR) {
+						return fmt.Errorf("final check: %s is unfinished or has no recorded check", other.Bead.ID)
+					}
+				}
+			}
+			return bc.AddComment(ctx, dir, id, e.Comment())
+		}
 		binding, err := workflowtemplate.Binding(block.Comments)
 		if err != nil {
 			return err
@@ -447,32 +488,25 @@ func (v Verifier) checkOnce(ctx context.Context, bc beads.Client, dir, project, 
 					}
 					for _, c := range s.Comments {
 						e, ok := workflowtemplate.ParseEvidence(c.Text)
-						if !ok || e.Binding != binding.Revision || e.Head != binding.Head || e.PR != binding.PR || e.Proof == nil {
+						if !ok || e.PR != binding.PR || e.Proof == nil {
 							continue
 						}
-						// Every review the primary evidence stands on (its retained
-						// prior review too); this reader also judges the adversarial
-						// proof's own prior_review, so neither can borrow the primary's.
 						found = true
-						for _, primary := range []string{e.Proof.ReviewBead, e.Proof.PriorReview} {
-							if primary == "" {
-								continue
-							}
-							if primary == reviewID {
-								return workflowtemplate.Review{}, fmt.Errorf("adversarial review must not name the primary step's review %s", primary)
-							}
-							first, err := v.rolesInScope(ctx, bc, dir, project, root, primary)
-							if err != nil {
-								return workflowtemplate.Review{}, err
-							}
-							if roleOverlap(roles, first) {
-								return workflowtemplate.Review{}, fmt.Errorf("adversarial reviewer must differ from first reviewer (review %s)", primary)
-							}
+						primary := e.Proof.ReviewBead
+						if primary == reviewID {
+							return workflowtemplate.Review{}, fmt.Errorf("adversarial review must not name the primary step's review %s", primary)
+						}
+						first, err := v.rolesInScope(ctx, bc, dir, project, root, primary)
+						if err != nil {
+							return workflowtemplate.Review{}, err
+						}
+						if roleOverlap(roles, first) {
+							return workflowtemplate.Review{}, fmt.Errorf("adversarial reviewer must differ from first reviewer (review %s)", primary)
 						}
 					}
 				}
 				if !found {
-					return workflowtemplate.Review{}, fmt.Errorf("current primary review evidence required")
+					return workflowtemplate.Review{}, fmt.Errorf("primary review evidence required")
 				}
 			}
 			cs, err := bc.Comments(ctx, dir, reviewID)
@@ -501,30 +535,7 @@ func (v Verifier) checkOnce(ctx context.Context, bc beads.Client, dir, project, 
 			}
 			return err
 		}
-		if e.Head != binding.Head {
-			return fmt.Errorf("stale writer binding: ask the owning Manager to run %s", workflowtemplate.RebindCommand(project, block.Bead.ID, &binding, e.Head))
-		}
 		e.Binding = binding.Revision
-		if verifier == "head-current" {
-			for _, other := range nodes {
-				if workflowtemplate.Label(other.Bead, workflowtemplate.LabelInstance) != instance {
-					continue
-				}
-				sid := workflowtemplate.Label(other.Bead, workflowtemplate.LabelStep)
-				if sid == "" || sid == step {
-					continue
-				}
-				v := ""
-				for _, s := range tpl.Steps {
-					if s.ID == sid {
-						v = s.Verifier
-					}
-				}
-				if other.Bead.Status != "closed" || !workflowtemplate.BoundEvidenceFor(other, block, instance, sid, v, e.PR, e.Head) {
-					return fmt.Errorf("final check: %s has unfinished or stale evidence for PR head %s", other.Bead.ID, e.Head)
-				}
-			}
-		}
 		return bc.AddComment(ctx, dir, id, e.Comment())
 	}
 	// A container closes only after its entire block passes the same merge rule.
@@ -624,7 +635,7 @@ func (v Verifier) checkOnce(ctx context.Context, bc beads.Client, dir, project, 
 		if h.SHA != n.Head {
 			return fmt.Errorf("PR head changed during merge review check; retry")
 		}
-		finding := "pr-review topology and current-head evidence checked"
+		finding := "pr-review topology and step checks checked"
 		if workflowtemplate.Settled([]string{pr}, n.PRStates) {
 			finding = "PR merged: the review block was not checked"
 		}

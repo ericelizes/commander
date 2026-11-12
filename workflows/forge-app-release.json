@@ -1,0 +1,22 @@
+{
+  "schema": "workflow-template@v1",
+  "id": "forge-app-release",
+  "version": 1,
+  "title": "Forge app release",
+  "applies_to": "a change to a Forge app, shipped through its deploy process (often no pull request)",
+  "summary": "Ship a Forge app change from its dev box to production with the owner's go.",
+  "use_when": [
+    "Any change to a Forge app that goes to production"
+  ],
+  "skip_when": [
+    "A change that never leaves the dev box (an experiment or a spike)"
+  ],
+  "catalog_only": true,
+  "steps": [
+    {"id": "build-on-dev", "title": "Build and test on the app's dev box, never on prod", "kind": "task", "verifier": "recorded", "actor": "operator"},
+    {"id": "app-checks", "title": "The app's own checks pass (its release check and tests), compared with the base so failures that were already there don't block", "kind": "task", "verifier": "recorded", "actor": "operator"},
+    {"id": "owner-go", "title": "The app owner gives a written go naming the exact version to ship", "kind": "checkpoint", "verifier": "owner-answer", "actor": "owner"},
+    {"id": "ship", "title": "Ship to production with the app's own release script", "kind": "task", "verifier": "recorded", "actor": "operator"},
+    {"id": "check-prod", "title": "Check production once after the deploy: errors and the change's target numbers", "kind": "task", "verifier": "recorded", "actor": "operator", "optional": true}
+  ]
+}

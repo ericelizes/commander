@@ -16,10 +16,10 @@ type ReviewBlock struct {
 	Template string `json:"template"`
 	Invalid  bool   `json:"invalid,omitempty"`
 	PR       string `json:"pr,omitempty"`
-	// Head is the PR head the display knows ("" until the first read): a check
-	// recorded on another head is stale.
+	// Head is the PR head the display knows ("" until the first read). A check
+	// recorded on an earlier head still counts.
 	Head  string `json:"head,omitempty"`
-	Done  int    `json:"done"`  // checks closed with evidence on Head
+	Done  int    `json:"done"`  // checks closed with a recorded check
 	Total int    `json:"total"` // the template's steps
 	Stale int    `json:"stale,omitempty"`
 	// Settled counts checks closed by settle-block once the PR merged outside
@@ -39,7 +39,7 @@ type ReviewCheck struct {
 	Verifier string `json:"verifier,omitempty"`
 	Head     string `json:"head,omitempty"`    // the head its evidence was recorded on
 	Finding  string `json:"finding,omitempty"` // what the check found
-	Stale    bool   `json:"stale,omitempty"`   // closed, but current bound evidence is missing
+	Stale    bool   `json:"stale,omitempty"`   // closed, but no check is recorded
 	Settled  bool   `json:"settled,omitempty"` // closed by settle-block: the PR merged, this was never checked
 }
 
@@ -118,7 +118,7 @@ func (f flow) reviewBlock(s SnapStep) *ReviewBlock {
 			settledHere = e.Verifier == workflowtemplate.SettledVerifier
 		}
 		closed := n.Bead.Status == "closed"
-		current := settled || (definitionErr == nil && workflowtemplate.CheckCurrent(n, *s.WorkflowCheck, t, ts.id, ts.verifier, rb.PR, rb.Head))
+		current := settled || (definitionErr == nil && workflowtemplate.StepDone(n, *s.WorkflowCheck, t, ts.id, ts.verifier, rb.PR))
 		switch {
 		case rb.Invalid:
 			c.Stale = true
@@ -127,21 +127,7 @@ func (f flow) reviewBlock(s SnapStep) *ReviewBlock {
 		case closed && !current:
 			c.Stale = true
 			rb.Stale++
-			c.Kind, c.Text = "stalled", "Stale: checked "+shortSHA(c.Head)+", the PR is now at "+shortSHA(rb.Head)
-			if c.Head == "" {
-				c.Text = "Stale: no check recorded on the PR head " + shortSHA(rb.Head)
-			}
-			binding, err := workflowtemplate.Binding(s.WorkflowCheck.Comments)
-			switch {
-			case err != nil:
-				c.Text = "Stale: writer binding required"
-			case binding.PR != rb.PR || (binding.Head != rb.Head && c.Head == rb.Head):
-				c.Text = "Stale: writer binding differs from the current PR head"
-			case rb.Head == "":
-				c.Text = "Waiting for the current PR head"
-			case c.Head == rb.Head:
-				c.Text = "Stale: no check recorded for the current writer binding"
-			}
+			c.Kind, c.Text = "stalled", "Closed with no recorded check: close it again to run its check"
 		case closed && settledHere:
 			c.Settled = true
 			rb.Settled++
@@ -208,9 +194,8 @@ func shortSHA(h string) string {
 	return h
 }
 
-// reviewLine is a block's own line: the same rules as any row, with two of its
-// own once closed: done only while every check stands on the PR head, and
-// stale after a new push.
+// reviewLine is a block's own line: the same rules as any row, with its own
+// once closed: done only while every check is recorded.
 func reviewLine(rb *ReviewBlock, closed bool, l line) line {
 	if !closed {
 		return l
@@ -219,7 +204,7 @@ func reviewLine(rb *ReviewBlock, closed bool, l line) line {
 		return line{kind: "stalled", text: "Invalid template snapshot: ask the Manager to plug the block again"}
 	}
 	if rb.Stale > 0 {
-		return line{kind: "stalled", text: "Checks need renewal: " + strconv.Itoa(rb.Stale) + " to rerun, the Manager's move"}
+		return line{kind: "stalled", text: "Closed with " + strconv.Itoa(rb.Stale) + " checks not recorded, the Manager's move"}
 	}
 	if rb.Done+rb.Settled < rb.Total {
 		return line{kind: "stalled", text: "Closed with " + strconv.Itoa(rb.Total-rb.Done-rb.Settled) + " checks missing, the Manager's move"}

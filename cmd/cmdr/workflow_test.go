@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 
@@ -92,6 +93,29 @@ func plugInstance(t *testing.T, pr string) *workflowtemplate.Instance {
 
 const testPR = "https://github.com/o/r/pull/7"
 
+// legacyInstance plugs pr-review version 1 (six steps, review proofs and a
+// writer binding), as blocks plugged before the two-step review carry it.
+func legacyInstance(t *testing.T, pr string) *workflowtemplate.Instance {
+	t.Helper()
+	tpl, err := legacyTemplateFile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	in, err := workflowtemplate.Instantiate(tpl, workflowtemplate.Params{Project: "p", Parent: "B", Before: "M", PR: pr})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return in
+}
+
+func legacyTemplateFile() (*workflowtemplate.Template, error) {
+	raw, err := os.ReadFile("../../internal/workflowtemplate/testdata/pr-review-v1.json")
+	if err != nil {
+		return nil, err
+	}
+	return workflowtemplate.Parse(raw)
+}
+
 func TestPlugCreatesBlockAndEdges(t *testing.T) {
 	g := newFakeGraph("B", "M", "X")
 	g.deps["M"] = []beads.Dep{{IssueID: "M", DependsOnID: "X", Type: "blocks"}}
@@ -99,11 +123,11 @@ func TestPlugCreatesBlockAndEdges(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(res.Created) != 7 || len(res.Remaining) != 6 {
+	if len(res.Created) != 3 || len(res.Remaining) != 2 {
 		t.Fatalf("created %v remaining %v", res.Created, res.Remaining)
 	}
 	c := g.beads[res.Container]
-	if c.Title != "Review gate" || c.ParentID != "B" || !hasLabel(c.Labels, "workflow-template:pr-review") || !hasLabel(c.Labels, "workflow-version:1") ||
+	if c.Title != "Review gate" || c.ParentID != "B" || !hasLabel(c.Labels, "workflow-template:pr-review") || !hasLabel(c.Labels, "workflow-version:2") ||
 		!hasLabel(c.Labels, "workflow-instance:"+res.Instance) || !strings.Contains(c.Description, `"schema":"workflow-template@v1"`) {
 		t.Fatalf("container %+v", c)
 	}
@@ -145,13 +169,13 @@ func TestPlugIsIdempotent(t *testing.T) {
 	if len(g.beads) != beadsBefore || g.depCalls != depsBefore || len(second.Created) != 0 || second.Container != first.Container {
 		t.Fatalf("second plug wrote: beads %d->%d deps %d->%d created %v", beadsBefore, len(g.beads), depsBefore, g.depCalls, second.Created)
 	}
-	if len(second.Remaining) != 6 {
+	if len(second.Remaining) != 2 {
 		t.Fatalf("remaining %v", second.Remaining)
 	}
 }
 
 func TestPlugResumesAfterPartialWrite(t *testing.T) {
-	for failAt := 1; failAt <= 7; failAt++ {
+	for failAt := 1; failAt <= 3; failAt++ {
 		g := newFakeGraph("B", "M")
 		g.failAt = failAt
 		in := plugInstance(t, testPR)
@@ -162,7 +186,7 @@ func TestPlugResumesAfterPartialWrite(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failAt %d resume: %v", failAt, err)
 		}
-		if len(g.beads) != 2+7 || len(res.Remaining) != 6 {
+		if len(g.beads) != 2+3 || len(res.Remaining) != 2 {
 			t.Fatalf("failAt %d: %d beads, remaining %d (duplicates or gaps)", failAt, len(g.beads), len(res.Remaining))
 		}
 		if len(g.deps["M"]) != 1 || len(g.deps[res.Remaining[1].BeadID]) != 1 {
@@ -179,7 +203,7 @@ func TestPlugResumesAfterMissingEdges(t *testing.T) {
 	if _, err := plugWorkflow(context.Background(), g, "/d", in); err != nil {
 		t.Fatal(err)
 	}
-	if len(g.deps["M"]) != 1 || g.deps["M"][0].DependsOnID != res.Container || len(g.beads) != 9 {
+	if len(g.deps["M"]) != 1 || g.deps["M"][0].DependsOnID != res.Container || len(g.beads) != 5 {
 		t.Fatalf("deps %v beads %d", g.deps["M"], len(g.beads))
 	}
 }
@@ -220,7 +244,7 @@ func TestPlugClosedStepsAreNotRemainingAndNothingCloses(t *testing.T) {
 	res, _ := plugWorkflow(context.Background(), g, "/d", in)
 	g.beads[res.Remaining[0].BeadID].Status = "closed"
 	res, err := plugWorkflow(context.Background(), g, "/d", in)
-	if err != nil || len(res.Remaining) != 5 {
+	if err != nil || len(res.Remaining) != 1 {
 		t.Fatalf("err=%v remaining %d", err, len(res.Remaining))
 	}
 	closedTarget := newFakeGraph("B", "M")
@@ -257,10 +281,10 @@ func TestWorkflowPlugVerb(t *testing.T) {
 		t.Fatalf("exit %d: %s", code, errOut)
 	}
 	var res workflowPlugResult
-	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &res); err != nil || len(res.Remaining) != 6 || res.Template != "pr-review" {
+	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &res); err != nil || len(res.Remaining) != 2 || res.Template != "pr-review" || res.Version != 2 {
 		t.Fatalf("out=%s err=%v", out, err)
 	}
-	if code, _, _ = run(); code != 0 || len(g.beads) != 9 {
+	if code, _, _ = run(); code != 0 || len(g.beads) != 5 {
 		t.Fatalf("rerun: code %d beads %d", code, len(g.beads))
 	}
 	stdout, stderr, read := withTempOutputFiles(t)

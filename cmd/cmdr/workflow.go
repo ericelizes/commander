@@ -60,8 +60,11 @@ func runWorkflow(args []string, stdout, stderr *os.File) int {
 	if len(args) > 0 && args[0] == "settle-block" {
 		return runWorkflowSettleBlock(args[1:], stdout, stderr)
 	}
+	if len(args) > 0 && (args[0] == "list" || args[0] == "show") {
+		return runWorkflowCatalog(args, stdout, stderr)
+	}
 	if len(args) == 0 || args[0] != "plug" {
-		emitErr(stderr, "usage: workflow plug <template> --project P --parent B --before M --pr URL | workflow bind-writers --project P --block B --writers original-task,fix-task [--external-writer user --commits base-sha..last-sha] --head full-sha | workflow settle-block --project P --block B --reason R")
+		emitErr(stderr, "usage: workflow list | workflow show <template> | workflow plug <template> --project P --parent B --before M --pr URL | workflow bind-writers --project P --block B --writers original-task,fix-task [--external-writer user --commits base-sha..last-sha] --head full-sha | workflow settle-block --project P --block B --reason R")
 		return 1
 	}
 	return runWorkflowPlug(args[1:], stdout, stderr)
@@ -312,4 +315,51 @@ func ensureWaits(ctx context.Context, bc beads.Client, dir, from, dep string) er
 		}
 	}
 	return bc.DependOn(ctx, dir, from, dep)
+}
+
+// runWorkflowCatalog: `workflow list` prints every template's catalog entry
+// (what it applies to, when to use and skip it); `workflow show <id>` prints
+// one whole template, steps included. Both read the embedded files only.
+func runWorkflowCatalog(args []string, stdout, stderr *os.File) int {
+	var out any
+	switch {
+	case args[0] == "list" && len(args) == 1:
+		all, err := workflowtemplate.Catalog()
+		if err != nil {
+			emitErr(stderr, err.Error())
+			return 1
+		}
+		type entry struct {
+			ID          string   `json:"id"`
+			Version     int      `json:"version"`
+			Title       string   `json:"title"`
+			AppliesTo   string   `json:"applies_to"`
+			Summary     string   `json:"summary"`
+			UseWhen     []string `json:"use_when"`
+			SkipWhen    []string `json:"skip_when"`
+			CatalogOnly bool     `json:"catalog_only,omitempty"`
+		}
+		entries := []entry{}
+		for _, t := range all {
+			entries = append(entries, entry{t.ID, t.Version, t.Title, t.AppliesTo, t.Summary, t.UseWhen, t.SkipWhen, t.CatalogOnly})
+		}
+		out = entries
+	case args[0] == "show" && len(args) == 2:
+		t, err := workflowtemplate.Load(args[1])
+		if err != nil {
+			emitErr(stderr, err.Error())
+			return 1
+		}
+		out = t
+	default:
+		emitErr(stderr, "usage: workflow list | workflow show <template>")
+		return 1
+	}
+	enc := json.NewEncoder(stdout)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(out); err != nil {
+		emitErr(stderr, err.Error())
+		return 1
+	}
+	return 0
 }

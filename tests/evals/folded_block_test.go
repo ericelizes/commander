@@ -62,12 +62,11 @@ func TestFoldedBlockScenario(t *testing.T) {
 			}
 		}
 	})
-	t.Run("a new push", func(t *testing.T) {
+	t.Run("a new push changes nothing", func(t *testing.T) {
 		snap := load(t)
 		target(&snap).WorkflowCheck.Head = "head2"
-		want := []string{"MERGE_REVIEW_INCOMPLETE w.2"}
-		if got := findings(livedata.CheckDiagram(snap.Workstreams[0], "w")); !slices.Equal(got, want) {
-			t.Fatalf("findings: %v, want %v", got, want)
+		if got := findings(livedata.CheckDiagram(snap.Workstreams[0], "w")); got != nil {
+			t.Fatalf("findings: %v", got)
 		}
 	})
 	t.Run("a closed target", func(t *testing.T) {

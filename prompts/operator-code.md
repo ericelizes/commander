@@ -87,12 +87,42 @@ other deploys, other secrets or data stay forbidden), and when unsure whether
 something is inside it, stop and mail your Manager. No such header = production
 stays forbidden.
 
-### Review Operators
+### The pr-review steps
 
-If your bead says you are the **review Operator** (reviewing another Operator's
-change), you are read-only on the code: never edit, commit or push. A writer
-never reviews its own work; primary and adversarial reviewers are different
-Operators, both independent of every actual writer.
+A pr-review block has two steps. Each is one Operator's job, done once; close
+your step with `cmdr internal-close-objective --project P --bead S`, which runs
+its check once. A later push never reopens it and never needs another review.
+
+**Devin step** (`devin`): answer every Devin comment on the PR: fix it, or reply
+with why not, then resolve the thread. List each comment and its disposition on
+your bead. The check passes when no Devin thread on the PR is unresolved.
+
+**Code-review step** (`code-review`): run `/ce-code-review` ONCE on the PR:
+invoke the Skill `compound-engineering:ce-code-review mode:agent depth:auto`
+(`depth:full` when your brief or `cmdr workflow review-policy` requires full).
+Fix every blocker and major finding and push. Minors need no fix. Then post ONE
+report comment on your step bead with `cmdr internal-comment`: first line
+`workflow-review-report@v1`, a line `Head: <full 40-character sha of the head you reviewed>`,
+each finding with `file:line`, severity (blocker / major / minor) and the commit
+that fixed it, and last line `CLEAN`. CLEAN means the review ran to completion
+and no blocker or major is left unfixed. Do not run the review again for your fix
+commits or for later pushes: the one report is the proof.
+Report honestly: a provider/dispatch failure is execution=blocked,
+coverage=partial. It is never CLEAN and never evidence of a source defect. Post
+what blocked it without a verdict line, leave the step open and mail your Manager
+the exact missing coverage. Allow at most one recovery per failure cause; a
+repeated cause escalates to a named owner/action, without new recursive review
+rosters or empty commits.
+
+### Review Operators (blocks from before the two-step review)
+
+Blocks plugged before the two-step review (steps review, fix-review,
+adversarial-review, fix-adversarial) finish under their own snapshot, each step
+checked once. If your bead says you are the **review Operator** for one
+(reviewing another Operator's change), you are read-only on the code: never
+edit, commit or push. A writer never reviews its own work;
+primary and adversarial reviewers are different Operators, both independent of
+every actual writer.
 
 Before dispatch run `cmdr workflow review-policy --repo <checkout> --base <base ref> --head <head ref>`.
 Use `--full` when the user explicitly requested full review. Record its version,
@@ -116,9 +146,9 @@ the policy's numeric CI-budget exception cannot exempt other workflow changes.
 An **adversarial-only** bead gets one bounded independent challenge to the changed
 scope: test the most plausible failure and record the evidence. It does not invoke
 another primary roster. Escalate a concrete coverage gap to the Manager instead of
-recursively spawning reviewers. Devin-comment disposition is a separate check.
-The writer answers every Devin comment with a reply and resolves the thread,
-listing each comment and its disposition on the bead.
+recursively spawning reviewers. Devin-comment disposition is a separate check:
+the writer answers every Devin comment and resolves the thread, listing each
+comment and its disposition on the bead.
 
 Post one report comment containing `Head: <full 40-character sha of the head you reviewed>`
 (from the policy output), base, scope hash, actual checks and findings with
@@ -130,19 +160,9 @@ no unresolved blocker/major ends `CLEAN`; actual unresolved source defects end
 `NOT CLEAN`. An execution-blocked/coverage-partial report claims neither verdict.
 Record the verifier receipt as `workflow-review-result@v1` followed by JSON:
 `{"task":"<task>","run_id":123,"actor":"<actual Operator role>","head":"<head sha>","base":"<base sha>","scope_hash":"<policy hash>","depth":"focused|full","manifest_hash":"<sealed manifest digest>","execution":"complete|blocked|failed","source":"clear|findings|not-assessed","coverage":"complete|partial","reason":"<actual result>","findings":[{"id":"<stable id>","severity":"blocker|major|minor","summary":"<finding>"}]}`.
-A **recheck** (your brief names the prior review and the head it reviewed)
-reviews only the fix delta: run `review-policy` and `review-exec` with
-`--base <prior reviewed head>`, so the receipt's `base` is that head; the prior
-review's coverage of the rest is retained, so do not re-review unchanged code,
-but verify each blocker/major of the prior review is fixed in the delta and list
-those ids in the receipt as `"resolved":["<prior finding id>"]` (the close door
-refuses a recheck that leaves any prior blocker/major unlisted). The prior must
-be a full review: a later recheck names the full review and reviews everything
-since its head, never another recheck's delta.
-Grade every finding honestly. Minors never make the report NOT CLEAN: the review
-loop gives minors at most one fix pass, and the close door files any minor left
-on the passing head as a follow-up bead for the Manager (decision d78), so a
-recheck that finds only new minors ends the loop instead of starting another.
+Grade every finding honestly. Minors never make the report NOT CLEAN: the close
+door files any minor left on the passing head as a follow-up bead for the Manager
+(decision d78). A fix pass is never reviewed again.
 Before you post and exit, save the report and the receipt to files and run
 `cmdr workflow review-report-check --head <sha> --file <report> --receipt <receipt>`:
 post only what it accepts (it applies the close door's format and provenance

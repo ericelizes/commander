@@ -223,7 +223,7 @@ func TestCloseVerbOfAMergedPRTargetReadsOnlyItsOwnBeads(t *testing.T) {
 // plugBefore plugs a pr-review block for testPR in front of an existing bead under B.
 func plugBefore(t *testing.T, mem *beads.MemClient, target string) *workflowPlugResult {
 	t.Helper()
-	tpl, err := workflowtemplate.Load("pr-review")
+	tpl, err := legacyTemplateFile()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -847,7 +847,7 @@ func TestGuardedCloseAgainstRealBD_BDIntegration(t *testing.T) {
 	if err := c.SetParent(ctx, dir, target, parent); err != nil {
 		t.Fatal(err)
 	}
-	tpl, err := workflowtemplate.Load("pr-review")
+	tpl, err := legacyTemplateFile()
 	if err != nil {
 		t.Fatal(err)
 	}

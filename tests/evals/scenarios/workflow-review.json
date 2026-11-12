@@ -24,22 +24,20 @@
       "expected": ""
     },
     {
-      "name": "new push invalidates final check",
+      "name": "a later push keeps a passed block complete",
       "block": true,
       "complete": true,
       "head": "head2",
       "state": "OPEN",
-      "expected": "MERGE_REVIEW_INCOMPLETE",
-      "fix": "\"head\":\"<full-sha>\",\"fix_commits\":[\"<full-fix-sha>\"]}' ; cmdr internal-close-objective --project p --bead S1"
+      "expected": ""
     },
     {
-      "name": "later push still requires current-head evidence",
+      "name": "another push still needs no rerun",
       "block": true,
       "complete": true,
       "head": "head3",
       "state": "OPEN",
-      "expected": "MERGE_REVIEW_INCOMPLETE",
-      "fix": "\"head\":\"<full-sha>\",\"fix_commits\":[\"<full-fix-sha>\"]}' ; cmdr internal-close-objective --project p --bead S1"
+      "expected": ""
     },
     {
       "name": "merged historical PR",
@@ -57,56 +55,22 @@
       "expected": ""
     },
     {
-      "name": "legacy unbound refuses completion and displays zero done",
+      "name": "the two steps need no writer binding",
       "block": true,
       "complete": true,
       "unbound": true,
       "head": "head1",
       "state": "OPEN",
-      "expected": "MERGE_REVIEW_INCOMPLETE",
-      "fix": "cmdr workflow bind-writers --project p --block R"
+      "expected": ""
     },
     {
-      "name": "writer binding change invalidates checks and display",
-      "block": true,
-      "complete": true,
-      "rebound": true,
-      "head": "head1",
-      "state": "OPEN",
-      "expected": "MERGE_REVIEW_INCOMPLETE",
-      "fix": "cmdr internal-close-objective --project p --bead S0 ; cmdr internal-comment --project p --bead S1 --text",
-      "not_fix": "bind-writers",
-      "reason": "Stale: no check recorded for the current writer binding"
-    },
-    {
-      "name": "changed revision renewal names the proof for the current binding",
-      "block": true,
-      "complete": true,
-      "rebound": true,
-      "head": "head1",
-      "state": "OPEN",
-      "expected": "MERGE_REVIEW_INCOMPLETE",
-      "fix": "\"head\":\"<full-sha>\",\"fix_commits\":[\"<full-fix-sha>\"]}' ; cmdr internal-close-objective --project p --bead S1",
-      "not_fix": "bind-writers"
-    },
-    {
-      "name": "stale-head binding must be bound again",
-      "block": true,
-      "complete": true,
-      "head": "head2",
-      "state": "OPEN",
-      "expected": "MERGE_REVIEW_INCOMPLETE",
-      "fix": "cmdr workflow bind-writers --project p --block R"
-    },
-    {
-      "name": "stale-head binding after a changed revision must be bound again",
+      "name": "a changed writer binding changes nothing",
       "block": true,
       "complete": true,
       "rebound": true,
       "head": "head2",
       "state": "OPEN",
-      "expected": "MERGE_REVIEW_INCOMPLETE",
-      "fix": "cmdr workflow bind-writers --project p --block R"
+      "expected": ""
     },
     {
       "name": "merged legacy unbound block reads complete",
@@ -127,14 +91,13 @@
       "expected": "MERGE_REVIEW_INCOMPLETE"
     },
     {
-      "name": "closed unmerged PR still needs bound checks",
+      "name": "closed unmerged PR with recorded checks reads complete",
       "block": true,
       "complete": true,
       "unbound": true,
       "head": "head1",
       "state": "CLOSED",
-      "expected": "MERGE_REVIEW_INCOMPLETE",
-      "fix": "cmdr workflow bind-writers --project p --block R"
+      "expected": ""
     }
   ]
 }

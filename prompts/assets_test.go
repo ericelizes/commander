@@ -241,20 +241,31 @@ func TestExistingAgentMailRouteInPrompts(t *testing.T) {
 	}
 }
 
-func TestRenewingStaleWorkflowStepsInLeadPrompt(t *testing.T) {
-	body, err := templateFS.ReadFile("lead.md")
-	if err != nil {
-		t.Fatal(err)
-	}
-	lead := string(body)
-	for _, needle := range []string{
-		"A new push requires current-head evidence, not blind repetition",
-		"Closing a closed step again reruns its fresh check",
-		"cmdr internal-close-objective --project P --bead S",
-		"workflow-review-proof@v1 {",
+// The PR review is two steps, each checked once; planners read the catalog
+// before plugging. The retired recheck and current-head rules are gone.
+func TestTwoStepReviewInPrompts(t *testing.T) {
+	for file, needles := range map[string][]string{
+		"lead.md": {"Read the workflow catalog before you plug", "cmdr workflow list", "read its use_when and skip_when and follow them",
+			"say which skip_when applies", "PR review is two steps, on by default for code PRs", "`compound-engineering:ce-code-review` ONCE",
+			"workflow-review-report@v1", "fix commits\n   made after the report need no new review", "cmdr internal-close-objective --project P --bead S",
+			"never propose a\n   re-review unless GitHub itself blocks the merge", "one is enough", "Blocks plugged before the two-step review",
+			"cmdr workflow settle-block"},
+		"commander.md":     {"cmdr workflow list", "use_when", "skip_when", "say which\n   skip_when applies", "on by default for code PRs"},
+		"operator-code.md": {"### The pr-review steps", "workflow-review-report@v1", "Do not run the review again", "execution=blocked"},
 	} {
-		if !strings.Contains(lead, needle) {
-			t.Errorf("lead.md misses %q", needle)
+		body, err := templateFS.ReadFile(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, needle := range needles {
+			if !strings.Contains(string(body), needle) {
+				t.Errorf("%s misses %q", file, needle)
+			}
+		}
+		for _, stale := range []string{"A new push requires current-head evidence", "delta_renewal", "prior_review", "Renew checks in template order", "renew checks", "A recheck reviews only the fix delta"} {
+			if strings.Contains(string(body), stale) {
+				t.Errorf("%s retains the retired rule %q", file, stale)
+			}
 		}
 	}
 }
@@ -262,7 +273,7 @@ func TestRenewingStaleWorkflowStepsInLeadPrompt(t *testing.T) {
 func TestStandingDecisionD9InPrompts(t *testing.T) {
 	for file, needles := range map[string][]string{
 		"lead.md":          {"PR-review blocks are optional planning tools", "cmdr workflow plug pr-review", "cmdr workflow bind-writers", "Never mark a PR **reviewed** clean while", "Devin comments are unanswered", "adversarial-only", "one bounded independent challenge", "at most one recovery per failure cause", "never call unavailable execution a source NOT CLEAN"},
-		"operator-code.md": {"read-only on the code", "primary and adversarial reviewers are different", "compound-engineering:ce-code-review", "depth:auto", "when policy requires", "not a supported skill", "execution=blocked", "coverage=partial", "another primary roster", "at most one recovery per failure", "The writer answers every Devin comment"},
+		"operator-code.md": {"read-only on the code", "primary and adversarial reviewers are different", "compound-engineering:ce-code-review", "depth:auto", "when policy requires", "not a supported skill", "execution=blocked", "coverage=partial", "another primary roster", "at most one recovery per failure", "answer every Devin comment on the PR"},
 	} {
 		body, err := templateFS.ReadFile(file)
 		if err != nil {
@@ -300,7 +311,7 @@ func TestBackgroundServiceRuleInLeadAndOperatorPrompts(t *testing.T) {
 
 func TestReviewedGateRuleInLeadAndOperatorPrompts(t *testing.T) {
 	for file, needles := range map[string][]string{
-		"lead.md":          {"**reviewed**", "reviewed by a SEPARATE", "/ce-code-review", "NOT CLEAN"},
+		"lead.md":          {"**reviewed**", "Code review is never yours", "/ce-code-review", "NOT CLEAN"},
 		"operator-code.md": {"review Operator", "read-only on the code", "`CLEAN`", "`NOT CLEAN`", "file:line", "depth:focused", "Agent tool", "scope_hash", "`Head: <full 40-character sha"},
 	} {
 		body, err := templateFS.ReadFile(file)
@@ -682,7 +693,7 @@ func TestDeliveryAuthorityAndReadinessContract(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, needle := range []string{"Authority and approvals", "do not ask again", "automatic deployment", "deployment runner capability", "restorable rollback inputs", "Progress is evidence", "last real result and time", "current-head delta assessment", "never relabel an old report"} {
+	for _, needle := range []string{"Authority and approvals", "do not ask again", "automatic deployment", "deployment runner capability", "restorable rollback inputs", "Progress is evidence", "last real result and time"} {
 		if !strings.Contains(string(body), needle) {
 			t.Errorf("missing delivery contract %q", needle)
 		}

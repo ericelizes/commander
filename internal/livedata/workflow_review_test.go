@@ -83,10 +83,7 @@ func seedStage(mem *beads.MemClient, stageLabels ...string) {
 // seedClosedBlock plugs a complete, closed pr-review block before target.
 func seedClosedBlock(t *testing.T, mem *beads.MemClient, target, head string) {
 	t.Helper()
-	tpl, err := workflowtemplate.Load("pr-review")
-	if err != nil {
-		t.Fatal(err)
-	}
+	tpl := legacyReviewTemplate(t)
 	inst, err := workflowtemplate.Instantiate(tpl, workflowtemplate.Params{Project: "p", Parent: "w", Before: target, PR: reviewedPR})
 	if err != nil {
 		t.Fatal(err)
@@ -116,9 +113,8 @@ func TestWorkflowReview_ClosedCompleteBlockReadsComplete(t *testing.T) {
 	if got := reviewFindings(t, mem, &fakeHeads{state: "OPEN", head: "head1"}); len(got) != 0 {
 		t.Fatalf("complete closed block: %+v", got)
 	}
-	// A new push still shows, from the same folded steps.
-	got := reviewFindings(t, mem, &fakeHeads{state: "OPEN", head: "head2"})
-	if len(got) != 1 || got[0].Check != "MERGE_REVIEW_INCOMPLETE" {
+	// A new push changes nothing: the recorded checks stand.
+	if got := reviewFindings(t, mem, &fakeHeads{state: "OPEN", head: "head2"}); len(got) != 0 {
 		t.Fatalf("new push: %+v", got)
 	}
 }
@@ -326,10 +322,9 @@ func TestWorkflowReview_FoldedBlockStillJudgesItsOpenTarget(t *testing.T) {
 			t.Fatalf("complete block under a closed parent: %+v", got)
 		}
 	})
-	t.Run("a new push reads incomplete", func(t *testing.T) {
-		got := reviewFindings(t, complete(t), &fakeHeads{state: "OPEN", head: "head2"})
-		if len(got) != 1 || got[0].Check != "MERGE_REVIEW_INCOMPLETE" || got[0].Bead != "w.2" {
-			t.Fatalf("stale block: %+v", got)
+	t.Run("a new push still reads complete", func(t *testing.T) {
+		if got := reviewFindings(t, complete(t), &fakeHeads{state: "OPEN", head: "head2"}); len(got) != 0 {
+			t.Fatalf("a passed block went stale: %+v", got)
 		}
 	})
 	t.Run("an open block reads incomplete", func(t *testing.T) {

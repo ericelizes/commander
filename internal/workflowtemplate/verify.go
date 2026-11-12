@@ -8,7 +8,6 @@ import (
 	"net/url"
 	"os/exec"
 	"regexp"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -156,13 +155,18 @@ func ReadHead(ctx context.Context, run GHRunner, pr string) (Head, error) {
 const EvidencePrefix = "workflow-check@v1 "
 const ProofPrefix = "workflow-review-proof@v1 "
 
-// needsProof names the verifiers that read a review proof comment on the step.
-func needsProof(verifier string) bool {
+// ReportMarker opens the one report comment that proves a review-report step:
+// the ce-code-review report its Operator posts on the step bead.
+const ReportMarker = "workflow-review-report@v1"
+
+// NeedsProof names the verifiers that read a review proof comment on the step
+// (the retired six-step review); only they need a writer binding.
+func NeedsProof(verifier string) bool {
 	return verifier == "review-proof" || verifier == "review-clean" || verifier == "recheck-clean"
 }
 
-// Evidence is written only after a successful fresh check. A changed head
-// makes every prior result stale, including the final check.
+// Evidence is written only after a successful fresh check. It stays valid
+// when the PR head moves on: a later push never reopens a passed step.
 type Evidence struct {
 	Binding  string `json:"writer_binding,omitempty"`
 	Instance string `json:"instance"`
@@ -196,21 +200,10 @@ type Proof struct {
 	FixCommits    []string     `json:"fix_commits"`
 	NoFindings    bool         `json:"no_findings"`
 	NoFixRequired bool         `json:"no_fix_required,omitempty"`
-	// PriorReview and PriorHead make this a delta recheck: ReviewBead reviewed
-	// only the fix delta PriorHead..Head (its typed receipt's base is PriorHead),
-	// and PriorReview's complete review of PriorHead is the retained coverage.
-	PriorReview string `json:"prior_review,omitempty"`
-	PriorHead   string `json:"prior_head,omitempty"`
-	// DeltaRenewal carries ReviewBead's review of PriorHead to Head with no new
-	// review, when the verifier measures the fix delta as tiny documentation
-	// (renewDelta). PriorReview stays empty: ReviewBead is the renewed review.
-	DeltaRenewal bool `json:"delta_renewal,omitempty"`
 }
 
-// MinorPolicy is the review loop's bound (decision d78): blockers and majors are
-// fixed and rechecked; minors get at most one fix pass; minors a review leaves
-// unfixed on the passing head are filed as follow-up beads held by the owning
-// Manager, and the step passes. A recheck reviews only the fix delta.
+// MinorPolicy (decision d78): minors a review leaves unfixed on the passing head
+// are filed as follow-up beads held by the owning Manager, and the step passes.
 const MinorPolicy = "one-minor-fix-pass@v1"
 
 // FollowUpFiler files (idempotently) one follow-up bead per finding left
@@ -242,8 +235,10 @@ func Verify(ctx context.Context, run GHRunner, read ReviewReader, verifier, pr, 
 	e.Head = h.SHA
 	var pending *followUps
 	switch verifier {
-	case "threads-resolved", "devin-comments-resolved":
-		err = threads(ctx, run, pr)
+	case "threads-resolved":
+		err = threads(ctx, run, pr, false)
+	case "devin-comments-resolved":
+		err = threads(ctx, run, pr, true)
 	case "ci-green":
 		err = ciGreen(h)
 	case "merged":
@@ -267,8 +262,10 @@ func Verify(ctx context.Context, run GHRunner, read ReviewReader, verifier, pr, 
 		}
 	case "review-proof", "review-clean", "recheck-clean":
 		pending, err = reviewProof(ctx, run, read, pr, h, proof)
+	case "review-report":
+		err = fmt.Errorf("its report is read by VerifyReport")
 	case "head-current":
-		if err = threads(ctx, run, pr); err == nil {
+		if err = threads(ctx, run, pr, false); err == nil {
 			err = ciGreen(h)
 		}
 	default:
@@ -285,9 +282,6 @@ func Verify(ctx context.Context, run GHRunner, read ReviewReader, verifier, pr, 
 		return e, fmt.Errorf("PR head changed during check; retry")
 	}
 	e.Finding = verifier + " passed"
-	if pending != nil && pending.note != "" {
-		e.Finding += "; " + pending.note
-	}
 	if pending != nil && len(pending.findings) > 0 {
 		if pending.file == nil {
 			return e, fmt.Errorf("%s: review %s left %d minor finding(s) on head %s and no follow-up filer is available; close through cmdr internal-close-objective", verifier, pending.review, len(pending.findings), h.SHA)
@@ -341,7 +335,6 @@ type followUps struct {
 	review, head string
 	findings     []ReviewFinding
 	file         FollowUpFiler
-	note         string
 }
 
 func reviewProof(ctx context.Context, run GHRunner, read ReviewReader, pr string, h Head, p *Proof) (*followUps, error) {
@@ -369,48 +362,13 @@ func reviewProof(ctx context.Context, run GHRunner, read ReviewReader, pr string
 			return nil, err
 		}
 	}
-	// A renewal judges the review on the head it read; everything else on the current head.
-	reviewed, note := h.SHA, ""
-	if p.DeltaRenewal {
-		if p.Addendum != nil || !hexLength(p.PriorHead, 40) || p.PriorHead == h.SHA || len(p.FixCommits) == 0 {
-			return nil, fmt.Errorf("a delta renewal names the renewed review as review_bead, its full prior_head and the fix_commits since, with no addendum")
-		}
-		reviewed = p.PriorHead
-	}
+	reviewed := h.SHA
 	if p.Addendum == nil {
 		if err := reviewVerdict(r, reviewed); err != nil {
 			return nil, err
 		}
 	}
 	current := currentResult(r, reviewed)
-	if p.DeltaRenewal {
-		if current == nil {
-			return nil, fmt.Errorf("a delta renewal carries only a complete typed review: review %s has none on head %s", r.ID, p.PriorHead)
-		}
-		// The renewed review must stand on full coverage: a full review, or a
-		// delta recheck whose proof names the full review it retained
-		// (prior_review), judged exactly as that recheck was.
-		full := fullCoverage(ctx, run, pr, h, r.ID, current)
-		if p.PriorReview == "" {
-			if full != nil {
-				return nil, full
-			}
-		} else if full == nil {
-			return nil, fmt.Errorf("review %s is a full review: a renewal names prior_review only to renew a delta recheck", r.ID)
-		} else if err := deltaRecheck(ctx, run, read, pr, h, &Proof{ReviewBead: r.ID, PriorReview: p.PriorReview, PriorHead: current.Base, FixCommits: p.FixCommits}, current); err != nil {
-			return nil, fmt.Errorf("renewing delta recheck %s: %w", r.ID, err)
-		}
-		on, err := OnPR(ctx, run, pr, h, p.PriorHead)
-		if err != nil {
-			return nil, fmt.Errorf("prior head %s: %w", p.PriorHead, err)
-		}
-		if !on {
-			return nil, fmt.Errorf("prior head %s is not on the PR", p.PriorHead)
-		}
-		if note, err = renewDelta(ctx, run, pr, p.PriorHead, h.SHA); err != nil {
-			return nil, err
-		}
-	}
 	if p.NoFixRequired {
 		typed, err := resultVerdict(r, reviewed)
 		if !typed || err != nil {
@@ -420,11 +378,7 @@ func reviewProof(ctx context.Context, run GHRunner, read ReviewReader, pr string
 	if p.NoFindings && current != nil && len(current.Findings) > 0 {
 		return nil, fmt.Errorf("no_findings contradicts review %s, whose typed result on head %s has %d finding(s): use fix_commits or no_fix_required", r.ID, reviewed, len(current.Findings))
 	}
-	if !p.DeltaRenewal && (p.PriorReview != "" || p.PriorHead != "") {
-		if err := deltaRecheck(ctx, run, read, pr, h, p, current); err != nil {
-			return nil, err
-		}
-	} else if !p.DeltaRenewal && p.Addendum == nil && current != nil {
+	if p.Addendum == nil && current != nil {
 		// A plain proof stands on its own review: one that reviewed only a delta
 		// (its base a PR commit) covers nothing before it.
 		if err := fullCoverage(ctx, run, pr, h, r.ID, current); err != nil {
@@ -440,7 +394,7 @@ func reviewProof(ctx context.Context, run GHRunner, read ReviewReader, pr string
 			return nil, fmt.Errorf("fix commit %s is not on the PR", sha)
 		}
 	}
-	out := &followUps{review: r.ID, head: reviewed, file: r.FileFollowUps, note: note}
+	out := &followUps{review: r.ID, head: reviewed, file: r.FileFollowUps}
 	// Any finding left here is minor (reviewVerdict refused the rest): the head
 	// passes, and each one becomes a follow-up rather than another review round.
 	if current != nil {
@@ -463,7 +417,7 @@ func fullCoverage(ctx context.Context, run GHRunner, pr string, h Head, review s
 		return fmt.Errorf("review %s base %s: %w", review, res.Base, err)
 	}
 	if on {
-		return fmt.Errorf("review %s reviewed only the delta %s..%s (its base is a PR commit): prove it as a delta recheck with prior_review and prior_head naming the full review it builds on", review, res.Base, res.Head)
+		return fmt.Errorf("review %s reviewed only the delta %s..%s (its base is a PR commit): it does not cover the whole PR, review it again from the PR base", review, res.Base, res.Head)
 	}
 	if h.Base == "" {
 		return fmt.Errorf("review %s base %s: GitHub returned no PR base", review, res.Base)
@@ -514,76 +468,6 @@ func resultsOn(r Review, head string) []ReviewResult {
 		out = append(out, result)
 	}
 	return out
-}
-
-// deltaRecheck holds a recheck that reviewed only the fix delta to honest
-// retained coverage: the recheck's typed receipt has base = the prior head, the
-// prior review is a complete full typed review of that head (never itself a
-// delta, so coverage never chains), every blocker/major it found is named in the
-// recheck's resolved list, the prior head is on the PR and the fix pass between
-// them is named.
-func deltaRecheck(ctx context.Context, run GHRunner, read ReviewReader, pr string, h Head, p *Proof, current *ReviewResult) error {
-	if p.PriorReview == "" || !hexLength(p.PriorHead, 40) || p.PriorHead == h.SHA {
-		return fmt.Errorf("a delta recheck proof needs prior_review and the full prior_head it was reviewed at (not the current head)")
-	}
-	if p.PriorReview == p.ReviewBead {
-		return fmt.Errorf("a delta recheck must be a new review of the fix delta, not review %s again", p.ReviewBead)
-	}
-	if len(p.FixCommits) == 0 {
-		return fmt.Errorf("a delta recheck reviews a fix pass: name its fix_commits")
-	}
-	if current == nil {
-		return fmt.Errorf("a delta recheck needs a typed review result on head %s", h.SHA)
-	}
-	if current.Base != p.PriorHead {
-		return fmt.Errorf("delta recheck %s reviewed %s..%s, not the fix delta since the prior reviewed head %s: run review-policy with --base %s", p.ReviewBead, current.Base, h.SHA, p.PriorHead, p.PriorHead)
-	}
-	prior, err := read(ctx, p.PriorReview)
-	if err != nil {
-		return fmt.Errorf("prior review %s: %w", p.PriorReview, err)
-	}
-	if prior.ID != p.PriorReview || prior.Status != "closed" || !strings.HasPrefix(prior.Owner, "operator-") {
-		return fmt.Errorf("prior review %s must be a closed separate review Operator bead", p.PriorReview)
-	}
-	retained := currentResult(prior, p.PriorHead)
-	if retained == nil || retained.Execution != "complete" || retained.Coverage != "complete" || retained.Source == "not-assessed" {
-		return fmt.Errorf("prior review %s has no complete typed review of head %s to retain", p.PriorReview, p.PriorHead)
-	}
-	if err := fullCoverage(ctx, run, pr, h, p.PriorReview, retained); err != nil {
-		return fmt.Errorf("a delta recheck retains one full review, never another delta (a later recheck names the full review as prior_review and its head as prior_head): %w", err)
-	}
-	resolved := map[string]bool{}
-	for _, id := range current.Resolved {
-		resolved[id] = true
-	}
-	// Every blocker/major any result of the prior review reported on that head
-	// (an interrupted run, then a clear resume) must be verified fixed.
-	known := map[string]bool{}
-	var unverified []string
-	for _, res := range resultsOn(prior, p.PriorHead) {
-		for _, f := range res.Findings {
-			if !resolved[f.ID] && !slices.Contains(unverified, f.ID) && (f.Severity == "blocker" || f.Severity == "major") {
-				unverified = append(unverified, f.ID)
-			}
-			known[f.ID] = true
-		}
-	}
-	for _, id := range current.Resolved {
-		if !known[id] {
-			return fmt.Errorf("delta recheck %s resolves %s, which is no finding of prior review %s", p.ReviewBead, id, p.PriorReview)
-		}
-	}
-	if len(unverified) > 0 {
-		return fmt.Errorf("delta recheck %s does not verify the prior review's blocker/major finding(s) %s fixed: its receipt must list each one in resolved", p.ReviewBead, strings.Join(unverified, ", "))
-	}
-	on, err := OnPR(ctx, run, pr, h, p.PriorHead)
-	if err != nil {
-		return fmt.Errorf("prior head %s: %w", p.PriorHead, err)
-	}
-	if !on {
-		return fmt.Errorf("prior head %s is not on the PR", p.PriorHead)
-	}
-	return nil
 }
 
 // OnPR says whether sha is one of the PR's commits. `gh pr view --json commits`
@@ -672,7 +556,10 @@ func verdictLines(comment string) (clean, notClean bool) {
 	return clean, notClean
 }
 
-func threads(ctx context.Context, run GHRunner, pr string) error {
+// threads reads every review thread. devinOnly (devin-comments-resolved) asks
+// only that each thread Devin started is resolved, answered or not; otherwise
+// every thread must be resolved and each Devin thread answered.
+func threads(ctx context.Context, run GHRunner, pr string, devinOnly bool) error {
 	m := prPath.FindStringSubmatch(strings.TrimPrefix(pr, "https://github.com"))
 	if m == nil {
 		return fmt.Errorf("invalid PR")
@@ -723,13 +610,20 @@ func threads(ctx context.Context, run GHRunner, pr string) error {
 			return fmt.Errorf("GitHub review threads unreadable")
 		}
 		for _, n := range t.Nodes {
-			if !n.Resolved {
-				return fmt.Errorf("unresolved review thread")
-			}
+			devin := false
 			for _, c := range n.Comments.Nodes {
-				if c.Author != nil && strings.Contains(strings.ToLower(c.Author.Login), "devin") && n.Comments.Count < 2 {
-					return fmt.Errorf("Devin thread has no answer")
+				if c.Author != nil && strings.Contains(strings.ToLower(c.Author.Login), "devin") {
+					devin = true
 				}
+			}
+			switch {
+			case devinOnly && devin && !n.Resolved:
+				return fmt.Errorf("unresolved Devin thread: fix it or reply why not, then resolve the thread")
+			case devinOnly:
+			case !n.Resolved:
+				return fmt.Errorf("unresolved review thread")
+			case devin && n.Comments.Count < 2:
+				return fmt.Errorf("Devin thread has no answer")
 			}
 		}
 		if !t.Page.More {
@@ -751,4 +645,55 @@ const SettledVerifier = "settled"
 // SettledFinding is what a settled step records: the merge, never a review.
 func SettledFinding(head, reason string) string {
 	return "settled: PR merged at " + head + ", review not completed. Reason: " + reason
+}
+
+// VerifyReport checks a review-report step: report is the newest comment on the
+// step bead that opens with ReportMarker. It must name the head the review ran
+// on (a "Head: <full-sha>" line, a commit of the PR) and end with a CLEAN line:
+// the review ran to completion and no blocker or major finding is left unfixed.
+// One report is enough: commits pushed after it never make the step stale.
+func VerifyReport(ctx context.Context, run GHRunner, pr, instance, step, report string) (Evidence, error) {
+	e := Evidence{Instance: instance, Step: step, Verifier: "review-report", PR: pr}
+	h, err := ReadHead(ctx, run, pr)
+	if err != nil {
+		return e, err
+	}
+	e.Head = h.SHA
+	reviewed, err := checkReport(report)
+	if err == nil {
+		var on bool
+		if on, err = OnPR(ctx, run, pr, h, reviewed); err == nil && !on {
+			err = fmt.Errorf("the report's head %s is not a commit of %s", reviewed, pr)
+		}
+	}
+	if err != nil {
+		return e, fmt.Errorf("review-report: %w", err)
+	}
+	e.Finding = "review-report passed: ce-code-review report on " + reviewed
+	return e, nil
+}
+
+// checkReport returns the reviewed head a report names, or why it proves nothing.
+func checkReport(report string) (string, error) {
+	if strings.TrimSpace(report) == "" {
+		return "", fmt.Errorf("no report: run ce-code-review once, fix its blocker and major findings, then post the report on this step with cmdr internal-comment, first line %s, a line Head: <full-sha>, ending CLEAN", ReportMarker)
+	}
+	head := ""
+	for _, line := range strings.Split(report, "\n") {
+		line = strings.TrimLeft(strings.TrimSpace(strings.NewReplacer("*", "", "`", "").Replace(line)), "-+ ")
+		if v, ok := strings.CutPrefix(line, "Head:"); ok && head == "" {
+			head = strings.TrimSpace(v)
+		}
+	}
+	if !FullSHA(head) {
+		return "", fmt.Errorf("the report needs a line Head: <full 40-character sha> naming the head the review ran on")
+	}
+	clean, notClean := verdictLines(report)
+	switch {
+	case notClean:
+		return "", fmt.Errorf("the report says NOT CLEAN: fix the blocker and major findings, then post the report again ending CLEAN")
+	case !clean:
+		return "", fmt.Errorf("the report has no CLEAN line: a review that did not run to completion is not CLEAN; report what blocked it and do not close this step")
+	}
+	return head, nil
 }

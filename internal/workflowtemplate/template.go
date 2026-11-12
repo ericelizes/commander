@@ -32,10 +32,16 @@ const (
 
 var (
 	Kinds  = []string{"task", "checkpoint"}
-	Actors = []string{"operator", "separate-reviewer", "automatic"}
+	Actors = []string{"operator", "separate-reviewer", "automatic", "owner"}
 	// Verifiers are the supported check ids (never arbitrary code). Their
 	// checks run in later steps; here a step only has to name a known one.
-	Verifiers = []string{"devin-comments-resolved", "review-clean", "recheck-clean", "head-current", "threads-resolved", "ci-green", "merged", "deploy-ok", "review-proof"}
+	// review-clean, recheck-clean and head-current only judge blocks plugged
+	// from the retired six-step pr-review (version 1) snapshot.
+	Verifiers = []string{"devin-comments-resolved", "review-report", "review-clean", "recheck-clean", "head-current", "threads-resolved", "ci-green", "merged", "deploy-ok", "review-proof"}
+	// CatalogVerifiers name evidence no close door checks yet: the agent's
+	// recorded comment, or the owner's recorded answer. Only a catalog-only
+	// template may use them.
+	CatalogVerifiers = []string{"recorded", "owner-answer"}
 )
 
 var idRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,39}$`)
@@ -49,15 +55,25 @@ type Step struct {
 	Verifier string   `json:"verifier"`
 	Actor    string   `json:"actor"`
 	After    []string `json:"after,omitempty"`
+	// Optional marks a step a planner may skip with a reason. Catalog-only
+	// templates alone may mark one: the merge rule requires every step.
+	Optional bool `json:"optional,omitempty"`
 }
 
-// Template is a parsed, validated template file.
+// Template is a parsed, validated template file. AppliesTo, Summary, UseWhen
+// and SkipWhen are the catalog's plain words for when to use it; planners read
+// them before plugging. A CatalogOnly template is shown and read, never plugged.
 type Template struct {
-	Schema  string `json:"schema"`
-	ID      string `json:"id"`
-	Version int    `json:"version"`
-	Title   string `json:"title"`
-	Steps   []Step `json:"steps"`
+	Schema      string   `json:"schema"`
+	ID          string   `json:"id"`
+	Version     int      `json:"version"`
+	Title       string   `json:"title"`
+	AppliesTo   string   `json:"applies_to,omitempty"`
+	Summary     string   `json:"summary,omitempty"`
+	UseWhen     []string `json:"use_when,omitempty"`
+	SkipWhen    []string `json:"skip_when,omitempty"`
+	CatalogOnly bool     `json:"catalog_only,omitempty"`
+	Steps       []Step   `json:"steps"`
 }
 
 // Parse decodes and validates a template; unknown fields, a missing field, an
@@ -91,7 +107,23 @@ func Load(id string) (*Template, error) {
 	if t.ID != id {
 		return nil, fmt.Errorf("workflow template file %s.json declares id %q", id, t.ID)
 	}
+	if strings.TrimSpace(t.AppliesTo) == "" || strings.TrimSpace(t.Summary) == "" || len(t.UseWhen) == 0 || len(t.SkipWhen) == 0 {
+		return nil, fmt.Errorf("workflow template %s: a catalog template needs applies_to, summary, use_when and skip_when", id)
+	}
 	return t, nil
+}
+
+// Catalog loads every embedded template, in id order.
+func Catalog() ([]*Template, error) {
+	var out []*Template
+	for _, id := range Names() {
+		t, err := Load(id)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, t)
+	}
+	return out, nil
 }
 
 // Names lists the embedded template ids.
@@ -141,8 +173,10 @@ func (t *Template) Validate() error {
 			return fmt.Errorf("workflow template %s: step %s: title is missing", t.ID, s.ID)
 		case !oneOf(s.Kind, Kinds):
 			return fmt.Errorf("workflow template %s: step %s: kind %q is not one of %s", t.ID, s.ID, s.Kind, strings.Join(Kinds, ", "))
-		case !oneOf(s.Verifier, Verifiers):
+		case !oneOf(s.Verifier, Verifiers) && !(t.CatalogOnly && oneOf(s.Verifier, CatalogVerifiers)):
 			return fmt.Errorf("workflow template %s: step %s: unknown verifier %q (known: %s)", t.ID, s.ID, s.Verifier, strings.Join(Verifiers, ", "))
+		case s.Optional && !t.CatalogOnly:
+			return fmt.Errorf("workflow template %s: step %s: only a catalog-only template may mark a step optional", t.ID, s.ID)
 		case !oneOf(s.Actor, Actors):
 			return fmt.Errorf("workflow template %s: step %s: actor %q is not one of %s", t.ID, s.ID, s.Actor, strings.Join(Actors, ", "))
 		}

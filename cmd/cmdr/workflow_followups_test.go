@@ -21,8 +21,6 @@ func TestReviewMinorPolicyScenario(t *testing.T) {
 			Name     string                           `json:"name"`
 			Step     int                              `json:"step"`
 			Retry    bool                             `json:"retry"`
-			Renew    bool                             `json:"renew"`
-			Compare  json.RawMessage                  `json:"compare"`
 			Head     string                           `json:"head"`
 			Review   string                           `json:"review"`
 			Base     string                           `json:"base"`
@@ -52,7 +50,6 @@ func TestReviewMinorPolicyScenario(t *testing.T) {
 	mem := &beads.MemClient{}
 	res := seedReviewWorkflow(t, mem)
 	head := sha["h1"]
-	var compare []byte
 	pinWorkflowGH(t, func(_ context.Context, args ...string) ([]byte, error) {
 		if args[0] == "pr" {
 			var commits []string
@@ -60,9 +57,6 @@ func TestReviewMinorPolicyScenario(t *testing.T) {
 				commits = append(commits, `{"oid":"`+sha[k]+`"}`)
 			}
 			return []byte(`{"headRefOid":"` + head + `","baseRefOid":"` + sha["pr-base"] + `","state":"OPEN","commits":[` + strings.Join(commits, ",") + `]}`), nil
-		}
-		if args[0] == "api" && strings.Contains(args[1], "/compare/") {
-			return compare, nil
 		}
 		return []byte(`{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[],"pageInfo":{"hasNextPage":false}}}}}}`), nil
 	})
@@ -95,14 +89,13 @@ func TestReviewMinorPolicyScenario(t *testing.T) {
 			mem.Close(ctx, "/d", steps[current].BeadID)
 			current = r.Step
 		}
-		compare = r.Compare
 		if !r.Retry {
 			if h := at(r.Head); h != head {
 				head = h
 				seedWriterBinding(mem, res.Container, head)
 			}
 		}
-		if !r.Retry && !r.Renew {
+		if !r.Retry {
 			mem.Seed(beads.Bead{ID: r.Review, Status: "closed"})
 			mem.SetParent(ctx, "/d", r.Review, "B")
 			mem.AddComment(ctx, "/d", r.Review, "Head: "+head+"\nreport\nCLEAN")
@@ -115,7 +108,7 @@ func TestReviewMinorPolicyScenario(t *testing.T) {
 		}
 		if !r.Retry {
 			p := r.Proof
-			p.ReviewBead, p.Head, p.PriorHead = r.Review, head, at(p.PriorHead)
+			p.ReviewBead, p.Head = r.Review, head
 			for i := range p.FixCommits {
 				p.FixCommits[i] = at(p.FixCommits[i])
 			}
@@ -135,10 +128,7 @@ func TestReviewMinorPolicyScenario(t *testing.T) {
 		if r.Want == "pass" && !r.Retry {
 			cs, _ := mem.Comments(ctx, "/d", steps[r.Step].BeadID)
 			e, ok := workflowtemplate.ParseEvidence(cs[len(cs)-1].Text)
-			if r.Renew && (!ok || !strings.Contains(e.Finding, "delta renewal of "+sha[r.Proof.PriorHead]) || e.Head != head) {
-				t.Fatalf("%s: renewal not recorded: %+v", r.Name, e)
-			}
-			if !r.Renew && (!ok || len(e.FollowUps) != len(r.Findings) || (len(r.Findings) > 0 && !strings.Contains(e.Finding, workflowtemplate.MinorPolicy))) {
+			if !ok || len(e.FollowUps) != len(r.Findings) || (len(r.Findings) > 0 && !strings.Contains(e.Finding, workflowtemplate.MinorPolicy)) {
 				t.Fatalf("%s: evidence does not record the policy: %+v", r.Name, e)
 			}
 		}

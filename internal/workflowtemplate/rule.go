@@ -259,7 +259,8 @@ type Finding struct {
 	NoPR bool
 }
 
-// MergeRule checks topology, exact snapshot steps and current-head evidence.
+// MergeRule checks topology, exact snapshot steps and that each step recorded
+// its check. A push after a step passed never reopens it.
 // Generated steps are never merge targets themselves (no recursion).
 func MergeRule(project, repo string, nodes []Node, scope map[string]bool) []Finding {
 	byID := map[string]Node{}
@@ -308,10 +309,6 @@ func MergeRule(project, repo string, nodes []Node, scope map[string]bool) []Find
 				steps[id] = n
 			}
 		}
-		head := m.Head
-		if head == "" {
-			head = block.Head
-		}
 		for _, s := range t.Steps {
 			n, ok := steps[s.ID]
 			if !ok {
@@ -319,8 +316,7 @@ func MergeRule(project, repo string, nodes []Node, scope map[string]bool) []Find
 				plugNeeded = true
 				continue
 			}
-			bad := !CheckCurrent(n, *block, t, s.ID, s.Verifier, pr, head)
-			if bad {
+			if !StepDone(n, *block, t, s.ID, s.Verifier, pr) {
 				stale = append(stale, n.Bead.ID)
 			}
 			delete(steps, s.ID) // edges below use all nodes, so resolve separately
@@ -355,24 +351,12 @@ func MergeRule(project, repo string, nodes []Node, scope map[string]bool) []Find
 		slices.Sort(stale)
 		stale = slices.Compact(stale)
 		if len(stale) > 0 {
-			renew := renewCommands(project, t, ids, stale, block.Bead)
-			binding, bindingErr := Binding(block.Comments)
-			if bindingErr != nil || binding.PR != pr || binding.Head != head {
-				var old *WriterBinding
-				if bindingErr == nil {
-					old = &binding
-				}
-				renew = append([]string{RebindCommand(project, block.Bead.ID, old, "")}, renew...)
-			}
+			renew := finishCommands(project, t, ids, stale, block.Bead)
 			if plugNeeded {
 				renew = append([]string{fix}, renew...)
 			}
 			fix = strings.Join(renew, " ; ")
-			current := head
-			if current == "" {
-				current = "the current PR head"
-			}
-			out = append(out, Finding{Check: "MERGE_REVIEW_INCOMPLETE", Target: m.Bead.ID, Block: block.Bead.ID, Stale: stale, Fix: fix, Text: fmt.Sprintf("MERGE_REVIEW_INCOMPLETE: %s is blocked by %s; unfinished or stale: %s. Fix, in this order (closing a closed step again reruns its fresh check; a proof names a closed separate review of %s and the commits that fixed its findings; only if that review reports no findings, use %s instead of fix_commits): %s", m.Bead.ID, block.Bead.ID, strings.Join(stale, ", "), current, noFindingsProof, fix)})
+			out = append(out, Finding{Check: "MERGE_REVIEW_INCOMPLETE", Target: m.Bead.ID, Block: block.Bead.ID, Stale: stale, Fix: fix, Text: fmt.Sprintf("MERGE_REVIEW_INCOMPLETE: %s is blocked by %s; unfinished: %s. Fix, in this order: %s", m.Bead.ID, block.Bead.ID, strings.Join(stale, ", "), fix)})
 		}
 	}
 	return out
@@ -400,13 +384,10 @@ func refusedPlugFix(n Node, byID map[string]Node, project, repo, other, pr strin
 	return fmt.Sprintf("work out why %s waits on %s; no plug can be added while it does", n.Bead.ID, other)
 }
 
-// noFindingsProof is the alternative to fix_commits, for a review that says it found nothing.
-const noFindingsProof = `"no_findings":true,"fix_commits":[]`
-
-// renewCommands are the commands that finish or renew the stale steps, in template
-// order; the block, when still open, closes last. A proof's values are placeholders:
-// only the review can say which head it read and whether it found anything.
-func renewCommands(project string, t *Template, ids map[string]string, stale []string, block beads.Bead) []string {
+// finishCommands are the commands that finish the unfinished steps, in template
+// order; the block, when still open, closes last. A proof's or report's values
+// are placeholders: only the review can say which head it read and what it found.
+func finishCommands(project string, t *Template, ids map[string]string, stale []string, block beads.Bead) []string {
 	var cmds []string
 	closeBead := func(id string) {
 		cmds = append(cmds, fmt.Sprintf("cmdr internal-close-objective --project %s --bead %s", project, id))
@@ -418,8 +399,11 @@ func renewCommands(project string, t *Template, ids map[string]string, stale []s
 		} else if !slices.Contains(stale, id) {
 			continue
 		}
-		if needsProof(s.Verifier) {
+		switch {
+		case NeedsProof(s.Verifier):
 			cmds = append(cmds, fmt.Sprintf(`cmdr internal-comment --project %s --bead %s --text '%s{"review_bead":"<separate-review-task>","head":"<full-sha>","fix_commits":["<full-fix-sha>"]}'`, project, id, ProofPrefix))
+		case s.Verifier == "review-report":
+			cmds = append(cmds, fmt.Sprintf(`cmdr internal-comment --project %s --bead %s --text '<the ce-code-review report: first line %s, a line Head: <full-sha it reviewed>, last line CLEAN>'`, project, id, ReportMarker))
 		}
 		closeBead(id)
 	}

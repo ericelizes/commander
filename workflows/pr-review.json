@@ -1,14 +1,22 @@
 {
   "schema": "workflow-template@v1",
   "id": "pr-review",
-  "version": 1,
+  "version": 2,
   "title": "Review gate",
+  "applies_to": "a pull request on a shared platform repo",
+  "summary": "Answer every Devin comment, then run the code review skill once and fix its blocker and major findings before the merge gate.",
+  "use_when": [
+    "Changes to shared platform code: the orchestrator, fleet infrastructure and Ansible, Notify, Commander itself",
+    "Anything touching auth, permissions, secrets, PHI or data deletion",
+    "Database migrations"
+  ],
+  "skip_when": [
+    "Docs-only or comment-only changes",
+    "A one-line config or version bump",
+    "Forge app changes: they ship through the Forge app release process, not a pull request, so use that workflow instead"
+  ],
   "steps": [
-    {"id": "devin-comments", "title": "Answer and resolve every Devin comment", "kind": "task", "verifier": "devin-comments-resolved", "actor": "operator"},
-    {"id": "review", "title": "Run the code review", "kind": "checkpoint", "verifier": "review-clean", "actor": "separate-reviewer"},
-    {"id": "fix-review", "title": "Fix the review findings and get a clean recheck", "kind": "task", "verifier": "recheck-clean", "actor": "operator"},
-    {"id": "adversarial-review", "title": "Adversarial review by a different reviewer", "kind": "checkpoint", "verifier": "review-clean", "actor": "separate-reviewer"},
-    {"id": "fix-adversarial", "title": "Fix the adversarial findings and get a clean recheck", "kind": "task", "verifier": "recheck-clean", "actor": "operator"},
-    {"id": "final-check", "title": "Final check on the current PR head", "kind": "checkpoint", "verifier": "head-current", "actor": "automatic"}
+    {"id": "devin", "title": "Answer every Devin comment (fix it or reply why not) and resolve its thread", "kind": "task", "verifier": "devin-comments-resolved", "actor": "operator"},
+    {"id": "code-review", "title": "Run ce-code-review once, fix its blocker and major findings, post the report", "kind": "task", "verifier": "review-report", "actor": "operator"}
   ]
 }

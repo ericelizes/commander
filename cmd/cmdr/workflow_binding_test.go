@@ -114,7 +114,7 @@ func TestWorkflowBindWritersScopeAndRevision(t *testing.T) {
 		t.Fatal(manager, err)
 	}
 	// Plug is idempotent and preserves the existing selection.
-	if _, err := plugWorkflow(ctx, mem, "/d", plugInstance(t, testPR)); err != nil {
+	if _, err := plugWorkflow(ctx, mem, "/d", legacyInstance(t, testPR)); err != nil {
 		t.Fatal(err)
 	}
 	cs, _ := mem.Comments(ctx, "/d", res.Container)
@@ -279,32 +279,38 @@ func TestWorkflowBindWritersCallerAuthorization(t *testing.T) {
 	}
 }
 
+// Only a version 1 proof step reads the writer binding; its Devin step and the
+// two-step review never do.
 func TestWorkflowWriterBindingDoorRefusalsBeforeWrite(t *testing.T) {
-	for _, tc := range []struct{ name, pr, head, want string }{
-		{"missing", "", "", "writer binding required"},
-		{"foreign PR", "https://github.com/other/repo/pull/8", "head1", "writer binding PR differs from block"},
-		{"stale head", testPR, "head0", "stale writer binding"},
+	for _, tc := range []struct{ name, pr, want string }{
+		{"missing", "", "writer binding required"},
+		{"foreign PR", "https://github.com/other/repo/pull/8", "writer binding PR differs from block"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
 			mem := &beads.MemClient{}
 			// A newly plugged workflow has no binding.
 			mem.Seed(beads.Bead{ID: "B", Status: "open"})
 			mem.Seed(beads.Bead{ID: "M", ParentID: "B", Title: "PR merged", Labels: []string{"gate", "kind:objective", "approver:user"}})
-			res, err := plugWorkflow(context.Background(), mem, "/d", plugInstance(t, testPR))
+			res, err := plugWorkflow(ctx, mem, "/d", legacyInstance(t, testPR))
 			if err != nil {
 				t.Fatal(err)
 			}
 			if tc.pr != "" {
-				mem.AddComment(context.Background(), "/d", res.Container, workflowtemplate.WriterBinding{Revision: "rev", PR: tc.pr, Head: tc.head, Tasks: []string{"writer"}}.Comment())
+				mem.AddComment(ctx, "/d", res.Container, workflowtemplate.WriterBinding{Revision: "rev", PR: tc.pr, Head: "head1", Tasks: []string{"writer"}}.Comment())
 			}
 			pinWorkflowGH(t, workflowFakeGH)
-			id := res.Remaining[0].BeadID
-			err = checkWorkflowClose(context.Background(), mem, "/d", "p", id)
+			if err := checkWorkflowClose(ctx, mem, "/d", "p", res.Remaining[0].BeadID); err != nil {
+				t.Fatalf("the Devin step needs no binding: %v", err)
+			}
+			mem.Close(ctx, "/d", res.Remaining[0].BeadID)
+			id := res.Remaining[1].BeadID
+			err = checkWorkflowClose(ctx, mem, "/d", "p", id)
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("got %v want %q", err, tc.want)
 			}
-			cs, _ := mem.Comments(context.Background(), "/d", id)
-			b, _ := mem.Show(context.Background(), "/d", id)
+			cs, _ := mem.Comments(ctx, "/d", id)
+			b, _ := mem.Show(ctx, "/d", id)
 			if len(cs) != 0 || b.Status == "closed" {
 				t.Fatal("refusal wrote evidence or closed step", cs, b)
 			}
@@ -349,54 +355,6 @@ func TestWorkflowBindWritersDispatchRefusesBeforeIO(t *testing.T) {
 				t.Fatalf("home changed: %v %v", entries, err)
 			}
 		})
-	}
-}
-
-// The adversarial step can borrow no review the primary evidence stands on: its
-// retained prior review counts as the primary's too (M4 of the bounded loop's review).
-func TestWorkflowAdversarialCannotBorrowThePrimarysPriorReview(t *testing.T) {
-	ctx := context.Background()
-	mem := &beads.MemClient{}
-	res := seedReviewWorkflow(t, mem)
-	pinWorkflowGH(t, workflowFakeGH)
-	for _, task := range []string{"primary", "earlier", "peer"} {
-		mem.Seed(beads.Bead{ID: task, Status: "closed", Labels: []string{"owner:manager-B"}})
-		mem.SetParent(ctx, "/d", task, "B")
-		mem.AddComment(ctx, "/d", task, "Head: head1\nCLEAN")
-	}
-	for _, s := range res.Remaining[:3] {
-		if s.Step != "devin-comments" {
-			raw, _ := json.Marshal(workflowtemplate.Proof{ReviewBead: "primary", Head: "head1", NoFindings: true})
-			mem.AddComment(ctx, "/d", s.BeadID, workflowtemplate.ProofPrefix+string(raw))
-		}
-		if err := checkWorkflowClose(ctx, mem, "/d", "p", s.BeadID); err != nil {
-			t.Fatal(err)
-		}
-		mem.Close(ctx, "/d", s.BeadID)
-		if s.Step != "review" {
-			continue
-		}
-		// The primary's evidence as a delta recheck would record it: it retains "earlier".
-		comments, _ := mem.Comments(ctx, "/d", s.BeadID)
-		for _, c := range comments {
-			if e, ok := workflowtemplate.ParseEvidence(c.Text); ok && e.Proof != nil {
-				e.Proof.PriorReview, e.Proof.PriorHead = "earlier", strings.Repeat("1", 40)
-				mem.AddComment(ctx, "/d", s.BeadID, e.Comment())
-			}
-		}
-	}
-	raw, _ := json.Marshal(workflowtemplate.Proof{ReviewBead: "peer", Head: "head1", NoFindings: true})
-	mem.AddComment(ctx, "/d", res.Remaining[3].BeadID, workflowtemplate.ProofPrefix+string(raw))
-	old := workflowTaskRoles
-	workflowTaskRoles = func(_ context.Context, _, task string) ([]string, error) {
-		if task == "peer" || task == "earlier" {
-			return []string{"operator-common"}, nil
-		}
-		return []string{"operator-" + task}, nil
-	}
-	t.Cleanup(func() { workflowTaskRoles = old })
-	if err := checkWorkflowClose(ctx, mem, "/d", "p", res.Remaining[3].BeadID); err == nil || !strings.Contains(err.Error(), "review earlier") {
-		t.Fatal(err)
 	}
 }
 
