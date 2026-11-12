@@ -247,7 +247,7 @@ export function Overview({ ws, row, track, onTrack, part = 'status' }: {
       try {
         const r = await fetch(`${cfg.apiUrl}/api/overview`, {
           method: 'POST', headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ project: ws.project, bead_id: ws.bead_id, track_id: track ?? '', stream: true }), signal: controller.signal,
+          body: JSON.stringify({ project: ws.project, bead_id: ws.bead_id, track_id: track ?? '', part, stream: true }), signal: controller.signal,
         })
         if (!r.ok) throw new Error('not ready')
         const take = (line: string) => {
@@ -285,7 +285,7 @@ export function Overview({ ws, row, track, onTrack, part = 'status' }: {
     }
     void loop()
     return () => { cancelled = true; clearTimeout(timer); controller?.abort() }
-  }, [cfg, ws.project, ws.bead_id, track, degraded])
+  }, [cfg, ws.project, ws.bead_id, track, degraded, part])
 
   // While the reader is writing, its draft stands in for the earlier recap.
   // Only a first summary streams in; a rewrite of one already shown keeps the old
@@ -369,7 +369,7 @@ export function Overview({ ws, row, track, onTrack, part = 'status' }: {
         </section>}
         {/* The pitch: what this is and why it matters, after the status. */}
         {part === 'pitch' && <section className="ov-pitch" aria-label="Pitch">
-          {(!shown || result?.stale || result?.state === 'updating' || result?.state === 'retrying') && !draftOn && <Refreshing />}
+          {(!shown || result?.state === 'updating' || result?.state === 'retrying') && !draftOn && <Refreshing />}
           {shown ? <div className="ov-fade" key={result?.recap?.generated_at ?? 'draft'}>
             {/* Each section appears once it has words, so a summary being written
                 builds top to bottom instead of showing empty headings early. */}

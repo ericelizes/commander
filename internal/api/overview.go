@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/example-user/commander/internal/linearapi"
+	"github.com/example-user/commander/internal/linearsync"
 	"io"
 	"net/http"
 	"os"
@@ -29,6 +31,8 @@ type overviewRequest struct {
 	Project string `json:"project"`
 	BeadID  string `json:"bead_id"`
 	TrackID string `json:"track_id"`
+	// Part is the tab asking: "status" (default) or "pitch".
+	Part string `json:"part"`
 	// Stream asks for newline-delimited results: one per change while the recap is
 	// being written, ending when it is ready (or is waiting on something).
 	Stream bool `json:"stream"`
@@ -178,6 +182,21 @@ func buildOverviewInput(snap livedata.Snapshot, ws *livedata.SnapWorkstream, q o
 	}
 	in.Evidence = append(in.Evidence, overviewMessages(home, ws.ManagerRole, q.TrackID)...)
 	in.Evidence = append(in.Evidence, overviewPRSizes(*ws, q.TrackID)...)
+	in.Evidence = append(in.Evidence, overviewLinearTickets(home, *ws, q.TrackID)...)
+	in.Part = "status"
+	if q.Part == "pitch" {
+		// The pitch is scoping: it reads what the work is, not what moved a
+		// minute ago, and is rewritten at most hourly.
+		in.Part, in.Cooldown = "pitch", time.Hour
+		kept := in.Evidence[:0]
+		for _, e := range in.Evidence {
+			if e.ID != "live-status" && !strings.HasPrefix(e.ID, "chat:") {
+				kept = append(kept, e)
+			}
+		}
+		in.Evidence = kept
+	}
+	in.Scope += ":" + in.Part
 	now := time.Now()
 	for i := range in.Evidence {
 		in.Evidence[i].Text = livedata.HumanTimes(in.Evidence[i].Text, now)
@@ -540,4 +559,109 @@ func overviewGenerator(opts Options) overview.Generate {
 	return func(ctx context.Context, in overview.Input) (overview.Recap, error) {
 		return overview.ClaudeWith(prompt, claudeacct.Env(home, chat.ReadAccount(home, "commander")))(ctx, in)
 	}
+}
+
+// linearTicketLookup reads a Linear ticket's state, title and description with
+// the saved key ("" when it cannot); tests replace it.
+var linearTicketLookup = fetchLinearTicket
+
+var linearTickets = struct {
+	sync.Mutex
+	m map[string]prSizeEntry
+}{m: map[string]prSizeEntry{}}
+
+// overviewLinearTickets is each Linear ticket the scope names, as the user
+// wrote it: the problem, the measurements and the acceptance criteria.
+func overviewLinearTickets(home string, ws livedata.SnapWorkstream, track string) []overview.Evidence {
+	var ids []string
+	seen := map[string]bool{}
+	addIDs := func(title string, labels []string) {
+		for _, id := range append(ticketID.FindAllString(title, -1), labels...) {
+			if !seen[id] {
+				seen[id] = true
+				ids = append(ids, id)
+			}
+		}
+	}
+	var walk func([]livedata.SnapStep)
+	walk = func(steps []livedata.SnapStep) {
+		for _, st := range steps {
+			addIDs(st.Title, st.Tickets)
+			walk(st.Children)
+		}
+	}
+	if track == "" {
+		addIDs(ws.Title, ws.Tickets)
+		walk(ws.Steps)
+	} else {
+		var find func([]livedata.SnapStep) bool
+		find = func(steps []livedata.SnapStep) bool {
+			for _, st := range steps {
+				if st.BeadID == track {
+					addIDs(st.Title, st.Tickets)
+					walk(st.Children)
+					return true
+				}
+				if find(st.Children) {
+					return true
+				}
+			}
+			return false
+		}
+		find(ws.Steps)
+	}
+	if len(ids) > 4 {
+		ids = ids[:4]
+	}
+	var out []overview.Evidence
+	for _, id := range ids {
+		linearTickets.Lock()
+		e, ok := linearTickets.m[id]
+		linearTickets.Unlock()
+		if !ok || time.Since(e.at) > 10*time.Minute {
+			e = prSizeEntry{at: time.Now(), text: linearTicketLookup(home, id)}
+			linearTickets.Lock()
+			linearTickets.m[id] = e
+			linearTickets.Unlock()
+		}
+		if e.text != "" {
+			out = append(out, overview.Evidence{ID: "linear-" + id, Label: "Linear ticket " + id + ": the user's own problem statement, measurements and acceptance criteria", Text: e.text})
+		}
+	}
+	return out
+}
+
+func fetchLinearTicket(home, id string) string {
+	key, err := linearsync.ReadKey(home)
+	if err != nil || key == "" {
+		return ""
+	}
+	payload, _ := json.Marshal(map[string]any{
+		"query":     "query($id: String!) { issue(id: $id) { identifier title description state { name } } }",
+		"variables": map[string]string{"id": id},
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	body, status := linearapi.Query(ctx, nil, linearapi.Endpoint, key, payload)
+	if status/100 != 2 {
+		return ""
+	}
+	body = []byte(strings.ReplaceAll(string(body), key, "[redacted]"))
+	var data struct {
+		Data struct {
+			Issue *struct {
+				Identifier  string `json:"identifier"`
+				Title       string `json:"title"`
+				Description string `json:"description"`
+				State       struct {
+					Name string `json:"name"`
+				} `json:"state"`
+			} `json:"issue"`
+		} `json:"data"`
+	}
+	if json.Unmarshal(body, &data) != nil || data.Data.Issue == nil {
+		return ""
+	}
+	is := data.Data.Issue
+	return fmt.Sprintf("%s (%s): %s\n%s", is.Identifier, is.State.Name, is.Title, trimOverview(is.Description, 6000))
 }
