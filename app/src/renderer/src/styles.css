@@ -3367,6 +3367,16 @@ kbd {
 .ws-state.agent-stuck { --dot: var(--peach); }
 .ws-state.agent-waiting { --dot: var(--attn); }
 .ws-state.agent-working { --dot: var(--ok); }
+/* About: a parent workstream's what-it-covers line; no dot, muted. */
+.ws-state.agent-about { padding-left: 0; }
+.ws-state.agent-about::before { display: none; }
+.ws-state.agent-about .ws-state-text { color: var(--text-3); }
+
+/* Who works on a row: the Claude or OpenAI mark, gently pulsing. */
+.agent-marks { display: inline-flex; align-items: center; gap: 3px; }
+.agent-mark { display: inline-flex; color: var(--text); animation: agent-mark-pulse 1.8s ease-in-out infinite; }
+@keyframes agent-mark-pulse { 50% { opacity: 0.45; } }
+
 /* Done: the Complete button is the whole state, on the left; no dot, no text. */
 .ws-state.agent-done { padding-left: 0; }
 .ws-state.agent-done::before { display: none; }

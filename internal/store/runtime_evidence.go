@@ -73,10 +73,11 @@ type ObservedExecution struct {
 	Known, Alive                           bool
 	Since                                  int64
 	Path                                   []string
+	Runtime                                string // claude or codex ("" before it was recorded)
 }
 
 const observedExecutionSQL = `SELECT r.id,r.project_id,r.agent_name,r.opencode_session_id,r.task_bead_id,
- COALESCE(o.checked_at,0)>=?,COALESCE(o.alive,FALSE),COALESCE(a.state,'unknown'),COALESCE(a.detail,''),COALESCE(a.since,0),b.project_id,b.id,b.execution_attempts,b.execution_error
+ COALESCE(o.checked_at,0)>=?,COALESCE(o.alive,FALSE),COALESCE(a.state,'unknown'),COALESCE(a.detail,''),COALESCE(a.since,0),b.project_id,b.id,b.execution_attempts,b.execution_error,COALESCE(r.execution_runtime,'')
  FROM agent_runs r JOIN bead_tasks b ON b.active_run_id=r.id
  LEFT JOIN run_observations o ON o.run_id=r.id
  LEFT JOIN LATERAL(SELECT state,detail,since FROM agent_state a WHERE replace(a.role,'.','-')=replace(r.agent_name,'.','-') ORDER BY updated DESC LIMIT 1)a ON TRUE
@@ -100,7 +101,7 @@ func (s *Store) ObservedExecutions(ctx context.Context) ([]ObservedExecution, er
 		var x ObservedExecution
 		var pid int64
 		var bead string
-		if e = rows.Scan(&x.RunID, &x.ProjectID, &x.Role, &x.SessionID, &x.BeadID, &x.Known, &x.Alive, &x.State, &x.Detail, &x.Since, &pid, &bead, &x.StartupAttempts, &x.StartupError); e != nil {
+		if e = rows.Scan(&x.RunID, &x.ProjectID, &x.Role, &x.SessionID, &x.BeadID, &x.Known, &x.Alive, &x.State, &x.Detail, &x.Since, &pid, &bead, &x.StartupAttempts, &x.StartupError, &x.Runtime); e != nil {
 			rows.Close()
 			return nil, e
 		}
