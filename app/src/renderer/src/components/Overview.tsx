@@ -310,7 +310,8 @@ export function Overview({ ws, row, track, onTrack }: {
         {tickets.length > 0 && <div className="ov-tickets"><TicketPills tickets={tickets} progress={target.milestones ?? target.progress} /></div>}
         {/* Status: what is true right now, and what needs you. */}
         <section className={`ov-status${asks.length ? ' ov-needs' : ''}${stalled ? ' ov-stalled' : ''}`} aria-label="Status">
-          <h2>Status</h2>
+          <h2 className="ov-section-title">Current status</h2>
+          {(!shown || result?.stale || result?.state === 'updating' || result?.state === 'retrying') && !draftOn && <Refreshing />}
           {target.kind === 'done' ? (
             <div className="ov-confirm">
               <h3>Confirm this workstream is complete?</h3>
@@ -328,21 +329,20 @@ export function Overview({ ws, row, track, onTrack }: {
             </div>
           ))}
           {asks.length === 0 && (pendingDecision || stalled) && <p>{noAsk}</p>}
+          {shown && (hasText(shown.now) || hasText(shown.recent) || hasText(shown.next)) && <div className="ov-status-story">
+            {hasText(shown.now) && <p className="ov-field">{cite(shown.now)}</p>}
+            {hasText(shown.recent) && <><h3>Done lately</h3><ul className="ov-fields">{sentencesOf(shown.recent!).map((s, i) => <li key={i}><StreamSentence s={s} done={cited} live={draftOn} /></li>)}</ul></>}
+            {hasText(shown.next) && <><h3>Up next</h3><ul className="ov-fields">{sentencesOf(shown.next!).map((s, i) => <li key={i}><StreamSentence s={s} done={cited} live={draftOn} /></li>)}</ul></>}
+          </div>}
         </section>
         {/* The pitch: what this is and why it matters, after the status. */}
         <section className="ov-pitch" aria-label="Pitch">
           {shown ? <div>
-            {(result?.stale || result?.state === 'updating' || result?.state === 'retrying') && !draftOn && <Refreshing />}
-            {(hasText(shown.now) || hasText(shown.recent) || hasText(shown.next)) && <div className="ov-status-story">
-              {hasText(shown.now) && <p className="ov-field">{cite(shown.now)}</p>}
-              {hasText(shown.recent) && <><h3>Recently</h3><ul className="ov-fields">{sentencesOf(shown.recent!).map((s, i) => <li key={i}><StreamSentence s={s} done={cited} live={draftOn} /></li>)}</ul></>}
-              {hasText(shown.next) && <><h3>Next</h3><ul className="ov-fields">{sentencesOf(shown.next!).map((s, i) => <li key={i}><StreamSentence s={s} done={cited} live={draftOn} /></li>)}</ul></>}
-            </div>}
-            {hasText(shown.problem) && <hr className="ov-divider" />}
+            {hasText(shown.problem) && <><hr className="ov-divider" /><h2 className="ov-section-title">Pitch</h2></>}
             {/* Each section appears once it has words, so a summary being written
                 builds top to bottom instead of showing empty headings early. */}
             {hasText(shown.problem) && <>
-              <h2>Problem</h2>
+              <h3>Problem</h3>
               <p className="ov-field">{cite(shown.problem)}</p>
               <ul className="ov-fields">
                 {shown.problem_type && <li><b>Type:</b> {typeNames[shown.problem_type] ?? shown.problem_type}</li>}
@@ -350,20 +350,20 @@ export function Overview({ ws, row, track, onTrack }: {
               </ul>
             </>}
             {(hasText(shown.solution) || hasText(shown.impact)) && <>
-              <h2>Solution</h2>
+              <h3>Solution</h3>
               <ul className="ov-fields">
                 {hasText(shown.solution) && <li><b>Description:</b> {cite(shown.solution)}</li>}
                 {hasText(shown.impact) && <li><b>Impact:</b> {cite(shown.impact)}</li>}
               </ul>
             </>}
             {(hasText(shown.scope_detail) || hasText(shown.risk_detail)) && <>
-              <h2>Appetite</h2>
+              <h3>Appetite</h3>
               <ul className="ov-fields">
                 {hasText(shown.scope_detail) && <li><b>Scope:</b> {shown.scope && <>{scopeDot[shown.scope] ?? ''} {shown.scope}. </>}{cite(shown.scope_detail)}</li>}
                 {hasText(shown.risk_detail) && <li><b>Risk:</b> {riskDot(shown.risk ?? 0)} {shown.risk ?? 0}/10. {cite(shown.risk_detail)}</li>}
               </ul>
             </>}
-          </div> : <Refreshing />}
+          </div> : null}
         </section>
         {below.length > 0 && <section aria-label="Workstreams under this one"><h2>Across this workstream</h2><div className="ov-tracks">{below.map((t) => <button type="button" key={t.bead_id} onClick={() => onTrack(t.bead_id)}><strong>{plainTitle(t.title)}</strong><span data-tone={toneOf(t.kind)}>{t.text}</span></button>)}</div></section>}
         <footer className="ov-footer">
