@@ -29,6 +29,9 @@ export type RecapResult = {
 // Pitch is the recap as a Shape Up style pitch: the problem, the solution and
 // how big and risky it is, every sentence cited.
 type Pitch = {
+  now?: Claim
+  recent?: Claim
+  next?: Claim
   problem_type?: string
   problem?: Claim
   problem_impact?: Claim
@@ -39,7 +42,7 @@ type Pitch = {
   risk?: number
   risk_detail?: Claim
 }
-const pitchClaims = (p: Pitch): Claim[] => [p.problem, p.problem_impact, p.solution, p.impact, p.scope_detail, p.risk_detail].filter((c): c is Claim => !!c)
+const pitchClaims = (p: Pitch): Claim[] => [p.now, p.recent, p.next, p.problem, p.problem_impact, p.solution, p.impact, p.scope_detail, p.risk_detail].filter((c): c is Claim => !!c)
 const typeNames: Record<string, string> = { bug: '🐛 Bug', performance: '⚡ Performance', feature: '✨ Feature', operations: '🛠️ Operations', request: '📨 Request' }
 const scopeDot: Record<string, string> = { Small: '🟢', Medium: '🟡', Large: '🔴' }
 const riskDot = (risk: number) => (risk <= 3 ? '🟢' : risk <= 6 ? '🟡' : '🔴')
@@ -258,7 +261,7 @@ export function Overview({ ws, row, track, onTrack }: {
   }, [cfg, ws.project, ws.bead_id, track, degraded])
 
   // While the reader is writing, its draft stands in for the earlier recap.
-  const draftOn = result?.state === 'updating' && !!result.draft?.problem && sentencesOf(result.draft.problem).length > 0
+  const draftOn = result?.state === 'updating' && !!result.draft?.now && sentencesOf(result.draft.now).length > 0
   const shown: Pitch | undefined = draftOn ? result!.draft : result?.recap
 
   // One number per source across the whole recap, so a source cited twice reads
@@ -326,10 +329,16 @@ export function Overview({ ws, row, track, onTrack }: {
           ))}
           {asks.length === 0 && (pendingDecision || stalled) && <p>{noAsk}</p>}
         </section>
-        {/* The pitch: what this is and why it matters. */}
+        {/* The pitch: what this is and why it matters, after the status. */}
         <section className="ov-pitch" aria-label="Pitch">
           {shown ? <div>
             {(result?.stale || result?.state === 'updating' || result?.state === 'retrying') && !draftOn && <Refreshing />}
+            {(hasText(shown.now) || hasText(shown.recent) || hasText(shown.next)) && <div className="ov-status-story">
+              {hasText(shown.now) && <p className="ov-field">{cite(shown.now)}</p>}
+              {hasText(shown.recent) && <><h3>Recently</h3><ul className="ov-fields">{sentencesOf(shown.recent!).map((s, i) => <li key={i}><StreamSentence s={s} done={cited} live={draftOn} /></li>)}</ul></>}
+              {hasText(shown.next) && <><h3>Next</h3><ul className="ov-fields">{sentencesOf(shown.next!).map((s, i) => <li key={i}><StreamSentence s={s} done={cited} live={draftOn} /></li>)}</ul></>}
+            </div>}
+            {hasText(shown.problem) && <hr className="ov-divider" />}
             {/* Each section appears once it has words, so a summary being written
                 builds top to bottom instead of showing empty headings early. */}
             {hasText(shown.problem) && <>

@@ -194,3 +194,10 @@
 .ov .ov-refreshing { font: 400 15px/1.4 var(--font); color: var(--ink-3); gap: 8px; }
 .ov-dots { flex: none; fill: var(--ink-3); animation: ov-dots 0.9s steps(8) infinite; }
 @keyframes ov-dots { to { transform: rotate(360deg); } }
+
+/* Status is a section of its own (no card), then a divider, then the pitch. */
+.ov .ov-status { margin: 0 0 4px; padding: 0; background: none; border-radius: 0; }
+.ov .ov-status.ov-needs, .ov .ov-status.ov-stalled { background: none; }
+.ov .ov-status h2 { font: 600 18px/1.35 var(--serif); color: var(--ink); margin: 0 0 10px; }
+.ov-status-story h3 { font: 600 15px/1.4 var(--serif); margin: 18px 0 6px; }
+.ov .ov-divider { border: 0; border-top: 1px solid var(--hairline); margin: 30px 0 26px; }
