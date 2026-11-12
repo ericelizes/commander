@@ -5,7 +5,7 @@ import { useSmoothText } from '../../../features/chat/thread/streaming'
 import { useStore } from '../store'
 import { askKey, findTrack, openNested, plainTitle } from '../viewmodel'
 import { diagramFor } from './DerivedDiagram'
-import { Spinner } from './Glyphs'
+import { CompleteButton } from './Navigator'
 import { SourceReader, type Evidence, type Tone } from './OverviewSource'
 import './overview.css'
 
@@ -21,10 +21,25 @@ export type RecapResult = {
   error?: string
   waiting_for?: string
   evidence: Evidence[]
-  recap?: { summary: Claim; changes: Claim[]; next: Claim[]; generated_at: string }
+  recap?: Pitch & { generated_at: string }
   // What the reader has written so far while state is updating.
-  draft?: { summary: Claim; changes?: Claim[] | null; next?: Claim[] | null }
+  draft?: Pitch
 }
+
+// Pitch is the recap as a Shape Up style pitch: the problem, the solution and
+// how big and risky it is, every sentence cited.
+type Pitch = {
+  problem_type?: string
+  problem?: Claim
+  solution?: Claim
+  impact?: Claim
+  scope?: string
+  scope_detail?: Claim
+  risk?: number
+  risk_detail?: Claim
+}
+const pitchClaims = (p: Pitch): Claim[] => [p.problem, p.solution, p.impact, p.scope_detail, p.risk_detail].filter((c): c is Claim => !!c)
+const typeNames: Record<string, string> = { bug: 'Bug', performance: 'Performance', feature: 'Feature', operations: 'Operations', request: 'Request' }
 
 // The recap's own wording of a wait, so a transient wait never reads as a failure.
 export function waitText(r: RecapResult | null, degraded: boolean, reconnecting: boolean): string {
@@ -220,15 +235,15 @@ export function Overview({ ws, row, track, onTrack }: {
   }, [cfg, ws.project, ws.bead_id, track, degraded])
 
   // While the reader is writing, its draft stands in for the earlier recap.
-  const draftOn = result?.state === 'updating' && !!result.draft?.summary && sentencesOf(result.draft.summary).length > 0
-  const shown = draftOn ? { summary: result!.draft!.summary, changes: result!.draft!.changes ?? [], next: result!.draft!.next ?? [], generated_at: result?.recap?.generated_at ?? '' } : result?.recap
+  const draftOn = result?.state === 'updating' && !!result.draft?.problem && sentencesOf(result.draft.problem).length > 0
+  const shown: Pitch | undefined = draftOn ? result!.draft : result?.recap
 
   // One number per source across the whole recap, so a source cited twice reads
   // as the same footnote.
   const sourceNumbers = useMemo(() => {
     const numbers = new Map<string, number>()
     const recap = shown
-    if (recap) for (const c of [recap.summary, ...recap.changes, ...recap.next]) for (const s of sentencesOf(c)) for (const id of s.sources ?? []) if (!numbers.has(id)) numbers.set(id, numbers.size + 1)
+    if (recap) for (const c of pitchClaims(recap)) for (const s of sentencesOf(c)) for (const id of s.sources ?? []) if (!numbers.has(id)) numbers.set(id, numbers.size + 1)
     return numbers
   }, [result, shown])
   // The marks close their own sentence, held to its last word so they never sit alone on a line.
@@ -251,7 +266,7 @@ export function Overview({ ws, row, track, onTrack }: {
       </>
     )
   }
-  const cite = (claim: Claim) => sentencesOf(claim).map((s, n) => (
+  const cite = (claim?: Claim) => claim && sentencesOf(claim).map((s, n) => (
     <Fragment key={n}>
       {n > 0 && ' '}
       <StreamSentence s={s} done={cited} live={draftOn} />
@@ -267,26 +282,40 @@ export function Overview({ ws, row, track, onTrack }: {
       <article className="ov" aria-label="Workstream overview">
         <h1>{splitTickets(target.title).text}</h1>
         {tickets.length > 0 && <div className="ov-tickets"><TicketPills tickets={tickets} progress={target.milestones ?? target.progress} /></div>}
-        {asks.length === 0 && <p className="ov-live"><span className="ov-dot" data-tone={toneOf(target.kind)} />{target.text || 'No current activity has been recorded.'}</p>}
-        {target.why && <p className="ov-warning">{target.why}</p>}
-        {degraded && <p role="status" className="ov-warning">Connection interrupted. This status may be out of date.</p>}
-        {(asks.length > 0 || pendingDecision || stalled) && <section className={`ov-attention${asks.length ? ' ov-needs' : ''}${stalled ? ' ov-stalled' : ''}`} aria-label="Needs you">
-          <h2>{asks.length ? 'Needs you' : pendingDecision ? 'Decision details pending' : 'Recovery needed'}</h2>
-          {asks.length ? asks.map((ask) => (
+        {/* Status: what is true right now, and what needs you. */}
+        <section className={`ov-status${asks.length ? ' ov-needs' : ''}${stalled ? ' ov-stalled' : ''}`} aria-label="Status">
+          <h2>Status</h2>
+          {target.kind === 'done' ? (
+            <div className="ov-confirm">
+              <h3>Confirm this workstream is complete?</h3>
+              <CompleteButton project={ws.project} bead={track ?? ws.bead_id} title={target.title} />
+            </div>
+          ) : <p className="ov-live"><span className="ov-dot" data-tone={toneOf(target.kind)} />{target.text || 'No current activity has been recorded.'}</p>}
+          {target.why && <p className="ov-warning">{target.why}</p>}
+          {degraded && <p role="status" className="ov-warning">Connection interrupted. This status may be out of date.</p>}
+          {asks.map((ask) => (
             <div className="ov-ask" key={ask.bead_id}>
               <h3>{ask.decision?.question || ask.ask || ask.title}</h3>
               {ask.decision?.context && <p>{decisionPreview(ask.decision.context)}</p>}
               {ask.stale_why && <p className="ov-warning">This request needs a fresh check: {ask.stale_why}</p>}
               {openAsk !== askKey(ask) && <button type="button" className="ov-action" onClick={() => useStore.getState().select({ kind: 'ask', key: askKey(ask) })}>Answer this</button>}
             </div>
-          )) : <p>{noAsk}</p>}
-        </section>}
-        <section aria-label="Recap">
+          ))}
+          {asks.length === 0 && (pendingDecision || stalled) && <p>{noAsk}</p>}
+        </section>
+        {/* The pitch: what this is and why it matters. */}
+        <section className="ov-pitch" aria-label="Pitch">
           {shown ? <div>
-            {(result?.stale || result?.state === 'updating') && !draftOn && <p className="ov-muted ov-refreshing" role="status"><Spinner size={10} /> Refreshing summary…</p>}
-            <p className="ov-summary">{cite(shown.summary)}</p>
-            {shown.changes.length > 0 && <><h2>What changed</h2><ul>{shown.changes.map((c, i) => <li key={i}>{cite(c)}</li>)}</ul></>}
-            {shown.next.length > 0 && <><h2>What happens next</h2><ul>{shown.next.map((c, i) => <li key={i}>{cite(c)}</li>)}</ul></>}
+            {(result?.stale || result?.state === 'updating') && !draftOn && <p className="ov-muted ov-refreshing" role="status"><span className="ov-spin" aria-hidden /> Refreshing summary…</p>}
+            <h2>Problem</h2>
+            {shown.problem_type && <p className="ov-field"><span className="ov-label">Type</span>{typeNames[shown.problem_type] ?? shown.problem_type}</p>}
+            <p className="ov-field"><span className="ov-label">Impact</span>{cite(shown.problem)}</p>
+            <h2>Solution</h2>
+            <p className="ov-field"><span className="ov-label">Description</span>{cite(shown.solution)}</p>
+            <p className="ov-field"><span className="ov-label">Impact</span>{cite(shown.impact)}</p>
+            <h2>Appetite</h2>
+            <p className="ov-field"><span className="ov-label">Scope</span>{shown.scope && <strong>{shown.scope}. </strong>}{cite(shown.scope_detail)}</p>
+            {(shown.risk_detail && sentencesOf(shown.risk_detail).length > 0) && <p className="ov-field"><span className="ov-label">Risk</span><strong>{shown.risk ?? 0}/10. </strong>{cite(shown.risk_detail)}</p>}
           </div> : <p className="ov-muted" role="status">{waitText(result, degraded, !!error)}</p>}
           {shown && result?.state === 'retrying' && <p className="ov-warning">{waitText(result, false, false)}</p>}
         </section>

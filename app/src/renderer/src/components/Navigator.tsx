@@ -434,7 +434,7 @@ function TrackRow({ t, n, wsKey, parentOwner }: { t: BoardTrack; n: number; wsKe
 // CompleteButton closes a workstream the user has finished. It shows
 // only when nothing under it is open, and only this click closes it; the row
 // reads Completed at once, before the board catches up.
-function CompleteButton({ project, bead, title }: { project: string; bead: string; title: string }) {
+export function CompleteButton({ project, bead, title }: { project: string; bead: string; title: string }) {
   const apis = useApis()
   const key = `${project}:${bead}`
   const error = useStore((s) => s.completeError[key] ?? '')
