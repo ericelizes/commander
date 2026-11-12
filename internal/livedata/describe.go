@@ -46,9 +46,9 @@ func applyDescriptions(describe DescribeFunc, snap *Snapshot, d *Display) {
 		tracks = func(ts []BoardTrack) {
 			for j := range ts {
 				t := &ts[j]
-				if len(t.Children) > 0 {
-					t.Text, t.Kind = aboutLine(describe, t.Key, t.Title, t.Children), "about"
-				} else if t.Actor != nil {
+				// Only a top-level workstream says what it covers: a nested one is
+				// work in its own right and always shows its state.
+				if t.Actor != nil {
 					steps := []SnapStep{}
 					if st, ok := stepByID(ws.Steps, t.BeadID); ok {
 						steps = st.Children

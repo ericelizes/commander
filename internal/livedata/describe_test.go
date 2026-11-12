@@ -182,7 +182,7 @@ func TestParentRowSaysWhatItCovers(t *testing.T) {
 	lead := nextactor.Result{Actor: nextactor.Agent, Reason: "executing", Bead: "x"}
 	s := activeBoardFixture()
 	d := Display{Workstreams: []BoardRow{{Key: "p:root", N: 1, Actor: &nextactor.Row{Lead: lead}, Tracks: []BoardTrack{
-		{Key: "p:t1", BeadID: "t1", Title: "Staging", Actor: &nextactor.Row{Lead: lead}},
+		{Key: "p:t1", BeadID: "t1", Title: "Staging", Actor: &nextactor.Row{Lead: lead}, Children: []BoardTrack{{Key: "p:t1a", BeadID: "t1a", Title: "Staging checks", Actor: &nextactor.Row{Lead: lead}}}},
 		{Key: "p:t2", BeadID: "t2", Title: "Prod", Actor: &nextactor.Row{Lead: lead}},
 	}}}}
 	var about string
@@ -199,6 +199,6 @@ func TestParentRowSaysWhatItCovers(t *testing.T) {
 		t.Fatalf("parent row %q %q (facts %q)", r.Kind, r.Text, about)
 	}
 	if r.Tracks[0].Kind == "about" || r.Tracks[0].Text != "Agent working" {
-		t.Fatalf("a nested row keeps its state: %+v", r.Tracks[0])
+		t.Fatalf("a nested row keeps its state, even with rows under it: %+v", r.Tracks[0])
 	}
 }
