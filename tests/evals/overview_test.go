@@ -34,7 +34,8 @@ func TestWorkstreamOverviewScenario(t *testing.T) {
 			s := api.New(api.Options{Token: "test", Run: func(context.Context, []string) api.CmdResult { writes.Add(1); return api.CmdResult{} }, Source: func(context.Context) livedata.Snapshot {
 				return livedata.Snapshot{Workstreams: []livedata.SnapWorkstream{{Project: "p", BeadID: "w", Title: sc.Goal, Steps: []livedata.SnapStep{{BeadID: "infra", Title: sc.Evidence[0].Text, Status: "open"}}}}}
 			}, OverviewGenerate: func(context.Context, overview.Input) (overview.Recap, error) {
-				return overview.Recap{Summary: overview.Claim{Sentences: []overview.Sentence{{Text: sc.Evidence[0].Text, Sources: []string{tc.Source}}}}}, nil
+				claim := overview.Claim{Sentences: []overview.Sentence{{Text: sc.Evidence[0].Text, Sources: []string{tc.Source}}}}
+				return overview.Recap{ProblemType: "feature", Problem: claim, ProblemImpact: claim, Solution: claim, Impact: claim, Scope: "Small", ScopeDetail: claim, Risk: 1, RiskDetail: claim}, nil
 			}})
 			var result overview.Result
 			deadline := time.Now().Add(time.Second)
