@@ -93,7 +93,7 @@ func TestShortenDropsATrailingClauseBeforeCutting(t *testing.T) {
 }
 
 func TestFinishDescriptionKeepsOneOpeningAndRejectsJunk(t *testing.T) {
-	if got, ok := finishDescription("Working:", "Working: two agents run the parity tests"); !ok || got != "Working: two agents run the parity tests" {
+	if got, ok := finishDescription("Working:", "Working: QA Hub parity tests"); !ok || got != "Working: QA Hub parity tests" {
 		t.Fatalf("%q", got)
 	}
 	if _, ok := finishDescription("Working:", "   "); ok {
