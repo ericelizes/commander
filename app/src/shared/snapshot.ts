@@ -45,7 +45,7 @@ export interface Snapshot {
 // The board (livedata.Board): every row's state as one derivation in cmdrd
 // says it, for the sidebar and the agents alike. Text never holds an age;
 // since is when the state began (unix s, 0 when unknown).
-export type LineKind = 'none' | 'idle' | 'working' | 'waiting' | 'stuck' | 'needs' | 'stalled' | 'quiet'
+export type LineKind = 'none' | 'idle' | 'working' | 'waiting' | 'stuck' | 'needs' | 'stalled' | 'quiet' | 'done'
 
 export interface Display {
   commander: { kind: LineKind; text: string; since: number; unread: number }

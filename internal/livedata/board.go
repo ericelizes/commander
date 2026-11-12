@@ -1305,7 +1305,7 @@ func operatorTaskTitles(s Snapshot) map[string]string {
 }
 
 // urgency orders lines by who acts: red, yellow, green; grey only when nothing is moving.
-var urgency = map[string]int{"needs": 0, "waiting": 1, "working": 2, "stuck": 3, "stalled": 4, "idle": 5, "quiet": 6, "none": 7}
+var urgency = map[string]int{"needs": 0, "waiting": 1, "working": 2, "stuck": 3, "stalled": 4, "idle": 5, "quiet": 6, "done": 6, "none": 7}
 
 func mostUrgent(ls []line) (line, bool) {
 	if len(ls) == 0 {

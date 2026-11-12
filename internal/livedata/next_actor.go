@@ -25,11 +25,14 @@ func (b board) actorRow(ws SnapWorkstream) nextactor.Row {
 	if root.Actor != nextactor.None || root.Reason == "children" {
 		var walk func([]SnapStep)
 		walk = func(steps []SnapStep) {
+			ready := readyClosingGate(steps)
 			for _, s := range steps {
 				if s.Superseded || (stepClosed(s) && !s.HumanAnswerPending) {
 					continue
 				}
-				d := nextactor.Decide(b.actorBead(ws.Project, ws.ProjectID, ws.PlanningCommander, s), ctx)
+				bead := b.actorBead(ws.Project, ws.ProjectID, ws.PlanningCommander, s)
+				bead.ReadyToClose = s.BeadID == ready
+				d := nextactor.Decide(bead, ctx)
 				results = append(results, d)
 				if d.Actor == nextactor.None && d.Reason != "children" {
 					continue // paused or withdrawn: its steps are out of play
@@ -44,6 +47,29 @@ func (b board) actorRow(ws SnapWorkstream) nextactor.Row {
 	return row
 }
 
+// readyClosingGate is the open Confirm done step among steps when every other
+// step there is finished (and there was one), or "".
+func readyClosingGate(steps []SnapStep) string {
+	gate, others := "", 0
+	for _, s := range steps {
+		switch {
+		case s.ClosingGate:
+			if !stepClosed(s) {
+				gate = s.BeadID
+			}
+		case s.Superseded || s.Withdrawn:
+		case !stepClosed(s):
+			return ""
+		default:
+			others++
+		}
+	}
+	if others == 0 {
+		return ""
+	}
+	return gate
+}
+
 // actorLine is a row's line from its next-actor state.
 func actorLine(row nextactor.Row) line {
 	kind := map[nextactor.Actor]string{
@@ -52,6 +78,7 @@ func actorLine(row nextactor.Row) line {
 		nextactor.Agent:     "working",
 		nextactor.Commander: "working",
 		nextactor.External:  "waiting",
+		nextactor.Done:      "done",
 		nextactor.None:      "quiet",
 	}[row.Lead.Actor]
 	// "why" draws a warning icon in the sidebar; a blocking chain is not a

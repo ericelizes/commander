@@ -9,7 +9,7 @@ import type { BoardRow, BoardTrack, Display, SnapAgent, SnapFleet, SnapStep, Sna
 export type Tone = 'attn' | 'run' | 'ok' | 'err' | 'muted' | 'accent'
 
 export interface AgentLine {
-  kind: 'none' | 'idle' | 'working' | 'waiting' | 'stuck' | 'needs' | 'stalled' | 'quiet'
+  kind: 'none' | 'idle' | 'working' | 'waiting' | 'stuck' | 'needs' | 'stalled' | 'quiet' | 'done'
   text: string
   age: string
   since?: number // unix s the state began, when cmdrd knows it (a recorded wait, a Manager's turn)

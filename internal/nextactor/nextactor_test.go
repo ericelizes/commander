@@ -170,9 +170,12 @@ func TestClosingGateAsksOnlyWithItsCard(t *testing.T) {
 	if r := Decide(gate, ctx); r.Actor != None || r.Reason != "closing" {
 		t.Fatalf("closing gate before its card: %+v", r)
 	}
-	gate.NeedsUser, gate.UserAsk = true, "Is “Fast Unblocks” done?"
-	if r := Decide(gate, ctx); r.Actor != User || r.Text != "Needs you: Is “Fast Unblocks” done?" {
-		t.Fatalf("closing gate with its card: %+v", r)
+	gate.ReadyToClose = true
+	if r := Decide(gate, ctx); r.Actor != Done || r.Text != "Complete" {
+		t.Fatalf("closing gate once the rest is finished: %+v", r)
+	}
+	if row := Rollup([]Result{{Actor: Done, Reason: "ready_to_close"}, {Actor: Agent, Reason: "executing", Who: "a"}}); row.Lead.Actor != Agent {
+		t.Fatalf("open work leads over Complete: %+v", row)
 	}
 	row := Rollup([]Result{{Actor: None, Reason: "closing"}, {Actor: Agent, Reason: "executing", Who: "a"}})
 	if row.Lead.Actor != Agent || row.Counts[None] != 0 {
