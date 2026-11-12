@@ -19,7 +19,7 @@ const row: BoardRow = { n: 1, key: 'p:w', project: 'p', bead_id: 'w', title: ws.
   { key: 'b', bead_id: 'track-b', letter: 'B', title: 'Payroll', kind: 'working', text: 'Payroll migrating', since: 0, progress: { done: 0, total: 1 }, working: 1 },
 ] }
 const snap: Snapshot = { version: 1, generated_at: new Date().toISOString(), projects: [], workstreams: [ws], needs_you: [], agents: {}, fleet: {} as Snapshot['fleet'], unread: {}, display: { commander: { kind: 'idle', text: '', since: 0, unread: 0 }, asks: [], workstreams: [row] } }
-const result: RecapResult = { state: 'ready', stale: false, evidence: [{ id: 'apply', label: 'Terraform state', text: 'Manual apply remains pending in two workspaces.' }], recap: { generated_at: new Date().toISOString(), summary: { sentences: [{ text: 'The dashboard button is published; the infrastructure apply is still pending.', sources: ['apply'] }] }, changes: [], next: [{ sentences: [{ text: 'Verify access after the apply completes.', sources: ['apply'] }] }] } }
+const result: RecapResult = { state: 'ready', stale: false, evidence: [{ id: 'apply', label: 'Terraform state', text: 'Manual apply remains pending in two workspaces.' }], recap: { generated_at: new Date().toISOString(), problem: { sentences: [{ text: 'The dashboard button is published; the infrastructure apply is still pending.', sources: ['apply'] }] }, solution: { sentences: [{ text: 'Verify access after the apply completes.', sources: ['apply'] }] } } }
 
 beforeEach(() => {
   useIntegrations.setState({ linearTeam: 'TEAM' }) // the titles' ticket prefix
@@ -30,7 +30,7 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); useIntegrations.setState({ l
 
 describe('Overview', () => {
   it('renders a null or empty streaming draft without throwing', async () => {
-    const draft = { state: 'updating', stale: false, evidence: [], draft: { summary: { sentences: null }, changes: null, next: null } }
+    const draft = { state: 'updating', stale: false, evidence: [], draft: { problem: { sentences: null }, solution: null } }
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => new Response(JSON.stringify(String(input).includes('/api/overview') ? draft : { project_id: 1, ws: 'w', active_id: 0, tabs: [] }), { status: 200 })))
     render(<InspectorColumn />)
     expect(await screen.findByRole('article', { name: 'Workstream overview' })).toBeInTheDocument()
@@ -83,7 +83,7 @@ describe('Overview', () => {
     expect(screen.queryByRole('dialog', { name: 'Supporting evidence' })).toBeNull()
   })
   it('cites each sentence with its own sources, one number per source', async () => {
-    const two = { ...result, evidence: [...result.evidence, { id: 'pr', label: 'The PR', text: 'Open.' }], recap: { ...result.recap!, summary: { sentences: [{ text: 'The button is published.', sources: ['pr'] }, { text: 'The apply is pending.', sources: ['apply'] }] }, next: [{ sentences: [{ text: 'Verify access.', sources: ['apply'] }] }] } }
+    const two = { ...result, evidence: [...result.evidence, { id: 'pr', label: 'The PR', text: 'Open.' }], recap: { ...result.recap!, problem: { sentences: [{ text: 'The button is published.', sources: ['pr'] }, { text: 'The apply is pending.', sources: ['apply'] }] }, solution: { sentences: [{ text: 'Verify access.', sources: ['apply'] }] } } }
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(two), { status: 200 })))
     render(<Overview ws={ws} row={row} onWorkflow={vi.fn()} onTrack={vi.fn()} />)
     await screen.findByText(/The button is/)
@@ -91,7 +91,7 @@ describe('Overview', () => {
     expect(screen.getAllByRole('button', { name: 'Evidence: Terraform state' }).map((b) => b.textContent)).toEqual(['2', '2'])
   })
   it('still reads a recap from a daemon that sends one block of sources', async () => {
-    const old = { ...result, recap: { ...result.recap!, summary: { text: 'Old recap sentence.', sources: ['apply'] }, next: [] } }
+    const old = { ...result, recap: { ...result.recap!, problem: { text: 'Old recap sentence.', sources: ['apply'] }, solution: undefined } }
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(old), { status: 200 })))
     render(<Overview ws={ws} row={row} onWorkflow={vi.fn()} onTrack={vi.fn()} />)
     expect(await screen.findByText(/Old recap/)).toBeInTheDocument()
@@ -137,9 +137,10 @@ describe('Overview', () => {
   })
   it('distinguishes a stalled agent from a user decision', () => {
     render(<Overview ws={ws} row={{ ...row, kind: 'stalled', working: 0, text: 'Operator stopped without reporting' }} onWorkflow={vi.fn()} onTrack={vi.fn()} />)
-    expect(screen.getByRole('heading', { name: 'Automation failure — Manager recovery needed' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Status' })).toBeInTheDocument()
+    expect(screen.getByText('Operator stopped without reporting')).toBeInTheDocument()
     expect(screen.getByText('No decision is requested from you. Agent recovery is needed.')).toBeInTheDocument()
-    expect(screen.getByRole('region', { name: 'Automation failure' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Status' })).toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'Needs you' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Answer this' })).toBeNull()
   })
@@ -161,7 +162,7 @@ describe('Overview', () => {
   })
   it('streams a sentence in word by word, never redrawing what shows, and cites it once finished', async () => {
     const enc = new TextEncoder()
-    const frame = (text: string, partial: boolean) => JSON.stringify({ state: 'updating', stale: false, evidence: result.evidence, draft: { summary: { sentences: [{ text, sources: partial ? [] : ['apply'], partial }] } } }) + '\n'
+    const frame = (text: string, partial: boolean) => JSON.stringify({ state: 'updating', stale: false, evidence: result.evidence, draft: { problem: { sentences: [{ text, sources: partial ? [] : ['apply'], partial }] } } }) + '\n'
     let ctl!: ReadableStreamDefaultController<Uint8Array>
     const body = new ReadableStream<Uint8Array>({ start(c) { ctl = c } })
     vi.stubGlobal('fetch', vi.fn(async () => new Response(body, { status: 200 })))
@@ -180,7 +181,7 @@ describe('Overview', () => {
   it('paces and fades a refresh draft that takes the place of an earlier recap', async () => {
     const enc = new TextEncoder()
     const earlier = JSON.stringify({ ...result, state: 'updating' }) + '\n'
-    const frame = (text: string) => JSON.stringify({ state: 'updating', stale: false, evidence: result.evidence, recap: result.recap, draft: { summary: { sentences: [{ text, sources: [], partial: true }] } } }) + '\n'
+    const frame = (text: string) => JSON.stringify({ state: 'updating', stale: false, evidence: result.evidence, recap: result.recap, draft: { problem: { sentences: [{ text, sources: [], partial: true }] } } }) + '\n'
     let ctl!: ReadableStreamDefaultController<Uint8Array>
     const body = new ReadableStream<Uint8Array>({ start(c) { ctl = c } })
     vi.stubGlobal('fetch', vi.fn(async () => new Response(body, { status: 200 })))
@@ -197,7 +198,7 @@ describe('Overview', () => {
     ctl.close()
   })
   it('streams the recap in as it is written', async () => {
-    const draft = { state: 'updating', stale: true, evidence: result.evidence, draft: { summary: { sentences: [{ text: 'The button is published.', sources: ['apply'] }] } } }
+    const draft = { state: 'updating', stale: true, evidence: result.evidence, draft: { problem: { sentences: [{ text: 'The button is published.', sources: ['apply'] }] } } }
     const enc = new TextEncoder()
     let finish: () => void = () => {}
     const body = new ReadableStream<Uint8Array>({ start(c) {
