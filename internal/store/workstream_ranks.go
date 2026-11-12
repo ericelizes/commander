@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"sort"
 )
@@ -39,6 +40,9 @@ func (s *Store) SetWorkstreamOrder(ctx context.Context, order []WorkstreamKey) e
 		return fmt.Errorf("store: begin workstream order: %w", err)
 	}
 	defer tx.Rollback()
+	if err := s.lockWorkstreamRanks(ctx, tx); err != nil {
+		return err
+	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM workstream_ranks`); err != nil {
 		return fmt.Errorf("store: clear workstream ranks: %w", err)
 	}
@@ -58,21 +62,15 @@ func (s *Store) SetWorkstreamOrder(ctx context.Context, order []WorkstreamKey) e
 // write transaction, so a caller holding an old view cannot undo a newer move
 // and two concurrent moves compose. It returns the new order.
 func (s *Store) MoveWorkstream(ctx context.Context, present []WorkstreamKey, key WorkstreamKey, to int) ([]WorkstreamKey, error) {
-	conn, err := s.db.Conn(ctx)
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return nil, fmt.Errorf("store: move workstream: %w", err)
-	}
-	defer conn.Close()
-	if _, err := conn.ExecContext(ctx, `BEGIN IMMEDIATE`); err != nil {
 		return nil, fmt.Errorf("store: begin move workstream: %w", err)
 	}
-	committed := false
-	defer func() {
-		if !committed {
-			_, _ = conn.ExecContext(context.WithoutCancel(ctx), `ROLLBACK`)
-		}
-	}()
-	rows, err := conn.QueryContext(ctx, `SELECT project_id, bead_id, rank FROM workstream_ranks`)
+	defer tx.Rollback()
+	if err := s.lockWorkstreamRanks(ctx, tx); err != nil {
+		return nil, err
+	}
+	rows, err := tx.QueryContext(ctx, `SELECT project_id, bead_id, rank FROM workstream_ranks`)
 	if err != nil {
 		return nil, fmt.Errorf("store: read workstream ranks: %w", err)
 	}
@@ -97,20 +95,19 @@ func (s *Store) MoveWorkstream(ctx context.Context, present []WorkstreamKey, key
 		return nil, err
 	}
 
-	if _, err := conn.ExecContext(ctx, `DELETE FROM workstream_ranks`); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM workstream_ranks`); err != nil {
 		return nil, fmt.Errorf("store: clear workstream ranks: %w", err)
 	}
 	for i, k := range order {
-		if _, err := conn.ExecContext(ctx,
+		if _, err := tx.ExecContext(ctx,
 			`INSERT INTO workstream_ranks(project_id, bead_id, rank) VALUES (?, ?, ?)`,
 			k.ProjectID, k.BeadID, i+1); err != nil {
 			return nil, fmt.Errorf("store: rank %s: %w", k.BeadID, err)
 		}
 	}
-	if _, err := conn.ExecContext(ctx, `COMMIT`); err != nil {
+	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("store: commit move workstream: %w", err)
 	}
-	committed = true
 	return order, nil
 }
 
@@ -188,4 +185,15 @@ func (s *Store) MoveBead(ctx context.Context, present []WorkstreamKey, key Works
 		}
 	}
 	return order, tx.Commit()
+}
+
+// lockWorkstreamRanks serializes fleet-wide rank replacements, including an
+// empty rank table. SQLite BeginTx already takes its immediate write lock.
+func (s *Store) lockWorkstreamRanks(ctx context.Context, tx *sql.Tx) error {
+	if s.postgres {
+		if _, err := tx.ExecContext(ctx, `LOCK TABLE workstream_ranks IN EXCLUSIVE MODE`); err != nil {
+			return fmt.Errorf("store: lock workstream ranks: %w", err)
+		}
+	}
+	return nil
 }

@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"reflect"
 	"sync"
 	"testing"
 )
@@ -133,5 +134,73 @@ func TestMoveBead_RanksOnlyItsSiblings(t *testing.T) {
 	// Workstream order lives apart and survives.
 	if got, _ := s.ListWorkstreamRanks(ctx); len(got) != 0 {
 		t.Errorf("workstream ranks %v", got)
+	}
+}
+
+func TestPostgresWorkstreamMovesCompose(t *testing.T) {
+	st := postgresTestStore(t)
+	ctx := context.Background()
+	pid, err := st.InsertProject(ctx, Project{Name: "ranks", Type: "code", Path: t.TempDir(), Status: "active"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	present := []WorkstreamKey{{pid, "a"}, {pid, "b"}, {pid, "c"}, {pid, "d"}}
+	if err := st.SetWorkstreamOrder(ctx, present); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.MoveWorkstream(ctx, present, present[2], 1); err != nil {
+		t.Fatal(err)
+	}
+	got, err := st.MoveWorkstream(ctx, present, present[3], 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []WorkstreamKey{present[2], present[3], present[0], present[1]}
+	for i, k := range want {
+		if got[i] != k {
+			t.Fatalf("order = %v, want %v", got, want)
+		}
+	}
+	ranks, err := st.ListWorkstreamRanks(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, k := range want {
+		if ranks[k] != i+1 {
+			t.Fatalf("ranks = %v, want %v", ranks, want)
+		}
+	}
+}
+
+func TestPostgresWorkstreamConcurrentMovesCompose(t *testing.T) {
+	st := postgresTestStore(t)
+	ctx := context.Background()
+	pid, err := st.InsertProject(ctx, Project{Name: "ranks", Type: "code", Path: t.TempDir(), Status: "active"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	present := []WorkstreamKey{{pid, "a"}, {pid, "b"}, {pid, "c"}, {pid, "d"}}
+	// Include the empty-table case: row locks alone cannot serialize these moves.
+	for _, seeded := range []bool{false, true} {
+		if seeded {
+			if err := st.SetWorkstreamOrder(ctx, present); err != nil {
+				t.Fatal(err)
+			}
+		}
+		start := make(chan struct{})
+		errs := make(chan error, 2)
+		go func() { <-start; _, err := st.MoveWorkstream(ctx, present, present[2], 1); errs <- err }()
+		go func() { <-start; _, err := st.MoveWorkstream(ctx, present, present[3], 2); errs <- err }()
+		close(start)
+		for i := 0; i < 2; i++ {
+			if err := <-errs; err != nil {
+				t.Fatal(err)
+			}
+		}
+		got := orderOf(t, st)
+		// Either serial ordering preserves both moves. A lost write produces neither.
+		if !reflect.DeepEqual(got, []string{"c", "d", "a", "b"}) && !reflect.DeepEqual(got, []string{"c", "a", "d", "b"}) {
+			t.Fatalf("moves did not compose (seeded=%v): %v", seeded, got)
+		}
 	}
 }
