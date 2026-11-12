@@ -108,6 +108,31 @@ describe('EngineMapper (cmdrd chat.Event frames)', () => {
     expect(activity[0].endedAt! - activity[0].startedAt!).toBeLessThan(60_000)
   })
 
+  // Recorded 2026-11-12 (commander.jsonl seq 1508910-1509017): a question sent
+  // while the Commander finished a wrap-up; the turn ended without reading it
+  // and the next turn answered it.
+  it('puts a message the turn never read after that turn, before the reply to it', () => {
+    const b = { role: 'commander', session_id: 's', source: 'live' }
+    const at = (hms: string) => `2026-11-12T${hms}Z`
+    const m = new EngineMapper()
+    const evs = m.map([
+      { ...b, seq: 1, kind: 'user_message', source: 'engine', time: at('22:40:00'), text: '[mail] supervision: three alerts', origin: 'mail' },
+      { ...b, seq: 1.5, kind: 'hook', time: at('22:40:00'), hook: { name: 'UserPromptSubmit', event: 'UserPromptSubmit' } },
+      { ...b, seq: 2, kind: 'tool_start', time: at('22:40:20'), message_id: 'm1', block: 0, tool: { id: 't1', name: 'Bash' } },
+      { ...b, seq: 3, kind: 'tool_result', time: at('22:40:50'), tool: { id: 't1', output: 'ok' } },
+      { ...b, seq: 4, kind: 'user_message', source: 'engine', time: at('22:40:57'), text: 'what is the accepted data latency', origin: 'user' },
+      { ...b, seq: 5, kind: 'text', time: at('22:40:57'), message_id: 'm2', block: 0, text: 'I handled all three supervision alerts.' },
+      { ...b, seq: 6, kind: 'turn_result', time: at('22:40:57'), result: { subtype: 'success' } },
+      { ...b, seq: 7, kind: 'text', time: at('22:41:15'), message_id: 'm3', block: 0, text: 'Yes. A chart can change in CareHub.' },
+    ])
+    const s = reduceAll(initialState(), evs)
+    const order = s.order.map((id) => s.items[id]).map((i) => (i.type === 'user' ? i.text : i.type === 'text' ? i.text : i.type === 'system' ? i.variant : i.type))
+    const q = order.indexOf('what is the accepted data latency')
+    expect(q).toBeGreaterThan(order.indexOf('I handled all three supervision alerts.'))
+    expect(q).toBeLessThan(order.indexOf('Yes. A chart can change in CareHub.'))
+    expect(s.queue).toEqual([])
+  })
+
   // Recorded 2026-10-21 (commander.jsonl seq 3242-3751): two messages sent
   // while a mail-woken turn ran a tool; the CLI read both at the next tool
   // boundary (one UserPromptSubmit hook each) and answered them in that turn.

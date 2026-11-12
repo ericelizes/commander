@@ -203,6 +203,7 @@ export interface ChatState {
   turnOpen: boolean
   turnStartTs?: number
   queue: string[] // queued user item ids
+  readsPrompts?: boolean // the runtime reports each message it reads (prompt_read); Codex does not
   pendingRequests: string[] // unresolved permission/question/plan item ids
   runningTools: string[]
   tasks: Record<string, { status: string; description?: string; toolUseId?: string }>
@@ -560,22 +561,21 @@ function apply(d: Draft, e: ChatEvent | LocalAction): void {
       d.phase = 'idle'
       d.turnOpen = false
       d.turnStartTs = undefined
-      for (const id of d.queue) patch<UserItem>(d, id, () => ({ queued: false }))
-      d.queue = []
+      releaseUnread(d)
       return
     }
     case 'agent_idle': {
       finishStreaming(d)
       for (const id of d.runningTools) patch<ToolItem>(d, id, () => ({ status: 'interrupted' }))
       d.runningTools = []
-      for (const id of d.queue) patch<UserItem>(d, id, () => ({ queued: false }))
-      d.queue = []
+      releaseUnread(d)
       d.turnOpen = false
       d.phase = 'idle'
       d.turnStartTs = undefined
       return
     }
     case 'prompt_read': {
+      d.readsPrompts = true
       // A message sent mid-turn joins the thread where the agent read it, so
       // the reply that answers it comes after it.
       const next = d.queue.shift()
@@ -734,4 +734,19 @@ export function toolLabel(name: string): string {
     return `${server} · ${rest.join('__')}`
   }
   return name
+}
+
+// releaseUnread ends the queue when a turn ends without reading what was sent
+// during it: those messages come after everything that turn wrote, so the
+// reply that answers them follows them instead of a wrap-up seeming to.
+function releaseUnread(d: Draft) {
+  for (const id of d.queue) {
+    // A runtime that does not report reads may have answered it in that turn.
+    if (d.readsPrompts) {
+      remove(d.order, id)
+      d.order.push(id)
+    }
+    patch<UserItem>(d, id, () => ({ queued: false }))
+  }
+  d.queue = []
 }
