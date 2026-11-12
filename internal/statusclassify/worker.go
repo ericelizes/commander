@@ -136,7 +136,7 @@ func (w *Worker) watchRole(ctx context.Context, role string, lastSeq uint64) {
 		writeCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
 		if e := w.Store.ObserveClassificationForRun(writeCtx, ev.Role, ev.RunID, ev.SessionID, int64(ev.Seq), text, enqueue); e != nil {
-			log.Printf("status classifier: evidence persistence unavailable for %s", role)
+			log.Printf("status classifier: evidence persistence unavailable for %s: %v", role, e)
 			return false
 		}
 		return true
