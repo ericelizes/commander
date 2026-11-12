@@ -77,6 +77,8 @@ func TestDoorChecks(t *testing.T) {
 		{"agent closing a workstream refused", []string{agent}, []string{"close", "b-1", "--reason", "done"}, &beads.Bead{ID: "b-1", Labels: []string{beads.WorkstreamLabel}}, nil, nil, "only the user marks a workstream done"},
 		{"agent closing a nested workstream refused", []string{agent}, []string{"update", "b-1", "--status", "closed"}, &beads.Bead{ID: "b-1", Labels: []string{beads.TrackLabel}}, nil, nil, "only the user marks a workstream done"},
 		{"agent closing a step allowed", []string{agent}, []string{"close", "b-1"}, open, nil, nil, ""},
+		{"agent closing a Confirm done step refused", []string{agent}, []string{"close", "b-1"}, &beads.Bead{ID: "b-1", Labels: []string{beads.GateLabel, beads.ClosingGateLabel}}, nil, nil, "only the user confirms it"},
+		{"work after a Confirm done step refused", []string{agent}, []string{"dep", "add", "x-1", "b-1"}, &beads.Bead{ID: "b-1", Labels: []string{beads.ClosingGateLabel}}, nil, nil, "nothing may wait on it"},
 		{"user closing a workstream allowed", nil, []string{"close", "b-1"}, &beads.Bead{ID: "b-1", Labels: []string{beads.WorkstreamLabel}}, nil, nil, ""},
 		{"in progress owned by user refused", []string{agent}, []string{"update", "b-1", "--status", "in_progress", "--add-label", "owner:user"}, open, nil, nil, "owner user"},
 		{"in progress with the bead's user owner refused", []string{agent}, []string{"update", "b-1", "--status", "in_progress"}, &beads.Bead{ID: "b-1", Labels: []string{"owner:user"}}, nil, nil, "owner user"},

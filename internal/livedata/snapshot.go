@@ -280,6 +280,7 @@ type SnapStep struct {
 	BlockedBy   []string         `json:"blocked_by,omitempty"`       // bead IDs it waits on
 	Until       string           `json:"until,omitempty"`            // owned job: its finish line; its children are the owner's pipeline
 	Gate        bool             `json:"gate,omitempty"`             // a human approval gate: approved when closed
+	ClosingGate bool             `json:"closing_gate,omitempty"`     // its workstream's "Confirm done" step
 	Approvers   []string         `json:"approvers,omitempty"`        // who approves the gate
 	Waiting     string           `json:"waiting,omitempty"`          // what its owner waits on: "CI #4101", "review (reviewer-a, reviewer-b)", "you"
 	WaitSince   int64            `json:"waiting_since,omitempty"`    // unix s its oldest wait was recorded
@@ -584,7 +585,7 @@ func snapSteps(nodes []*StepNode, now string, live LiveAgent, stage bool) []Snap
 			WorkflowCheck: o.WorkflowCheck, BeadID: o.BeadID, Title: o.Title, State: o.State, Status: o.Status, Owner: o.Owner, OwnerState: o.OwnerState,
 			OwnerWhy: o.OwnerWhy, OwnerSince: o.OwnerSince, Restarts: o.Restarts,
 			Starred: o.Starred, Review: o.Review, PR: o.PR, Tickets: o.Tickets, PRRepo: o.PRRepo, Ask: o.Ask, Note: o.Note, Decision: o.Decision, SpecHash: o.SpecHash, Basis: o.Basis, PushCount: o.PushCount, PushFirst: o.PushFirst,
-			Now: o.BeadID != "" && o.BeadID == now, BlockedBy: o.BlockedBy, Until: o.Until, Gate: o.Gate, Approvers: o.Approvers,
+			Now: o.BeadID != "" && o.BeadID == now, BlockedBy: o.BlockedBy, Until: o.Until, Gate: o.Gate, ClosingGate: o.ClosingGate, Approvers: o.Approvers,
 			Superseded: o.Superseded, Lane: o.Lane, Criteria: o.Criteria, CloseReason: o.CloseReason, FinishedTasks: o.FinishedTasks, DoneBlockers: o.DoneBlockers, Waiting: beads.WaitsText(o.Waits), ParkedUntil: o.ParkedUntil, Gates: snapGates(o.Gates, o.GateIDs),
 		}
 		if o.Owns {

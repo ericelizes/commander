@@ -540,6 +540,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 				describer := &statusclassify.Describer{Worker: worker, UserName: config.UserName(d.cfg), CachePath: filepath.Join(d.home, "status-lines.json"), OnReady: func() { d.store.NotifyStateChanged(context.Background()) }}
 				d.live.Describe = describer.Describe
 				go describer.Run(ctx)
+				go d.runClosingSweep(ctx)
 			}
 		}
 		go chat.RunCaptureSweep(ctx, d.home, time.Hour)
