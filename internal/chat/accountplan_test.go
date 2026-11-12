@@ -161,14 +161,26 @@ func TestAccountOrderReadFailureCannotLaunchOnDefaults(t *testing.T) {
 	}
 }
 
-// Integration guard: Commander preferences permit provider fallback, while a
-// Manager's Claude pin still refuses it. Both paths retain capacity recovery.
+// Integration guard: automatic Commander preferences permit provider fallback;
+// explicit Commander and Manager pins refuse it. All retain capacity recovery.
 func TestUnifiedPlanCapacityRecoveryPreservesRolePolicy(t *testing.T) {
-	for _, role := range []string{"commander", "manager-example"} {
-		t.Run(role, func(t *testing.T) {
+	for _, tc := range []struct {
+		name, role string
+		pinned     bool
+	}{
+		{"commander-preference", "commander", false},
+		{"commander-pin", "commander", true},
+		{"manager-pin", "manager-example", true},
+	} {
+		role := tc.role
+		t.Run(tc.name, func(t *testing.T) {
 			h := accountHarness(t)
 			h.e.opts.CodexHooksReady = func() bool { return true }
-			if err := WriteRuntime(h.home, role, RuntimeClaude); err != nil {
+			write := WriteAutoRuntime
+			if tc.pinned {
+				write = WriteRuntime
+			}
+			if err := write(h.home, role, RuntimeClaude); err != nil {
 				t.Fatal(err)
 			}
 			now := time.Now()
@@ -182,12 +194,12 @@ func TestUnifiedPlanCapacityRecoveryPreservesRolePolicy(t *testing.T) {
 			}
 			h.e.Usage().Record(RuntimeCodex, "", role, []byte(`{"status":"allowed"}`), now)
 			_, _, err := h.e.steerManager(role, false)
-			if role == "commander" {
+			if !tc.pinned {
 				if err != nil || ReadRuntime(h.home, role) != RuntimeCodex || len(h.e.CapacityFailures()) != 0 {
 					t.Fatalf("unified fallback failed: runtime=%s capacity=%v err=%v", ReadRuntime(h.home, role), h.e.CapacityFailures(), err)
 				}
 			} else if !errors.Is(err, ErrNoUsage) || h.e.CapacityFailures()[role] == "" {
-				t.Fatalf("Manager pin lost: capacity=%v err=%v", h.e.CapacityFailures(), err)
+				t.Fatalf("explicit pin lost: capacity=%v err=%v", h.e.CapacityFailures(), err)
 			}
 			h.e.Usage().Record(RuntimeClaude, "default", role, []byte(`{"status":"allowed"}`), now)
 			if _, _, err := h.e.steerManager(role, false); err != nil || ReadRuntime(h.home, role) != RuntimeClaude || len(h.e.CapacityFailures()) != 0 {
