@@ -70,13 +70,6 @@ func TestPostgresMacExecutionScenario(t *testing.T) {
 		out, e := c.CombinedOutput()
 		return string(out), e
 	}
-	// A per-step runtime choice must coexist with Mac capability routing.
-	if out, e := cmd(nil, "", "internal-set-objective", "--project", "mac-eval", "--bead", sc.Bead, "--runtime", "claude"); e != nil {
-		t.Fatal(e, out)
-	}
-	if b, e := bc.Show(ctx, dir, sc.Bead); e != nil || b == nil || !strings.Contains(strings.Join(b.Labels, ","), "runtime:claude") {
-		t.Fatal("runtime preference was not saved", b, e)
-	}
 	rev, err := cmd(nil, "", "place", "revision")
 	if err != nil {
 		t.Fatal(err, rev)
@@ -104,6 +97,13 @@ func TestPostgresMacExecutionScenario(t *testing.T) {
 		if err = os.WriteFile(filepath.Join(home, name), []byte(value), 0600); err != nil {
 			t.Fatal(err)
 		}
+	}
+	// A per-step runtime choice must coexist with Mac capability routing.
+	if out, e := cmd(nil, "", "internal-set-objective", "--project", "mac-eval", "--bead", sc.Bead, "--runtime", "claude"); e != nil {
+		t.Fatal(e, out)
+	}
+	if b, e := bc.Show(ctx, dir, sc.Bead); e != nil || b == nil || !strings.Contains(strings.Join(b.Labels, ","), "runtime:claude") {
+		t.Fatal("runtime preference was not saved", b, e)
 	}
 	out, err := cmd(nil, "", "place", "pair", code, "--name", strings.TrimPrefix(sc.Place, "mac:"))
 	if err != nil {

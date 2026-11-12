@@ -2,6 +2,9 @@ package evals
 
 import (
 	"context"
+	"github.com/example-user/commander/internal/api"
+	"github.com/example-user/commander/internal/beads"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -27,6 +30,9 @@ func TestAStepRuntimeMacCapabilityScenario(t *testing.T) {
 	st, dsn := pgtest.Open(t)
 	ctx := context.Background()
 	home, dir := t.TempDir(), t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".beads"), 0700); err != nil {
+		t.Fatal(err)
+	}
 	t.Setenv("COMMANDER_HOME", home)
 	if err := os.WriteFile(filepath.Join(home, "state.postgres"), []byte(dsn), 0600); err != nil {
 		t.Fatal(err)
@@ -40,7 +46,16 @@ func TestAStepRuntimeMacCapabilityScenario(t *testing.T) {
 	}
 	bin := filepath.Join(t.TempDir(), "cmdr")
 	mustBuild(t, os.Environ(), bin, "./cmd/cmdr")
+	server := api.New(api.Options{Token: "synthetic-token", StateStore: st, Beads: beads.New()})
+	ts := httptest.NewServer(server.Handler())
+	defer ts.Close()
+	for name, value := range map[string]string{"api-url": ts.URL, "api-token": "synthetic-token"} {
+		if err := os.WriteFile(filepath.Join(home, name), []byte(value), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
 	c := exec.Command(bin, "internal-set-objective", "--project", "runtime-mac", "--bead", "step", "--runtime", "claude")
+	c.Dir = dir
 	c.Env = append(os.Environ(), "COMMANDER_HOME="+home, "HOME="+home)
 	if out, err := c.CombinedOutput(); err != nil {
 		t.Fatal(err, string(out))
