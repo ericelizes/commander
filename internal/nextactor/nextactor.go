@@ -22,6 +22,7 @@ const (
 	Agent     Actor = "agent"     // an execution agent has it
 	Commander Actor = "commander" // the planning Commander has it
 	External  Actor = "external"  // CI, a review, a named person or a date
+	Done      Actor = "done"      // everything finished: the user closes it with Complete
 	None      Actor = "none"      // paused, withdrawn, done, or carried by its children
 )
 
@@ -42,7 +43,8 @@ type Bead struct {
 	Withdrawn         bool // a withdrawn or retired request
 	Held              bool // the hold label: paused by recorded direction
 	HoldReason        string
-	ClosingGate       bool // the workstream's "Confirm done" step: nobody's move until it asks
+	ClosingGate       bool // the workstream's "Confirm done" step: nobody's move until the rest is finished
+	ReadyToClose      bool // a closing gate whose workstream has nothing else open
 
 	NeedsUser          bool   // needs-user state, a user gate or an open decision card
 	UserAsk            string // what the user is asked, when known
@@ -232,9 +234,10 @@ func own(b Bead, ctx Context) Result {
 			text += ": " + b.HoldReason
 		}
 		return Result{Actor: None, Reason: "paused", Text: text}
-	case b.ClosingGate && !b.NeedsUser:
-		// Asks the user only once everything else is finished (cmdrd puts the card on it).
-		return Result{Actor: None, Reason: "closing", Text: "Confirm done once the rest is finished"}
+	case b.ClosingGate && b.ReadyToClose:
+		return Result{Actor: Done, Reason: "ready_to_close", Text: "Complete"}
+	case b.ClosingGate:
+		return Result{Actor: None, Reason: "closing", Text: "Complete once the rest is finished"}
 	case b.NeedsUser:
 		return Result{Actor: User, Reason: "decision", Text: "Needs you: " + firstNonEmpty(b.UserAsk, b.Title)}
 	case b.PendingQuestions > 0 || b.QuestionWaiting:
@@ -360,12 +363,14 @@ func commanderOwed(b Bead, ctx Context, reason, what string, since int64) Result
 func Rank(a Actor) int {
 	switch a {
 	case User:
-		return 5
+		return 6
 	case Stuck:
-		return 4
+		return 5
 	case Agent, Commander:
-		return 3
+		return 4
 	case External:
+		return 3
+	case Done:
 		return 2
 	case None:
 		return 1

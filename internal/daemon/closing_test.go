@@ -6,7 +6,7 @@ import (
 	"github.com/example-user/commander/internal/livedata"
 )
 
-func TestClosingJobsKeepOneConfirmStepAndAskWhenTheRestIsDone(t *testing.T) {
+func TestClosingJobsKeepOneConfirmStep(t *testing.T) {
 	snap := livedata.Snapshot{
 		Projects: []livedata.SnapProject{{Name: "p", Path: "/p"}},
 		Workstreams: []livedata.SnapWorkstream{
@@ -31,20 +31,16 @@ func TestClosingJobsKeepOneConfirmStepAndAskWhenTheRestIsDone(t *testing.T) {
 	for _, j := range closingJobs(snap) {
 		got[j.workstream] = j
 	}
-	if j, ok := got["new"]; !ok || j.card || j.dir != "/p" {
+	if j, ok := got["new"]; !ok || j.dir != "/p" {
 		t.Fatalf("a workstream without the step gets one: %+v", got)
 	}
-	if j, ok := got["busy.3"]; !ok || j.card {
+	if _, ok := got["busy.3"]; !ok {
 		t.Fatalf("a nested workstream gets its own step: %+v", got)
 	}
-	if _, ok := got["busy"]; ok {
-		t.Fatal("open work: no card yet")
-	}
-	if j, ok := got["done"]; !ok || !j.card || j.gate != "done.2" || j.title != "Done work" {
-		t.Fatalf("everything finished: ask on the step: %+v", got)
-	}
-	if _, ok := got["asked"]; ok {
-		t.Fatal("an asked step is not asked again")
+	for _, has := range []string{"busy", "done", "asked"} {
+		if _, ok := got[has]; ok {
+			t.Fatalf("%s already has its step: %+v", has, got)
+		}
 	}
 	if _, ok := got["gone"]; ok {
 		t.Fatal("a closed workstream needs nothing")

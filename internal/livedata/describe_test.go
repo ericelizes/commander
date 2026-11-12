@@ -97,6 +97,28 @@ func TestPlaceholderTrimsLongTitles(t *testing.T) {
 	}
 }
 
+func TestFinishedWorkstreamIsCompleteNotDescribed(t *testing.T) {
+	steps := []SnapStep{{BeadID: "w.1", Status: "closed"}, {BeadID: "w.2", Status: "open", ClosingGate: true}}
+	if got := readyClosingGate(steps); got != "w.2" {
+		t.Fatalf("ready gate %q", got)
+	}
+	if got := readyClosingGate([]SnapStep{{BeadID: "w.2", Status: "open", ClosingGate: true}}); got != "" {
+		t.Fatal("a workstream with nothing done yet is not complete")
+	}
+	if got := readyClosingGate(append(steps, SnapStep{BeadID: "w.3", Status: "open"})); got != "" {
+		t.Fatal("open work: not complete")
+	}
+	called := false
+	describe := func(key, actor, reason, opener, facts string) (string, string, bool) {
+		called = true
+		return "x", "", true
+	}
+	row := nextactor.Row{Lead: nextactor.Result{Actor: nextactor.Done, Reason: "ready_to_close", Text: "Complete"}}
+	if got := describeRow(describe, "p:w", row, "facts", "Complete"); got != "Complete" || called {
+		t.Fatalf("Complete was described: %q", got)
+	}
+}
+
 func TestPlaceholderHasNoLabel(t *testing.T) {
 	if got := placeholder("Needs you: merge it? (blocking “Middle step”)"); got != "Merge it?" {
 		t.Fatalf("%q", got)

@@ -2,29 +2,25 @@ package daemon
 
 import (
 	"context"
-	"encoding/json"
 	"log"
 	"time"
 
-	"github.com/example-user/commander/internal/api"
 	"github.com/example-user/commander/internal/beads"
 	"github.com/example-user/commander/internal/livedata"
-	"github.com/example-user/commander/internal/store"
 )
 
 // closingSweepEvery is how often cmdrd checks every open workstream's Confirm
 // done step.
 const closingSweepEvery = time.Minute
 
-// closingJob is one write the sweep owes: create a workstream's Confirm done
-// step, or (card) ask the user on it once everything else is finished.
+// closingJob is a workstream missing its Confirm done step. Once everything
+// else in it is finished, the sidebar shows Complete on it (the user's click).
 type closingJob struct {
-	project, dir, workstream, title, gate string
-	card                                  bool
+	project, dir, workstream, title string
 }
 
 // closingJobs: every open workstream, top level or nested, has one Confirm done
-// step; once everything else in it is finished, that step asks the user.
+// step.
 func closingJobs(s livedata.Snapshot) []closingJob {
 	dirs := map[string]string{}
 	for _, p := range s.Projects {
@@ -33,29 +29,19 @@ func closingJobs(s livedata.Snapshot) []closingJob {
 	var out []closingJob
 	var visit func(project, id, title string, steps []livedata.SnapStep)
 	visit = func(project, id, title string, steps []livedata.SnapStep) {
-		var gate *livedata.SnapStep
-		others, open := 0, 0
+		hasGate := false
 		for i := range steps {
 			st := &steps[i]
 			if st.ClosingGate {
-				if gate == nil || st.Status != "closed" {
-					gate = st
-				}
+				hasGate = true
 				continue
 			}
-			others++
-			if st.Status != "closed" && st.Status != "tombstone" {
-				open++
-				if st.Track && !st.Withdrawn && st.Status != beads.StatusDeferred {
-					visit(project, st.BeadID, st.Title, st.Children)
-				}
+			if st.Track && st.Status != "closed" && st.Status != "tombstone" && !st.Withdrawn && st.Status != beads.StatusDeferred {
+				visit(project, st.BeadID, st.Title, st.Children)
 			}
 		}
-		switch {
-		case gate == nil:
+		if !hasGate {
 			out = append(out, closingJob{project: project, dir: dirs[project], workstream: id, title: title})
-		case gate.Status != "closed" && others > 0 && open == 0 && gate.State != beads.StateNeedsUser && gate.Decision == nil:
-			out = append(out, closingJob{project: project, dir: dirs[project], workstream: id, title: title, gate: gate.BeadID, card: true})
 		}
 	}
 	for _, ws := range s.Workstreams {
@@ -67,23 +53,9 @@ func closingJobs(s livedata.Snapshot) []closingJob {
 	return out
 }
 
-// closingCard is the "Is it done?" card on a Confirm done step.
-func closingCard(title string) string {
-	raw, _ := json.Marshal(store.Decision{
-		Question: "Is “" + title + "” done?",
-		Context:  "Everything in this workstream is finished. Confirming closes it; Not yet sends it back to Commander.",
-		Options: []store.DecisionOption{
-			{Label: "Done, close it", Recommended: true, Approves: true},
-			{Label: "Not yet", Implications: "Commander adds the missing work"},
-		},
-	})
-	return string(raw)
-}
-
 func (d *Daemon) runClosingSweep(ctx context.Context) {
 	t := time.NewTicker(closingSweepEvery)
 	defer t.Stop()
-	run := api.ExecRunner(cmdrPath())
 	bc := beads.New()
 	for {
 		select {
@@ -96,12 +68,6 @@ func (d *Daemon) runClosingSweep(ctx context.Context) {
 			continue
 		}
 		for _, j := range closingJobs(snap) {
-			if j.card {
-				if res := run(ctx, []string{"internal-set-objective", "--project", j.project, "--bead", j.gate, "--state", "needs-user", "--decision", closingCard(j.title)}); !res.OK {
-					log.Printf("closing: could not ask about %s %s: %s", j.project, j.workstream, res.Stderr)
-				}
-				continue
-			}
 			if _, err := bc.Create(ctx, j.dir, "Confirm done", beads.CreateOptions{
 				Parent:             j.workstream,
 				Labels:             []string{"kind:objective", beads.GateLabel, "approver:user", beads.ClosingGateLabel},
