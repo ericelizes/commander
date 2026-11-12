@@ -81,12 +81,12 @@ func verifyMacResultCockpit(t *testing.T, bin, dsn string) {
 			}
 		}
 		text, err = script("text")
-		if err == nil && strings.Contains(text, "Mac execution result") && strings.Contains(text, "Result ready for Commander review") {
+		if err == nil && strings.Contains(text, "Mac execution result") && strings.Contains(text, "Commander to review the finished result") {
 			break
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	if err != nil || !strings.Contains(text, "Mac execution result") || !strings.Contains(text, "Result ready for Commander review") {
+	if err != nil || !strings.Contains(text, "Mac execution result") || !strings.Contains(text, "Commander to review the finished result") {
 		t.Fatalf("Mac result missing from detached cockpit: %v\n%s", err, text)
 	}
 	if strings.Contains(text, "Manager review overdue") || strings.Contains(text, "real claude is disabled") || strings.Contains(text, "real codex is disabled") {
