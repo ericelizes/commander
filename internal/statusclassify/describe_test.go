@@ -95,6 +95,12 @@ func TestPromptNamesTheReaderAsYou(t *testing.T) {
 	}
 }
 
+func TestCommanderLinesNeverClaimTheReadersMove(t *testing.T) {
+	if !strings.Contains(promptFor("commander"), "never write that the reader is needed") {
+		t.Fatal("commander prompt")
+	}
+}
+
 func TestShortenDropsATrailingClauseBeforeCutting(t *testing.T) {
 	if got := shorten("stop staging or all Notify, unblocking the rollout plan", 44); got != "stop staging or all Notify" {
 		t.Fatalf("%q", got)

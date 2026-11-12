@@ -265,7 +265,7 @@ func promptFor(actor string) string {
 	case "agent":
 		return describeBase + " Agents are working: summarize what they are doing right now from their activity, including when something blocks them."
 	case "commander":
-		return describeBase + " Commander, the planning agent, has the next move: say what it is doing or must do next."
+		return describeBase + " Commander, the planning agent, has the next move: say what it is doing or must do next. It is not the reader's move yet: never write that the reader is needed; when Commander must write down a question for the reader, say so, like 'writing your deploy question'."
 	case "external":
 		return describeBase + " The work waits on someone outside (CI, a reviewer, a date): say who or what, and for what."
 	}
