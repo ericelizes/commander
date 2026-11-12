@@ -164,6 +164,22 @@ func TestDependencyChainsResolveToTheirRoot(t *testing.T) {
 	}
 }
 
+func TestClosingGateAsksOnlyWithItsCard(t *testing.T) {
+	ctx := Context{Now: time.Unix(1_800_000_000, 0)}
+	gate := Bead{ID: "ws.9", Title: "Confirm done", Status: "open", ClosingGate: true}
+	if r := Decide(gate, ctx); r.Actor != None || r.Reason != "closing" {
+		t.Fatalf("closing gate before its card: %+v", r)
+	}
+	gate.NeedsUser, gate.UserAsk = true, "Is “Fast Unblocks” done?"
+	if r := Decide(gate, ctx); r.Actor != User || r.Text != "Needs you: Is “Fast Unblocks” done?" {
+		t.Fatalf("closing gate with its card: %+v", r)
+	}
+	row := Rollup([]Result{{Actor: None, Reason: "closing"}, {Actor: Agent, Reason: "executing", Who: "a"}})
+	if row.Lead.Actor != Agent || row.Counts[None] != 0 {
+		t.Fatalf("a quiet closing gate must not count: %+v", row)
+	}
+}
+
 func TestRollupLeadsWithTheUserAndCountsTheRest(t *testing.T) {
 	row := Rollup([]Result{
 		{Actor: Agent, Reason: "executing", Who: "a", Since: 10},

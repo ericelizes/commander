@@ -42,6 +42,7 @@ type Bead struct {
 	Withdrawn         bool // a withdrawn or retired request
 	Held              bool // the hold label: paused by recorded direction
 	HoldReason        string
+	ClosingGate       bool // the workstream's "Confirm done" step: nobody's move until it asks
 
 	NeedsUser          bool   // needs-user state, a user gate or an open decision card
 	UserAsk            string // what the user is asked, when known
@@ -138,7 +139,7 @@ func resolveOnce(b Bead, ctx Context, seen map[string]bool, depth int) Result {
 			continue
 		}
 		c := resolve(child, ctx, seen, depth+1)
-		if c.Actor == None && (c.Reason == "done" || c.Reason == "withdrawn" || c.Reason == "children") {
+		if c.Actor == None && (c.Reason == "done" || c.Reason == "withdrawn" || c.Reason == "children" || c.Reason == "closing") {
 			continue
 		}
 		if !found || Rank(c.Actor) > Rank(best.Actor) {
@@ -231,6 +232,9 @@ func own(b Bead, ctx Context) Result {
 			text += ": " + b.HoldReason
 		}
 		return Result{Actor: None, Reason: "paused", Text: text}
+	case b.ClosingGate && !b.NeedsUser:
+		// Asks the user only once everything else is finished (cmdrd puts the card on it).
+		return Result{Actor: None, Reason: "closing", Text: "Confirm done once the rest is finished"}
 	case b.NeedsUser:
 		return Result{Actor: User, Reason: "decision", Text: "Needs you: " + firstNonEmpty(b.UserAsk, b.Title)}
 	case b.PendingQuestions > 0 || b.QuestionWaiting:
@@ -319,7 +323,7 @@ func blockers(b Bead, ctx Context, seen map[string]bool, depth int) (Result, boo
 			continue
 		}
 		r := resolve(dep, ctx, seen, depth+1)
-		if r.Actor == None && (r.Reason == "done" || r.Reason == "withdrawn" || r.Reason == "children") {
+		if r.Actor == None && (r.Reason == "done" || r.Reason == "withdrawn" || r.Reason == "children" || r.Reason == "closing") {
 			continue
 		}
 		r.Via = append([]string{dep.Title}, r.Via...)
@@ -383,7 +387,7 @@ func Rollup(results []Result) Row {
 	row := Row{Counts: map[Actor]int{}}
 	agents := map[string]bool{}
 	for _, r := range results {
-		if r.Actor == None && r.Reason == "children" {
+		if r.Actor == None && (r.Reason == "children" || r.Reason == "closing") {
 			continue
 		}
 		row.Counts[r.Actor]++

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -24,13 +25,22 @@ func (s *Store) ObserveClassification(ctx context.Context, role, session string,
 func (s *Store) ObserveClassificationForRun(ctx context.Context, role string, runID int64, session string, seq int64, text string, enqueue bool) error {
 	return s.observeClassification(ctx, role, &runID, session, seq, text, enqueue)
 }
+
+// clipEvidence keeps the last 6000 bytes of text as valid UTF-8 without NUL
+// bytes: cutting inside a multi-byte character, or a NUL from tool output,
+// makes PostgreSQL refuse the whole write.
+func clipEvidence(text string) string {
+	if len(text) > 6000 {
+		text = text[len(text)-6000:]
+	}
+	return strings.ToValidUTF8(strings.ReplaceAll(text, "\x00", ""), "")
+}
+
 func (s *Store) observeClassification(ctx context.Context, role string, expectedRun *int64, session string, seq int64, text string, enqueue bool) error {
 	if !s.postgres || session == "" {
 		return nil
 	}
-	if len(text) > 6000 {
-		text = text[len(text)-6000:]
-	}
+	text = clipEvidence(text)
 	now := time.Now().Unix()
 	return s.WithTx(ctx, func(q Querier) error {
 		var pid, runID int64

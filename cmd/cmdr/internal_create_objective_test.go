@@ -146,7 +146,12 @@ func TestRunInternalCloseObjective(t *testing.T) {
 	// The workflow door then reads the bead and its own edges (a plugged review block), the stage's
 	// gate beads are looked up, the holder check reads the closure fresh (batched List by id,
 	// Show, Details, Dependents), then the close, then a read for push labels to clear; the close
-	// is the only write
+	// is the only write. The user's close first reads the children for a
+	// Confirm done step to confirm with it (Dependents; this bead has none).
+	if len(mock.Calls) < 1 || !strings.HasPrefix(mock.Calls[0], "Dependents:obj-1") {
+		t.Fatalf("the Confirm done check did not run first: %v", mock.Calls)
+	}
+	mock.Calls = mock.Calls[1:]
 	n := len(mock.Calls)
 	if n < 7 || !strings.HasPrefix(mock.Calls[0], "Show:") || !strings.HasPrefix(mock.Calls[1], "Dependents:obj-1") || !strings.HasPrefix(mock.Calls[2], "Show:") || !strings.HasPrefix(mock.Calls[3], "Deps:obj-1") || !strings.HasPrefix(mock.Calls[4], "List:") || !strings.HasPrefix(mock.Calls[n-2], "Close:obj-1") || !strings.HasPrefix(mock.Calls[n-1], "Show:obj-1") {
 		t.Fatalf("unexpected beads calls: %v", mock.Calls)

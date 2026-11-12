@@ -77,7 +77,8 @@ func beadOf(f store.SupervisionFact) nextactor.Bead {
 	b := nextactor.Bead{
 		ID: f.BeadID, Title: f.Title, Status: f.Status,
 		Superseded: has(f.Labels, "superseded") || has(f.Labels, "retired"), Withdrawn: has(f.Labels, "withdrawn"),
-		Held: f.Held, NeedsUser: state == beads.StateNeedsUser || has(f.Labels, beads.GateLabel),
+		Held: f.Held, NeedsUser: state == beads.StateNeedsUser || has(f.Labels, beads.GateLabel) && !beads.IsClosingGate(f.Labels),
+		ClosingGate:        beads.IsClosingGate(f.Labels),
 		HumanAnswerPending: f.PendingHumanAnswer, PendingQuestions: f.PendingQuestions, QuestionWaiting: f.QuestionWaiting,
 		Waits: beads.WaitsOf(f.Labels), HasOpenChildren: f.ChildCount > 0, ProgressAt: f.ProgressAt,
 		PlanningCommander: f.PlanningCommander,
