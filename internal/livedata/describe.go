@@ -57,10 +57,22 @@ func applyDescriptions(describe DescribeFunc, snap *Snapshot, d *Display) {
 func describeRow(describe DescribeFunc, key string, row nextactor.Row, facts, fallback string) string {
 	text, signal, ok := describe(key, string(row.Lead.Actor), row.Lead.Reason, Opener(row.Lead), facts)
 	if !ok {
-		return withoutChain(fallback)
+		return placeholder(fallback)
 	}
 	if signal != "" && row.Lead.Actor == nextactor.Agent {
 		noteDisagreement(key, signal)
+	}
+	return text
+}
+
+// placeholder is the rule-based line shown until the model's line is ready:
+// no blocking chain and no "Needs you:" label, like the written lines.
+func placeholder(text string) string {
+	text = withoutChain(text)
+	if rest := strings.TrimPrefix(text, "Needs you: "); rest != text && rest != "" {
+		r := []rune(rest)
+		r[0] = unicode.ToUpper(r[0])
+		text = string(r)
 	}
 	return text
 }
