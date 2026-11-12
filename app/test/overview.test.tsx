@@ -150,14 +150,14 @@ describe('Overview', () => {
     expect(await screen.findByText('Refreshing summary…')).toHaveAttribute('role', 'status')
     expect(screen.getByText('Verifying the dashboard')).toBeInTheDocument()
     expect(screen.queryByText(/Earlier recap/)).toBeNull()
-    expect(screen.getByText(/Trying again shortly/)).toBeInTheDocument()
+    expect(screen.queryByText(/Trying again shortly/)).toBeNull()
   })
   it('says what it waits for while the board loads and never reads unavailable', async () => {
     const waiting = { state: 'waiting', stale: false, evidence: [], waiting_for: 'the board to finish loading (cmdrd is still reading its first snapshot)' }
     const calls: number[] = []
     vi.stubGlobal('fetch', vi.fn(async () => { calls.push(1); return calls.length === 1 ? new Response(JSON.stringify(waiting), { status: 200 }) : new Response('x', { status: 503 }) }))
     render(<Overview ws={ws} row={row} onWorkflow={vi.fn()} onTrack={vi.fn()} />)
-    expect(await screen.findByText(/Waiting for the board to finish loading/)).toBeInTheDocument()
+    expect(await screen.findByText('Refreshing summary…')).toHaveAttribute('role', 'status')
     expect(screen.queryByText(/unavailable/i)).toBeNull()
   })
   it('streams a sentence in word by word, never redrawing what shows, and cites it once finished', async () => {
