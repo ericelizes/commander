@@ -241,5 +241,8 @@ func onlyKnown(r Recap, in Input) Recap {
 	out.Goal, out.Progress, out.Now, out.Recent, out.Next = fix(r.Goal), fix(r.Progress), fix(r.Now), fix(r.Recent), fix(r.Next)
 	out.Problem, out.ProblemImpact, out.Solution, out.Impact = fix(r.Problem), fix(r.ProblemImpact), fix(r.Solution), fix(r.Impact)
 	out.ScopeDetail, out.RiskDetail, out.StillToDefine = fix(r.ScopeDetail), fix(r.RiskDetail), fix(r.StillToDefine)
+	if out.Targets == nil {
+		out.Targets = []Target{}
+	}
 	return out
 }

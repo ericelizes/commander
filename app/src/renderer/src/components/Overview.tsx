@@ -33,6 +33,7 @@ export type RecapResult = {
 type Pitch = {
   goal?: Claim
   progress?: Claim
+  targets?: { name: string; target: string; was: string; now: string; met: boolean }[]
   now?: Claim
   recent?: Claim
   next?: Claim
@@ -197,35 +198,116 @@ export function OverviewPage(props: OverviewProps) {
   const order: ('status' | 'pitch')[] = scoping ? ['pitch', 'status'] : ['status', 'pitch']
   const scroll = useRef<HTMLDivElement>(null)
   const go = (part: string) => scroll.current?.querySelector(`#ov-sec-${part}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  // One summary for the whole page. Until it has words the page is one loader:
+  // no empty headings. A summary already written stays on screen while a newer
+  // one is written, and is swapped in whole.
+  const result = useRecap(props.ws, props.track, '', true)
+  const { shown } = shownOf(result)
+  const parts = order.filter((part) => !!shown && ((part === 'status' && hasTargets(shown)) || (part === 'status' ? statusFields : pitchFields).some((k) => hasText(shown[k] as Claim | undefined))))
   return (
     <div className="ov-pane">
       <ActivityFreshness />
       <div className="ov-scroll" ref={scroll}>
         <div className="ov-layout">
           <article className="ov" aria-label="Workstream overview">
-            {order.map((part, i) => <Fragment key={part}>{i > 0 && <hr className="ov-divider" />}<Overview {...props} part={part} embedded first={i === 0} /></Fragment>)}
+            {parts.length === 0 && <Refreshing />}
+            {parts.map((part, i) => <Fragment key={part}>{i > 0 && <hr className="ov-divider" />}<Overview {...props} part={part} embedded shared={result} /></Fragment>)}
           </article>
-          <nav className="ov-toc" aria-label="On this page">
+          {parts.length > 1 && <nav className="ov-toc" aria-label="On this page">
             <div className="ov-toc-title">On this page</div>
-            {order.map((part) => (
+            {parts.map((part) => (
               <button type="button" key={part} onClick={() => go(part)}>
                 {part === 'status' ? <><Activity size={13} aria-hidden /> Current status</> : <><Lightbulb size={13} aria-hidden /> Pitch</>}
               </button>
             ))}
-          </nav>
+          </nav>}
         </div>
       </div>
     </div>
   )
 }
 
-// Overview is one part of the workstream's page: its current status, or its pitch.
-export function Overview({ ws, row, track, onTrack, part = 'status', embedded = false, first = true }: OverviewProps & { part?: 'status' | 'pitch'; embedded?: boolean; first?: boolean }) {
-  const snapshot = useStore((s) => s.snapshot)!
+const statusFields: (keyof Pitch)[] = ['goal', 'progress', 'now', 'recent', 'next']
+const hasTargets = (p?: Pitch) => !!p?.targets?.length
+const pitchFields: (keyof Pitch)[] = ['still_to_define', 'problem', 'problem_impact', 'solution', 'impact', 'scope_detail', 'risk_detail']
+
+// shownOf is what a summary shows: the summary written, or, only while a first
+// one is being written, its draft. A rewrite of a summary already shown keeps
+// the old one on screen until the new one is done.
+function shownOf(result: RecapResult | null): { shown?: Pitch; draftOn: boolean } {
+  const draft = result?.draft
+  const draftOn = result?.state === 'updating' && !result.recap && !!draft &&
+    [...statusFields, ...pitchFields].some((k) => hasText(draft[k] as Claim | undefined))
+  return { shown: draftOn ? draft : result?.recap, draftOn }
+}
+
+// useRecap keeps a workstream's summary current: it opens the summary stream
+// (a result per change while it is written, then the stream ends) and asks
+// again soon after a wait or a failure, and every 15 seconds otherwise.
+function useRecap(ws: SnapWorkstream, track: string | undefined, part: '' | 'status' | 'pitch', enabled: boolean): RecapResult | null {
   const cfg = useStore((s) => s.config)
   const conn = useStore((s) => s.conn)
+  const degraded = useStore((s) => !!s.snapshot?.degraded) || conn !== 'live'
   const [result, setResult] = useState<RecapResult | null>(null)
-  const [, setError] = useState('')
+  useEffect(() => {
+    if (!enabled || !cfg || degraded) return
+    let cancelled = false
+    let controller: AbortController | null = null
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const pass = async (): Promise<number> => {
+      controller = new AbortController()
+      const abort = setTimeout(() => controller?.abort(), 150_000)
+      let last: RecapResult | null = null
+      try {
+        const r = await fetch(`${cfg.apiUrl}/api/overview`, {
+          method: 'POST', headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ project: ws.project, bead_id: ws.bead_id, track_id: track ?? '', part, stream: true }), signal: controller.signal,
+        })
+        if (!r.ok) throw new Error('not ready')
+        const take = (line: string) => {
+          if (!line.trim()) return
+          const body = JSON.parse(line) as RecapResult
+          if (!['waiting', 'updating', 'retrying', 'ready', 'unavailable'].includes(body.state) || !Array.isArray(body.evidence)) throw new Error('Invalid recap')
+          last = body
+          if (!cancelled) setResult(body)
+        }
+        const reader = r.body?.getReader()
+        if (!reader) take(await r.text())
+        else {
+          const dec = new TextDecoder()
+          let buf = ''
+          for (;;) {
+            const { done, value } = await reader.read()
+            buf += dec.decode(value, { stream: !done })
+            const lines = buf.split('\n')
+            buf = lines.pop() ?? ''
+            lines.forEach(take)
+            if (done) break
+          }
+          take(buf)
+        }
+      } catch {
+        return 3_000
+      } finally { clearTimeout(abort) }
+      const state = (last as RecapResult | null)?.state
+      return state === 'waiting' || state === 'retrying' || state === 'updating' ? 3_000 : 15_000
+    }
+    const loop = async () => {
+      const wait = await pass()
+      if (!cancelled) timer = setTimeout(() => void loop(), wait)
+    }
+    void loop()
+    return () => { cancelled = true; clearTimeout(timer); controller?.abort() }
+  }, [enabled, cfg, ws.project, ws.bead_id, track, degraded, part])
+  return result
+}
+
+// Overview is one part of the workstream's page: its current status, or its pitch.
+export function Overview({ ws, row, track, onTrack, part = 'status', embedded = false, shared = null }: OverviewProps & { part?: 'status' | 'pitch'; embedded?: boolean; shared?: RecapResult | null }) {
+  const snapshot = useStore((s) => s.snapshot)!
+  const conn = useStore((s) => s.conn)
+  const own = useRecap(ws, track, part, !embedded)
+  const result = embedded ? shared : own
   const [source, setSource] = useState<{ evidence: Evidence; anchor: HTMLElement; pinned: boolean } | null>(null)
   // Hover is forgiving: a brush past a number shows nothing, and the pointer can
   // cross the gap from the number to the popup without losing it.
@@ -274,65 +356,11 @@ export function Overview({ ws, row, track, onTrack, part = 'status', embedded = 
     return titles
   }, [result, ws.steps])
 
-  useEffect(() => {
-    if (!cfg || degraded) return
-    let cancelled = false
-    let controller: AbortController | null = null
-    let timer: ReturnType<typeof setTimeout> | undefined
-    // Each pass opens the recap stream: a result per change while it is being
-    // written, then the stream ends. A wait or a failure is asked again soon.
-    const pass = async (): Promise<number> => {
-      controller = new AbortController()
-      const abort = setTimeout(() => controller?.abort(), 150_000)
-      let last: RecapResult | null = null
-      try {
-        const r = await fetch(`${cfg.apiUrl}/api/overview`, {
-          method: 'POST', headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ project: ws.project, bead_id: ws.bead_id, track_id: track ?? '', part: embedded ? '' : part, stream: true }), signal: controller.signal,
-        })
-        if (!r.ok) throw new Error('not ready')
-        const take = (line: string) => {
-          if (!line.trim()) return
-          const body = JSON.parse(line) as RecapResult
-          if (!['waiting', 'updating', 'retrying', 'ready', 'unavailable'].includes(body.state) || !Array.isArray(body.evidence)) throw new Error('Invalid recap')
-          last = body
-          if (!cancelled) { setResult(body); setError('') }
-        }
-        const reader = r.body?.getReader()
-        if (!reader) take(await r.text())
-        else {
-          const dec = new TextDecoder()
-          let buf = ''
-          for (;;) {
-            const { done, value } = await reader.read()
-            buf += dec.decode(value, { stream: !done })
-            const lines = buf.split('\n')
-            buf = lines.pop() ?? ''
-            lines.forEach(take)
-            if (done) break
-          }
-          take(buf)
-        }
-      } catch {
-        if (!cancelled) setError('reconnecting')
-        return 3_000
-      } finally { clearTimeout(abort) }
-      const state = (last as RecapResult | null)?.state
-      return state === 'waiting' || state === 'retrying' || state === 'updating' ? 3_000 : 15_000
-    }
-    const loop = async () => {
-      const wait = await pass()
-      if (!cancelled) timer = setTimeout(() => void loop(), wait)
-    }
-    void loop()
-    return () => { cancelled = true; clearTimeout(timer); controller?.abort() }
-  }, [cfg, ws.project, ws.bead_id, track, degraded, part, embedded])
 
   // While the reader is writing, its draft stands in for the earlier recap.
   // Only a first summary streams in; a rewrite of one already shown keeps the old
   // one on screen and swaps in whole when it is done.
-  const draftOn = result?.state === 'updating' && !result.recap && ((!!result.draft?.now && sentencesOf(result.draft.now).length > 0) || (!!result.draft?.problem && sentencesOf(result.draft.problem).length > 0))
-  const shown: Pitch | undefined = draftOn ? result!.draft : result?.recap
+  const { shown, draftOn } = shownOf(result)
 
   // One number per source across the whole recap, so a source cited twice reads
   // as the same footnote.
@@ -377,7 +405,7 @@ export function Overview({ ws, row, track, onTrack, part = 'status', embedded = 
         {/* Status: what is true right now, and what needs you. */}
         {part === 'status' && <section id="ov-sec-status" className={`ov-sec ov-status${asks.length ? ' ov-needs' : ''}${stalled ? ' ov-stalled' : ''}`} aria-label="Status">
           {embedded && <h2 className="ov-section-title"><Activity size={18} aria-hidden /> Current status</h2>}
-          {!(embedded && !first) && (!shown || result?.stale || result?.state === 'updating' || result?.state === 'retrying') && !draftOn && <Refreshing />}
+          {!embedded && (!shown || result?.stale || result?.state === 'updating' || result?.state === 'retrying') && !draftOn && <Refreshing />}
           {target.kind === 'done' ? (
             <div className="ov-confirm">
               <h3>Confirm this workstream is complete?</h3>
@@ -401,6 +429,15 @@ export function Overview({ ws, row, track, onTrack, part = 'status', embedded = 
               <p className="ov-field">{cite(shown.goal)}</p>
               {hasText(shown.progress) && <p className="ov-field"><b>Progress:</b> {cite(shown.progress)}</p>}
             </>}
+            {!!shown.targets?.length && <table className="ov-targets">
+              <thead><tr><th>Measure</th><th>Target</th><th>Was</th><th>Now</th><th aria-label="Met" /></tr></thead>
+              <tbody>{shown.targets.map((t, i) => (
+                <tr key={i} className={t.met ? 'is-met' : ''}>
+                  <td>{t.name}</td><td>{t.target}</td><td>{t.was}</td><td className="ov-target-now">{t.now}</td>
+                  <td aria-label={t.met ? 'Met' : 'Not met'}>{t.met ? '🟢' : '🔴'}</td>
+                </tr>
+              ))}</tbody>
+            </table>}
             {hasText(shown.now) && <><h3 className="ov-sub">Right now</h3><p className="ov-field">{cite(shown.now)}</p></>}
             {hasText(shown.recent) && <><h3 className="ov-sub">Done lately</h3><ul className="ov-fields">{sentencesOf(shown.recent!).map((s, i) => <li key={i}><StreamSentence s={s} done={cited} live={draftOn} /></li>)}</ul></>}
             {hasText(shown.next) && <><h3 className="ov-sub">Up next</h3><ul className="ov-fields">{sentencesOf(shown.next!).map((s, i) => <li key={i}><StreamSentence s={s} done={cited} live={draftOn} /></li>)}</ul></>}
@@ -409,7 +446,7 @@ export function Overview({ ws, row, track, onTrack, part = 'status', embedded = 
         {/* The pitch: what this is and why it matters, after the status. */}
         {part === 'pitch' && <section id="ov-sec-pitch" className="ov-sec ov-pitch" aria-label="Pitch">
           {embedded && <h2 className="ov-section-title"><Lightbulb size={18} aria-hidden /> Pitch</h2>}
-          {!(embedded && !first) && (!shown || result?.state === 'updating' || result?.state === 'retrying') && !draftOn && <Refreshing />}
+          {!embedded && (!shown || result?.state === 'updating' || result?.state === 'retrying') && !draftOn && <Refreshing />}
           {shown ? <div className="ov-fade" key={result?.recap?.generated_at ?? 'draft'}>
             {hasText(shown.still_to_define) && <div className="ov-todo">
               <h3>Still to define</h3>

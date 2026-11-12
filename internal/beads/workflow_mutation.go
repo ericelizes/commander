@@ -169,6 +169,13 @@ func pgCheckWorkflowUnlink(ctx context.Context, q store.Querier, pid int64, from
 			if publicationEdgeAllowed(ctx, pid, from, to) {
 				return nil
 			}
+			// The planning Commander rewires its own gates; a user gate is
+			// still guarded by pgCheckHumanUnlink. Workflow checks stay bound.
+			if workflowGate(b) {
+				if planner, e := pgPlanningOwnerCaller(ctx, q, pid, from); e != nil || planner {
+					return e
+				}
+			}
 			return errors.New("an unfinished required gate cannot be unlinked to release work; complete it or use an explicit guarded scope repair")
 		}
 		if e = pgVerifyCompletion(ctx, q, pid, from); e != nil {

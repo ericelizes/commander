@@ -45,20 +45,37 @@ describe('Overview', () => {
     useStore.getState().setSnapshot({ ...snap, version: 2 })
     expect(screen.getByRole('tab', { name: 'Workflow' })).toHaveAttribute('aria-selected', 'true')
   })
-  it('is one page: its parts in order with a contents list, one summary for both, one loader', async () => {
+  it('is one page: one summary for both parts, in order, with a contents list once both have words', async () => {
     const asked: string[] = []
-    vi.stubGlobal('fetch', vi.fn(async (_: RequestInfo | URL, init?: RequestInit) => { asked.push(JSON.parse(String(init?.body)).part); return new Response(JSON.stringify({ ...result, stale: true }), { status: 200 }) }))
+    const both = { ...result, stale: true, recap: { ...result.recap!, problem: { sentences: [{ text: 'Dashboards are hard to find.', sources: [] }] } } }
+    vi.stubGlobal('fetch', vi.fn(async (_: RequestInfo | URL, init?: RequestInit) => { asked.push(JSON.parse(String(init?.body)).part); return new Response(JSON.stringify(both), { status: 200 }) }))
     const parts = () => screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent!.trim()).filter((t) => t === 'Current status' || t === 'Pitch')
     const { unmount } = render(<OverviewPage ws={ws} row={row} onWorkflow={vi.fn()} onTrack={vi.fn()} />)
     await screen.findByText(/The dashboard button is published/)
     expect(parts()).toEqual(['Current status', 'Pitch'])
     expect(within(screen.getByRole('navigation', { name: 'On this page' })).getAllByRole('button').map((b) => b.textContent!.trim())).toEqual(['Current status', 'Pitch'])
     expect(new Set(asked)).toEqual(new Set(['']))
-    expect(screen.getAllByText(/Refreshing summary/)).toHaveLength(1)
+    // a stale summary stays on screen, whole, while a newer one is written
+    expect(screen.queryByText(/Refreshing summary/)).toBeNull()
     unmount()
     render(<OverviewPage ws={{ ...ws, phase: 'scoping' }} row={row} onWorkflow={vi.fn()} onTrack={vi.fn()} />)
     await screen.findByText(/The dashboard button is published/)
     expect(parts()).toEqual(['Pitch', 'Current status'])
+  })
+  it('shows only a part that has words, and no contents list for one part', async () => {
+    render(<OverviewPage ws={ws} row={row} onWorkflow={vi.fn()} onTrack={vi.fn()} />)
+    await screen.findByText(/The dashboard button is published/)
+    expect(screen.queryByRole('heading', { name: 'Pitch' })).toBeNull()
+    expect(screen.queryByRole('navigation', { name: 'On this page' })).toBeNull()
+  })
+  it('is one loader and nothing else until the first summary has words', async () => {
+    const waiting = { state: 'updating', stale: false, evidence: [], draft: { now: { sentences: [] } } }
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(waiting), { status: 200 })))
+    render(<OverviewPage ws={ws} row={row} onWorkflow={vi.fn()} onTrack={vi.fn()} />)
+    expect(await screen.findAllByText(/Refreshing summary/)).toHaveLength(1)
+    expect(screen.queryAllByRole('heading', { level: 2 })).toHaveLength(0)
+    expect(screen.queryByRole('link', { name: /PR #/ })).toBeNull()
+    expect(screen.queryByRole('navigation', { name: 'On this page' })).toBeNull()
   })
   it('shows the tickets under a clean title, a workstream counting its open tracks', () => {
     const carrying: SnapWorkstream = { ...ws, title: 'Ship dashboards (TEAM-1)', steps: [{ ...ws.steps![0], title: 'Dashboards (TEAM-2)' }, { ...ws.steps![1], tickets: ['TEAM-3'] }] }
@@ -309,5 +326,17 @@ describe('a source page reads as the board does', () => {
       fireEvent.keyDown(document.body, { key: 'Escape' })
       expect(onClose).toHaveBeenCalledTimes(1)
     })
+  })
+})
+
+describe("Overview targets", () => {
+  it("shows the goal targets as a table, one row each", async () => {
+    const withTargets = { ...result, recap: { ...result.recap!, goal: { sentences: [{ text: "Every endpoint at most 500 ms.", sources: ["apply"] }] }, targets: [{ name: "Worklist (Needs Review)", target: "≤ 500 ms", was: "20.2 s", now: "726 ms", met: false }, { name: "Worklist counts", target: "≤ 500 ms", was: "3.4 s", now: "346 ms", met: true }] } }
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(withTargets), { status: 200 })))
+    render(<OverviewPage ws={ws} row={row} onWorkflow={vi.fn()} onTrack={vi.fn()} />)
+    const table = await screen.findByRole("table")
+    expect(within(table).getAllByRole("row")).toHaveLength(3)
+    expect(within(table).getByText("726 ms")).toBeInTheDocument()
+    expect(within(table).getByLabelText("Not met")).toBeInTheDocument()
   })
 })

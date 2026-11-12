@@ -76,7 +76,8 @@ func TestDiagramNow_ReadyUserGateIsCurrentAndNeedsYou(t *testing.T) {
 	}
 }
 
-func TestDiagramNow_FlaggedStepBehindGateKeepsItsAsk(t *testing.T) {
+// A card behind an open gate is not the user's move yet: it waits on the gate.
+func TestDiagramNow_FlaggedStepBehindGateWaitsOnIt(t *testing.T) {
 	dg := reportBoard(t, func(rows []ObjectiveRow) {
 		for i := range rows {
 			if rows[i].BeadID == "w.10" {
@@ -85,7 +86,7 @@ func TestDiagramNow_FlaggedStepBehindGateKeepsItsAsk(t *testing.T) {
 			}
 		}
 	})
-	if s := diagramStep(dg, "w.10"); s == nil || s.Kind != "needs" {
-		t.Errorf("w.10 = %+v, want needs", s)
+	if s := diagramStep(dg, "w.10"); s == nil || s.Kind != "waiting" || s.Text != "Waiting on greenlight merging" {
+		t.Errorf("w.10 = %+v, want waiting on the gate", s)
 	}
 }

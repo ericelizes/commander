@@ -251,7 +251,24 @@ func TestEachPartHasItsOwnPromptSchemaAndChecks(t *testing.T) {
 	if err := Validate(r, in); err != nil {
 		t.Fatalf("a pitch-only recap: %v", err)
 	}
-	if req := readerSchema(Input{Part: "status"})["required"].([]string); len(req) != 5 || req[0] != "goal" {
+	if req := readerSchema(Input{Part: "status"})["required"].([]string); len(req) != 6 || req[0] != "goal" {
 		t.Fatalf("status schema %v", req)
+	}
+}
+
+func TestTargetsAreRowsOfTheGoal(t *testing.T) {
+	in := Input{Part: "status", Evidence: []Evidence{{ID: "a", Text: "x"}}}
+	ok := Recap{Now: Claim{Sentences: []Sentence{{Text: "Working.", Sources: []string{"a"}}}}, Targets: []Target{{Name: "Worklist", Target: "≤ 500 ms", Was: "20.2 s", Now: "726 ms"}}}
+	if err := Validate(ok, in); err != nil {
+		t.Fatal(err)
+	}
+	bad := ok
+	bad.Targets = []Target{{Name: ""}}
+	if Validate(bad, in) == nil {
+		t.Fatal("a target needs a name")
+	}
+	props := readerSchema(in)["properties"].(map[string]any)
+	if _, ok := props["targets"]; !ok {
+		t.Fatal("the status schema asks for targets")
 	}
 }

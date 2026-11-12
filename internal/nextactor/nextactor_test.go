@@ -268,3 +268,24 @@ func TestUsageCapacityPreservesNextActorGates(t *testing.T) {
 		})
 	}
 }
+
+// A card is the user's move only once what it waits on is done.
+func TestCardWaitsOnItsBlocker(t *testing.T) {
+	graph := map[string]Bead{
+		"build": {ID: "build", Title: "Build the release", Status: "open", Executing: true, ExecSince: now.Unix()},
+		"done":  {ID: "done", Title: "Old step", Status: "closed"},
+	}
+	ctx := ctxWith(true, 0, graph)
+	card := Bead{ID: "gate", Title: "Approve the release", Status: "open", NeedsUser: true, UserAsk: "approve the release", BlockedBy: []string{"build"}}
+	if r := Decide(card, ctx); r.Actor != Agent || r.Bead != "build" {
+		t.Fatalf("a card behind running work: %+v", r)
+	}
+	card.BlockedBy = []string{"done"}
+	if r := Decide(card, ctx); r.Actor != User || r.Reason != "decision" {
+		t.Fatalf("a card whose blockers are done: %+v", r)
+	}
+	card.BlockedBy = []string{"build"}
+	if r := Decide(card, Context{Now: now}); r.Actor != None || r.Reason != "dependency" {
+		t.Fatalf("without lookup a blocked card waits on its dependency: %+v", r)
+	}
+}

@@ -274,3 +274,11 @@
 .ov .ov-sec .ov-status-story > h3.ov-sub:first-child, .ov .ov-sec .ov-fade > h3.ov-sub:first-child { margin-top: 4px; }
 .ov .ov-field, .ov .ov-fields li { font-size: 16px; line-height: 1.65; }
 .ov .ov-divider { margin: 40px 0 34px; }
+
+/* The goal's measured targets: one row each, the latest number bold. */
+.ov .ov-targets { width: 100%; border-collapse: collapse; margin: 6px 0 4px; font: 400 14px/1.4 var(--font); font-variant-numeric: tabular-nums; }
+.ov .ov-targets th { text-align: left; font-weight: 600; font-size: 12px; color: var(--ink-3); padding: 6px 10px 6px 0; border-bottom: 1px solid var(--line, rgba(0,0,0,.12)); }
+.ov .ov-targets td { padding: 7px 10px 7px 0; border-bottom: 1px solid var(--line-soft, rgba(0,0,0,.06)); vertical-align: top; }
+.ov .ov-targets td:not(:first-child), .ov .ov-targets th:not(:first-child) { white-space: nowrap; }
+.ov .ov-targets .ov-target-now { font-weight: 600; }
+.ov .ov-targets td:last-child { width: 1%; font-size: 11px; }

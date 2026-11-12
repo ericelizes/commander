@@ -55,25 +55,38 @@ type Claim struct {
 // Recap is a Shape Up style pitch for the workstream: what the problem is, what
 // is being done about it, and how big and risky it is, every sentence cited.
 type Recap struct {
-	ProblemType   string `json:"problem_type"`   // bug, performance, feature, operations or request
-	Goal          Claim  `json:"goal"`           // status: what done means, measurably (its acceptance criteria)
-	Progress      Claim  `json:"progress"`       // status: where it stands against the goal, with the latest measured number
-	Now           Claim  `json:"now"`            // status: where it stands right now
-	Recent        Claim  `json:"recent"`         // status: what happened recently, a sentence each, newest first
-	Next          Claim  `json:"next"`           // status: what happens next, a sentence each, in order
-	Problem       Claim  `json:"problem"`        // the problem, in one line
-	ProblemImpact Claim  `json:"problem_impact"` // what it costs today: who, how often, time lost
-	Solution      Claim  `json:"solution"`       // what is being done, and where it stands
-	Impact        Claim  `json:"impact"`         // the result once it is done
-	Scope         string `json:"scope"`          // Small, Medium or Large
-	ScopeDetail   Claim  `json:"scope_detail"`   // the concrete size
-	Risk          int    `json:"risk"`           // 0-10: how likely shipping it breaks something
-	RiskDetail    Claim  `json:"risk_detail"`    // why
+	ProblemType string `json:"problem_type"` // bug, performance, feature, operations or request
+	Goal        Claim  `json:"goal"`         // status: what done means, measurably (its acceptance criteria)
+	Progress    Claim  `json:"progress"`     // status: where it stands against the goal, with the latest measured number
+	// Targets are the goal's measured targets, a row each, when the records
+	// list them (an endpoint's p95, a suite's run time).
+	Targets       []Target `json:"targets"`
+	Now           Claim    `json:"now"`            // status: where it stands right now
+	Recent        Claim    `json:"recent"`         // status: what happened recently, a sentence each, newest first
+	Next          Claim    `json:"next"`           // status: what happens next, a sentence each, in order
+	Problem       Claim    `json:"problem"`        // the problem, in one line
+	ProblemImpact Claim    `json:"problem_impact"` // what it costs today: who, how often, time lost
+	Solution      Claim    `json:"solution"`       // what is being done, and where it stands
+	Impact        Claim    `json:"impact"`         // the result once it is done
+	Scope         string   `json:"scope"`          // Small, Medium or Large
+	ScopeDetail   Claim    `json:"scope_detail"`   // the concrete size
+	Risk          int      `json:"risk"`           // 0-10: how likely shipping it breaks something
+	RiskDetail    Claim    `json:"risk_detail"`    // why
 	// StillToDefine is, while the work is scoped, what the pitch still lacks
 	// before it can be agreed (acceptance criteria first).
 	StillToDefine Claim     `json:"still_to_define"`
 	GeneratedAt   time.Time `json:"generated_at"`
 	Hash          string    `json:"hash"`
+}
+
+// Target is one measured target: what is measured, the target, the first and
+// the latest recorded number, and whether the latest meets the target.
+type Target struct {
+	Name   string `json:"name"`
+	Target string `json:"target"`
+	Was    string `json:"was"`
+	Now    string `json:"now"`
+	Met    bool   `json:"met"`
 }
 
 // claims are the recap's cited parts, in reading order.
@@ -144,7 +157,10 @@ func (c *Cache) notifyLocked() {
 	c.changed = make(chan struct{})
 }
 func Hash(in Input) string {
-	b, _ := json.Marshal(in)
+	b, _ := json.Marshal(struct {
+		Version int // bump when the summary's shape changes
+		In      Input
+	}{2, in})
 	h := sha256.Sum256(b)
 	return hex.EncodeToString(h[:])
 }
@@ -264,6 +280,14 @@ func Validate(r Recap, in Input) error {
 	case "pitch":
 		required, optional = []Claim{r.Problem, r.ProblemImpact, r.Solution, r.Impact, r.ScopeDetail, r.RiskDetail}, []Claim{r.StillToDefine}
 	}
+	if len(r.Targets) > 20 {
+		return errors.New("too many recap targets")
+	}
+	for _, t := range r.Targets {
+		if strings.TrimSpace(t.Name) == "" || len(t.Name) > 80 || len(t.Target) > 40 || len(t.Was) > 40 || len(t.Now) > 40 {
+			return errors.New("invalid recap target")
+		}
+	}
 	if in.Part != "status" && (!problemTypes[r.ProblemType] || !scopes[r.Scope] || r.Risk < 0 || r.Risk > 10) {
 		return errors.New("invalid recap type, scope or risk")
 	}
@@ -286,8 +310,8 @@ func Validate(r Recap, in Input) error {
 }
 
 const Prompt = `You write the Overview of a workstream for a person who delegated it to agents, in two parts: first its STATUS (what is happening right now and lately), then a short Shape Up style PITCH (what this work is and why they should care).
-Return ONLY JSON, keys in this order: {"goal":{"sentences":[...]},"progress":{"sentences":[...]},"now":{"sentences":[{"text":"...","sources":["evidence-id"]}]},"recent":{"sentences":[...]},"next":{"sentences":[...]},"problem":{"sentences":[{"text":"...","sources":["evidence-id"]}]},"problem_type":"bug|performance|feature|operations|request","problem_impact":{"sentences":[...]},"solution":{"sentences":[...]},"impact":{"sentences":[...]},"scope":"Small|Medium|Large","scope_detail":{"sentences":[...]},"risk":0,"risk_detail":{"sentences":[...]}}.
-STATUS, as easy to read as the pitch. When a Linear ticket is in the evidence, its acceptance criteria are the user's own targets: goal states those targets with their numbers (like 'Worklist p95 at most 2s and open-chart p95 at most 3s'), and progress compares the latest measured numbers to them with when they were measured, saying plainly when nothing has been re-measured since a change went live. goal: ONE short sentence stating the target itself, measurably, from the acceptance criteria (done_when) of the workstream and its steps, like 'The QA Hub test suite runs in 4 minutes or less on 2 cores' (not 'Done means ...'); empty when the records give no criteria. progress: ONE short sentence on where it stands against that goal right now, with the latest measured number when the records have one, like 'Last full run took 6.5 minutes on 4 cores; not yet timed on 2', or 'Not measured yet'; empty when goal is empty. now: ONE short sentence, at most 20 words, on where this stands right now: what is happening and what it waits on. recent: up to 3 sentences, each one thing that happened lately and matters to the reader (shipped, merged, found, failed, decided), newest first, at most 15 words each; empty when nothing did. next: up to 3 sentences, each the next recorded step, in order, at most 15 words each; empty when none is recorded. Say what each thing means for the reader, not its mechanics: no ids, build hashes, settings or environment names, file names, audit references or who-said-what unless that is the point.
+Return ONLY JSON, keys in this order: {"goal":{"sentences":[...]},"progress":{"sentences":[...]},"targets":[{"name":"...","target":"...","was":"...","now":"...","met":false}],"now":{"sentences":[{"text":"...","sources":["evidence-id"]}]},"recent":{"sentences":[...]},"next":{"sentences":[...]},"problem":{"sentences":[{"text":"...","sources":["evidence-id"]}]},"problem_type":"bug|performance|feature|operations|request","problem_impact":{"sentences":[...]},"solution":{"sentences":[...]},"impact":{"sentences":[...]},"scope":"Small|Medium|Large","scope_detail":{"sentences":[...]},"risk":0,"risk_detail":{"sentences":[...]}}.
+STATUS, as easy to read as the pitch. When a Linear ticket is in the evidence, its acceptance criteria are the user's own targets: goal states those targets with their numbers (like 'Worklist p95 at most 2s and open-chart p95 at most 3s'), and progress compares the latest measured numbers to them with when they were measured, saying plainly when nothing has been re-measured since a change went live. goal: ONE short sentence stating the target itself, measurably, from the acceptance criteria (done_when) of the workstream and its steps, like 'The QA Hub test suite runs in 4 minutes or less on 2 cores' (not 'Done means ...'); empty when the records give no criteria. progress: ONE short sentence on where it stands against that goal right now, with the latest measured number when the records have one, like 'Last full run took 6.5 minutes on 4 cores; not yet timed on 2', or 'Not measured yet'; empty when goal is empty. targets: when the records list measured targets (each endpoint's p95, a suite's run time), EVERY one of them as a row, in the records' order, none left out: name (short and plain, like 'Worklist (Needs Review)' or 'Open chart: deferred sections'), target (like '≤ 500 ms'), was (the earliest recorded number, like '20.2 s', or '—'), now (the latest recorded number, like '726 ms', or 'not measured'), met (true only when the latest number meets the target). Write times under a second in ms and longer ones in s with one decimal. Empty when the records list no measured targets; then progress carries the numbers. now: ONE short sentence, at most 20 words, on where this stands right now: what is happening and what it waits on. recent: up to 3 sentences, each one thing that happened lately and matters to the reader (shipped, merged, found, failed, decided), newest first, at most 15 words each; empty when nothing did. next: up to 3 sentences, each the next recorded step, in order, at most 15 words each; empty when none is recorded. Say what each thing means for the reader, not its mechanics: no ids, build hashes, settings or environment names, file names, audit references or who-said-what unless that is the point.
 PITCH. KEEP IT SHORT: every pitch part is one or two short sentences, at most 30 words in all, written so the reader gets it in one glance. Leave details, ids and history out unless they are the point.
 problem: ONE short sentence naming the problem in plain words. Not the steps taken.
 problem_impact: 1-2 sentences on the REAL impact today, the reason anyone should care: who experiences it, how often, the time or money it costs, what it blocks or risks. If the records do not say how big it is, say that in a few words instead of guessing.
@@ -477,7 +501,7 @@ func PromptFor(prompt, part string) string {
 	if part == "status" {
 		head := []string{
 			"You write the CURRENT STATUS of a workstream for a person who delegated it to agents: what is happening right now and lately, measured against their goal.",
-			`Return ONLY JSON, keys in this order: {"goal":{"sentences":[{"text":"...","sources":["evidence-id"]}]},"progress":{"sentences":[...]},"now":{"sentences":[...]},"recent":{"sentences":[...]},"next":{"sentences":[...]}}.`,
+			`Return ONLY JSON, keys in this order: {"goal":{"sentences":[{"text":"...","sources":["evidence-id"]}]},"progress":{"sentences":[...]},"targets":[{"name":"...","target":"...","was":"...","now":"...","met":false}],"now":{"sentences":[...]},"recent":{"sentences":[...]},"next":{"sentences":[...]}}.`,
 		}
 		return strings.Join(append(append(head, statusRules...), common...), "\n")
 	}
@@ -503,8 +527,15 @@ func readerSchema(in Input) map[string]any {
 	list := map[string]any{"type": "object", "additionalProperties": false, "required": []string{"sentences"}, "properties": map[string]any{
 		"sentences": map[string]any{"type": "array", "minItems": 0, "maxItems": 4, "items": sentence},
 	}}
+	target := map[string]any{"type": "object", "additionalProperties": false, "required": []string{"name", "target", "was", "now", "met"}, "properties": map[string]any{
+		"name":   map[string]any{"type": "string", "minLength": 1, "maxLength": 80},
+		"target": map[string]any{"type": "string", "maxLength": 40},
+		"was":    map[string]any{"type": "string", "maxLength": 40},
+		"now":    map[string]any{"type": "string", "maxLength": 40},
+		"met":    map[string]any{"type": "boolean"},
+	}}
 	props := map[string]any{
-		"goal": list, "progress": list,
+		"goal": list, "progress": list, "targets": map[string]any{"type": "array", "maxItems": 20, "items": target},
 		"now": claim, "recent": list, "next": list,
 		"problem": claim, "problem_impact": claim, "solution": claim, "impact": claim,
 		"problem_type":    map[string]any{"type": "string", "enum": []string{"bug", "performance", "feature", "operations", "request"}},
@@ -514,7 +545,7 @@ func readerSchema(in Input) map[string]any {
 		"risk_detail":     claim,
 		"still_to_define": list,
 	}
-	status := []string{"goal", "progress", "now", "recent", "next"}
+	status := []string{"goal", "progress", "targets", "now", "recent", "next"}
 	pitch := []string{"problem", "problem_type", "problem_impact", "solution", "impact", "scope", "scope_detail", "risk", "risk_detail", "still_to_define"}
 	keys := append(append([]string{}, status...), pitch...)
 	switch in.Part {
