@@ -57,6 +57,9 @@ func applyDescriptions(describe DescribeFunc, snap *Snapshot, d *Display) {
 func describeRow(describe DescribeFunc, key string, row nextactor.Row, facts, fallback string) string {
 	text, signal, ok := describe(key, string(row.Lead.Actor), row.Lead.Reason, Opener(row.Lead), facts)
 	if !ok {
+		if via := row.Lead.Via; len(via) > 0 && row.Lead.Actor != nextactor.User && row.Lead.Actor != nextactor.Stuck {
+			return "Waiting for " + "“" + via[len(via)-1] + "”"
+		}
 		return placeholder(fallback)
 	}
 	if signal != "" && row.Lead.Actor == nextactor.Agent {
@@ -149,6 +152,10 @@ func rowFacts(snap Snapshot, workstream, track string, steps []SnapStep, row nex
 	b.WriteString("\n")
 	if len(lead.Via) > 0 {
 		fmt.Fprintf(&b, "It blocks, in order: %s\n", strings.Join(lead.Via, " <- "))
+		if lead.Actor != nextactor.User && lead.Actor != nextactor.Stuck {
+			// The move belongs to another step: this line's own work waits on it.
+			fmt.Fprintf(&b, "Nothing runs for this line itself: it waits for %q to finish.\n", lead.Via[len(lead.Via)-1])
+		}
 	}
 	also := []string{}
 	if row.Agents > 0 {
