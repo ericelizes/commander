@@ -1,3 +1,4 @@
+import { ActivityFreshness } from './ActivityFreshness'
 import { Component, Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { BoardRow, BoardTrack, LineKind, SnapStep, SnapWorkstream, Snapshot } from '../../../shared/snapshot'
 import { splitTickets, TicketPills } from '../../../features/linear/Ticket'
@@ -301,6 +302,7 @@ export function Overview({ ws, row, track, onTrack }: {
 
   return (
     <div className="ov-pane">
+    <ActivityFreshness />
     <div className="ov-scroll" onScroll={() => setSource((s) => (s?.pinned ? s : null))}>
       <article className="ov" aria-label="Workstream overview">
         <h1>{splitTickets(target.title).text}</h1>

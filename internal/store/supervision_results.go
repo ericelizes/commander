@@ -24,13 +24,17 @@ func (s *Store) FinishNativeExecution(ctx context.Context, role string, rid int6
 // FinishNativeExecutionReport records a physical exit and its unaccepted model
 // report atomically. It never closes work or substitutes for review/approval.
 func (s *Store) FinishNativeExecutionReport(ctx context.Context, role string, rid int64, session, status, report string) error {
-	if !s.postgres || rid <= 0 || role == "" || session == "" || (status != "exited" && status != "native-error") {
+	if !s.postgres || rid <= 0 || role == "" || session == "" || (status != "exited" && status != "native-error" && status != "usage-limited") {
 		return errors.New("invalid native execution exit identity")
 	}
 	return s.closeSupervisedRunIdentity(ctx, rid, status, role, session, truncateSupervision(report, 6000))
 }
 
 func (s *Store) closeSupervisedRunIdentity(ctx context.Context, rid int64, status, expectedRole, expectedSession, nativeReport string) error {
+	usageLimited := status == "usage-limited"
+	if usageLimited {
+		status = "native-error"
+	}
 	return s.WithTx(ctx, func(q Querier) error {
 		var pid int64
 		var bead, session, actor string
@@ -80,11 +84,16 @@ func (s *Store) closeSupervisedRunIdentity(ctx context.Context, rid int64, statu
 			if status == "native-error" {
 				history = "Native execution ended with an error; its report has not been accepted."
 			}
+			factKind := ""
+			if usageLimited {
+				history = "Native execution stopped at its account usage limit; authorized work awaits available capacity."
+				factKind = "native-usage-limit"
+			}
 			body := strings.TrimSpace(nativeReport)
 			if body == "" {
 				body = "No terminal report was returned. Inspect the chat and artifacts before deciding the next action."
 			}
-			if _, e = q.ExecContext(ctx, `INSERT INTO bead_comments(project_id,bead_id,id,author,text,created_at,run_id) VALUES(?,?,?,'cmdrd',?,?,?)`, pid, bead, "native-exit:"+fmt.Sprint(rid), history+"\n"+body, time.Now().UTC().Format(time.RFC3339Nano), rid); e != nil {
+			if _, e = q.ExecContext(ctx, `INSERT INTO bead_comments(project_id,bead_id,id,author,text,created_at,run_id,fact_kind) VALUES(?,?,?,'cmdrd',?,?,?,?)`, pid, bead, "native-exit:"+fmt.Sprint(rid), history+"\n"+body, time.Now().UTC().Format(time.RFC3339Nano), rid, factKind); e != nil {
 				return e
 			}
 		}
@@ -124,6 +133,20 @@ func (s *Store) closeSupervisedRunIdentity(ctx context.Context, rid int64, statu
 		rows.Close()
 		if e != nil {
 			return e
+		}
+		// Usage exhaustion is a recoverable capacity event, not a deliverable.
+		// Requeue only the exact admitted plan after physical exit. Holds,
+		// pending questions and capacity remain enforced at the next claim.
+		if expectedRole != "" && usageLimited && summary == "" {
+			result, err := q.ExecContext(ctx, `UPDATE bead_tasks b SET status='open',execution_ready=TRUE,resume_run_id=?,resume_plan_revision=b.plan_revision,execution_attempts=0,execution_due_at=0,execution_error=? WHERE b.project_id=? AND b.id=? AND b.active_run_id=? AND b.status IN('open','in_progress') AND b.result_run_id IS NULL AND EXISTS(SELECT 1 FROM execution_slots x WHERE x.run_id=? AND x.plan_revision=b.plan_revision)`, rid, UsageCapacityError+"execution stopped at its account limit; awaiting available account", pid, bead, rid, rid)
+			if err != nil {
+				return err
+			}
+			if n, err := result.RowsAffected(); err != nil {
+				return err
+			} else if n > 0 {
+				return nil
+			}
 		}
 		if expectedRole != "" && summary == "" {
 			summary = strings.TrimSpace(nativeReport)

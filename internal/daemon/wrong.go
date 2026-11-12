@@ -14,6 +14,7 @@ import (
 	"github.com/example-user/commander/internal/boardturn"
 	"github.com/example-user/commander/internal/linearsync"
 	"github.com/example-user/commander/internal/livedata"
+	"github.com/example-user/commander/internal/nextactor"
 )
 
 // linearSelfFix ends Commander's Linear lines: per standing decision d27,
@@ -42,12 +43,12 @@ func wrongOnScreen(d livedata.Display, workstreams []livedata.SnapWorkstream, sp
 	rows := map[string]livedata.BoardRow{}
 	for _, w := range d.Workstreams {
 		rows[w.Key] = w
-		if w.Why != "" {
-			add("why:"+w.Key, w.Key, fmt.Sprintf("#%d %s: %s. Its Manager is picking it up", w.N, plain(w.Title), whyWords(w.Why)))
+		if whyMismatch(w.Kind, w.Why, w.Actor) {
+			add("why:"+w.Key, w.Key, fmt.Sprintf("#%d %s: %s. %s", w.N, plain(w.Title), whyWords(w.Why), nextActorWords(w.Actor, w.PlanningCommander)))
 		}
 		for _, t := range w.AllTracks() {
-			if t.Why != "" {
-				add("why:"+t.Key, w.Key, fmt.Sprintf("#%d%s %s: %s. Its Manager is picking it up", w.N, t.Letter, plain(t.Title), whyWords(t.Why)))
+			if whyMismatch(t.Kind, t.Why, t.Actor) {
+				add("why:"+t.Key, w.Key, fmt.Sprintf("#%d%s %s: %s. %s", w.N, t.Letter, plain(t.Title), whyWords(t.Why), nextActorWords(t.Actor, t.PlanningCommander)))
 			}
 		}
 	}
@@ -115,9 +116,62 @@ func wrongOnScreen(d livedata.Display, workstreams []livedata.SnapWorkstream, sp
 				target, name = w.Key, fmt.Sprintf("#%d %s", w.N, plain(w.Title))
 			}
 		}
-		add("gate:"+g.Gate, target, fmt.Sprintf("Agents on %s tried to start before its plan was approved. Approve the plan, or tell its Manager to wait", name))
+		add("gate:"+g.Gate, target, fmt.Sprintf("Agents on %s tried to start before its plan was approved. Approve the plan, or tell its planning Commander to wait", name))
 	}
 	return out
+}
+
+// A canonical why-chain explains the row; it is not itself an error. Legacy
+// rows have no actor and still use Why exclusively for observed discrepancies.
+func whyMismatch(kind, why string, actor *nextactor.Row) bool {
+	if why == "" {
+		return false
+	}
+	if actor == nil {
+		return true
+	}
+	expected := map[nextactor.Actor]string{
+		nextactor.User: "needs", nextactor.Agent: "working", nextactor.Commander: "working",
+		nextactor.External: "waiting", nextactor.Stuck: "stuck", nextactor.None: "quiet",
+	}[actor.Lead.Actor]
+	if expected == "" || kind != expected {
+		return true
+	}
+	// A dependency without a resolved actor needs planning inspection. Paused,
+	// completed and child-carried scopes legitimately have no next actor.
+	return actor.Lead.Actor == nextactor.None && strings.TrimPrefix(actor.Lead.Reason, "blocked:") == "dependency"
+}
+
+func nextActorWords(actor *nextactor.Row, commander string) string {
+	planner := "The planning Commander"
+	if commander != "" {
+		planner += " (" + commander + ")"
+	}
+	if actor == nil {
+		return planner + " needs to inspect this mismatch"
+	}
+	r := actor.Lead
+	switch r.Actor {
+	case nextactor.User:
+		return "The next move is on Eric's card"
+	case nextactor.Commander:
+		if r.Who != "" {
+			return "The next move belongs to planning Commander " + r.Who
+		}
+		return planner + " has the next move"
+	case nextactor.Agent:
+		if r.Who != "" {
+			return "The next move belongs to agent " + r.Who
+		}
+		return "The next move belongs to an execution agent"
+	case nextactor.External:
+		if r.Who != "" {
+			return "The next move is waiting on " + r.Who
+		}
+		return "The next move is waiting outside the agents"
+	default:
+		return planner + " needs to inspect this mismatch"
+	}
 }
 
 type gateWarning struct{ Time, Scope, Gate string }

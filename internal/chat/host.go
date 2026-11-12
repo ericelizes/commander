@@ -42,6 +42,8 @@ const (
 // later Engine can adopt it without resolving anything.
 type hostInfo struct {
 	ExecutionRunID int64     `json:"execution_run_id,omitempty"`
+	Runtime        string    `json:"runtime,omitempty"`
+	Account        string    `json:"account,omitempty"`
 	Role           string    `json:"role"`
 	SessionID      string    `json:"session_id"`
 	Model          string    `json:"model,omitempty"`
@@ -111,6 +113,7 @@ type host struct {
 	exited              *hostExit
 	quit                bool
 	nativeEndOnce       sync.Once
+	nativeLimit         *UsageLimit
 	nativeResultError   bool
 	nativeResultSummary string
 	client              *hostClientConn
@@ -221,10 +224,22 @@ func (h *host) startClaude() {
 
 // pump journals claude's stdout, then reaps it and records the exit.
 func (h *host) pump(stdout io.Reader) {
+	normalizer := NewNormalizer(0, false, time.Now)
 	sc := bufio.NewScanner(stdout)
 	sc.Buffer(make([]byte, 0, 1<<20), 64<<20)
 	for sc.Scan() {
 		line := sc.Text()
+		if h.cfg.Info.ExecutionRunID > 0 {
+			events, _ := normalizer.Line(sc.Bytes())
+			for _, event := range events {
+				if u := usageLimitOf(event); u != nil {
+					if h.nativeLimit != nil && u.ResetsAt == 0 {
+						u.ResetsAt = h.nativeLimit.ResetsAt
+					}
+					h.nativeLimit = u
+				}
+			}
+		}
 		var t struct {
 			Type string `json:"type"`
 		}

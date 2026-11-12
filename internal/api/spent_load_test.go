@@ -86,10 +86,10 @@ func (f *loadFixture) write(t *testing.T, url, to string) beads.DoorResponse {
 
 // The diagnosed load: a settle's load ran out of its budget. Every store read
 // after that failed, so it came back with no Operators and read as degraded. It
-// must publish nothing, keep the last board and the last good data, not read as
+// must publish no new content, keep the last board and the last good data, not read as
 // degraded, and answer settled:false. Through the door, the real settle and
 // refresh, whichever read the budget ends in.
-func TestSettle_ALoadThatOutlivesItsBudgetPublishesNothing(t *testing.T) {
+func TestSettle_ALoadThatOutlivesItsBudgetPublishesOnlyFreshnessError(t *testing.T) {
 	for name, hang := range map[string]func(beads.ListOptions) bool{
 		"in the project read": func(o beads.ListOptions) bool { return !slices.Contains(o.Labels, gates.KindLabel) },
 		"in the gate read":    func(o beads.ListOptions) bool { return slices.Contains(o.Labels, gates.KindLabel) },
@@ -128,8 +128,11 @@ func TestSettle_ALoadThatOutlivesItsBudgetPublishesNothing(t *testing.T) {
 			}
 			select {
 			case <-ch:
-				t.Fatal("subscribers were told about a spent load")
 			default:
+				t.Fatal("subscribers were not told freshness could not be verified")
+			}
+			if !after.LoadError || after.LoadCompletedAt != before.LoadCompletedAt {
+				t.Fatal("spent load renewed successful read evidence")
 			}
 			if err := f.src.LastLoadErr(); err != nil {
 				t.Fatalf("one spent load reads as degraded: %v", err)

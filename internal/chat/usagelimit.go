@@ -110,9 +110,7 @@ func (e *Engine) settleLimit(c *chatRole, p *process, ev Event) {
 	c.mu.Unlock()
 
 	until := u.ResetsAt
-	if until == 0 {
-		until = u.At.Add(time.Hour).Unix() // unknown reset: skip the account for an hour
-	}
+	// Zero means the provider did not report a reset. Never invent a deadline.
 	e.opts.Usage.MarkOut(p.runtime(), p.spec.Account, c.role, until, u.At)
 
 	c.publish(Event{Kind: KindNotice, Source: SourceEngine, Subtype: "usage_limit",

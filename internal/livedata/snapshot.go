@@ -19,6 +19,11 @@ import (
 // Snapshot is the JSON view of the cockpit served by cmdrd's /api/snapshot
 // and /api/events: what the TUI sidebar and title bar show, as data.
 type Snapshot struct {
+	PlanningUsage map[string]string `json:"planning_usage,omitempty"`
+
+	// LoadCompletedAt advances only after a complete successful API source read.
+	LoadCompletedAt   time.Time         `json:"load_completed_at"`
+	LoadError         bool              `json:"load_error,omitempty"`
 	OrchestrationMode string            `json:"orchestration_mode,omitempty"`
 	Storage           string            `json:"storage,omitempty"`
 	Executions        []SnapExecution   `json:"executions"`
@@ -360,6 +365,7 @@ func BuildSnapshot(data Data, unread map[string]int) Snapshot {
 	asks, noPitch := askLists(data)
 	s := Snapshot{
 		OrchestrationMode: data.OrchestrationMode,
+		PlanningUsage:     data.PlanningUsage,
 		GeneratedAt:       data.LoadedAt,
 		Projects:          []SnapProject{},
 		Workstreams:       []SnapWorkstream{},

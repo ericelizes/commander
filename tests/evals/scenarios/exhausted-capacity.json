@@ -1,0 +1,24 @@
+{
+  "kinds": [
+    "code",
+    "knowledge"
+  ],
+  "runners": [
+    "internal/spawn:TestExhaustedCapacityScenario",
+    "internal/execution:TestUsageCapacityDoesNotSpendLaunchAttempts",
+    "internal/livedata:TestUsageCapacityAppearsOnEveryAffectedRow",
+    "tests/evals:TestExhaustedCapacityInIsolatedCockpit",
+    "cmd/cmdr:TestActiveExecutionMailRetiredManagerFollowsPlanningOwner"
+  ],
+  "invariants": [
+    "Saved account ordering is preference; connected accounts outside it remain fallback capacity",
+    "Physical usage-limited exit requeues only the admitted plan and retains the workspace",
+    "A worktrees symlink and its physical noindex path identify the same retained workspace",
+    "The worker and native spawner use available capacity with a fresh session and attributed handoff",
+    "Every affected row shows exhaustion without inventing a holder or reset",
+    "Explicit runtime pins, pauses and planning checkpoints remain constraints",
+    "Capacity waits do not spend the launch failure budget",
+    "Unknown usage reset remains unknown",
+    "An automatic Claude question/answer continuation never creates a user pin and later usage exhaustion can move to Codex; a genuine Claude pin waits instead"
+  ]
+}

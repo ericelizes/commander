@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/example-user/commander/internal/agentrt"
+	"github.com/example-user/commander/internal/chat"
 	"os/exec"
 	"strings"
 
@@ -25,6 +27,15 @@ func (w *Worker) resumeQuestionCheckpoint(ctx context.Context, c store.Execution
 	r.Name = strings.TrimPrefix(prior.AgentName, "operator-")
 	r.Resume = true
 	r.ResumeSourceRunID = prior.ID
+	usageRecovery, err := w.Store.UsageRecoverySource(ctx, prior.ID)
+	if err != nil {
+		return err
+	}
+	if usageRecovery && prior.ExecutionDriver == "native" {
+		r.UsageRecovery = true
+		r.Runtime = chat.ReadRuntimePin(agentrt.CommanderHome(), prior.AgentName)
+		return resumeUsageWorkspace(ctx, c, r, *prior)
+	}
 	r.ResumeSessionID = prior.OpencodeSessionID
 	if r.ResumeSessionID == "" {
 		return errors.New("question checkpoint has no recorded runtime session")
@@ -36,7 +47,8 @@ func (w *Worker) resumeQuestionCheckpoint(ctx context.Context, c store.Execution
 	if r.ResumeRuntime == "" {
 		return errors.New("question checkpoint has no recorded provider")
 	}
-	r.Runtime = r.ResumeRuntime
+	// Runtime carries explicit intent; ResumeRuntime binds only this continuation.
+	r.Runtime = chat.ReadRuntimePin(agentrt.CommanderHome(), prior.AgentName)
 	if prior.ExecutionDriver == "native" {
 		if prior.ExecutionRuntime != r.ResumeRuntime || prior.ExecutionAccount == "" || prior.ExecutionModel == "" {
 			return errors.New("native checkpoint disagrees with its recorded provider binding")
@@ -57,6 +69,22 @@ func (w *Worker) resumeQuestionCheckpoint(ctx context.Context, c store.Execution
 		if r.Branch == "" {
 			return errors.New("question checkpoint has no resumable branch")
 		}
+	}
+	return nil
+}
+
+func resumeUsageWorkspace(ctx context.Context, c store.ExecutionClaim, r *spawn.SpawnRequest, prior store.AgentRun) error {
+	if c.Project.Type != "code" {
+		return nil
+	}
+	path := spawn.RunWorktree(c.Project.Path, prior)
+	raw, e := exec.CommandContext(ctx, "git", "-C", path, "symbolic-ref", "--quiet", "--short", "HEAD").Output()
+	if e != nil {
+		return fmt.Errorf("read usage recovery branch: %w", e)
+	}
+	r.Branch = strings.TrimSpace(string(raw))
+	if r.Branch == "" {
+		return errors.New("usage recovery has no retained branch")
 	}
 	return nil
 }

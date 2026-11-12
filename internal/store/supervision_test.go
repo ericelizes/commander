@@ -2,6 +2,10 @@ package store
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -183,5 +187,67 @@ func TestNativeExitPreservesAttributedFinalReportOverChatSummary(t *testing.T) {
 	var result int64
 	if e = s.DB().QueryRow(`SELECT result_summary,status,result_run_id FROM bead_tasks WHERE project_id=? AND id='task'`, pid).Scan(&summary, &status, &result); e != nil || summary != report || status != "open" || result != rid {
 		t.Fatal("native chat summary displaced formal evidence or closed work", summary, status, result, e)
+	}
+}
+
+func TestPostgresSupervisionInactiveGates(t *testing.T) {
+	s := postgresTestStore(t)
+	ctx := context.Background()
+	raw, err := os.ReadFile("../../tests/evals/scenarios/supervision-inactive-gates.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var scenario struct {
+		Cases []struct {
+			Name, Stage, Ancestor, Parent string
+			Inactive                      bool
+		}
+	}
+	if err := json.Unmarshal(raw, &scenario); err != nil {
+		t.Fatal(err)
+	}
+	if len(scenario.Cases) == 0 {
+		t.Fatal("missing gate scenarios")
+	}
+	for i, tc := range scenario.Cases {
+		t.Run(tc.Name, func(t *testing.T) {
+			pid, err := s.InsertProject(ctx, Project{Name: fmt.Sprintf("gate-fixture-%d", i), Path: fmt.Sprintf("/gate-fixture-%d", i), Type: "code", Status: "active"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			parent := ""
+			if tc.Parent != "" {
+				parent = "gate-parent"
+			}
+			for _, row := range []struct{ id, status, parent, labels string }{
+				{"ancestor", tc.Ancestor, "", `[]`},
+				{"stage.1", tc.Stage, "ancestor", `[]`},
+				{"gate-parent", "open", "", `[]`},
+				{"gate", "open", parent, `["kind:gate","gate-of:stage_2e1","gate-status:pending","approver:human"]`},
+			} {
+				if row.id == "gate-parent" && tc.Parent != "" {
+					row.status = tc.Parent
+				}
+				if _, err := s.DB().Exec(`INSERT INTO bead_tasks(project_id,id,title,status,parent_id,labels,created_at,updated_at) VALUES(?,?,?,?,NULLIF(?,''),?::jsonb,'now','now')`, pid, row.id, row.id, row.status, row.parent, row.labels); err != nil {
+					t.Fatal(err)
+				}
+			}
+			f, err := s.SupervisionFact(ctx, SupervisionJob{ProjectID: pid, BeadID: "gate"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if f.GateInactive != tc.Inactive {
+				t.Fatalf("inactive=%v want %v", f.GateInactive, tc.Inactive)
+			}
+			// Reading supervision does not pass, close, delete, or relabel the gate.
+			var status, labels string
+			var visible bool
+			if err := s.DB().QueryRow(`SELECT status,labels::text,deleted_at IS NULL FROM bead_tasks WHERE project_id=? AND id='gate'`, pid).Scan(&status, &labels, &visible); err != nil {
+				t.Fatal(err)
+			}
+			if status != "open" || !visible || !strings.Contains(labels, `"gate-status:pending"`) || !strings.Contains(labels, `"approver:human"`) {
+				t.Fatalf("gate changed: %s %s visible=%v", status, labels, visible)
+			}
+		})
 	}
 }

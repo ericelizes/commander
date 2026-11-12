@@ -5,6 +5,7 @@ import (
 	"github.com/example-user/commander/internal/livedata"
 	"github.com/example-user/commander/internal/store"
 	"github.com/example-user/commander/internal/tui/widgets"
+	"strings"
 )
 
 type canonicalLine struct {
@@ -50,7 +51,13 @@ func newCanonicalState(s *livedata.Snapshot) *canonicalState {
 	var steps func(int64, []livedata.SnapStep)
 	steps = func(pid int64, ss []livedata.SnapStep) {
 		for _, s := range ss {
-			out.working[store.WorkstreamKey{ProjectID: pid, BeadID: s.BeadID}] = s.Working
+			key := store.WorkstreamKey{ProjectID: pid, BeadID: s.BeadID}
+			out.working[key] = s.Working
+			// Ordinary task rows have no BoardTrack, but carry the same canonical
+			// capacity fact. Never replace a track's higher-priority hold/decision.
+			if _, exists := out.lines[key]; !exists && s.ExecutionMode == "active" && s.ExecutionReady && s.ExecutionEligible && strings.HasPrefix(s.ExecutionError, store.UsageCapacityError) {
+				out.lines[key] = canonicalLine{kind: "stalled", text: s.ExecutionError}
+			}
 			steps(pid, s.Children)
 		}
 	}

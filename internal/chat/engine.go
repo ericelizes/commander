@@ -715,7 +715,7 @@ func (e *Engine) startHost(spec Spec, resume bool, lock *sessionLock) (*hostConn
 		binary, args = bridge, CodexBridgeArgs(spec, e.opts.Home)
 	}
 	cfg := hostConfig{InitialPrompt: spec.ExecutionInitialPrompt, Sock: sock, Binary: binary, Args: args, Cwd: spec.Cwd,
-		Info: hostInfo{ExecutionRunID: spec.ExecutionRunID, Role: spec.Role, SessionID: spec.SessionID, Model: spec.Model, Cwd: spec.Cwd, Resumed: resume, StartedAt: e.opts.Now()}}
+		Info: hostInfo{Runtime: spec.Runtime, Account: spec.Account, ExecutionRunID: spec.ExecutionRunID, Role: spec.Role, SessionID: spec.SessionID, Model: spec.Model, Cwd: spec.Cwd, Resumed: resume, StartedAt: e.opts.Now()}}
 	if spec.ExecutionRunID > 0 {
 		cfg.ExitReceiptPath = nativeExitPath(e.opts.Home, spec.Role, spec.ExecutionRunID)
 		if err := os.MkdirAll(filepath.Dir(cfg.ExitReceiptPath), 0700); err != nil {

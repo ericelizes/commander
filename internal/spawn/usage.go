@@ -46,17 +46,25 @@ type providerPick struct {
 // spawn's own refusals (lock, branch, stop) are behind it, so a refused spawn
 // leaves the role's runtime, account and intent as they were.
 func (s *Spawner) resolveProvider(ctx context.Context, req SpawnRequest, agentName string) (SpawnRequest, error) {
-	if !req.Resume && len(req.AgentAccounts) > 0 && req.Runtime == "" && req.Account == "" {
+	if (!req.Resume || req.UsageRecovery) && len(req.AgentAccounts) > 0 && req.Runtime == "" && req.Account == "" {
 		if _, ok := firstAgentAccount(req); !ok {
-			return req, fmt.Errorf("spawn: %w in the saved execution account order", chat.ErrNoUsage)
+			return req, fmt.Errorf("spawn: %w among connected accounts for this execution", chat.ErrNoUsage)
 		}
 	}
 	asked := req
 	pick := &providerPick{asked: asked, wasCodex: wasOnCodex(req, agentName)}
-	pick.runtime, pick.reason, pick.pinned = pickOperatorRuntime(req, agentName)
+	selection := req
+	// A checkpoint binds this continuation, independently of persistent user intent.
+	if req.ResumeRuntime != "" && !req.UsageRecovery {
+		selection.Runtime = req.ResumeRuntime
+	}
+	pick.runtime, pick.reason, pick.pinned = pickOperatorRuntime(selection, agentName)
+	if req.UsageRecovery && asked.Runtime != "" && pick.runtime != asked.Runtime {
+		return req, fmt.Errorf("%w: pinned runtime %s is unavailable", chat.ErrNoUsage, asked.Runtime)
+	}
 	req.Runtime, req.runtimeReason = pick.runtime, pick.reason
 	if pick.reason == ReasonAgentAccounts && req.Account == "" {
-		if p, ok := firstAgentAccount(req); ok && p.Account != "" && slices.Contains(agentOrder(req), p.Account) {
+		if p, ok := firstAgentAccount(req); ok && p.Account != "" && p.Runtime == chat.RuntimeClaude && (len(req.AgentAccounts) > 0 || req.UsageRecovery || slices.Contains(agentOrder(req), p.Account)) {
 			req.Account = p.Account
 		}
 	}
@@ -68,9 +76,9 @@ func (s *Spawner) resolveProvider(ctx context.Context, req SpawnRequest, agentNa
 	req.Account = acct
 	req.pick = pick
 	home := agentrt.CommanderHome()
-	mv, err := steerByUsage(home, readUsage(home), usageNow(), req.Runtime, req.Account, usageRuntimeIntent(asked, agentName, pick.reason), asked.Account)
+	mv, err := steerByUsage(home, readUsage(home), usageNow(), req.Runtime, req.Account, usageRuntimeIntent(selection, agentName, pick.reason), asked.Account)
 	if err != nil {
-		return req, fmt.Errorf("spawn: %s: %w", agentName, err)
+		return req, fmt.Errorf("spawn: %s: %w: %w", agentName, chat.ErrNoUsage, err)
 	}
 	if mv.note == "" {
 		return req, nil
@@ -144,6 +152,9 @@ func (s *Spawner) applyUsageMove(ctx context.Context, req SpawnRequest, agentNam
 // task bead not made yet is refused only when both runtimes would be.
 func CheckUsage(req SpawnRequest, agentName, managerRole string) error {
 	req.managerRole = managerRole
+	if req.ResumeRuntime != "" && !req.UsageRecovery {
+		req.Runtime = req.ResumeRuntime
+	}
 	home := agentrt.CommanderHome()
 	usage, now := readUsage(home), usageNow()
 	rt, reason, _ := pickOperatorRuntime(req, agentName)

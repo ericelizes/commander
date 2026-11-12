@@ -15,6 +15,9 @@ const withdrawnLabel = "withdrawn"
 // in it decided by nextactor, rolled up. It is remembered on the board so the
 // row, its tracks and the descriptions read the same decision.
 func (b board) actorRow(ws SnapWorkstream) nextactor.Row {
+	if b.actors == nil {
+		b.actors = map[string]nextactor.Row{}
+	}
 	key := ws.Project + ":" + ws.BeadID
 	if row, ok := b.actors[key]; ok {
 		return row
@@ -129,6 +132,12 @@ func (b board) actorBead(project string, pid int64, commander string, s SnapStep
 	if n.PlanningCommander == "" {
 		n.PlanningCommander = commander
 	}
+	if cause := b.s.PlanningUsage[n.PlanningCommander]; s.PlanningPending && cause != "" {
+		n.PlanningUsage = store.UsageCapacityError + cause
+	}
+	if s.ExecutionReady && s.ExecutionEligible && s.ExecutionMode == "active" && strings.HasPrefix(s.ExecutionError, store.UsageCapacityError) {
+		n.UsageCapacity = s.ExecutionError
+	}
 	if b.needsIDs[s.BeadID] {
 		n.NeedsUser, n.UserAsk = true, b.askText(project, s)
 	} else if s.Decision != nil && strings.TrimSpace(s.Decision.Question) != "" {
@@ -204,7 +213,7 @@ func rootStep(ws SnapWorkstream) SnapStep {
 		BeadID: ws.BeadID, Title: ws.Title, Status: ws.Status, Hold: ws.Hold, HoldReason: ws.HoldReason, Withdrawn: ws.Withdrawn,
 		ProgressAt: ws.ProgressAt, TypedWaits: ws.TypedWaits, BlockedBy: ws.BlockedBy, HumanAnswerPending: ws.HumanAnswerPending,
 		QuestionWaiting: ws.QuestionWaiting, ResultRunID: ws.ResultRunID, ResultReadyAt: ws.ResultReadyAt,
-		ExecutionReady: ws.ExecutionReady, ExecutionCapable: ws.ExecutionCapable, ExecutionReserved: ws.ExecutionReserved,
+		ExecutionMode: ws.ExecutionMode, ExecutionEligible: ws.ExecutionEligible, ExecutionReady: ws.ExecutionReady, ExecutionCapable: ws.ExecutionCapable, ExecutionReserved: ws.ExecutionReserved,
 		ExecutionAttempts: ws.ExecutionAttempts, ExecutionError: ws.ExecutionError, PlanningPending: ws.PlanningPending,
 		PlanningCommander: ws.PlanningCommander, Children: ws.Steps,
 	}

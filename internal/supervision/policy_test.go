@@ -136,3 +136,29 @@ func TestRepeatBackoffSpacesOutUnchangedObligations(t *testing.T) {
 		}
 	}
 }
+
+func TestInactiveGateObligations(t *testing.T) {
+	now := time.Unix(20000, 0)
+	for _, inactive := range []bool{false, true} {
+		for _, completion := range []bool{false, true} {
+			f := store.SupervisionFact{Status: "open", Labels: []string{"kind:gate", "gate-of:stage"}, GateInactive: inactive, AgentID: "owner", SupervisorID: "commander", PresenceKnown: true, Alive: true, ExecutorBound: true, AgentState: "working", ProgressAt: now.Add(-2 * time.Hour).Unix()}
+			if completion {
+				f.CompletionAt = now.Add(-3 * time.Hour).Unix()
+			}
+			d := Decide(f, now)
+			if inactive {
+				if d.Action != "observe" || d.Reason != "gate_inactive" {
+					t.Fatalf("inactive gate: %+v", d)
+				}
+			} else {
+				want := "progress_check"
+				if completion {
+					want = "completion_check"
+				}
+				if d.Action != "wake" || d.Reason != want {
+					t.Fatalf("open stage: %+v want %s", d, want)
+				}
+			}
+		}
+	}
+}

@@ -1,3 +1,4 @@
+import { ActivityFreshness } from './ActivityFreshness'
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { splitTickets } from '../../../features/linear/Ticket'
@@ -53,7 +54,6 @@ const HOLD_MS = 60_000
 interface Lift { node: NavNode; x: number; y: number; drop: Drop | null; lineY: number }
 
 export function Navigator() {
-  const conn = useStore((s) => s.conn)
   const completed = useStore((s) => s.completed)
   const snapshot = useStore((s) => s.snapshot)
   const nowSec = useStore((s) => s.nowSec)
@@ -195,9 +195,7 @@ export function Navigator() {
   }, [cursor])
 
   const working = useAgentRows().filter((r) => r.state === 'working').length
-  if (snapshot?.storage === 'postgres' && conn !== 'live') return <nav className="nav" aria-label="Navigator"><p role="status">Live state unavailable. Reconnecting…</p></nav>
-  if (snapshot?.degraded) return <nav className="nav" aria-label="Navigator"><p role="status">Live state unavailable. {snapshot.degraded.reason}</p></nav>
-  if (!vm || !snapshot) return <NavSkeleton />
+  if (!vm || !snapshot) return <><ActivityFreshness /><NavSkeleton /></>
   const selKey = selected.kind === 'commander' || selected.kind === 'progress' ? 'commander' : selected.key
   // The row that is open is the one lit: a nested row when it can be seen, else the top-level row it sits in.
   // An open decision lights the row it sits in, the one its Overview is showing.
@@ -216,6 +214,7 @@ export function Navigator() {
 
   return (
     <nav className="nav" aria-label="Navigator">
+      <ActivityFreshness />
       <MyProgress workstreams={progress} onOpen={() => useStore.getState().select({ kind: 'progress' })} />
       <div className={`nav-tabs${tab === 'all' ? ' on-right' : ''}`} role="tablist">
         <button

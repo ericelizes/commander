@@ -1413,6 +1413,9 @@ func trackTitle(t string) string { return typedLetter.ReplaceAllString(t, "") }
 
 // trackWorkstream views one track as a workstream of its own, so its line is derived exactly as a row's.
 func trackWorkstream(ws SnapWorkstream, t SnapStep) SnapWorkstream {
+	if t.PlanningCommander != "" {
+		ws.PlanningCommander = t.PlanningCommander
+	}
 	ws.BlockedBy = slices.Clone(t.BlockedBy)
 	ws.PlanningPending = t.PlanningPending
 	ws.ResultRunID, ws.ResultReadyAt = t.ResultRunID, t.ResultReadyAt

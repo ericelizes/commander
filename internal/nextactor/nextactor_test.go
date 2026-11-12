@@ -229,3 +229,34 @@ func TestEveryDecisionHasAnActorAndText(t *testing.T) {
 		}
 	}
 }
+
+func TestUsageCapacityPreservesNextActorGates(t *testing.T) {
+	cause := "Account usage unavailable: exhausted"
+	base := Bead{ID: "work", Title: "Work", Status: "open", ReadyQueued: true, UsageCapacity: cause, PlanningUsage: cause}
+	cases := []struct {
+		name   string
+		change func(*Bead)
+		actor  Actor
+		reason string
+	}{
+		{"queued exhaustion", func(b *Bead) {}, Stuck, "usage_capacity"},
+		{"paused", func(b *Bead) { b.Held = true }, None, "paused"},
+		{"user decision", func(b *Bead) { b.NeedsUser = true }, User, "decision"},
+		{"external wait", func(b *Bead) { b.Waits = []beads.Wait{{Kind: beads.WaitCI, PR: 42}} }, External, "wait:ci"},
+		{"running", func(b *Bead) { b.Executing = true; b.ProgressAt = now.Unix() }, Agent, "executing"},
+		{"result review", func(b *Bead) { b.ResultReady = true }, Commander, "review_result"},
+		{"saved answer", func(b *Bead) { b.HumanAnswerPending = true }, Commander, "apply_answer"},
+		{"question", func(b *Bead) { b.QuestionWaiting = true }, Commander, "answer_question"},
+		{"dependency", func(b *Bead) { b.BlockedBy = []string{"gate"} }, User, "blocked:decision"},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			b := base
+			tt.change(&b)
+			got := Decide(b, ctxWith(true, 0, map[string]Bead{"gate": {ID: "gate", Title: "Approve", Status: "open", NeedsUser: true}}))
+			if got.Actor != tt.actor || got.Reason != tt.reason {
+				t.Fatalf("got %+v, want %s/%s", got, tt.actor, tt.reason)
+			}
+		})
+	}
+}

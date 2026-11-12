@@ -74,7 +74,7 @@ func writeOperatorRuntime(req SpawnRequest, agentName, rt string, pinned bool) {
 	if !req.Resume {
 		_ = os.Remove(chat.CodexThreadFile(home, agentName)) // a new run is a new thread
 	}
-	if req.Runtime != "" || pinned {
+	if req.Runtime != "" || pinned || req.ResumeRuntime != "" {
 		_ = chat.WriteEffectiveRuntime(home, agentName, rt)
 	} else {
 		_ = chat.WriteAutoRuntime(home, agentName, rt)
@@ -100,7 +100,7 @@ func pickOperatorRuntime(req SpawnRequest, agentName string) (rt, reason string,
 	if rt == "" && !req.Resume && needsBackgroundService(req.TaskText) {
 		rt, reason = chat.RuntimeClaude, ReasonClaudeServiceKeyword
 	}
-	if rt == "" && !req.Resume {
+	if rt == "" && (!req.Resume || req.UsageRecovery) {
 		if p, ok := firstAgentAccount(req); ok {
 			rt, reason = p.Runtime, ReasonAgentAccounts
 		}
