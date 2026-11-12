@@ -58,7 +58,11 @@ func describeRow(describe DescribeFunc, key string, row nextactor.Row, facts, fa
 	if row.Lead.Actor == nextactor.Done {
 		return fallback // "Complete": the app shows the Complete button
 	}
-	text, signal, ok := describe(key, string(row.Lead.Actor), row.Lead.Reason, Opener(row.Lead), facts)
+	actor := string(row.Lead.Actor)
+	if waitsOnAnotherStep(row.Lead) {
+		actor = "waiting_on_step"
+	}
+	text, signal, ok := describe(key, actor, row.Lead.Reason, Opener(row.Lead), facts)
 	if !ok {
 		if via := row.Lead.Via; len(via) > 0 && row.Lead.Actor != nextactor.User && row.Lead.Actor != nextactor.Stuck {
 			return "Waiting for: " + via[len(via)-1]
@@ -112,6 +116,9 @@ func withoutChain(text string) string {
 
 // Opener is the fixed start of a row's description, set by its state.
 func Opener(r nextactor.Result) string {
+	if waitsOnAnotherStep(r) {
+		return "Waiting:"
+	}
 	switch r.Actor {
 	case nextactor.User:
 		return "Needs you:"
