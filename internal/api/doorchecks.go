@@ -91,6 +91,11 @@ func checkOp(ctx context.Context, bc beads.Client, dir string, args []string) er
 			}
 		}
 		return nil
+	case "dep":
+		if len(args) >= 4 && args[1] == "add" {
+			return refuseAfterClosingGate(ctx, bc, dir, args[3])
+		}
+		return nil
 	case "update":
 		if len(args) < 2 {
 			return nil
@@ -122,6 +127,22 @@ func refuseWorkstreamClose(ctx context.Context, bc beads.Client, dir, id string)
 	}
 	if beads.IsWorkstream(b.Labels) {
 		return fmt.Errorf("%s is a workstream and only the user marks a workstream done: put a card on it asking them to confirm it is done, and leave it open", id)
+	}
+	if beads.IsClosingGate(b.Labels) {
+		return fmt.Errorf("%s is its workstream's Confirm done step: only the user confirms it, on its card", id)
+	}
+	return nil
+}
+
+// refuseAfterClosingGate: a workstream's Confirm done step comes after
+// everything else in it, so nothing may wait on it.
+func refuseAfterClosingGate(ctx context.Context, bc beads.Client, dir, blocker string) error {
+	b, err := bc.Show(ctx, dir, blocker)
+	if err != nil || b == nil {
+		return nil
+	}
+	if beads.IsClosingGate(b.Labels) {
+		return fmt.Errorf("%s is its workstream's Confirm done step and comes after everything else: nothing may wait on it", blocker)
 	}
 	return nil
 }

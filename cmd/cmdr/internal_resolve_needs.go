@@ -50,7 +50,8 @@ func runInternalResolveNeeds(args []string, stdout, stderr *os.File) int {
 		emitErr(stderr, "execution sessions cannot record or apply human decisions")
 		return 1
 	}
-	return editObjective(*project, stdout, stderr, func(ctx context.Context, dir string) (internalObjectiveEditResult, error) {
+	confirmed := "" // the workstream whose Confirm done step this answer closed
+	code := editObjective(*project, stdout, stderr, func(ctx context.Context, dir string) (internalObjectiveEditResult, error) {
 		result := internalObjectiveEditResult{BeadID: *bead}
 		release, err := lockNeedsResolution()
 		if err != nil {
@@ -329,6 +330,15 @@ func runInternalResolveNeeds(args []string, stdout, stderr *os.File) int {
 			if err := bc.Close(ctx, dir, *bead); err != nil {
 				return result, err
 			}
+			if b != nil && beads.IsClosingGate(b.Labels) {
+				confirmed = b.Parent
+				if confirmed == "" {
+					confirmed = b.ParentID
+				}
+				if confirmed == "" {
+					confirmed = beads.ParentOf(b.ID)
+				}
+			}
 		}
 		if err := st.AdvanceNeedsResolution(ctx, *r, store.ResolutionClosed); err != nil {
 			return result, err
@@ -339,6 +349,16 @@ func runInternalResolveNeeds(args []string, stdout, stderr *os.File) int {
 		}
 		return result, nil
 	})
+	// The user's "Done" closes the workstream itself (an agent applying the
+	// answer is refused that close at the write door: the Complete button
+	// finishes it then).
+	if code == 0 && confirmed != "" && os.Getenv("COMMANDER_ROLE") == "" {
+		if err := runQuiet(runInternalCloseObjective, []string{"--project", *project, "--bead", confirmed, "--reason", "Confirmed done by the user"}); err != nil {
+			emitErr(stderr, fmt.Sprintf("confirmed done, but the workstream could not close yet: %v", err))
+			return 1
+		}
+	}
+	return code
 }
 
 // legacyApprovals are the exact labels (normalised) that approve on a card

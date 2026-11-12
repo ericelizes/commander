@@ -8,6 +8,13 @@ import (
 	"strings"
 )
 
+// ClosingGateLabel marks a workstream's "Confirm done" step: the user's gate
+// that comes after everything else in it. Confirming it closes the workstream.
+const ClosingGateLabel = "closing-gate"
+
+// IsClosingGate: a workstream's "Confirm done" step.
+func IsClosingGate(labels []string) bool { return slices.Contains(labels, ClosingGateLabel) }
+
 // IsWorkstream: labelled a workstream, at any depth.
 func IsWorkstream(labels []string) bool {
 	return slices.Contains(labels, WorkstreamLabel) || slices.Contains(labels, TrackLabel)

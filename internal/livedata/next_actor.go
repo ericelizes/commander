@@ -97,7 +97,7 @@ func (b board) actorBead(project string, pid int64, commander string, s SnapStep
 		ID: s.BeadID, Title: s.Title, Status: s.Status, Superseded: s.Superseded, Withdrawn: s.Withdrawn,
 		Held: s.Hold, HoldReason: s.HoldReason, HumanAnswerPending: s.HumanAnswerPending, QuestionWaiting: s.QuestionWaiting,
 		Waits: s.TypedWaits, ProgressAt: s.ProgressAt, ResultReady: s.ResultReadyAt > 0, ResultSince: s.ResultReadyAt,
-		PlanningPending: s.PlanningPending, PlanningCommander: s.PlanningCommander,
+		PlanningPending: s.PlanningPending, PlanningCommander: s.PlanningCommander, ClosingGate: s.ClosingGate,
 	}
 	if n.PlanningCommander == "" {
 		n.PlanningCommander = commander

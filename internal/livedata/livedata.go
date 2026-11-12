@@ -113,6 +113,7 @@ type ObjectiveRow struct {
 	BlockedBy                                           []string     // bead IDs this step waits on ("blocks" dependencies)
 	Until                                               string       // owned job: the finish line its owner keeps at ("merged"), from the until:<x> label
 	Gate                                                bool         // a human approval gate (label gate)
+	ClosingGate                                         bool         // its workstream's "Confirm done" step
 	Approvers                                           []string     // who approves a gate (approver:<who> labels)
 	AskAnswered                                         bool         // the last ask was answered; only an explicit re-flag raises another
 	GateNote                                            string       // a gate's write-up (the bead description)
@@ -856,6 +857,7 @@ func projectObjectiveRows(ctx context.Context, bc beads.Client, project store.Pr
 			BlockedBy:     blockedBy,
 			Until:         UntilLabel(objective.Labels),
 			Gate:          slices.Contains(objective.Labels, beads.GateLabel) || approvalOnly[objective.ID],
+			ClosingGate:   beads.IsClosingGate(objective.Labels),
 			Approvers:     Approvers(objective.Labels),
 			AskAnswered:   slices.Contains(objective.Labels, beads.DecisionAnsweredLabel),
 			GateNote:      gateNote(objective),
