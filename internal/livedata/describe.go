@@ -149,6 +149,10 @@ func rowFacts(snap Snapshot, workstream, track string, steps []SnapStep, row nex
 	b.WriteString("\n")
 	if len(lead.Via) > 0 {
 		fmt.Fprintf(&b, "It blocks, in order: %s\n", strings.Join(lead.Via, " <- "))
+		if lead.Actor != nextactor.User && lead.Actor != nextactor.Stuck {
+			// The move belongs to another step: this line's own work waits on it.
+			fmt.Fprintf(&b, "Nothing runs for this line itself: it waits for %q to finish.\n", lead.Via[len(lead.Via)-1])
+		}
 	}
 	also := []string{}
 	if row.Agents > 0 {
