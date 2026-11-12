@@ -183,6 +183,7 @@ func buildOverviewInput(snap livedata.Snapshot, ws *livedata.SnapWorkstream, q o
 	in.Evidence = append(in.Evidence, overviewMessages(home, ws.ManagerRole, q.TrackID)...)
 	in.Evidence = append(in.Evidence, overviewPRSizes(*ws, q.TrackID)...)
 	in.Evidence = append(in.Evidence, overviewLinearTickets(home, *ws, q.TrackID)...)
+	in.Phase = scopePhase(*ws, q.TrackID)
 	in.Part = "status"
 	if q.Part == "pitch" {
 		// The pitch is scoping: it reads what the work is, not what moved a
@@ -664,4 +665,24 @@ func fetchLinearTicket(home, id string) string {
 	}
 	is := data.Data.Issue
 	return fmt.Sprintf("%s (%s): %s\n%s", is.Identifier, is.State.Name, is.Title, trimOverview(is.Description, 6000))
+}
+
+// scopePhase is the phase of the workstream or nested workstream in view.
+func scopePhase(ws livedata.SnapWorkstream, track string) string {
+	if track == "" {
+		return ws.Phase
+	}
+	var find func([]livedata.SnapStep) string
+	find = func(steps []livedata.SnapStep) string {
+		for _, st := range steps {
+			if st.BeadID == track {
+				return st.Phase
+			}
+			if p := find(st.Children); p != "" {
+				return p
+			}
+		}
+		return ""
+	}
+	return find(ws.Steps)
 }

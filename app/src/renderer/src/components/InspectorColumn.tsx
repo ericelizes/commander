@@ -14,7 +14,7 @@ import { useStore } from '../store'
 import { useAppDown } from './StartScreen'
 import { focusOf, PitchView, SavedPitchView } from './PitchView'
 import { DerivedDiagram, diagramFor } from './DerivedDiagram'
-import { Overview, OverviewBoundary, WorkstreamHeader } from './Overview'
+import { Overview, OverviewBoundary, WorkstreamHeader, scopePhase } from './Overview'
 import type { FocusTarget } from './FocusHeader'
 import type { SnapWorkstream } from '../../../shared/snapshot'
 import { askKey, findTrack, trackTitle, wsKey } from '../viewmodel'
@@ -89,7 +89,7 @@ export function InspectorColumn() {
   }, [snapshot, selected, workflowOpen, card])
   const focusedWs = selected.kind === 'ws' ? selected.key : ''
   useEffect(() => {
-    if (focusedWs && !selKey) setActivePinned('overview')
+    if (focusedWs && !selKey) setActivePinned(flow && scopePhase(flow.ws, flow.track) === 'scoping' ? 'pitch' : 'overview')
     // A new focus opens on Overview; snapshots alone do not move the tab.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusedWs])
@@ -146,16 +146,16 @@ export function InspectorColumn() {
     if (narrow) tabs.push({ id: 'chat', title: 'Chat', content: null, dot: !chatTab && chatSeq > seenSeq })
     if (flow) {
       tabs.push({
-        id: 'overview',
-        title: 'Current status',
-        icon: <Activity size={13} aria-hidden />,
-        content: <OverviewBoundary key={`o${flow.key}`}><Overview part="status" ws={flow.ws} row={flow.boardRow} track={flow.track} onWorkflow={() => setActivePinned('workflow')} onTrack={(id) => useStore.getState().openWorkflow(flow.row, id)} /></OverviewBoundary>,
-      })
-      tabs.push({
         id: 'pitch',
         title: 'Pitch',
         icon: <Lightbulb size={13} aria-hidden />,
         content: <OverviewBoundary key={`p${flow.key}`}><Overview part="pitch" ws={flow.ws} row={flow.boardRow} track={flow.track} onWorkflow={() => setActivePinned('workflow')} onTrack={(id) => useStore.getState().openWorkflow(flow.row, id)} /></OverviewBoundary>,
+      })
+      tabs.push({
+        id: 'overview',
+        title: 'Current status',
+        icon: <Activity size={13} aria-hidden />,
+        content: <OverviewBoundary key={`o${flow.key}`}><Overview part="status" ws={flow.ws} row={flow.boardRow} track={flow.track} onWorkflow={() => setActivePinned('workflow')} onTrack={(id) => useStore.getState().openWorkflow(flow.row, id)} /></OverviewBoundary>,
       })
       tabs.push({
         id: 'workflow',

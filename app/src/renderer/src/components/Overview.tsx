@@ -44,8 +44,9 @@ type Pitch = {
   scope_detail?: Claim
   risk?: number
   risk_detail?: Claim
+  still_to_define?: Claim
 }
-const pitchClaims = (p: Pitch): Claim[] => [p.goal, p.progress, p.now, p.recent, p.next, p.problem, p.problem_impact, p.solution, p.impact, p.scope_detail, p.risk_detail].filter((c): c is Claim => !!c)
+const pitchClaims = (p: Pitch): Claim[] => [p.still_to_define, p.goal, p.progress, p.now, p.recent, p.next, p.problem, p.problem_impact, p.solution, p.impact, p.scope_detail, p.risk_detail].filter((c): c is Claim => !!c)
 // SHOW_SOURCES draws each sentence's evidence numbers; off, the text reads clean.
 const SHOW_SOURCES = false
 const typeNames: Record<string, string> = { bug: '🐛 Bug', performance: '⚡ Performance', feature: '✨ Feature', operations: '🛠️ Operations', request: '📨 Request' }
@@ -161,14 +162,23 @@ function toneOf(kind?: LineKind): Tone {
 }
 
 // WorkstreamHeader is the workstream's title and tickets above the pane's tabs.
+const phaseNames: Record<string, string> = { scoping: 'Scoping', building: 'Building', rollout: 'Rolling out' }
+
+// scopePhase is the phase of the workstream or nested workstream in view.
+export function scopePhase(ws: SnapWorkstream, track?: string): string | undefined {
+  if (!track) return ws.phase
+  return scopedSteps(ws, track)[0]?.phase
+}
+
 export function WorkstreamHeader({ ws, row, track }: { ws: SnapWorkstream; row: BoardRow; track?: string }) {
+  const phase = scopePhase(ws, track)
   const nested = findTrack(row, track)
   const step = track && track !== row.scope ? scopedSteps(ws, track)[0] : undefined
   const title = nested?.title ?? step?.title ?? row.title
   const tickets = overviewTickets(ws, track)
   return (
     <header className="ws-header">
-      <div className="ws-header-label">Workstream {row.n}{nested?.letter ?? ''}</div>
+      <div className="ws-header-label">Workstream {row.n}{nested?.letter ?? ''}{phase && <span className={`ws-phase ws-phase-${phase}`}>{phaseNames[phase]}</span>}</div>
       <h1>{splitTickets(title).text}</h1>
       {(nested ?? row).text && (nested ?? row).kind !== 'done' && <p className="ws-header-line">{(nested ?? row).text}</p>}
       {tickets.length > 0 && <div className="ov-tickets"><TicketPills tickets={tickets} progress={(nested ?? row).milestones ?? (nested ?? row).progress} /></div>}
@@ -371,6 +381,10 @@ export function Overview({ ws, row, track, onTrack, part = 'status' }: {
         {part === 'pitch' && <section className="ov-pitch" aria-label="Pitch">
           {(!shown || result?.state === 'updating' || result?.state === 'retrying') && !draftOn && <Refreshing />}
           {shown ? <div className="ov-fade" key={result?.recap?.generated_at ?? 'draft'}>
+            {hasText(shown.still_to_define) && <div className="ov-todo">
+              <h3>Still to define</h3>
+              <ul className="ov-fields">{sentencesOf(shown.still_to_define!).map((s, i) => <li key={i}><StreamSentence s={s} done={cited} live={draftOn} /></li>)}</ul>
+            </div>}
             {/* Each section appears once it has words, so a summary being written
                 builds top to bottom instead of showing empty headings early. */}
             {hasText(shown.problem) && <>
