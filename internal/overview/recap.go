@@ -48,6 +48,8 @@ type Claim struct {
 // is being done about it, and how big and risky it is, every sentence cited.
 type Recap struct {
 	ProblemType   string    `json:"problem_type"`   // bug, performance, feature, operations or request
+	Goal          Claim     `json:"goal"`           // status: what done means, measurably (its acceptance criteria)
+	Progress      Claim     `json:"progress"`       // status: where it stands against the goal, with the latest measured number
 	Now           Claim     `json:"now"`            // status: where it stands right now
 	Recent        Claim     `json:"recent"`         // status: what happened recently, a sentence each, newest first
 	Next          Claim     `json:"next"`           // status: what happens next, a sentence each, in order
@@ -69,7 +71,7 @@ func (r Recap) claims() []Claim {
 }
 
 // lists are the status parts that may be empty: nothing recent, nothing next.
-func (r Recap) lists() []Claim { return []Claim{r.Recent, r.Next} }
+func (r Recap) lists() []Claim { return []Claim{r.Goal, r.Progress, r.Recent, r.Next} }
 
 var (
 	problemTypes = map[string]bool{"bug": true, "performance": true, "feature": true, "operations": true, "request": true}
@@ -262,8 +264,8 @@ func Validate(r Recap, in Input) error {
 }
 
 const Prompt = `You write the Overview of a workstream for a person who delegated it to agents, in two parts: first its STATUS (what is happening right now and lately), then a short Shape Up style PITCH (what this work is and why they should care).
-Return ONLY JSON, keys in this order: {"now":{"sentences":[{"text":"...","sources":["evidence-id"]}]},"recent":{"sentences":[...]},"next":{"sentences":[...]},"problem":{"sentences":[{"text":"...","sources":["evidence-id"]}]},"problem_type":"bug|performance|feature|operations|request","problem_impact":{"sentences":[...]},"solution":{"sentences":[...]},"impact":{"sentences":[...]},"scope":"Small|Medium|Large","scope_detail":{"sentences":[...]},"risk":0,"risk_detail":{"sentences":[...]}}.
-STATUS, as easy to read as the pitch. now: ONE short sentence, at most 20 words, on where this stands right now: what is happening and what it waits on. recent: up to 3 sentences, each one thing that happened lately and matters to the reader (shipped, merged, found, failed, decided), newest first, at most 15 words each; empty when nothing did. next: up to 3 sentences, each the next recorded step, in order, at most 15 words each; empty when none is recorded. Say what each thing means for the reader, not its mechanics: no ids, build hashes, settings or environment names, file names, audit references or who-said-what unless that is the point.
+Return ONLY JSON, keys in this order: {"goal":{"sentences":[...]},"progress":{"sentences":[...]},"now":{"sentences":[{"text":"...","sources":["evidence-id"]}]},"recent":{"sentences":[...]},"next":{"sentences":[...]},"problem":{"sentences":[{"text":"...","sources":["evidence-id"]}]},"problem_type":"bug|performance|feature|operations|request","problem_impact":{"sentences":[...]},"solution":{"sentences":[...]},"impact":{"sentences":[...]},"scope":"Small|Medium|Large","scope_detail":{"sentences":[...]},"risk":0,"risk_detail":{"sentences":[...]}}.
+STATUS, as easy to read as the pitch. goal: ONE short sentence on what done means, measurably, from the acceptance criteria (done_when) of the workstream and its steps, like 'QA Hub test suite runs in 4 minutes or less on 2 cores'; empty when the records give no criteria. progress: ONE short sentence on where it stands against that goal right now, with the latest measured number when the records have one, like 'Last full run took 6.5 minutes on 4 cores; not yet timed on 2', or 'Not measured yet'; empty when goal is empty. now: ONE short sentence, at most 20 words, on where this stands right now: what is happening and what it waits on. recent: up to 3 sentences, each one thing that happened lately and matters to the reader (shipped, merged, found, failed, decided), newest first, at most 15 words each; empty when nothing did. next: up to 3 sentences, each the next recorded step, in order, at most 15 words each; empty when none is recorded. Say what each thing means for the reader, not its mechanics: no ids, build hashes, settings or environment names, file names, audit references or who-said-what unless that is the point.
 PITCH. KEEP IT SHORT: every pitch part is one or two short sentences, at most 30 words in all, written so the reader gets it in one glance. Leave details, ids and history out unless they are the point.
 problem: ONE short sentence naming the problem in plain words. Not the steps taken.
 problem_impact: 1-2 sentences on the REAL impact today, the reason anyone should care: who experiences it, how often, the time or money it costs, what it blocks or risks. If the records do not say how big it is, say that in a few words instead of guessing.
@@ -436,9 +438,10 @@ func readerSchema(in Input) map[string]any {
 	list := map[string]any{"type": "object", "additionalProperties": false, "required": []string{"sentences"}, "properties": map[string]any{
 		"sentences": map[string]any{"type": "array", "minItems": 0, "maxItems": 4, "items": sentence},
 	}}
-	return map[string]any{"type": "object", "additionalProperties": false, "required": []string{"now", "recent", "next", "problem", "problem_type", "problem_impact", "solution", "impact", "scope", "scope_detail", "risk", "risk_detail"}, "properties": map[string]any{
+	return map[string]any{"type": "object", "additionalProperties": false, "required": []string{"goal", "progress", "now", "recent", "next", "problem", "problem_type", "problem_impact", "solution", "impact", "scope", "scope_detail", "risk", "risk_detail"}, "properties": map[string]any{
 		"problem_type": map[string]any{"type": "string", "enum": []string{"bug", "performance", "feature", "operations", "request"}},
-		"now":          claim, "recent": list, "next": list,
+		"goal":         list, "progress": list,
+		"now": claim, "recent": list, "next": list,
 		"problem": claim, "problem_impact": claim, "solution": claim, "impact": claim,
 		"scope":        map[string]any{"type": "string", "enum": []string{"Small", "Medium", "Large"}},
 		"scope_detail": claim,
