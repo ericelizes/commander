@@ -61,13 +61,13 @@ func (w opWatch) pass(ctx context.Context) {
 	runs, err := w.store.ListRunningRuns(ctx)
 	if err != nil {
 		log.Printf("daemon: watch: %v", err)
-		w.degraded.raise(ctx, "cannot read the state db: "+err.Error())
+		w.degraded.readFailure(ctx, err.Error(), errors.Is(err, context.DeadlineExceeded))
 		return
 	}
 	seen, err := w.store.RunWatches(ctx)
 	if err != nil {
 		log.Printf("daemon: watch: %v", err)
-		w.degraded.raise(ctx, "cannot read the state db: "+err.Error())
+		w.degraded.readFailure(ctx, err.Error(), errors.Is(err, context.DeadlineExceeded))
 		return
 	}
 	now := w.now()

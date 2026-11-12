@@ -974,6 +974,11 @@ their own scaled budget before the scenario timer starts. Polling stays fast;
 hung commands and missing replies still fail at bounded deadlines (the negative
 `scenarios/deadlines/hung.json` fixture is tested at scales 1 and 3).
 
+The full eval package can exceed Go's default 10-minute package timeout on a
+busy VM. Use `go test -timeout 30m ./...` inside a build slot for the full run;
+individual scenario deadlines stay bounded. See
+[watch read verification](docs/testing/watch-read-timeout.md) for the observed timeout.
+
 > **Never run `go test ./tests/evals` or tests that touch tmux with `$TMUX` set**
 > (i.e. from inside a cockpit pane): run `env -u TMUX go test ...`. The eval
 > harness's kill-session otherwise hits the real `commander` session.

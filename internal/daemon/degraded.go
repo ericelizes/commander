@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -19,7 +20,10 @@ import (
 // mapping lives there), so it uses a route cached while the db was readable
 // and the am server's HTTP API directly. A file in $COMMANDER_HOME records the
 // condition even when mail fails too.
-const degradedRepeat = 30 * time.Minute
+const (
+	degradedRepeat       = 30 * time.Minute
+	degradedTimeoutReads = 3
+)
 
 // mailRoute is the cached am addressing: project key plus the am names of the
 // sender (cmdrd) and Commander.
@@ -39,13 +43,14 @@ type roleNames interface {
 
 // degradedAlert raises the alarm at most once per degradedRepeat.
 type degradedAlert struct {
-	home   string
-	mail   degradedSender // nil: file only
-	names  roleNames      // the store, read while it still works
-	key    string
-	now    func() time.Time
-	mu     sync.Mutex
-	lastAt time.Time
+	home     string
+	mail     degradedSender // nil: file only
+	names    roleNames      // the store, read while it still works
+	key      string
+	now      func() time.Time
+	mu       sync.Mutex
+	lastAt   time.Time
+	timeouts int
 }
 
 func (a *degradedAlert) routePath() string    { return filepath.Join(a.home, "mail-route.json") }
@@ -72,8 +77,39 @@ func (a *degradedAlert) healthy() {
 	}
 	a.mu.Lock()
 	a.lastAt = time.Time{}
+	a.timeouts = 0
 	a.mu.Unlock()
 	_ = os.Remove(a.degradedPath())
+}
+
+// readFailure tolerates isolated deadline misses; other failures alert immediately.
+// A healthy read resets the streak. Three minute-watch misses mean state has
+// been unavailable across multiple independent reads, rather than one slow load.
+func (a *degradedAlert) readFailure(ctx context.Context, reason string, timeout bool) {
+	if a == nil {
+		return
+	}
+	a.mu.Lock()
+	if timeout {
+		a.timeouts++
+	} else {
+		// A concrete error must not be hidden by a previous timeout alert's
+		// repeat window: it supplies new evidence needing immediate attention.
+		if a.timeouts >= degradedTimeoutReads {
+			a.lastAt = time.Time{}
+		}
+		a.timeouts = 0
+	}
+	count := a.timeouts
+	a.mu.Unlock()
+	if timeout {
+		if count < degradedTimeoutReads {
+			return
+		}
+		a.raise(ctx, "state read timeout: "+reason)
+		return
+	}
+	a.raise(ctx, "state read error: "+reason)
 }
 
 // raise records the condition and mails Commander (urgent) without the db.
@@ -113,7 +149,13 @@ func (a *degradedAlert) sendMail(ctx context.Context, reason string) error {
 	}
 	subject := "cmdrd DEGRADED: cannot read state"
 	body := "cmdrd cannot read its state, so check-ins and the watch are blind (they are NOT 'all on track'):\n\n" + reason +
-		"\n\nTell the user. Likely cause: the state.db schema is newer than the installed cmdr/cmdrd (install the newer build), or the db is locked or missing."
+		"\n\nTell the user. Inspect the read error and database availability."
+	if strings.HasPrefix(reason, "state read timeout:") {
+		subject += " (timeout)"
+		body += " Consecutive state reads exceeded their deadline; inspect database latency and load."
+	} else {
+		subject += " (error)"
+	}
 	if err := a.mail.SendMessage(ctx, r.Key, r.Sender, []string{r.Commander}, subject, body, agentmail.SendOptions{Importance: "urgent"}); err != nil {
 		return err
 	}

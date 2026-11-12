@@ -1,0 +1,5 @@
+{
+  "name": "watch-read-timeout",
+  "description": "TestWatchTimeoutStreak drives the minute watch through an isolated timeout, healthy recovery, sustained timeout failures and a real locked-database error, asserting alert delivery and cause-specific text.",
+  "consecutive_timeouts": 3
+}

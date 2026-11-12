@@ -78,7 +78,8 @@ type Snapshot struct {
 
 // SnapDegraded says why the snapshot cannot be trusted.
 type SnapDegraded struct {
-	Reason string `json:"reason"`
+	Reason  string `json:"reason"`
+	Timeout bool   `json:"timeout,omitempty"`
 }
 
 // SnapWrong is one mismatch between the screen and what is happening; Target
@@ -749,6 +750,7 @@ func (s *Source) Current(ctx context.Context) (Data, Snapshot) {
 	if data.Postgres {
 		frame := snapshot
 		if data.LoadErr != nil || ctx.Err() != nil || frame.Degraded != nil {
+			timeout := deadlineOnly(data.LoadErr) || (data.LoadErr == nil && errors.Is(ctx.Err(), context.DeadlineExceeded))
 			reason := "Current state is unavailable"
 			if frame.Degraded != nil {
 				reason = frame.Degraded.Reason
@@ -757,7 +759,7 @@ func (s *Source) Current(ctx context.Context) (Data, Snapshot) {
 			if data.LoadErr == nil {
 				data.LoadErr = errors.New(reason)
 			}
-			frame = Snapshot{Storage: "postgres", Executions: []SnapExecution{}, Degraded: &SnapDegraded{Reason: reason}}
+			frame = Snapshot{Storage: "postgres", Executions: []SnapExecution{}, Degraded: &SnapDegraded{Reason: reason, Timeout: timeout}}
 			data.Projects = nil
 			data.Objectives = nil
 			data.Operators = nil
@@ -775,6 +777,31 @@ func (s *Source) Current(ctx context.Context) (Data, Snapshot) {
 		data.Metrics.IdleRatio = frame.Fleet.IdleRatio
 	}
 	return data, snapshot
+}
+
+// deadlineOnly keeps concrete errors visible when parallel project reads return
+// a joined error containing both a deadline miss and a genuine database error.
+func deadlineOnly(err error) bool {
+	if err == nil {
+		return false
+	}
+	if joined, ok := err.(interface{ Unwrap() []error }); ok {
+		found := false
+		for _, child := range joined.Unwrap() {
+			if child == nil {
+				continue
+			}
+			if !deadlineOnly(child) {
+				return false
+			}
+			found = true
+		}
+		return found
+	}
+	if wrapped, ok := err.(interface{ Unwrap() error }); ok {
+		return deadlineOnly(wrapped.Unwrap())
+	}
+	return errors.Is(err, context.DeadlineExceeded)
 }
 
 // WatchSnapshot reads required state independently of an API presentation build.

@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"strings"
@@ -115,5 +116,68 @@ func TestDegradedWithoutRouteStillWritesFile(t *testing.T) {
 	}
 	if b, err := os.ReadFile(alert.degradedPath()); err != nil || !strings.Contains(string(b), "boom") {
 		t.Fatalf("file = %q, %v", b, err)
+	}
+}
+
+func TestWatchTimeoutStreak(t *testing.T) {
+	raw, err := os.ReadFile("../../tests/evals/scenarios/watch-read-timeout.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var scenario struct {
+		ConsecutiveTimeouts int `json:"consecutive_timeouts"`
+	}
+	if err := json.Unmarshal(raw, &scenario); err != nil || scenario.ConsecutiveTimeouts != 3 {
+		t.Fatalf("invalid scenario: %s", raw)
+	}
+
+	now := time.Unix(1_000_000, 0)
+	w, _, delivered, _, _ := commanderWatch(stalledSnap(), now)
+	alert, mail := degradedAlertFor(t, &now)
+	w.degraded = alert
+	w.pass(context.Background())
+	snap := livedata.Snapshot{Degraded: &livedata.SnapDegraded{Reason: "context deadline exceeded", Timeout: true}}
+	w.latest = func() (livedata.Snapshot, bool) { return snap, true }
+	w.pass(context.Background())
+	if len(mail.sent) != 0 {
+		t.Fatal("isolated timeout alerted")
+	}
+	if _, err := os.Stat(alert.degradedPath()); !os.IsNotExist(err) {
+		t.Fatal("isolated timeout recorded degradation")
+	}
+	snap.Degraded = nil
+	w.pass(context.Background())
+	snap.Degraded = &livedata.SnapDegraded{Reason: "context deadline exceeded", Timeout: true}
+	for i := 0; i < scenario.ConsecutiveTimeouts-1; i++ {
+		now = now.Add(time.Minute)
+		w.pass(context.Background())
+	}
+	if len(mail.sent) != 0 {
+		t.Fatal("healthy read did not reset streak")
+	}
+	now = now.Add(time.Minute)
+	w.pass(context.Background())
+	if len(mail.sent) != 1 || !strings.Contains(mail.sent[0].subject, "timeout") || strings.Contains(mail.sent[0].body, "schema") {
+		t.Fatalf("timeout mail: %+v", mail.sent)
+	}
+	if len(*delivered) != 0 {
+		t.Fatal("check-in delivered using timed out state")
+	}
+	// A real error remains immediate even after a timeout alert.
+	snap.Degraded = &livedata.SnapDegraded{Reason: "database is locked"}
+	w.pass(context.Background())
+	if len(mail.sent) != 2 || !strings.Contains(mail.sent[1].subject, "error") {
+		t.Fatalf("error mail: %+v", mail.sent)
+	}
+}
+
+func TestReadErrorAfterOneTimeoutAlertsImmediately(t *testing.T) {
+	now := time.Unix(1_000_000, 0)
+	alert, mail := degradedAlertFor(t, &now)
+	alert.refreshRoute(context.Background())
+	alert.readFailure(context.Background(), "deadline exceeded", true)
+	alert.readFailure(context.Background(), "schema too new", false)
+	if len(mail.sent) != 1 || !strings.Contains(mail.sent[0].subject, "error") || !strings.Contains(mail.sent[0].body, "schema too new") {
+		t.Fatalf("real error delayed: %+v", mail.sent)
 	}
 }
