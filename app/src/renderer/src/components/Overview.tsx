@@ -86,6 +86,19 @@ const Word = memo(function Word({ word, fade }: { word: string; fade: boolean })
   return <span className={fade ? 'ct-fade-word' : undefined}>{word}</span>
 })
 
+// DotSpinner is eight dots in a circle, fading around: the page's own grey
+// spinner, not the agents' working one.
+function DotSpinner() {
+  return (
+    <svg className="ov-dots" width="16" height="16" viewBox="0 0 16 16" aria-hidden>
+      {Array.from({ length: 8 }, (_, i) => {
+        const a = (i / 8) * 2 * Math.PI
+        return <circle key={i} cx={8 + 5.6 * Math.sin(a)} cy={8 - 5.6 * Math.cos(a)} r="1.45" opacity={0.2 + (0.8 * i) / 7} />
+      })}
+    </svg>
+  )
+}
+
 // withCode shows `backticked` text as inline code.
 function withCode(text: string): React.ReactNode {
   if (!text.includes('`')) return text
@@ -310,7 +323,7 @@ export function Overview({ ws, row, track, onTrack }: {
         {/* The pitch: what this is and why it matters. */}
         <section className="ov-pitch" aria-label="Pitch">
           {shown ? <div>
-            {(result?.stale || result?.state === 'updating') && !draftOn && <p className="ov-muted ov-refreshing" role="status"><span className="ov-spin" aria-hidden /> Refreshing summary…</p>}
+            {(result?.stale || result?.state === 'updating') && !draftOn && <p className="ov-muted ov-refreshing" role="status"><DotSpinner /> Refreshing summary…</p>}
             <h2>Problem</h2>
             <p className="ov-field">{cite(shown.problem)}</p>
             <ul className="ov-fields">
