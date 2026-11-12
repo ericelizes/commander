@@ -3350,6 +3350,8 @@ kbd {
 .ws-state.agent-stuck { --dot: var(--peach); }
 .ws-state.agent-waiting { --dot: var(--attn); }
 .ws-state.agent-working { --dot: var(--ok); }
+/* Done: the Complete button is the whole state; no dot, no text. */
+.ws-state.agent-done::before { display: none; }
 
 .ws-state.agent-needs .ws-state-text,
 .ws-state.agent-stuck .ws-state-text,

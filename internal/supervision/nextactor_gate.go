@@ -43,7 +43,7 @@ func actorOf(f store.SupervisionFact, now time.Time) (nextactor.Result, bool) {
 // supervision must not nudge: the user, someone external, nobody, or an
 // agent already carrying it.
 func observedActor(a nextactor.Actor) bool {
-	return a == nextactor.User || a == nextactor.External || a == nextactor.None || a == nextactor.Agent
+	return a == nextactor.User || a == nextactor.External || a == nextactor.None || a == nextactor.Agent || a == nextactor.Done
 }
 
 // supervisionReason names an observed decision in supervision's vocabulary.

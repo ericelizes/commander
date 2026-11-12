@@ -56,6 +56,9 @@ func applyDescriptions(describe DescribeFunc, snap *Snapshot, d *Display) {
 }
 
 func describeRow(describe DescribeFunc, key string, row nextactor.Row, facts, fallback string) string {
+	if row.Lead.Actor == nextactor.Done {
+		return fallback // "Complete": the app shows the Complete button
+	}
 	text, signal, ok := describe(key, string(row.Lead.Actor), row.Lead.Reason, Opener(row.Lead), facts)
 	if !ok {
 		if via := row.Lead.Via; len(via) > 0 && row.Lead.Actor != nextactor.User && row.Lead.Actor != nextactor.Stuck {
