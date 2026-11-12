@@ -191,6 +191,16 @@ func recordQuestion(b Bead, ctx Context) Result {
 
 func decide(b Bead, ctx Context, seen map[string]bool, depth int) Result {
 	r := own(b, ctx)
+	// A card is the user's move only once what it waits on is done: until
+	// then it waits on its blocker.
+	if r.Actor == User && len(b.BlockedBy) > 0 {
+		if ctx.Lookup == nil {
+			return Result{Actor: None, Reason: "dependency", Text: "Waiting on another step", Bead: b.ID}
+		}
+		if blocked, ok := blockers(b, ctx, seen, depth); ok {
+			return blocked
+		}
+	}
 	if r.Actor != "" {
 		r.Bead = firstNonEmpty(r.Bead, b.ID)
 		return r

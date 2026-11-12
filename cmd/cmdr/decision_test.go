@@ -13,7 +13,6 @@ import (
 	"testing"
 
 	"github.com/example-user/commander/internal/api"
-	"github.com/example-user/commander/internal/beads"
 	"github.com/example-user/commander/internal/pgtest"
 	"github.com/example-user/commander/internal/store"
 )
@@ -135,14 +134,11 @@ func TestPostgresPlanDecisionReconciliationCLIUsesCurrentOwnerWithoutApproving(t
 	if calls.Load() != 4 {
 		t.Fatal("CLI did not delegate exactly once", calls.Load())
 	}
-	// The original approval can no longer clear the hold, even though its entire
-	// immutable payload remains present in the journal.
+	// The original approval is superseded, even though its entire immutable
+	// payload remains present in the journal.
 	before, e := st.ListNeedsResolutions(ctx, pid, "held")
 	if e != nil || len(before) != 1 || before[0].AnswerID != saved.AnswerID || before[0].State != store.ResolutionSuperseded {
 		t.Fatal(before, e)
-	}
-	if e = beads.New().SetLabel(ctx, dir, "held", "hold", false); e == nil {
-		t.Fatal("reconciliation renewed the original approval")
 	}
 	server.Close()
 	out.Reset()

@@ -197,8 +197,8 @@ func (f flow) leafBaseLine(s SnapStep) line {
 		return line{kind: "needs", text: "Needs you", since: waitSince([]SnapStep{s}, you)}
 	}
 	if f.decision(s) {
-		if s.Gate && unfinishedBlocker(s, f.byID) {
-			return line{kind: "idle", text: "Not reached"}
+		if unfinishedBlocker(s, f.byID) {
+			return f.notYetAsked(s)
 		}
 		return line{kind: "needs", text: "Needs you", since: waitSince([]SnapStep{s}, you)}
 	}
@@ -236,10 +236,13 @@ func (f flow) leafBaseLine(s SnapStep) line {
 	if l, ok := f.b.waitLine(waits, []SnapStep{s}); ok {
 		return humanWait(l, f.b.tasks)
 	}
-	if onUser(s) && (s.State == "needs-user" || !(unfinishedBlocker(s, f.byID) || f.blockedAbove(s))) {
+	if onUser(s) && !(unfinishedBlocker(s, f.byID) || f.blockedAbove(s)) {
 		return line{kind: "needs", text: "Needs you", since: waitSince([]SnapStep{s}, you)}
 	}
-	if unfinishedBlocker(s, f.byID) || f.blockedAbove(s) {
+	if unfinishedBlocker(s, f.byID) {
+		return f.notYetAsked(s)
+	}
+	if f.blockedAbove(s) {
 		if s.Gate {
 			return line{kind: "idle", text: "Not reached"}
 		}
@@ -253,6 +256,23 @@ func (f flow) leafBaseLine(s SnapStep) line {
 	}
 	if s.State == "in-progress" {
 		return line{kind: "stalled", text: "Stalled"}
+	}
+	return line{kind: "idle", text: "Not started"}
+}
+
+// notYetAsked is a step with an unfinished blocker: a gate is not reached yet,
+// and a card waits on its blocker before it is the user's move.
+func (f flow) notYetAsked(s SnapStep) line {
+	if s.Gate {
+		return line{kind: "idle", text: "Not reached"}
+	}
+	if !onUserCard(s) {
+		return line{kind: "idle", text: "Not started"}
+	}
+	for _, id := range s.BlockedBy {
+		if b, ok := f.byID[id]; ok && id != s.BeadID && !stepClosed(b) && !parked(b) {
+			return line{kind: "waiting", text: "Waiting on " + liveTitle(b.Title)}
+		}
 	}
 	return line{kind: "idle", text: "Not started"}
 }

@@ -232,31 +232,17 @@ func TestPostgresPlanHumanHoldScenarioThroughAPI(t *testing.T) {
 	}
 	server := httptest.NewServer(New(Options{Token: testToken, StateStore: st}).Handler())
 	defer server.Close()
-	req := beads.DoorRequest{Dir: dir, Atomic: true, NoWait: true, Plan: &beads.PlanBasis{RequestID: scenario.RequestID, JurisdictionRevision: 1, Beads: map[string]int64{"held": 1}}, Ops: [][]string{{"update", "held", "--remove-label", "hold"}}, Env: []string{"COMMANDER_ROLE=commander"}}
+	// An execution session cannot lift a hold; the planning Commander may,
+	// without a recorded answer: keeping the board true is its job.
+	req := beads.DoorRequest{Dir: dir, Atomic: true, NoWait: true, Plan: &beads.PlanBasis{RequestID: scenario.RequestID, JurisdictionRevision: 1, Beads: map[string]int64{"held": 1}}, Ops: [][]string{{"update", "held", "--remove-label", "hold"}}, Env: []string{"COMMANDER_ROLE=commander", "COMMANDER_RUN_SESSION=executor-session"}}
 	_, out := postWrite(t, server.URL, testToken, req)
 	if out.Exit == 0 {
-		t.Fatal("planning API erased a human hold")
+		t.Fatal("execution session erased a human hold")
 	}
-	if e = st.RecordPitch(ctx, pid, "held", scenario.Question, `{"options":[{"label":"Approve"}]}`, nil); e != nil {
-		t.Fatal(e)
-	}
-	if e = st.SaveNeedsResolution(ctx, store.NeedsResolution{ProjectID: pid, BeadID: "held", Generation: "1", AnswerID: "human-answer", Action: "approve", Approved: true}, scenario.Answer); e != nil {
-		t.Fatal(e)
-	}
+	req.Plan.RequestID = scenario.SecondRequestID
+	req.Env = []string{"COMMANDER_ROLE=commander"}
 	_, out = postWrite(t, server.URL, testToken, req)
 	if out.Exit != 0 {
-		t.Fatalf("recorded user approval did not permit its hold release: %+v", out)
-	}
-	if _, e = st.DB().ExecContext(ctx, `UPDATE bead_tasks SET labels='["hold"]' WHERE project_id=? AND id='held'`, pid); e != nil {
-		t.Fatal(e)
-	}
-	var revision int64
-	if e = st.DB().QueryRowContext(ctx, `SELECT plan_revision FROM bead_tasks WHERE project_id=? AND id='held'`, pid).Scan(&revision); e != nil {
-		t.Fatal(e)
-	}
-	req.Plan = &beads.PlanBasis{RequestID: scenario.SecondRequestID, JurisdictionRevision: 1, Beads: map[string]int64{"held": revision}}
-	_, out = postWrite(t, server.URL, testToken, req)
-	if out.Exit == 0 {
-		t.Fatal("fresh basis reused human approval against a later hold")
+		t.Fatalf("planning Commander could not lift a hold: %+v", out)
 	}
 }

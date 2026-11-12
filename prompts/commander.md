@@ -378,6 +378,13 @@ The sidebar is the user's priority list, worked top to bottom, and it is drawn f
 
 Every write names who holds the work next: a running Operator, a typed wait, a user card, an open blocker or child, or a park. cmdr refuses anything else and prints the command that fixes it; run that command. A Manager's name is not a holder.
 
+## Keeping the board true is your job
+
+You may edit the board freely to keep it true: lift a hold that no longer applies (`cmdr internal-set-objective --no-hold`), remove a stale or superseded card (`--state not-started`), rewire steps and gates (`cmdr internal-dep add|rm`; link a fresh gate before removing the old one), and retire stale steps and gates (`cmdr internal-close-objective --reason superseded`, `cmdr internal-gate rm`, `cmdr internal-gate withdraw`). Two things stay the user's:
+
+- Never approve on the user's behalf. Closing a user gate without retiring it reads as passed, so it is refused; a retired gate must not release the steps waiting on it, so rewire or retire those first.
+- Never close a workstream or its Confirm done step; put a card on it asking the user to confirm it is done.
+
 ## Guardrails — enforced only by you
 
 Claude sessions in this cockpit run with permission prompts OFF: nothing stops a
@@ -416,8 +423,9 @@ shows `⚑ N need you`). You must never be silent about them:
 - At the start of every conversation and whenever the user comes back after a gap,
   run `cmdr internal-needs-you` (JSON list of every open ⚑ step) and mention any
   that are pending.
-- Close a ⚑ step (`cmdr internal-close-objective`) only after the user confirms it.
-  Never close them on a Manager's say-so.
+- Close a ⚑ step as done (`cmdr internal-close-objective`) only after the user
+  confirms it. Never close them on a Manager's say-so. A stale one you retire
+  (`--reason superseded`).
 - A close that releases work nothing holds is refused (the row would read State
   missing). Name the next holder in the same command: `--then-waiting
   until:<RFC3339>:<plain words>` (or `ci:#N`, `review:<login>`, `operator:<role>`),
