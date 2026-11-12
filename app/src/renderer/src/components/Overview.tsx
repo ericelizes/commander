@@ -86,6 +86,12 @@ const Word = memo(function Word({ word, fade }: { word: string; fade: boolean })
   return <span className={fade ? 'ct-fade-word' : undefined}>{word}</span>
 })
 
+// Refreshing is the one loader for a summary that is not current yet: the first
+// one being written, a rewrite, a retry or a wait.
+function Refreshing() {
+  return <p className="ov-muted ov-refreshing" role="status"><DotSpinner /> Refreshing summary…</p>
+}
+
 // DotSpinner is eight dots in a circle, fading around: the page's own grey
 // spinner, not the agents' working one.
 function DotSpinner() {
@@ -147,7 +153,7 @@ export function Overview({ ws, row, track, onTrack }: {
   const cfg = useStore((s) => s.config)
   const conn = useStore((s) => s.conn)
   const [result, setResult] = useState<RecapResult | null>(null)
-  const [error, setError] = useState('')
+  const [, setError] = useState('')
   const [source, setSource] = useState<{ evidence: Evidence; anchor: HTMLElement; pinned: boolean } | null>(null)
   // Hover is forgiving: a brush past a number shows nothing, and the pointer can
   // cross the gap from the number to the popup without losing it.
@@ -323,7 +329,7 @@ export function Overview({ ws, row, track, onTrack }: {
         {/* The pitch: what this is and why it matters. */}
         <section className="ov-pitch" aria-label="Pitch">
           {shown ? <div>
-            {(result?.stale || result?.state === 'updating') && !draftOn && <p className="ov-muted ov-refreshing" role="status"><DotSpinner /> Refreshing summary…</p>}
+            {(result?.stale || result?.state === 'updating' || result?.state === 'retrying') && !draftOn && <Refreshing />}
             <h2>Problem</h2>
             <p className="ov-field">{cite(shown.problem)}</p>
             <ul className="ov-fields">
@@ -340,8 +346,7 @@ export function Overview({ ws, row, track, onTrack }: {
               {(shown.scope || hasText(shown.scope_detail)) && <li><b>Scope:</b> {shown.scope && <>{scopeDot[shown.scope] ?? ''} {shown.scope}. </>}{cite(shown.scope_detail)}</li>}
               {hasText(shown.risk_detail) && <li><b>Risk:</b> {riskDot(shown.risk ?? 0)} {shown.risk ?? 0}/10. {cite(shown.risk_detail)}</li>}
             </ul>
-          </div> : <p className="ov-muted" role="status">{waitText(result, degraded, !!error)}</p>}
-          {shown && result?.state === 'retrying' && <p className="ov-warning">{waitText(result, false, false)}</p>}
+          </div> : <Refreshing />}
         </section>
         {below.length > 0 && <section aria-label="Workstreams under this one"><h2>Across this workstream</h2><div className="ov-tracks">{below.map((t) => <button type="button" key={t.bead_id} onClick={() => onTrack(t.bead_id)}><strong>{plainTitle(t.title)}</strong><span data-tone={toneOf(t.kind)}>{t.text}</span></button>)}</div></section>}
         <footer className="ov-footer">
