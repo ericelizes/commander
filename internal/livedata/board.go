@@ -83,8 +83,9 @@ type BoardRow struct {
 	Since                int64           `json:"since"`
 	Progress             Progress        `json:"progress"`
 	Milestones           Progress        `json:"milestones"`
-	Working              int             `json:"working"` // its Manager in a turn and its live Operators
-	Flag                 int             `json:"flag"`    // NEEDS YOU items under it
+	Working              int             `json:"working"`                  // its Manager in a turn and its live Operators
+	AgentRuntimes        []string        `json:"agent_runtimes,omitempty"` // runtimes of the agents on its own steps (claude, codex)
+	Flag                 int             `json:"flag"`                     // NEEDS YOU items under it
 	Unread               int             `json:"unread"`
 	Gate                 *BoardGate      `json:"gate"`
 	Tracks               []BoardTrack    `json:"tracks"`               // its open nested workstreams; empty unless it has two or more
@@ -115,7 +116,8 @@ type BoardTrack struct {
 	Since                int64           `json:"since"`
 	Progress             Progress        `json:"progress"`
 	Milestones           Progress        `json:"milestones"`
-	Working              int             `json:"working"` // its live Operators
+	Working              int             `json:"working"`                  // its live Operators
+	AgentRuntimes        []string        `json:"agent_runtimes,omitempty"` // runtimes of the agents on its own steps (claude, codex)
 	Why                  string          `json:"why,omitempty"`
 	AgeAs                string          `json:"age_as,omitempty"`
 	// ManagerRole is set when the nested workstream has a Manager of its own.
@@ -1305,7 +1307,7 @@ func operatorTaskTitles(s Snapshot) map[string]string {
 }
 
 // urgency orders lines by who acts: red, yellow, green; grey only when nothing is moving.
-var urgency = map[string]int{"needs": 0, "waiting": 1, "working": 2, "stuck": 3, "stalled": 4, "idle": 5, "quiet": 6, "done": 6, "none": 7}
+var urgency = map[string]int{"needs": 0, "waiting": 1, "working": 2, "stuck": 3, "stalled": 4, "idle": 5, "quiet": 6, "done": 6, "about": 6, "none": 7}
 
 func mostUrgent(ls []line) (line, bool) {
 	if len(ls) == 0 {

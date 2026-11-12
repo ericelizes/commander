@@ -1,6 +1,8 @@
 package livedata
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"log"
 	"strings"
@@ -35,12 +37,18 @@ func applyDescriptions(describe DescribeFunc, snap *Snapshot, d *Display) {
 		if r.Actor == nil || ws == nil {
 			continue
 		}
-		r.Text = HumanTimes(describeRow(describe, r.Key, *r.Actor, rowFacts(*snap, ws.Title, "", ws.Steps, *r.Actor), r.Text), time.Now())
+		if len(r.Tracks) > 0 {
+			r.Text, r.Kind = aboutLine(describe, r.Key, ws.Title, r.Tracks), "about"
+		} else {
+			r.Text = HumanTimes(describeRow(describe, r.Key, *r.Actor, rowFacts(*snap, ws.Title, "", ws.Steps, *r.Actor), r.Text), time.Now())
+		}
 		var tracks func([]BoardTrack)
 		tracks = func(ts []BoardTrack) {
 			for j := range ts {
 				t := &ts[j]
-				if t.Actor != nil {
+				if len(t.Children) > 0 {
+					t.Text, t.Kind = aboutLine(describe, t.Key, t.Title, t.Children), "about"
+				} else if t.Actor != nil {
 					steps := []SnapStep{}
 					if st, ok := stepByID(ws.Steps, t.BeadID); ok {
 						steps = st.Children
@@ -52,6 +60,25 @@ func applyDescriptions(describe DescribeFunc, snap *Snapshot, d *Display) {
 		}
 		tracks(r.Tracks)
 	}
+}
+
+// aboutLine is a parent workstream's line: what it covers across its nested
+// workstreams, not their state (they show their own). It is rewritten rarely.
+func aboutLine(describe DescribeFunc, key, title string, tracks []BoardTrack) string {
+	names := make([]string, 0, len(tracks))
+	for _, t := range tracks {
+		names = append(names, t.Title)
+	}
+	facts := "Workstream: " + title + "\nNested workstreams: " + strings.Join(names, "; ")
+	// The set of nested workstreams is part of the state: a change rewrites the line.
+	set := sha256.Sum256([]byte(strings.Join(names, "\n")))
+	if text, _, ok := describe("about:"+key, "about", "about:"+hex.EncodeToString(set[:4]), "About:", facts); ok {
+		return text
+	}
+	if len(tracks) == 1 {
+		return "1 nested workstream"
+	}
+	return fmt.Sprintf("%d nested workstreams", len(tracks))
 }
 
 func describeRow(describe DescribeFunc, key string, row nextactor.Row, facts, fallback string) string {

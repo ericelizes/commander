@@ -1,7 +1,0 @@
-{
-  "goal": "An open Confirm done card remains the next user move on its workstream and parent, even when all other work is finished and an older answer was saved but never applied.",
-  "ask": "Is it done?",
-  "old_generation": "1",
-  "live_generation": 4,
-  "tests": ["internal/livedata:TestOpenConfirmDoneCardLeadsWorkstreamAndParent", "internal/livedata:TestConfirmDoneSavedAnswerGenerationScenario"]
-}

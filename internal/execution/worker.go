@@ -12,10 +12,52 @@ import (
 	"sync"
 	"time"
 
+	"github.com/example-user/commander/internal/beads"
 	"github.com/example-user/commander/internal/place"
 	"github.com/example-user/commander/internal/spawn"
 	"github.com/example-user/commander/internal/store"
 )
+
+// runtimePreference is the runtime a step asks its agents to run on: a
+// runtime:claude or runtime:codex label on the step or its nearest labelled
+// ancestor (a nested workstream labels all its steps). "" = the account order.
+func runtimePreference(ctx context.Context, bc beads.Client, dir, id string) string {
+	for i := 0; i < 8 && id != ""; i++ {
+		b, err := bc.Show(ctx, dir, id)
+		if err != nil || b == nil {
+			return ""
+		}
+		for _, l := range b.Labels {
+			if rt, ok := strings.CutPrefix(l, "runtime:"); ok && (rt == "claude" || rt == "codex") {
+				return rt
+			}
+		}
+		parent := b.Parent
+		if parent == "" {
+			parent = b.ParentID
+		}
+		if parent == "" {
+			parent = beads.ParentOf(id)
+		}
+		if parent == id {
+			return ""
+		}
+		id = parent
+	}
+	return ""
+}
+
+// preferRuntime puts runtime first in an account order, the rest after it as
+// the fallback when it has no usage left.
+func preferRuntime(order []string, runtime string) []string {
+	out := []string{runtime}
+	for _, a := range order {
+		if a != runtime {
+			out = append(out, a)
+		}
+	}
+	return out
+}
 
 type Spawner interface {
 	Spawn(context.Context, spawn.SpawnRequest) (*spawn.SpawnResult, error)
@@ -165,9 +207,13 @@ func (w *Worker) PassSlot(ctx context.Context, slot string) error {
 			orders, orderErr := w.Store.AgentAccounts(launchCtx)
 			e = orderErr
 			request.AgentAccounts = orders[store.AgentKindAgent]
+			if rt := runtimePreference(launchCtx, beads.New(), claim.Project.Path, claim.BeadID); rt != "" {
+				request.AgentAccounts = preferRuntime(request.AgentAccounts, rt)
+			}
 			if e == nil {
 				e = w.resumeQuestionCheckpoint(launchCtx, *claim, &request)
 			}
+
 		}
 		if e == nil && w.Place != "" {
 			if slot != "place:"+w.Place {

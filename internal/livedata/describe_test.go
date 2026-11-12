@@ -177,3 +177,28 @@ func TestALineWaitingOnAnotherStepIsYellowAndSaysWaiting(t *testing.T) {
 		t.Fatalf("describer asked as %q", asked)
 	}
 }
+
+func TestParentRowSaysWhatItCovers(t *testing.T) {
+	lead := nextactor.Result{Actor: nextactor.Agent, Reason: "executing", Bead: "x"}
+	s := activeBoardFixture()
+	d := Display{Workstreams: []BoardRow{{Key: "p:root", N: 1, Actor: &nextactor.Row{Lead: lead}, Tracks: []BoardTrack{
+		{Key: "p:t1", BeadID: "t1", Title: "Staging", Actor: &nextactor.Row{Lead: lead}},
+		{Key: "p:t2", BeadID: "t2", Title: "Prod", Actor: &nextactor.Row{Lead: lead}},
+	}}}}
+	var about string
+	describe := func(key, actor, reason, opener, facts string) (string, string, bool) {
+		if actor == "about" {
+			about = facts
+			return "Notify rollout: staging and prod", "", true
+		}
+		return "Agent working", "", true
+	}
+	applyDescriptions(describe, &s, &d)
+	r := d.Workstreams[0]
+	if r.Kind != "about" || r.Text != "Notify rollout: staging and prod" || !strings.Contains(about, "Staging; Prod") {
+		t.Fatalf("parent row %q %q (facts %q)", r.Kind, r.Text, about)
+	}
+	if r.Tracks[0].Kind == "about" || r.Tracks[0].Text != "Agent working" {
+		t.Fatalf("a nested row keeps its state: %+v", r.Tracks[0])
+	}
+}

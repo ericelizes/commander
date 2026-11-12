@@ -13,14 +13,14 @@ import (
 	"github.com/example-user/commander/internal/testguard"
 )
 
-const partialJSON = `{"problem":{"sentences":[{"text":"The PR is \"open\".","sources":["pr"]},{"text":"Second sent`
+const partialJSON = `{"now":{"sentences":[{"text":"The PR is \"open\".","sources":["pr"]},{"text":"Second sent`
 
 func TestPartialRecapKeepsOnlyFinishedSentences(t *testing.T) {
 	r := PartialRecap(partialJSON)
-	if len(r.Problem.Sentences) != 2 || r.Problem.Sentences[0].Text != `The PR is "open".` || r.Problem.Sentences[0].Partial {
+	if len(r.Now.Sentences) != 2 || r.Now.Sentences[0].Text != `The PR is "open".` || r.Now.Sentences[0].Partial {
 		t.Fatal(r)
 	}
-	if p := r.Problem.Sentences[1]; !p.Partial || p.Text != "Second sent" || len(p.Sources) != 0 {
+	if p := r.Now.Sentences[1]; !p.Partial || p.Text != "Second sent" || len(p.Sources) != 0 {
 		t.Fatal(p)
 	}
 	full := `{"problem_type":"bug","problem":{"sentences":[{"text":"A.","sources":["pr"]}]},"solution":{"sentences":[{"text":"B.","sources":["pr"]},{"text":"C.","sources":["pr"]}]},"impact":{"sentences":[{"text":"D.","sources":["x"]}]},"scope":"Small","risk":3,"risk_detail":{"sentences":[{"text":"E.","sources":[]}]}}`
@@ -51,7 +51,7 @@ func TestCacheShowsDraftWhileWritingAndSignalsChange(t *testing.T) {
 		t.Fatal("no change signal")
 	}
 	r := c.Get(in)
-	if r.State != "updating" || r.Draft == nil || len(r.Draft.Problem.Sentences) != 2 {
+	if r.State != "updating" || r.Draft == nil || len(r.Draft.Now.Sentences) != 2 {
 		t.Fatalf("%+v", r)
 	}
 	close(release)

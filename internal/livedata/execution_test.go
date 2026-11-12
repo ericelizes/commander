@@ -1,6 +1,7 @@
 package livedata
 
 import (
+	"github.com/example-user/commander/internal/store"
 	"testing"
 )
 
@@ -36,5 +37,21 @@ func TestProcessWithoutTurnEvidenceDoesNotSpin(t *testing.T) {
 	}
 	if n := executionCount(s, 1, "task", nil); n != 0 {
 		t.Fatalf("unknown run counted: %d", n)
+	}
+}
+
+func TestOwnRuntimesSkipNestedWorkstreams(t *testing.T) {
+	s := Snapshot{Executions: []SnapExecution{
+		{ProjectID: 1, BeadID: "w.1", Role: "a", State: store.AgentWorking, Runtime: "codex"},
+		{ProjectID: 1, BeadID: "w.2.1", Role: "b", State: store.AgentWorking, Runtime: "claude"},
+		{ProjectID: 1, BeadID: "w.3", Role: "c", State: store.AgentWorking},
+	}}
+	steps := []SnapStep{{BeadID: "w.1"}, {BeadID: "w.2", Track: true, Children: []SnapStep{{BeadID: "w.2.1"}}}, {BeadID: "w.3"}}
+	got := ownRuntimes(s, 1, "w", steps)
+	if len(got) != 2 || got[0] != "codex" || got[1] != "agent" {
+		t.Fatalf("own runtimes %v", got)
+	}
+	if nested := ownRuntimes(s, 1, "w.2", steps[1].Children); len(nested) != 1 || nested[0] != "claude" {
+		t.Fatalf("nested runtimes %v", nested)
 	}
 }

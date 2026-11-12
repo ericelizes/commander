@@ -409,6 +409,43 @@ function findStep(steps: SnapStep[], id: string): SnapStep | undefined {
   return undefined
 }
 
+// AgentMarks shows who works on a row's own steps: the Claude or OpenAI mark
+// per agent, no count.
+function AgentMarks({ runtimes }: { runtimes: string[] }) {
+  return (
+    <span className="agent-marks">
+      {runtimes.map((rt, i) => {
+        const name = rt === 'claude' ? 'Claude' : rt === 'codex' ? 'Codex (OpenAI)' : 'An agent'
+        return (
+          <span key={i} className={`agent-mark agent-mark-${rt}`} title={`${name} is working on this`} aria-label={`${name} is working on this`}>
+            {rt === 'claude' ? <ClaudeMark /> : rt === 'codex' ? <OpenAIMark /> : <Spinner size={9} />}
+          </span>
+        )
+      })}
+    </span>
+  )
+}
+
+const ClaudeMark = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" aria-hidden>
+    <g stroke="#d97757" strokeWidth="2.4" strokeLinecap="round">
+      {Array.from({ length: 12 }, (_, i) => {
+        const a = (i * Math.PI) / 6
+        const r = i % 2 ? 8.5 : 10.5
+        return <line key={i} x1={12 + 2.6 * Math.cos(a)} y1={12 + 2.6 * Math.sin(a)} x2={12 + r * Math.cos(a)} y2={12 + r * Math.sin(a)} />
+      })}
+    </g>
+  </svg>
+)
+
+const OpenAIMark = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" aria-hidden fill="none" stroke="currentColor" strokeWidth="1.8">
+    {Array.from({ length: 6 }, (_, i) => (
+      <ellipse key={i} cx="12" cy="7.6" rx="3.4" ry="5" transform={`rotate(${i * 60} 12 12)`} />
+    ))}
+  </svg>
+)
+
 function PlanningOwner({ owner }: { owner?: string }) {
   if (!owner) return null
   return <span className="row-commander" title={owner} aria-label={`Responsible Commander: ${owner}`}>{commanderName(owner)}</span>
@@ -446,7 +483,7 @@ function TrackRow({ t, n, wsKey, parentOwner }: { t: BoardTrack; n: number; wsKe
             </span>
             {t.planning_commander !== parentOwner && <PlanningOwner owner={t.planning_commander} />}
           </div>
-          <StateLine kind={t.kind} text={t.text} agents={t.working} age={age(t.since, nowSec)}
+          <StateLine kind={t.kind} text={t.text} agents={0} runtimes={t.agent_runtimes} age={t.kind === 'about' ? '' : age(t.since, nowSec)}
             action={t.kind === 'done' ? <CompleteButton project={project} bead={t.bead_id} title={t.title} /> : undefined} />
           {t.kind === 'stalled' && t.why && <p className="ws-recovery">{t.why}</p>}
           {t.why && <span className="ws-state-why" title={t.why} aria-label={t.why}>⚠</span>}
@@ -634,8 +671,9 @@ function WorkstreamState({ w }: { w: BoardRow }) {
         kind={w.kind}
         text={w.text}
         title={w.gate?.at && !w.gate.for_you ? `${w.text}: ${w.gate.who}` : w.text}
-        agents={w.working}
-        age={age(w.since, nowSec)}
+        agents={0}
+        runtimes={w.agent_runtimes}
+        age={w.kind === 'about' ? '' : age(w.since, nowSec)}
         action={w.kind === 'done' ? <CompleteButton project={w.project} bead={w.bead_id} title={w.title} /> : undefined}
       />
     </>
@@ -648,7 +686,7 @@ function WorkstreamState({ w }: { w: BoardRow }) {
  * agents pill and the time pill on the right. The text wraps, the pills stay.
  */
 // action replaces the text and pills: a finished row's state is its Complete button.
-function StateLine({ kind, text, title, agents, age, unread = 0, action }: { kind: string; text: string; title?: string; agents: number; age: string; unread?: number; action?: ReactNode }) {
+function StateLine({ kind, text, title, agents, runtimes, age, unread = 0, action }: { kind: string; text: string; title?: string; agents: number; runtimes?: string[]; age: string; unread?: number; action?: ReactNode }) {
   if (action) return <div className={`ws-state agent-${kind}`}>{action}</div>
   return (
     <div className={`ws-state agent-${kind}`}>
@@ -658,6 +696,7 @@ function StateLine({ kind, text, title, agents, age, unread = 0, action }: { kin
         </span>
       )}
       <span className="ws-state-meta">
+        {runtimes && runtimes.length > 0 && <AgentMarks runtimes={runtimes} />}
         {agents > 0 && (
           <span className="ws-state-agents">
             <Spinner size={9} /> {agents}
