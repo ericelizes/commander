@@ -86,6 +86,15 @@ func TestTooLongAnswerIsRewrittenOnceBeforeCutting(t *testing.T) {
 	}
 }
 
+func TestPromptNamesTheReaderAsYou(t *testing.T) {
+	if got := (&Describer{UserName: "Eric Elizes"}).prompt("none"); !strings.Contains(got, "write 'you' wherever the facts say Eric Elizes") {
+		t.Fatalf("%q", got)
+	}
+	if got := (&Describer{}).prompt("none"); got != promptFor("none") {
+		t.Fatal("no name, no extra sentence")
+	}
+}
+
 func TestShortenDropsATrailingClauseBeforeCutting(t *testing.T) {
 	if got := shorten("stop staging or all Notify, unblocking the rollout plan", 44); got != "stop staging or all Notify" {
 		t.Fatalf("%q", got)
