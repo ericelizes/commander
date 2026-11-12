@@ -114,6 +114,12 @@ func PartialRecap(buf string) Recap {
 // claimOf is the cited part a top-level key names, or nil.
 func claimOf(r *Recap, key string) *Claim {
 	switch key {
+	case "now":
+		return &r.Now
+	case "recent":
+		return &r.Recent
+	case "next":
+		return &r.Next
 	case "problem":
 		return &r.Problem
 	case "problem_impact":
@@ -226,6 +232,7 @@ func onlyKnown(r Recap, in Input) Recap {
 		return out
 	}
 	out := r
+	out.Now, out.Recent, out.Next = fix(r.Now), fix(r.Recent), fix(r.Next)
 	out.Problem, out.ProblemImpact, out.Solution, out.Impact = fix(r.Problem), fix(r.ProblemImpact), fix(r.Solution), fix(r.Impact)
 	out.ScopeDetail, out.RiskDetail = fix(r.ScopeDetail), fix(r.RiskDetail)
 	return out

@@ -19,6 +19,7 @@ func fixture() Input {
 func valid() Recap {
 	one := func(text string) Claim { return Claim{Sentences: []Sentence{{Text: text, Sources: []string{"pr"}}}} }
 	return Recap{
+		Now:           one("The dashboards PR is open and waits for review."),
 		ProblemType:   "feature",
 		Problem:       Claim{Sentences: []Sentence{{Text: "The PR is open.", Sources: []string{"pr"}}, {Text: "The infrastructure apply is still pending.", Sources: []string{"pr"}}}},
 		ProblemImpact: one("Teams lose an hour a week finding failures."),
@@ -216,5 +217,17 @@ func TestPitchNeedsTypeScopeAndRisk(t *testing.T) {
 		if Validate(b, in) == nil {
 			t.Fatalf("accepted %+v", b)
 		}
+	}
+}
+
+func TestStatusListsMayBeEmptyButNowMayNot(t *testing.T) {
+	in := fixture()
+	r := valid()
+	if err := Validate(r, in); err != nil {
+		t.Fatalf("empty recent and next are fine: %v", err)
+	}
+	r.Now = Claim{}
+	if Validate(r, in) == nil {
+		t.Fatal("a recap without its now line was accepted")
 	}
 }
