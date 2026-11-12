@@ -2222,8 +2222,8 @@ use their retained answer path. `internal-close-objective` first reads fresh
 actual child edges and statuses: ordinary, task, nested and deferred children
 must finish, and a recorded review wait refuses completion. Closed children
 remain folded history. Read failures refuse before custody writes. These CLI
-checks share the existing role/environment trust boundary and are not an atomic
-backend check-and-close transaction. Unit/eval:
+checks share the existing role/environment trust boundary; PostgreSQL additionally
+enforces child and review checks inside the graph-locked close transaction. Unit/eval:
 `TestUserGatePassAuthority`, `TestCloseParent*`, `TestCompletionAuthorityScenario`
 (`tests/evals/scenarios/completion-authority.json`, private command-handler eval).
 
@@ -2234,3 +2234,15 @@ incompatible placement, dependency cycles and newly unheld work; evidence failur
 refuse. No wrappers, Manager changes, gate/card/journal or run-provenance edits.
 See `docs/cli/ordinary-place.md` for limits and coverage (`TestOrdinaryPlace*`,
 private-handler eval `scenarios/ordinary-place.json`).
+
+**Parent completion invariants:** PostgreSQL closes check actual unfinished
+children (deferred and Confirm done children included) and pending review waits
+inside the close transaction under the project graph lock, for every caller.
+A concurrent child creation or state edit cannot slip between that check and the
+write; adding children or a new review wait to a closed scope refuses. Eric's
+Confirm done flow remains the completion authority. Parked nested workstreams
+stay in the sidebar as “Paused”; terminal percentages use delivery milestones.
+Regression coverage: `TestPostgresCloseConcurrentParentMutation`,
+`TestPostgresCloseComposesWithConfirmDone`, `TestCompletionConcurrentCLIScenario`,
+`wrong_state_test.go`, renderer `tracks.test.ts`, and eval
+`scenarios/paused-confirm-done.json` with detached PostgreSQL cockpit verification.

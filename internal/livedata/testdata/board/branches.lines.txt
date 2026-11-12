@@ -37,7 +37,7 @@
 36 state missing before gate: State missing (0% done, next gate: Merge approval, approved by a-reviewer) · why: Automation failure: open work has no valid holder. Owner: manager-w36. Next: inspect current evidence and record the next guarded recovery action on w36.1. Commander owns escalation if recovery fails.
 37 decisions: Needs you: Pick a region (+1 more) (0% done, next gate: Merge approval, approved by a-reviewer, ⚑ 2, 2 working)
 38 your gate not listed: Waiting for CI (50% done, next gate: Spec approval, approved by you, for 50s)
-39 stage gate first: Working on w39.1.2 · then: build approved (33% done, next gate: Build approved, approved by a-reviewer, 2 working)
+39 stage gate first: Working on w39.1.2 · then: build approved (0% done, next gate: Build approved, approved by a-reviewer, 2 working)
 40 two tracks: Needs you: Choose the log store (0% done, next gate: Merge approval, approved by a-reviewer, ⚑ 1)
   40.1 Script audits: Waiting for CI (0% done, for 3m)
   40.2 Log audits: Needs you: Choose the log store (0% done)

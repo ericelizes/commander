@@ -1,4 +1,4 @@
 0 Commander: no agent yet
-1 Two tracks, a direct task each: Working on task A (0% done, no gates, 3 working)
-  1.1 Track A: Working on task A (0% done, 1 working)
-  1.2 Track B: Working on task B (0% done, 1 working)
+1 Two tracks, a direct task each: Working on task A (100% done, no gates, 3 working)
+  1.1 Track A: Working on task A (100% done, 1 working)
+  1.2 Track B: Working on task B (100% done, 1 working)

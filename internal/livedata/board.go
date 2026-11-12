@@ -319,6 +319,9 @@ func (b board) row(ws SnapWorkstream) BoardRow {
 		}
 	}
 	l = b.capacityLine(ws.ManagerRole, rollUp(l, level, ownOpen(ws.Steps)))
+	if ws.Status == statusDeferred {
+		l = line{kind: "idle", text: "Paused"}
+	}
 	// One open nested workstream with nothing beside it stands in for the row.
 	title := titleOf(ws.Title, ws.BeadID)
 	scope, scopeRole := "", ""
@@ -369,6 +372,9 @@ func (b board) trackLevel(ws SnapWorkstream, steps []SnapStep, prefix string, ma
 		inheritedRole := ""
 		for {
 			c, only := soleChild(t.Children)
+			if parked(t) {
+				break
+			}
 			if !only {
 				break
 			}
@@ -394,7 +400,7 @@ func (b board) trackLevel(ws SnapWorkstream, steps []SnapStep, prefix string, ma
 		l := rollUp(local, kids, ownOpen(t.Children))
 		l = b.capacityLine(tws.ManagerRole, l)
 		if parked(t) {
-			l = line{kind: "quiet", text: "Paused"}
+			l = line{kind: "idle", text: "Paused"}
 		}
 		for _, id := range append(chain, t.BeadID) {
 			byTrack[id] = l
@@ -1380,7 +1386,7 @@ func ownOpen(steps []SnapStep) bool {
 // open beside it. A parent shows only with two or more, so this one stands in for it.
 func soleChild(steps []SnapStep) (SnapStep, bool) {
 	open := openTracksIn(steps)
-	if len(open) != 1 || ownOpen(steps) {
+	if len(open) != 1 || ownOpen(steps) || parked(open[0]) {
 		return SnapStep{}, false
 	}
 	return open[0], true

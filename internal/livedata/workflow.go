@@ -114,7 +114,9 @@ func (f flow) step(s SnapStep) WorkflowStep {
 		w.Who = approverNames(s.Approvers)
 	}
 	l, isTrack := f.lines[s.BeadID]
-	if open := !stepClosed(s) && !parked(s); open && (isTrack || f.container(s)) {
+	if isTrack && parked(s) {
+		w.Children = f.steps(s.Children)
+	} else if open := !stepClosed(s) && !parked(s); open && (isTrack || f.container(s)) {
 		w.Children = f.steps(s.Children)
 		if !isTrack {
 			l = f.pickingUp(f.b.trackLine(f.ws, s, f.manager, f.hasManager, f.asksUnder(s)))

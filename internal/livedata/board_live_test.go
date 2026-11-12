@@ -77,8 +77,8 @@ func TestBoardLinesByRole(t *testing.T) {
 	d := Display{
 		Commander: BoardCommander{Kind: "idle", Text: "monitoring", Since: 40},
 		Workstreams: []BoardRow{
-			{Key: "p:a", N: 1, Title: "Alpha", ManagerRole: "manager-a", Kind: "needs", Text: "Needs you: pick", Progress: Progress{Done: 1, Total: 3}, Flag: 1, Working: 2, Since: 70,
-				Tracks: []BoardTrack{{Letter: "A", Title: "One", Text: "Stalled", Progress: Progress{Total: 1}}, {Letter: "B", Title: "Two", Text: "Waiting for CI", Progress: Progress{Done: 1, Total: 1}}}},
+			{Key: "p:a", N: 1, Title: "Alpha", ManagerRole: "manager-a", Kind: "needs", Text: "Needs you: pick", Milestones: Progress{Done: 1, Total: 3}, Flag: 1, Working: 2, Since: 70,
+				Tracks: []BoardTrack{{Letter: "A", Title: "One", Text: "Stalled", Milestones: Progress{Total: 1}}, {Letter: "B", Title: "Two", Text: "Waiting for CI", Milestones: Progress{Done: 1, Total: 1}}}},
 			{Key: "p:b", N: 2, Title: "Beta", ManagerRole: "manager-b", Kind: "quiet", Text: "Nothing to do", Gate: &BoardGate{Title: "Merge", Who: "you"}},
 		},
 		Asks: []BoardAsk{{Rank: 1, Text: "pick", Workstream: "Alpha", Track: "Two", TrackLetter: "B", WsKey: "p:a"}},
