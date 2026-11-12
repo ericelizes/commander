@@ -353,11 +353,13 @@ function Workstream({ w, tracks, folded, onToggle, selected, cursor, mod }: { w:
           </span>
           <div className="row-text">
             <div className="row-head">
-              <span className="row-title">
-                {w.starred && <span className="star">★ </span>}
-                {splitTickets(w.title).text}
+              <span className="row-title-wrap">
+                <span className="row-title">
+                  {w.starred && <span className="star">★ </span>}
+                  {splitTickets(w.title).text}
+                </span>
+                <LinearTag project={w.project} bead={w.bead_id} title={w.title} />
               </span>
-              <LinearTag project={w.project} bead={w.bead_id} title={w.title} />
               {showOwner && <PlanningOwner owner={w.planning_commander} />}
               {w.why && <span className="ws-state-why" title={w.why} aria-label={w.why}>⚠</span>}
             </div>
@@ -438,8 +440,10 @@ function TrackRow({ t, n, wsKey, parentOwner }: { t: BoardTrack; n: number; wsKe
         <div className="row-body">
           <div className="row-head">
             <span className="rank track-rank">{n}{t.letter}</span>
-            <span className="row-title">{splitTickets(t.title).text}</span>
-            <LinearTag project={project} bead={t.bead_id} title={t.title} />
+            <span className="row-title-wrap">
+              <span className="row-title">{splitTickets(t.title).text}</span>
+              <LinearTag project={project} bead={t.bead_id} title={t.title} />
+            </span>
             {t.planning_commander !== parentOwner && <PlanningOwner owner={t.planning_commander} />}
           </div>
           <StateLine kind={t.kind} text={t.text} agents={t.working} age={age(t.since, nowSec)}
