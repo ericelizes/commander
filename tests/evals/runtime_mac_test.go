@@ -44,6 +44,9 @@ func TestAStepRuntimeMacCapabilityScenario(t *testing.T) {
 	if _, err = st.DB().Exec(`INSERT INTO bead_tasks(project_id,id,title,description,acceptance_criteria,labels,created_at,updated_at) VALUES(?,'step','Mac runtime','Bounded work','Recorded result','["kind:objective"]','now','now')`, pid); err != nil {
 		t.Fatal(err)
 	}
+	if _, err = st.SetExecutionReady(ctx, pid, "step", "commander", 1, 1, true, []string{"mac"}); err != nil {
+		t.Fatal(err)
+	}
 	bin := filepath.Join(t.TempDir(), "cmdr")
 	mustBuild(t, os.Environ(), bin, "./cmd/cmdr")
 	server := api.New(api.Options{Token: "synthetic-token", StateStore: st, Beads: beads.New()})
@@ -59,9 +62,6 @@ func TestAStepRuntimeMacCapabilityScenario(t *testing.T) {
 	c.Env = append(os.Environ(), "COMMANDER_HOME="+home, "HOME="+home)
 	if out, err := c.CombinedOutput(); err != nil {
 		t.Fatal(err, string(out))
-	}
-	if _, err = st.SetExecutionReady(ctx, pid, "step", "commander", 1, 1, true, []string{"mac"}); err != nil {
-		t.Fatal(err)
 	}
 	if _, err = st.SetOrchestrationControl(ctx, 1, "active", "runtime Mac fixture"); err != nil {
 		t.Fatal(err)
