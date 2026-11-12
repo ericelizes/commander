@@ -787,14 +787,20 @@ body.resizing .splitter:active {
   color: var(--accent);
 }
 
-/* The Linear logo on a row with Linear tickets. */
+/* The Linear logo on a row with Linear tickets, right after the title. */
+.row-title-wrap {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.row-title-wrap .row-title { flex: 0 1 auto; }
 .row-linear {
   flex: none;
   display: inline-flex;
   align-items: center;
-  align-self: center;
-  color: #5e6ad2;
-  opacity: 0.8;
+  color: var(--text);
 }
 .row-linear svg { width: 11px; height: 11px; }
 
