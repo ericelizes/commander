@@ -67,6 +67,13 @@ const Word = memo(function Word({ word, fade }: { word: string; fade: boolean })
   return <span className={fade ? 'ct-fade-word' : undefined}>{word}</span>
 })
 
+// withCode shows `backticked` text as inline code.
+function withCode(text: string): React.ReactNode {
+  if (!text.includes('`')) return text
+  return text.split(/(`[^`]+`)/g).map((part, i) =>
+    part.length > 2 && part.startsWith('`') && part.endsWith('`') ? <code key={i} className="ov-code">{part.slice(1, -1)}</code> : part)
+}
+
 function Words({ text, settled }: { text: string; settled: number }) {
   let offset = 0
   return <>{(text.match(/\S+\s*|\s+/g) ?? []).map((w, i) => {
@@ -226,12 +233,14 @@ export function Overview({ ws, row, track, onTrack }: {
   }, [result, shown])
   // The marks close their own sentence, held to its last word so they never sit alone on a line.
   const cited = (s: Sentence) => {
-    const lastWord = s.text.lastIndexOf(' ') + 1
+    let lastWord = s.text.lastIndexOf(' ') + 1
+    // A last word inside a code span stays with it.
+    if ((s.text.slice(0, lastWord).split('`').length - 1) % 2 === 1) lastWord = 0
     return (
       <>
-        {s.text.slice(0, lastWord)}
+        {withCode(s.text.slice(0, lastWord))}
         <span className="ov-cited">
-          {s.text.slice(lastWord)}
+          {withCode(s.text.slice(lastWord))}
           <span className="ov-cites">{(s.sources ?? []).map((id) => {
             const e = result?.evidence.find((x) => x.id === id)
             return e ? <button key={id} type="button" className={source?.evidence.id === id ? 'is-open' : ''} aria-label={`Evidence: ${e.label}`}
