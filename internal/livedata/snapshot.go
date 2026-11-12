@@ -800,6 +800,15 @@ func (s *Source) loadDeps() Deps {
 }
 
 // build turns a load into a Snapshot.
+// FinishBoard is the part of a full build that a board rebuilt after a write
+// needs too: agent counts and the written lines.
+func (s *Source) FinishBoard(snap *Snapshot, d *Display) {
+	applyExecutionCounts(snap, d)
+	if !s.stateOnly {
+		applyDescriptions(s.Describe, snap, d)
+	}
+}
+
 func (s *Source) build(ctx context.Context, data Data) Snapshot {
 	start := time.Now()
 	s.mu.Lock()

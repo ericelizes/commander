@@ -37,8 +37,9 @@ function usePref<T extends string>(key: string, initial: T): [T, (v: T) => void]
 }
 
 // What the rows need from the sidebar's drag: which row is lifted, and which nested rows are open.
-const NavContext = createContext<{ lifted: string; openNested: string; isOpen(key: string): boolean; toggleOpen(key: string): void }>({
-  lifted: '', openNested: '', isOpen: () => false, toggleOpen: () => {},
+// showOwner: more than one Commander runs these rows, so each row names its own.
+const NavContext = createContext<{ lifted: string; openNested: string; showOwner: boolean; isOpen(key: string): boolean; toggleOpen(key: string): void }>({
+  lifted: '', openNested: '', showOwner: false, isOpen: () => false, toggleOpen: () => {},
 })
 
 // Where each drop line sits, in the row's own indent.
@@ -251,7 +252,7 @@ export function Navigator() {
             <AskRows vm={vm} selKey={selKey} cursor={cursor} fresh={fresh} />
           ))}
         {tab === 'all' && (
-          <NavContext.Provider value={{ lifted: lift?.node.key ?? '', openNested, isOpen: (k) => openSet.has(k), toggleOpen }}>
+          <NavContext.Provider value={{ lifted: lift?.node.key ?? '', openNested, showOwner: new Set(vm.workstreams.map((w) => w.planning_commander).filter(Boolean)).size > 1, isOpen: (k) => openSet.has(k), toggleOpen }}>
             {vm.workstreams.map((w) => (
               <Workstream
                 key={w.key}
@@ -321,7 +322,7 @@ function SectionLabel({ title, count, tone }: { title: string; count?: number; t
 
 function Workstream({ w, tracks, folded, onToggle, selected, cursor, mod }: { w: BoardRow; tracks: BoardTrack[]; folded: boolean; onToggle: () => void; selected: boolean; cursor: boolean; mod: string }) {
   const leaving = useStore((s) => !!s.leaving[w.key])
-  const { lifted } = useContext(NavContext)
+  const { lifted, showOwner } = useContext(NavContext)
   const progress = w.milestones ?? w.progress
   const progressLabel = `${progress.done}/${progress.total} ${w.milestones ? 'stages' : 'tasks'} completed`
   return (
@@ -357,7 +358,7 @@ function Workstream({ w, tracks, folded, onToggle, selected, cursor, mod }: { w:
                 {w.starred && <span className="star">★ </span>}
                 {splitTickets(w.title).text}
               </span>
-              <PlanningOwner owner={w.planning_commander} />
+              {showOwner && <PlanningOwner owner={w.planning_commander} />}
               {w.why && <span className="ws-state-why" title={w.why} aria-label={w.why}>⚠</span>}
             </div>
             <WorkstreamState w={w} />
