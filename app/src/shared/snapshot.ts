@@ -47,7 +47,7 @@ export interface Snapshot {
 // The board (livedata.Board): every row's state as one derivation in cmdrd
 // says it, for the sidebar and the agents alike. Text never holds an age;
 // since is when the state began (unix s, 0 when unknown).
-export type LineKind = 'none' | 'idle' | 'working' | 'waiting' | 'stuck' | 'needs' | 'stalled' | 'quiet' | 'done'
+export type LineKind = 'none' | 'idle' | 'working' | 'waiting' | 'stuck' | 'needs' | 'stalled' | 'quiet' | 'done' | 'about'
 
 export interface Display {
   commander: { kind: LineKind; text: string; since: number; unread: number }
@@ -88,6 +88,7 @@ export interface BoardRow {
   progress: BoardProgress
   milestones?: BoardProgress // planned stages; excludes internal task attempts
   working: number // its Manager in a turn and its live Operators
+  agent_runtimes?: string[] // runtimes of the agents on its own steps (claude, codex)
   flag: number // NEEDS YOU items under it
   unread: number
   gate: { bead_id: string; title: string; who: string; at: boolean; for_you: boolean } | null
@@ -208,6 +209,7 @@ export interface BoardTrack {
   since: number
   progress: BoardProgress
   milestones?: BoardProgress // planned stages; excludes internal task attempts
+  agent_runtimes?: string[] // runtimes of the agents on its own steps (claude, codex)
   working: number
   why?: string
   age_as?: string // as BoardRow.age_as

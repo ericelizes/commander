@@ -21,6 +21,7 @@ type SnapExecution struct {
 	TaskBeadID      string `json:"task_bead_id,omitempty"`
 	RunID           int64  `json:"run_id,omitempty"`
 	SessionID       string `json:"session_id,omitempty"`
+	Runtime         string `json:"runtime,omitempty"` // claude or codex
 }
 
 func executionOf(s Snapshot, data Data, chats map[string]ChatState) []SnapExecution {
@@ -132,6 +133,45 @@ func executionCount(s Snapshot, pid int64, id string, steps []SnapStep) int {
 	return len(roles)
 }
 
+// ownRuntimes are the runtimes (claude, codex; "agent" when unknown) of the
+// agents working on a row's own steps: not those inside its nested
+// workstreams, which show on their own rows.
+func ownRuntimes(s Snapshot, pid int64, id string, steps []SnapStep) []string {
+	ids := map[string]bool{id: true}
+	var walk func([]SnapStep)
+	walk = func(steps []SnapStep) {
+		for _, st := range steps {
+			if st.Track {
+				continue
+			}
+			ids[st.BeadID] = true
+			walk(st.Children)
+		}
+	}
+	walk(steps)
+	seen := map[string]bool{}
+	var out []string
+	for _, run := range s.Executions {
+		if run.ProjectID != pid || !ids[run.BeadID] || run.State != store.AgentWorking {
+			continue
+		}
+		key := run.Role
+		if run.RunID > 0 {
+			key = fmt.Sprintf("run:%d", run.RunID)
+		}
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		rt := run.Runtime
+		if rt == "" {
+			rt = "agent"
+		}
+		out = append(out, rt)
+	}
+	return out
+}
+
 func applyExecutionCounts(s *Snapshot, d *Display) {
 	if s.Executions == nil {
 		return
@@ -165,6 +205,7 @@ func applyExecutionCounts(s *Snapshot, d *Display) {
 			continue
 		}
 		r.Working = executionCount(*s, ws.ProjectID, ws.BeadID, ws.Steps)
+		r.AgentRuntimes = ownRuntimes(*s, ws.ProjectID, ws.BeadID, ws.Steps)
 		// A next-actor decision already weighs executions and Commander's own work.
 		if s.Storage == "postgres" && r.Working == 0 && r.Kind == "working" && r.Actor == nil {
 			r.Kind = "waiting"
@@ -195,6 +236,7 @@ func updateTrackExecutions(s Snapshot, pid int64, steps []SnapStep, tracks []Boa
 	for i := range tracks {
 		st := byID[tracks[i].BeadID]
 		tracks[i].Working = executionCount(s, pid, tracks[i].BeadID, st.Children)
+		tracks[i].AgentRuntimes = ownRuntimes(s, pid, tracks[i].BeadID, st.Children)
 		if s.Storage == "postgres" && tracks[i].Working == 0 && tracks[i].Kind == "working" && tracks[i].Actor == nil {
 			tracks[i].Kind = "waiting"
 			tracks[i].Text = waitingExecutionText(s, pid, tracks[i].BeadID, st.Children)
