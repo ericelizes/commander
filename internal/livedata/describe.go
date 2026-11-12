@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/example-user/commander/internal/nextactor"
 )
@@ -39,9 +40,7 @@ func applyDescriptions(describe DescribeFunc, snap *Snapshot, d *Display) {
 		tracks = func(ts []BoardTrack) {
 			for j := range ts {
 				t := &ts[j]
-				if t.Actor != nil && r.Actor.Lead.Bead != "" && t.Actor.Lead.Bead == r.Actor.Lead.Bead && t.Actor.Lead.Actor == r.Actor.Lead.Actor {
-					t.Text = "" // the row's line already says it; the step keeps its color
-				} else if t.Actor != nil {
+				if t.Actor != nil {
 					steps := []SnapStep{}
 					if st, ok := stepByID(ws.Steps, t.BeadID); ok {
 						steps = st.Children
@@ -58,10 +57,31 @@ func applyDescriptions(describe DescribeFunc, snap *Snapshot, d *Display) {
 func describeRow(describe DescribeFunc, key string, row nextactor.Row, facts, fallback string) string {
 	text, signal, ok := describe(key, string(row.Lead.Actor), row.Lead.Reason, Opener(row.Lead), facts)
 	if !ok {
-		return fallback
+		return withoutChain(fallback)
 	}
 	if signal != "" && row.Lead.Actor == nextactor.Agent {
 		noteDisagreement(key, signal)
+	}
+	return text
+}
+
+// withoutChain drops the blocking chain from a rule-based line: "After “X”:
+// working on “Y”" reads "Working on “Y”"; "Needs you: Z (blocking “X”)" reads
+// "Needs you: Z".
+func withoutChain(text string) string {
+	if strings.HasPrefix(text, "After “") {
+		if i := strings.Index(text, "”: "); i > 0 {
+			rest := []rune(text[i+len("”: "):])
+			if len(rest) > 0 {
+				rest[0] = unicode.ToUpper(rest[0])
+			}
+			text = string(rest)
+		}
+	}
+	if i := strings.Index(text, " (blocking “"); i > 0 {
+		if j := strings.Index(text[i:], "”)"); j > 0 {
+			text = text[:i] + text[i+j+len("”)"):]
+		}
 	}
 	return text
 }

@@ -51,23 +51,32 @@ func TestPausedChainGivesTheDescriberItsHoldReason(t *testing.T) {
 	}
 }
 
-func TestTrackOnTheSameMoveAsItsRowDoesNotRepeatIt(t *testing.T) {
+func TestEveryTrackGetsItsOwnLine(t *testing.T) {
 	lead := nextactor.Result{Actor: nextactor.User, Reason: "decision", Bead: "gate"}
-	other := nextactor.Result{Actor: nextactor.Agent, Reason: "executing", Bead: "run"}
 	s := activeBoardFixture()
 	d := Display{Workstreams: []BoardRow{{Key: "p:root", N: 1, Actor: &nextactor.Row{Lead: lead}, Tracks: []BoardTrack{
 		{Key: "p:t1", BeadID: "t1", Actor: &nextactor.Row{Lead: lead}},
-		{Key: "p:t2", BeadID: "t2", Actor: &nextactor.Row{Lead: other}, Text: "Working on it"},
 	}}}}
 	describe := func(key, actor, reason, opener, facts string) (string, string, bool) {
-		return opener + " written", "", true
+		return opener + " written for " + key, "", true
 	}
 	applyDescriptions(describe, &s, &d)
-	if got := d.Workstreams[0].Tracks[0].Text; got != "" {
-		t.Fatalf("track repeating its row: %q", got)
+	if got := d.Workstreams[0].Tracks[0].Text; got != "Needs you: written for p:t1" {
+		t.Fatalf("a track on its row's decision lost its line: %q", got)
 	}
-	if got := d.Workstreams[0].Tracks[1].Text; got != "Working: written" {
-		t.Fatalf("a different track lost its own line: %q", got)
+}
+
+func TestPlaceholderDropsTheBlockingChain(t *testing.T) {
+	cases := map[string]string{
+		"After “Merge the batch”: working on “Prepare the Mac install”":     "Working on “Prepare the Mac install”",
+		"Needs you: approve it (blocking “Middle step”)":                    "Needs you: approve it",
+		"Needs you: approve it (blocking “Middle step”) · 2 agents working": "Needs you: approve it · 2 agents working",
+		"Working on “Build it”":                                             "Working on “Build it”",
+	}
+	for in, want := range cases {
+		if got := withoutChain(in); got != want {
+			t.Fatalf("%q -> %q, want %q", in, got, want)
+		}
 	}
 }
 
