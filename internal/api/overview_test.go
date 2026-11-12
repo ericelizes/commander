@@ -218,7 +218,7 @@ func TestOverviewStreamsDraftThenRecap(t *testing.T) {
 		<-release
 		id := in.Evidence[0].ID
 		one := overview.Claim{Sentences: []overview.Sentence{{Text: "Done.", Sources: []string{id}}}}
-		return overview.Recap{ProblemType: "feature", Problem: one, Solution: one, Impact: one, Scope: "Small", ScopeDetail: one, Risk: 1, RiskDetail: one}, nil
+		return overview.Recap{ProblemType: "feature", Problem: one, ProblemImpact: one, Solution: one, Impact: one, Scope: "Small", ScopeDetail: one, Risk: 1, RiskDetail: one}, nil
 	}})
 	s.Refresh(context.Background())
 	srv := httptest.NewServer(s.Handler())
