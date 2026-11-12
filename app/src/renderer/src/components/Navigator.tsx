@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { splitTickets } from '../../../features/linear/Ticket'
 import { MyProgress, progressWorkstreams } from '../../../features/linear/MyProgress'
@@ -326,7 +326,7 @@ function Workstream({ w, tracks, folded, onToggle, selected, cursor, mod }: { w:
   const progress = w.milestones ?? w.progress
   const progressLabel = `${progress.done}/${progress.total} ${w.milestones ? 'stages' : 'tasks'} completed`
   return (
-    <div className={`ws${w.tracks.length ? ' has-tracks' : ''}${w.kind === 'quiet' || w.kind === 'done' ? ' can-complete' : ''}${leaving ? ' is-leaving' : ''}${lifted === w.key ? ' is-lifted' : ''}`}>
+    <div className={`ws${w.tracks.length ? ' has-tracks' : ''}${w.kind === 'quiet' ? ' can-complete' : ''}${leaving ? ' is-leaving' : ''}${lifted === w.key ? ' is-lifted' : ''}`}>
       {w.tracks.length > 0 && (
         <button
           type="button"
@@ -365,7 +365,7 @@ function Workstream({ w, tracks, folded, onToggle, selected, cursor, mod }: { w:
           </div>
         </div>
       </button>
-      {(w.kind === 'quiet' || w.kind === 'done') && <CompleteButton project={w.project} bead={w.bead_id} title={w.title} />}
+      {w.kind === 'quiet' && <CompleteButton project={w.project} bead={w.bead_id} title={w.title} />}
       {!folded && tracks.length > 0 && (
         <div className="ws-tracks" role="group" aria-label={`Workstreams under ${w.title}`}>
           {tracks.map((t) => (
@@ -403,7 +403,7 @@ function TrackRow({ t, n, wsKey, parentOwner }: { t: BoardTrack; n: number; wsKe
   const project = t.key.slice(0, t.key.length - t.bead_id.length - 1)
   const children = t.children ?? []
   return (
-    <div className={`track-wrap${t.kind === 'quiet' || t.kind === 'done' ? ' can-complete' : ''}${leaving ? ' is-leaving' : ''}${lifted === t.key ? ' is-lifted' : ''}`}>
+    <div className={`track-wrap${t.kind === 'quiet' ? ' can-complete' : ''}${leaving ? ' is-leaving' : ''}${lifted === t.key ? ' is-lifted' : ''}`}>
       <button className={`row track-row${openNested === t.bead_id ? ' selected' : ''}`} aria-current={openNested === t.bead_id || undefined} data-nav-key={t.key} onClick={() => useStore.getState().openWorkflow(wsKey, t.bead_id)} title={t.title}>
         <div className="row-body">
           <div className="row-head">
@@ -411,11 +411,12 @@ function TrackRow({ t, n, wsKey, parentOwner }: { t: BoardTrack; n: number; wsKe
             <span className="row-title">{splitTickets(t.title).text}</span>
             {t.planning_commander !== parentOwner && <PlanningOwner owner={t.planning_commander} />}
           </div>
-          <StateLine kind={t.kind} text={t.text} agents={t.working} age={age(t.since, nowSec)} />
+          <StateLine kind={t.kind} text={t.text} agents={t.working} age={age(t.since, nowSec)}
+            action={t.kind === 'done' ? <CompleteButton project={project} bead={t.bead_id} title={t.title} /> : undefined} />
           {t.why && <span className="ws-state-why" title={t.why} aria-label={t.why}>⚠</span>}
         </div>
       </button>
-      {(t.kind === 'quiet' || t.kind === 'done') && <CompleteButton project={project} bead={t.bead_id} title={t.title} />}
+      {t.kind === 'quiet' && <CompleteButton project={project} bead={t.bead_id} title={t.title} />}
       {children.length > 0 && (
         <button type="button" className={`track-fold${open ? '' : ' folded'}`} aria-expanded={open} aria-label={`${open ? 'Hide' : 'Show'} ${children.length} workstreams under ${t.title}`} onClick={() => toggleOpen(t.key)}>
           <ChevronDown size={13} strokeWidth={2} aria-hidden />
@@ -458,7 +459,11 @@ function CompleteButton({ project, bead, title }: { project: string; bead: strin
   }
   return (
     <button type="button" className={`complete-btn${error ? ' is-error' : ''}`}
+      // It can sit inside its row (a finished row's state): the click is the
+      // Complete, not a select or a drag of the row.
+      onPointerDown={(e) => e.stopPropagation()}
       onClick={(e) => {
+        e.stopPropagation()
         const r = e.currentTarget.getBoundingClientRect()
         complete({ x: r.left + r.width / 2, y: r.top + r.height / 2 })
       }} title={error ? `Could not close it: ${error}` : `Close "${title}": nothing under it is open`}>
@@ -596,6 +601,7 @@ function WorkstreamState({ w }: { w: BoardRow }) {
         title={w.gate?.at && !w.gate.for_you ? `${w.text}: ${w.gate.who}` : w.text}
         agents={w.working}
         age={age(w.since, nowSec)}
+        action={w.kind === 'done' ? <CompleteButton project={w.project} bead={w.bead_id} title={w.title} /> : undefined}
       />
     </>
   )
@@ -606,10 +612,12 @@ function WorkstreamState({ w }: { w: BoardRow }) {
  * workstream): the status text, in its state's colour, on the left, then the
  * agents pill and the time pill on the right. The text wraps, the pills stay.
  */
-function StateLine({ kind, text, title, agents, age, unread = 0 }: { kind: string; text: string; title?: string; agents: number; age: string; unread?: number }) {
+// action replaces the text and pills: a finished row's state is its Complete button.
+function StateLine({ kind, text, title, agents, age, unread = 0, action }: { kind: string; text: string; title?: string; agents: number; age: string; unread?: number; action?: ReactNode }) {
+  if (action) return <div className={`ws-state agent-${kind}`}>{action}</div>
   return (
     <div className={`ws-state agent-${kind}`}>
-      {text && kind !== 'done' && (
+      {text && (
         <span className="ws-state-text" title={title ?? text}>
           {text}
         </span>
