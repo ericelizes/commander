@@ -110,6 +110,10 @@ type Engine struct {
 
 // WaitResumed blocks until the chats running before a restart have been picked
 // back up once, so a request cannot start a second process on one of them.
+// agentNice is the CPU priority (nice) execution agents run at: they get all
+// the CPU nobody else wants, never ahead of cmdrd or the database.
+const agentNice = 10
+
 func (e *Engine) WaitResumed(ctx context.Context) error {
 	e.mu.Lock()
 	ch := e.resumed
@@ -758,6 +762,11 @@ func (e *Engine) startHost(spec Spec, resume bool, lock *sessionLock) (*hostConn
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	if err := cmd.Start(); err != nil {
 		return nil, nil, fmt.Errorf("chat: start chat host: %w", err)
+	}
+	if strings.HasPrefix(spec.Role, "operator-") {
+		// An execution agent's builds and tests inherit this priority, so cmdrd,
+		// the database and the planning chats keep the CPU when agents test at once.
+		_ = syscall.Setpriority(syscall.PRIO_PROCESS, cmd.Process.Pid, agentNice)
 	}
 	lock.handoff()
 	exited := make(chan struct{})

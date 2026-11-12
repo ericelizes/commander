@@ -188,3 +188,19 @@ func TestFinishDescriptionDropsLabelsAndRejectsJunk(t *testing.T) {
 		t.Fatal("prompts do not differ by state")
 	}
 }
+
+func TestWaitingOnAStepAlwaysReadsWaiting(t *testing.T) {
+	d := &Describer{Call: func(_ context.Context, _, instruction, _ string, out any) error {
+		if !strings.Contains(instruction, "Start with 'Waiting for'") {
+			t.Fatal("waiting lines get their own prompt")
+		}
+		raw, _ := json.Marshal(map[string]string{"description": "PR 3622 to merge", "signal": "none"})
+		return json.Unmarshal(raw, out)
+	}}
+	d.Describe("p:w", "waiting_on_step", "blocked:executing", "Waiting:", "facts")
+	job, _ := d.next()
+	d.write(context.Background(), job)
+	if text, _, _ := d.Describe("p:w", "waiting_on_step", "blocked:executing", "Waiting:", "facts"); text != "Waiting for PR 3622 to merge" {
+		t.Fatalf("%q", text)
+	}
+}

@@ -73,6 +73,12 @@ func readyClosingGate(steps []SnapStep) string {
 	return gate
 }
 
+// waitsOnAnotherStep: the move belongs to another step this line waits for;
+// nothing runs for the line itself, so it reads as waiting, not working.
+func waitsOnAnotherStep(r nextactor.Result) bool {
+	return len(r.Via) > 0 && (r.Actor == nextactor.Agent || r.Actor == nextactor.Commander || r.Actor == nextactor.External)
+}
+
 // actorLine is a row's line from its next-actor state.
 func actorLine(row nextactor.Row) line {
 	kind := map[nextactor.Actor]string{
@@ -86,6 +92,9 @@ func actorLine(row nextactor.Row) line {
 	}[row.Lead.Actor]
 	// "why" draws a warning icon in the sidebar; a blocking chain is not a
 	// warning (it stays on the row's Actor for anyone who wants it).
+	if waitsOnAnotherStep(row.Lead) {
+		kind = "waiting"
+	}
 	return line{kind: kind, text: row.Summary(), since: row.Lead.Since}
 }
 

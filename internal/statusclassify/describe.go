@@ -261,6 +261,13 @@ func (d *Describer) write(ctx context.Context, job describeJob) bool {
 		}
 	}
 	text, ok := finishDescription(job.opener, answer.Description)
+	if ok && job.actor == "waiting_on_step" && !strings.HasPrefix(text, "Waiting") {
+		r := []rune(text)
+		if len(r) > 1 && !unicode.IsUpper(r[1]) {
+			r[0] = unicode.ToLower(r[0]) // keep acronyms like "PR"
+		}
+		text = "Waiting for " + string(r)
+	}
 	if !ok {
 		log.Printf("status describer: %s returned an empty description", job.key)
 		return false
@@ -350,6 +357,8 @@ func promptFor(actor string) string {
 		return describeBase + " Worker agents are on it: say what they are doing right now from their activity, like 'Agent resolving the Navigator conflict', '2 agents running QA Hub parity tests'."
 	case "commander":
 		return describeBase + " Commander, the planning agent, has the next move: say what it is doing or must do, starting with 'Commander', like 'Commander reviewing the SIGINT fix', 'Commander writing your deploy question'. It is not the reader's move yet: never write that the reader is needed. It is not stuck either (that is a different color): never call it stuck or blocked; say what Commander is doing about it."
+	case "waiting_on_step":
+		return describeBase + " Nothing runs for this line itself: it waits for another step in its workstream to finish. Start with 'Waiting for' and name that step briefly, like 'Waiting for PR 3622 to merge' or 'Waiting for the repair batch install'. Never write that an agent is working on this line."
 	case "external":
 		return describeBase + " It waits on someone outside (CI, a reviewer, a date): say who or what, and for what, like 'CI #3592 running unit tests', 'Waiting on Kara's review'."
 	}

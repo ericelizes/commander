@@ -158,3 +158,22 @@ func TestOpenerIsFixedByState(t *testing.T) {
 		}
 	}
 }
+
+func TestALineWaitingOnAnotherStepIsYellowAndSaysWaiting(t *testing.T) {
+	lead := nextactor.Result{Actor: nextactor.Agent, Reason: "blocked:executing", Bead: "pr", Via: []string{"PR 3622: readable Notify messages"}}
+	if got := actorLine(nextactor.Row{Lead: lead}); got.kind != "waiting" {
+		t.Fatalf("kind %q", got.kind)
+	}
+	if got := actorLine(nextactor.Row{Lead: nextactor.Result{Actor: nextactor.Agent, Reason: "executing"}}); got.kind != "working" {
+		t.Fatalf("an agent on the step itself is working: %q", got.kind)
+	}
+	var asked string
+	describe := func(key, actor, reason, opener, facts string) (string, string, bool) {
+		asked = actor
+		return "", "", false
+	}
+	describeRow(describe, "p:w", nextactor.Row{Lead: lead}, "facts", "")
+	if asked != "waiting_on_step" {
+		t.Fatalf("describer asked as %q", asked)
+	}
+}
