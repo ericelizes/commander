@@ -69,13 +69,13 @@ func wrongOnScreen(d livedata.Display, workstreams []livedata.SnapWorkstream, sp
 			add("stale:"+a.Key, a.WsKey, fmt.Sprintf("#%d%s %q may be out of date (%s). Check it still holds before you answer", a.Rank, a.TrackLetter, a.Text, strings.ToLower(a.StaleWhy[:1])+a.StaleWhy[1:]))
 		}
 	}
-	if sprint.State == "ok" {
+	if sprint.State == "ok" || sprint.State == "partial" {
 		// The app only reads Linear: the badge tells the user what to do there, Commander's copy tells it to update the status itself (d27).
 		linear := func(key, target, fact, userFix, selfFix string) {
 			out = append(out, livedata.SnapWrong{Key: key, Target: target, Text: fact + userFix, Agent: fact + ". " + selfFix})
 		}
 		carriers := ticketCarriers(d, workstreams)
-		for _, i := range sprint.Issues {
+		for _, i := range sprint.FreshIssues() {
 			cs := carriers[strings.ToUpper(i.ID)]
 			if i.StatusType == "completed" || i.StatusType == "canceled" {
 				for _, c := range cs {

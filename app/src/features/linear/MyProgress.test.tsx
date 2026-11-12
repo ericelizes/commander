@@ -211,3 +211,27 @@ describe('progressWorkstreams', () => {
     expect(s.wrong.map((r) => r.issue.id)).toEqual(['TEAM-1', 'TEAM-9'])
   })
 })
+
+it('shows different team cycles and checks all teams during partial availability', () => {
+ const merged = [mk('FOR-1', 'started', 'In Progress'), mk('ENGCHA-5197', 'completed', 'Done'), mk('ENGINT-2', 'unstarted', 'Todo')]
+ useSprint.setState({data:{state:'partial',key:'saved',issues:merged,teams:[
+ {team:'FOR',state:'unreachable',cycle:{name:'Cycle A',start:'2026-11-01',end:'2026-11-15'},fetched_at:'2026-11-12T10:00:00Z'},
+ {team:'ENGCHA',state:'ok',cycle:{name:'CareHub',start:'2026-11-02',end:'2026-11-16'}},
+ {team:'ENGINT',state:'ok',cycle:{name:'Internal',start:'2026-11-03',end:'2026-11-17'}}]}})
+ render(<ProgressPage workstreams={[]} onOpen={vi.fn()} />)
+ expect(screen.getByText(/FOR: Cycle A/)).toHaveTextContent('Linear unreachable')
+ expect(screen.getByText(/ENGCHA: CareHub/)).toHaveTextContent('Nov 2 to Nov 15')
+ expect(screen.getByRole('tab',{name:/Wrong status/})).toHaveTextContent('1')
+ fireEvent.click(screen.getByRole('tab',{name:/Finished/}))
+ expect(screen.getByText('ENGCHA-5197 title')).toBeTruthy()
+ fireEvent.click(screen.getByRole('tab',{name:/To do/}))
+ expect(screen.getByText('ENGINT-2 title')).toBeTruthy()
+})
+
+it('judges added tickets against their own team cycle start', () => {
+ const rows = [{...mk('FOR-1','unstarted','Todo'),team:'FOR',added_at:'2026-11-03'}, {...mk('ENGCHA-1','unstarted','Todo'),team:'ENGCHA',added_at:'2026-11-03'}]
+ const stats = sprintStats(rows, [], null, Date.now(), 'UTC', [
+ {team:'FOR',state:'ok',cycle:{name:'A',start:'2026-11-01'}},
+ {team:'ENGCHA',state:'ok',cycle:{name:'B',start:'2026-11-03'}}])
+ expect(stats.added.map((r)=>r.issue.id)).toEqual(['FOR-1'])
+})

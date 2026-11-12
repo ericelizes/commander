@@ -95,3 +95,51 @@ func TestLinearSprintScenario(t *testing.T) {
 		}
 	}
 }
+
+func TestLinearMultiTeamScenario(t *testing.T) {
+	raw, err := os.ReadFile("scenarios/linear-multi-team.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var scenario struct {
+		Teams       []string
+		Unreachable string
+	}
+	if err := json.Unmarshal(raw, &scenario); err != nil {
+		t.Fatal(err)
+	}
+	home := t.TempDir()
+	teams, _ := json.Marshal(scenario.Teams)
+	os.WriteFile(filepath.Join(home, "local.toml"), []byte("[integrations.linear]\nteam="+string(teams)), 0600)
+	if err := linearsync.WriteKey(home, "eval-key"); err != nil {
+		t.Fatal(err)
+	}
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload struct{ Variables map[string]string }
+		json.NewDecoder(r.Body).Decode(&payload)
+		team := payload.Variables["team"]
+		if team == scenario.Unreachable {
+			w.WriteHeader(503)
+			return
+		}
+		io.WriteString(w, strings.ReplaceAll(`{"data":{"teams":{"nodes":[{"activeCycle":{"name":"TEAM cycle","startsAt":"2026-11-01","endsAt":"2026-11-15","issues":{"nodes":[{"identifier":"TEAM-1","state":{"name":"Done","type":"completed"}}]}}}]}}}`, "TEAM", team))
+	}))
+	defer upstream.Close()
+	reader := linearsync.New(linearsync.Options{Home: home, Endpoint: upstream.URL, HTTP: upstream.Client().Do})
+	server := httptest.NewServer(api.New(api.Options{Token: "token", Linear: reader, ConfigPath: filepath.Join(home, "config.toml")}).Handler())
+	defer server.Close()
+	req, _ := http.NewRequest("GET", server.URL+"/api/linear", nil)
+	req.Header.Set("Authorization", "Bearer token")
+	resp, err := server.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var got linearsync.Response
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got.State != "partial" || len(got.Issues) != 2 || len(got.Teams) != 3 || got.Issues[0].Team != "ENGCHA" || got.Issues[1].Team != "ENGINT" {
+		t.Fatalf("%+v", got)
+	}
+}
