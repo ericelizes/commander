@@ -5,9 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/example-user/commander/internal/livedata"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -116,8 +119,103 @@ func (s *Server) serveCmd(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusServiceUnavailable, CmdResult{Exit: -1, Error: "no cmdr runner configured"})
 		return
 	}
+	// What the click completes, read before the close takes it off the board.
+	var done *completedWorkstream
+	if len(req.Argv) > 0 && req.Argv[0] == "internal-close-objective" {
+		if snap, ok := s.overviewSnapshot(); ok {
+			done = findCompleted(snap, flagValue(req.Argv, "--project"), flagValue(req.Argv, "--bead"))
+		}
+	}
 	res := s.opts.Run(r.Context(), req.Argv)
+	if done != nil && res.OK && !strings.Contains(res.Stdout, `"error"`) && s.opts.MailToRole != nil {
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			if err := s.opts.MailToRole(ctx, done.commander, done.message()); err != nil {
+				log.Printf("api: could not tell %s that %s is complete: %v", done.commander, done.bead, err)
+			}
+		}()
+	}
 	// The regular poll coalesces mutation bursts; do not start a full read
 	// for every write while another writer may be waiting.
 	writeJSON(w, http.StatusOK, res)
+}
+
+// completedWorkstream is what the user's Complete click closed, for the
+// Commander that plans it: it keeps Linear in step.
+type completedWorkstream struct {
+	bead, title, commander string
+	tickets                []string
+}
+
+func (c completedWorkstream) message() string {
+	msg := "Eric clicked Complete on \u201c" + c.title + "\u201d: it is closed in Commander."
+	if len(c.tickets) > 0 {
+		return msg + " Set its Linear tickets to Done: " + strings.Join(c.tickets, ", ") + "."
+	}
+	return msg + " It has no Linear ticket recorded; if it has one, set it to Done."
+}
+
+var ticketID = regexp.MustCompile(`\b[A-Z][A-Z0-9]+-\d+\b`)
+
+// findCompleted is the workstream or nested workstream bead names in project.
+func findCompleted(snap livedata.Snapshot, project, bead string) *completedWorkstream {
+	if project == "" || bead == "" {
+		return nil
+	}
+	make := func(title, commander string, labels []string) *completedWorkstream {
+		if commander == "" {
+			commander = "commander"
+		}
+		seen := map[string]bool{}
+		var tickets []string
+		for _, t := range append(ticketID.FindAllString(title, -1), labels...) {
+			if !seen[t] {
+				seen[t] = true
+				tickets = append(tickets, t)
+			}
+		}
+		return &completedWorkstream{bead: bead, title: title, commander: commander, tickets: tickets}
+	}
+	var find func([]livedata.SnapStep, string) *completedWorkstream
+	find = func(steps []livedata.SnapStep, owner string) *completedWorkstream {
+		for _, st := range steps {
+			if st.BeadID == bead {
+				return make(st.Title, firstNonEmptyStr(st.PlanningCommander, owner), st.Tickets)
+			}
+			if c := find(st.Children, firstNonEmptyStr(st.PlanningCommander, owner)); c != nil {
+				return c
+			}
+		}
+		return nil
+	}
+	for _, ws := range snap.Workstreams {
+		if ws.Project != project {
+			continue
+		}
+		if ws.BeadID == bead {
+			return make(ws.Title, ws.PlanningCommander, ws.Tickets)
+		}
+		if c := find(ws.Steps, ws.PlanningCommander); c != nil {
+			return c
+		}
+	}
+	return nil
+}
+
+func firstNonEmptyStr(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
+}
+
+// flagValue is the value after flag in argv ("" when absent).
+func flagValue(argv []string, flag string) string {
+	for i := 0; i+1 < len(argv); i++ {
+		if argv[i] == flag {
+			return argv[i+1]
+		}
+	}
+	return ""
 }

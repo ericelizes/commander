@@ -1,6 +1,8 @@
 package livedata
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"log"
 	"strings"
@@ -68,7 +70,9 @@ func aboutLine(describe DescribeFunc, key, title string, tracks []BoardTrack) st
 		names = append(names, t.Title)
 	}
 	facts := "Workstream: " + title + "\nNested workstreams: " + strings.Join(names, "; ")
-	if text, _, ok := describe("about:"+key, "about", "about", "About:", facts); ok {
+	// The set of nested workstreams is part of the state: a change rewrites the line.
+	set := sha256.Sum256([]byte(strings.Join(names, "\n")))
+	if text, _, ok := describe("about:"+key, "about", "about:"+hex.EncodeToString(set[:4]), "About:", facts); ok {
 		return text
 	}
 	if len(tracks) == 1 {
