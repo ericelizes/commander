@@ -322,13 +322,22 @@ func clip(s string, n int) string {
 }
 
 // maxDescriptionWords keeps a row's line short enough to read at a glance.
-const maxDescriptionWords = 64
+const maxDescriptionWords = 60
 
-// shorten cuts words to at most n runes at a word boundary.
+// trailing clauses a short line can lose without losing its point.
+var trailingClauses = []string{", which ", ", unblocking ", " to unblock ", " unblocking ", ", so ", " so ", " before ", ", and ", " because "}
+
+// shorten fits words in n runes: first by dropping a trailing clause, then at
+// a word boundary with an ellipsis.
 func shorten(words string, n int) string {
 	r := []rune(words)
 	if len(r) <= n {
 		return words
+	}
+	for _, clause := range trailingClauses {
+		if i := strings.Index(words, clause); i > 0 && len([]rune(words[:i])) <= n {
+			return strings.TrimRight(words[:i], " ,;:-")
+		}
 	}
 	cut := string(r[:n])
 	if i := strings.LastIndex(cut, " "); i > n/2 {

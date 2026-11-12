@@ -64,6 +64,12 @@ func TestDescriberWritesStateSpecificLinesAndNeverShowsAStaleState(t *testing.T)
 	}
 }
 
+func TestShortenDropsATrailingClauseBeforeCutting(t *testing.T) {
+	if got := shorten("decide whether to stop staging or all of Notify, unblocking the rollout plan", 60); got != "decide whether to stop staging or all of Notify" {
+		t.Fatalf("%q", got)
+	}
+}
+
 func TestFinishDescriptionKeepsOneOpeningAndRejectsJunk(t *testing.T) {
 	if got, ok := finishDescription("Working:", "Working: two agents run the parity tests"); !ok || got != "Working: two agents run the parity tests" {
 		t.Fatalf("%q", got)
