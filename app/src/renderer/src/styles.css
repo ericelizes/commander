@@ -787,6 +787,17 @@ body.resizing .splitter:active {
   color: var(--accent);
 }
 
+/* The Linear logo on a row with Linear tickets. */
+.row-linear {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  color: #5e6ad2;
+  opacity: 0.8;
+}
+.row-linear svg { width: 11px; height: 11px; }
+
 .row-title {
   flex: 1;
   min-width: 0;

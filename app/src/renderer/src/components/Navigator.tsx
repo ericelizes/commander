@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ChevronDown } from 'lucide-react'
-import { splitTickets } from '../../../features/linear/Ticket'
+import { LinearMark, splitTickets } from '../../../features/linear/Ticket'
 import { MyProgress, progressWorkstreams } from '../../../features/linear/MyProgress'
 import { AllClear } from './AllClear'
 import { useAgentRows } from './SettingsModal'
@@ -358,6 +358,7 @@ function Workstream({ w, tracks, folded, onToggle, selected, cursor, mod }: { w:
                 {w.starred && <span className="star">★ </span>}
                 {splitTickets(w.title).text}
               </span>
+              <LinearTag project={w.project} bead={w.bead_id} title={w.title} />
               {showOwner && <PlanningOwner owner={w.planning_commander} />}
               {w.why && <span className="ws-state-why" title={w.why} aria-label={w.why}>⚠</span>}
             </div>
@@ -374,6 +375,36 @@ function Workstream({ w, tracks, folded, onToggle, selected, cursor, mod }: { w:
       )}
     </div>
   )
+}
+
+// LinearTag is the Linear logo on a row whose workstream has Linear tickets (in
+// its title or its ticket: labels); hovering lists them.
+function LinearTag({ project, bead, title }: { project: string; bead: string; title: string }) {
+  const labelled = useStore((s) => {
+    for (const ws of s.snapshot?.workstreams ?? []) {
+      if (ws.project !== project) continue
+      if (ws.bead_id === bead) return ws.tickets
+      const step = findStep(ws.steps ?? [], bead)
+      if (step) return step.tickets
+    }
+    return undefined
+  })
+  const tickets = [...new Set([...splitTickets(title).tickets, ...(labelled ?? [])])]
+  if (tickets.length === 0) return null
+  return (
+    <span className="row-linear" title={`Linear: ${tickets.join(', ')}`} aria-label={`Linear tickets: ${tickets.join(', ')}`}>
+      <LinearMark />
+    </span>
+  )
+}
+
+function findStep(steps: SnapStep[], id: string): SnapStep | undefined {
+  for (const s of steps) {
+    if (s.bead_id === id) return s
+    const below = findStep(s.children ?? [], id)
+    if (below) return below
+  }
+  return undefined
 }
 
 function PlanningOwner({ owner }: { owner?: string }) {
@@ -408,6 +439,7 @@ function TrackRow({ t, n, wsKey, parentOwner }: { t: BoardTrack; n: number; wsKe
           <div className="row-head">
             <span className="rank track-rank">{n}{t.letter}</span>
             <span className="row-title">{splitTickets(t.title).text}</span>
+            <LinearTag project={project} bead={t.bead_id} title={t.title} />
             {t.planning_commander !== parentOwner && <PlanningOwner owner={t.planning_commander} />}
           </div>
           <StateLine kind={t.kind} text={t.text} agents={t.working} age={age(t.since, nowSec)}
