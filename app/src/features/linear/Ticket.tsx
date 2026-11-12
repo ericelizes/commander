@@ -45,7 +45,7 @@ export function linearUrl(id: string, workspace: string): string {
   return `https://linear.app/${encodeURIComponent(workspace)}/issue/${encodeURIComponent(id)}`
 }
 
-const LinearMark = () => (
+export const LinearMark = () => (
   <svg width="10" height="10" viewBox="0 0 16 16" aria-hidden>
     <path
       fill="currentColor"
