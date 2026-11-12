@@ -99,6 +99,27 @@ const Word = memo(function Word({ word, fade }: { word: string; fade: boolean })
 
 // Refreshing is the one loader for a summary that is not current yet: the first
 // one being written, a rewrite, a retry or a wait.
+// PageSkeleton stands in for a summary not written yet: the shape of the page
+// (a heading, a few lines of text, a list) shimmering, so it reads as text on
+// its way rather than an empty page.
+function PageSkeleton() {
+  const block = (lines: number[], key: string) => (
+    <div className="ov-skel-block" key={key}>
+      <span className="ov-skel ov-skel-head" />
+      {lines.map((w, i) => <span key={i} className="ov-skel ov-skel-line" style={{ width: `${w}%` }} />)}
+    </div>
+  )
+  return (
+    <div className="ov-skeleton" role="status">
+      <span className="ov-sr">Refreshing summary…</span>
+      <span className="ov-skel ov-skel-title" />
+      {block([96, 88, 62], 'a')}
+      {block([92, 70], 'b')}
+      {block([84, 90, 55], 'c')}
+    </div>
+  )
+}
+
 function Refreshing() {
   return <p className="ov-muted ov-refreshing" role="status"><DotSpinner /> Refreshing summary…</p>
 }
@@ -210,7 +231,7 @@ export function OverviewPage(props: OverviewProps) {
       <div className="ov-scroll" ref={scroll}>
         <div className="ov-layout">
           <article className="ov" aria-label="Workstream overview">
-            {parts.length === 0 && <Refreshing />}
+            {parts.length === 0 && <PageSkeleton />}
             {parts.map((part, i) => <Fragment key={part}>{i > 0 && <hr className="ov-divider" />}<Overview {...props} part={part} embedded shared={result} /></Fragment>)}
           </article>
           {parts.length > 1 && <nav className="ov-toc" aria-label="On this page">

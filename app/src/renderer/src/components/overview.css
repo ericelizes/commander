@@ -282,3 +282,14 @@
 .ov .ov-targets td:not(:first-child), .ov .ov-targets th:not(:first-child) { white-space: nowrap; }
 .ov .ov-targets .ov-target-now { font-weight: 600; }
 .ov .ov-targets td:last-child { width: 1%; font-size: 11px; }
+
+/* A summary on its way: grey bars in the page's shape, with a slow shimmer. */
+.ov-skeleton { display: flex; flex-direction: column; gap: 10px; padding-top: 4px; }
+.ov-skel { display: block; height: 12px; border-radius: 6px; background: linear-gradient(90deg, var(--skel, rgba(0,0,0,.06)) 0%, var(--skel-hi, rgba(0,0,0,.11)) 40%, var(--skel, rgba(0,0,0,.06)) 80%); background-size: 300% 100%; animation: ov-skel 1.6s ease-in-out infinite; }
+.ov-skel-title { width: 38%; height: 22px; border-radius: 7px; margin-bottom: 10px; }
+.ov-skel-block { display: flex; flex-direction: column; gap: 9px; margin-bottom: 18px; }
+.ov-skel-head { width: 22%; height: 15px; margin-bottom: 3px; }
+@keyframes ov-skel { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+@media (prefers-reduced-motion: reduce) { .ov-skel { animation: none; } }
+@media (prefers-color-scheme: dark) { .ov-skeleton { --skel: rgba(255,255,255,.07); --skel-hi: rgba(255,255,255,.13); } }
+.ov-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
