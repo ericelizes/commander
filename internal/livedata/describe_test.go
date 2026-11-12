@@ -63,7 +63,7 @@ func TestTrackOnTheSameMoveAsItsRowDoesNotRepeatIt(t *testing.T) {
 		return opener + " written", "", true
 	}
 	applyDescriptions(describe, &s, &d)
-	if got := d.Workstreams[0].Tracks[0].Text; got != "Needs you: same question as row 1" {
+	if got := d.Workstreams[0].Tracks[0].Text; got != "" {
 		t.Fatalf("track repeating its row: %q", got)
 	}
 	if got := d.Workstreams[0].Tracks[1].Text; got != "Working: written" {

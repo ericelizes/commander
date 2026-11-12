@@ -608,9 +608,11 @@ function WorkstreamState({ w }: { w: BoardRow }) {
 function StateLine({ kind, text, title, agents, age, unread = 0 }: { kind: string; text: string; title?: string; agents: number; age: string; unread?: number }) {
   return (
     <div className={`ws-state agent-${kind}`}>
-      <span className="ws-state-text" title={title ?? text}>
-        {text}
-      </span>
+      {text && (
+        <span className="ws-state-text" title={title ?? text}>
+          {text}
+        </span>
+      )}
       <span className="ws-state-meta">
         {agents > 0 && (
           <span className="ws-state-agents">
