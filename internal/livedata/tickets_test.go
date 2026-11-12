@@ -29,7 +29,7 @@ func TestWorkstreamTicketsOpenTracksJudgedAlone(t *testing.T) {
 		{Title: "Dropped (TEAM-6)", Track: true, Status: "open", Superseded: true},
 		{Title: "Plain step (TEAM-7)", Status: "open"},
 	}}
-	want := []WorkstreamTicket{{ID: "TEAM-1"}, {ID: "TEAM-9"}, {ID: "TEAM-2", OnTrack: true, Working: true}, {ID: "TEAM-3", OnTrack: true}}
+	want := []WorkstreamTicket{{ID: "TEAM-1"}, {ID: "TEAM-9"}, {ID: "TEAM-2", OnTrack: true, Working: true}, {ID: "TEAM-3", OnTrack: true}, {ID: "TEAM-5", OnTrack: true}}
 	if got := WorkstreamTickets(ws); !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %+v, want %+v", got, want)
 	}

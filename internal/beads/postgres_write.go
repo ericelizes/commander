@@ -544,10 +544,17 @@ func pgWrite(ctx context.Context, q store.Querier, pid int64, args []string) ([]
 	default:
 		return nil, fmt.Errorf("unsupported Postgres bead operation %s", verb)
 	}
+	if oldStatus == "closed" && newStatus == "closed" {
+		for _, w := range WaitsOf(labels) {
+			if w.Kind == WaitReview && !slices.Contains(beforeLabels, w.Label()) {
+				return nil, errors.New("reopen completed work before adding a review wait")
+			}
+		}
+	}
 	if e := pgCheckHumanMutation(ctx, q, pid, id, verb, oldStatus, newStatus, beforeLabels, labels, f.has("--parent") && f.one("--parent") != parent, f); e != nil {
 		return nil, e
 	}
-	if e := pgCheckCompletion(ctx, q, pid, id, oldStatus, newStatus, slices.Contains(labels, "retired") || slices.Contains(labels, "superseded")); e != nil {
+	if e := pgCheckCompletion(ctx, q, pid, id, oldStatus, newStatus, slices.Contains(labels, "retired") || slices.Contains(labels, "superseded"), labels); e != nil {
 		return nil, e
 	}
 	raw, e := json.Marshal(labels)

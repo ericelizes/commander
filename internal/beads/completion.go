@@ -2,7 +2,6 @@ package beads
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -18,20 +17,12 @@ type CompletionValidator func(context.Context, store.Querier, int64, string) err
 func WithCompletionValidator(ctx context.Context, v CompletionValidator) context.Context {
 	return context.WithValue(ctx, completionValidatorKey{}, v)
 }
-func pgCheckCompletion(ctx context.Context, q store.Querier, pid int64, id, oldStatus, newStatus string, retired bool) error {
+func pgCheckCompletion(ctx context.Context, q store.Querier, pid int64, id, oldStatus, newStatus string, retired bool, labels []string) error {
 	if newStatus != "closed" || oldStatus == "closed" {
 		return nil
 	}
 	// All close callers, including roleless and legacy callers, share these
 	// invariants. pgWrite holds the project graph lock before reading the bead.
-	var raw []byte
-	if err := q.QueryRowContext(ctx, `SELECT labels FROM bead_tasks WHERE project_id=? AND id=? AND deleted_at IS NULL`, pid, id).Scan(&raw); err != nil {
-		return err
-	}
-	var labels []string
-	if err := json.Unmarshal(raw, &labels); err != nil {
-		return err
-	}
 	for _, w := range WaitsOf(labels) {
 		if w.Kind == WaitReview {
 			return fmt.Errorf("cannot close %s: Waiting for review (%s); record the required review first", id, w.Ref)

@@ -1,7 +1,7 @@
 0 Commander: no agent yet
 1 Move background jobs to the queue: Agent stopped on build wave 2 of the job moves: the Manager's move (50% done, no gates) · why: Operator is no longer running and has not reported
 2 Fix the flaky login test: Agent stopped on find why the login test fails on CI: the Manager's move (0% done, no gates, for 11m) · why: Operator stopped without a report; restarted once, stopped again
-3 Classify the nightly jobs: Working on classify wave 1 against the read-only rule · then: classifier PR approved (50% done, next gate: Classifier PR approved, approved by reviewer-a, ⚑ 1, 2 working) · why: An Operator is still on it; the ask waits for its report
+3 Classify the nightly jobs: Working on classify wave 1 against the read-only rule · then: classifier PR approved (0% done, next gate: Classifier PR approved, approved by reviewer-a, ⚑ 1, 2 working) · why: An Operator is still on it; the ask waits for its report
 4 Tidy the deploy scripts: State missing (50% done, no gates)
 5 Shrink the build image: Operator working (100% done, no gates) · why: Its step was closed while it still runs (app-w5.2.1)
 6 Cut over the dev database: Agent stopped on switch dev to the new database at a quiet window: the Manager's move (0% done, no gates) · why: The Operator it waited on is no longer running

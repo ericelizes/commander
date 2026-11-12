@@ -2,7 +2,7 @@
 1 Stage loop: Waiting for until-ready (0% done, no gates, 2 working, for 1h)
   1.1 Inner loop: Waiting for until-ready (0% done, for 1h)
 2 Report: Waiting for report checked by the Manager (50% done, next gate: Report checked by the Manager, approved by manager-app-f, ⚑ 1)
-3 Docs refresh: State missing (33% done, next gate: Idle stage accepted, approved by reviewer-d)
+3 Docs refresh: State missing (0% done, next gate: Idle stage accepted, approved by reviewer-d)
 4 Glossary: Needs you (0% done, next gate: Glossary accepted, approved by reviewer-d)
 Needs you (1):
   #2 Approve the release? (Report)

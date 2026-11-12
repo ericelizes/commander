@@ -2132,3 +2132,15 @@ through cmdr plan apply, then claimed by the generic scheduler, preserving holds
 Use the explicit restored-production rehearsal against a private trial copy
 before the final installed-state check. A merged PR or installed binary alone
 does not establish active orchestration, successful retirement or accurate UI.
+
+**Parent completion invariants:** PostgreSQL closes check actual unfinished
+children (deferred and Confirm done children included) and pending review waits
+inside the close transaction under the project graph lock, for every caller.
+A concurrent child creation or state edit cannot slip between that check and the
+write; adding children or a new review wait to a closed scope refuses. Eric's
+Confirm done flow remains the completion authority. Parked nested workstreams
+stay in the sidebar as “Paused”; terminal percentages use delivery milestones.
+Regression coverage: `TestPostgresCloseConcurrentParentMutation`,
+`TestPostgresCloseComposesWithConfirmDone`, `TestCompletionConcurrentCLIScenario`,
+`wrong_state_test.go`, renderer `tracks.test.ts`, and eval
+`scenarios/paused-confirm-done.json` with detached PostgreSQL cockpit verification.
