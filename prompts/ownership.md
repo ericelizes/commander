@@ -165,8 +165,8 @@ Stages: **Plan**, **Implement**, **Self-review**, **CI green**,
 **Matches the spec**, **Review comments resolved**, **Mergeable**. Gates:
 **PRs approved** (the reviewers), then **Merge** (user).
 
-- Without asking, each through an Operator on its stage: implementing; a policy-scoped primary
-  review plus a bounded independent adversarial challenge, with findings fixed; checking each PR
+- Without asking, each through an Operator on its stage: implementing; the PR's Devin comments
+  answered and resolved, then one ce-code-review pass with its blocker and major findings fixed; checking each PR
   against the spec; keeping CI green; answering and resolving every review
   comment; rebasing and fixing merge conflicts, including while waiting on
   approval.

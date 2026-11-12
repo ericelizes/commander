@@ -50,6 +50,9 @@ func Instantiate(t *Template, p Params) (*Instance, error) {
 	if err := t.Validate(); err != nil {
 		return nil, err
 	}
+	if t.CatalogOnly {
+		return nil, fmt.Errorf("workflow template %s is catalog-only: read it to plan (cmdr workflow show %s); it cannot be plugged", t.ID, t.ID)
+	}
 	if p.Project == "" || p.Parent == "" || p.Before == "" {
 		return nil, fmt.Errorf("instantiate %s: project, parent and before are required", t.ID)
 	}

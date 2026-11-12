@@ -29,9 +29,6 @@ type ReviewResult struct {
 	Coverage     string          `json:"coverage"`
 	Reason       string          `json:"reason,omitempty"`
 	Findings     []ReviewFinding `json:"findings"`
-	// Resolved names, on a delta recheck, each blocker/major finding of the
-	// prior review that this review verified fixed in the delta.
-	Resolved []string `json:"resolved,omitempty"`
 }
 
 type ReviewFinding struct {
@@ -88,7 +85,7 @@ func ParseReviewResult(comment string) (ReviewResult, bool, error) {
 			return result, true, fmt.Errorf("ambiguous typed review result field %v", key)
 		}
 		switch name {
-		case "task", "run_id", "actor", "head", "base", "scope_hash", "manifest_hash", "depth", "execution", "source", "coverage", "findings", "reason", "resolved":
+		case "task", "run_id", "actor", "head", "base", "scope_hash", "manifest_hash", "depth", "execution", "source", "coverage", "findings", "reason":
 		default:
 			return result, true, fmt.Errorf("unknown typed review result field %s", name)
 		}
@@ -162,13 +159,6 @@ func (r ReviewResult) validate(review Review) error {
 			return fmt.Errorf("review findings require unique IDs, severity and summary")
 		}
 		seen[f.ID] = true
-	}
-	resolved := map[string]bool{}
-	for _, id := range r.Resolved {
-		if id == "" || resolved[id] {
-			return fmt.Errorf("resolved prior findings need unique non-empty IDs")
-		}
-		resolved[id] = true
 	}
 	return nil
 }

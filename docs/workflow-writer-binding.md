@@ -6,7 +6,9 @@ commands on PostgreSQL (the owning Manager on legacy backends). Other Commanders
 and Operators are refused, including execution sessions borrowing a planning role.
 
 PR-review blocks are optional. A merge title or `pr:` label does not require one.
-When a block is plugged, its writer and current-head checks still apply.
+Only blocks plugged from pr-review version 1 (six steps: review proofs) need a
+writer binding; the two-step review (version 2) never does. A push never makes a
+recorded check stale.
 
 1. Run the existing `workflow plug pr-review --project P --parent B --before M --pr URL`
    command with the same parameters. Its JSON `container` is the existing review
@@ -39,7 +41,7 @@ When a block is plugged, its writer and current-head checks still apply.
    `tasks`. The user's own CLI, Commander (external commits only, never task
    writers; the task writers already bound for the PR are kept) or the owning Manager may bind an external writer; Operators and
    other Managers never. Changing the commits, the tasks or the head gives a new
-   revision, as above.
+   revision; checks already recorded stay valid.
 
    **An Operator's commit is never the user's.** Before it records anything,
    the bind reads the project's local repo (`repo_path`, else the project dir)
@@ -69,9 +71,8 @@ When a block is plugged, its writer and current-head checks still apply.
    (branch and worktree deleted, reflog expired) passes; this is
    a speed bump against a mistaken or careless bind, not a proof of authorship.
 
-4. Renew each step in template order. Existing closed steps use the same close
-   command and stay closed. For every review/fix step, reference a closed separate
-   review task with a CLEAN report for the current full SHA:
+4. Finish each open step in template order. For every review/fix step, reference
+   a closed separate review task with a CLEAN report for the PR head at the time:
 
    ```sh
    /absolute/path/to/cmdr internal-comment --project P --bead S --text 'workflow-review-proof@v1 {"review_bead":"separate-review-task","head":"FULL_SHA","fix_commits":["FULL_FIX_SHA"]}'
@@ -79,13 +80,11 @@ When a block is plugged, its writer and current-head checks still apply.
    ```
 
    Use `"no_findings":true,"fix_commits":[]` only when that review found nothing.
-   Include fixes from earlier rounds. Primary and adversarial reviewers must have
-   no overlapping actual Operator roles; neither may overlap any writer role.
-   The final check goes last, followed by the block close if still open.
+   Primary and adversarial reviewers must have no overlapping actual Operator
+   roles; neither may overlap any writer role. The final check goes last,
+   followed by the block close if still open.
 
 Every task needs readable, exact-task run records in the same project and fresh
 parent ancestry in the block's workstream. Shared Manager owner labels do not
-matter. Missing data refuses completion. If a push changes the head, confirm the
-writer selection again, rebind to the new full SHA, and renew all checks. Changing
-writers at the same head also invalidates old checks; reverting a selection does
-not restore them. Graph check prints the binding command for legacy unbound blocks.
+matter. Missing data refuses completion. A rebind or a push never invalidates a
+check already recorded.

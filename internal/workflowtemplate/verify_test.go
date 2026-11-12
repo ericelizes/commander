@@ -33,6 +33,9 @@ func TestVerifierChecks(t *testing.T) {
 	}
 	proof := &Proof{ReviewBead: "review-bead", Head: "abc", FixCommits: []string{"fix"}}
 	for _, id := range Verifiers {
+		if id == "review-report" {
+			continue // VerifyReport reads the step's report instead
+		}
 		t.Run(id, func(t *testing.T) {
 			e, err := Verify(context.Background(), fakeGH("abc", false), read, id, testURL, "key", "step", proof)
 			if err != nil {
@@ -439,5 +442,72 @@ func TestVerifyCIIgnoresDispatchRunsLikeGHPRChecks(t *testing.T) {
 		if _, err := Verify(context.Background(), github("FAILURE"), nil, id, testURL, "key", "step", nil); err == nil {
 			t.Fatalf("%s passed a failing PR check", id)
 		}
+	}
+}
+
+// threadsGH answers the PR read like fakeGH and the review threads with nodes.
+func threadsGH(nodes string) GHRunner {
+	return func(ctx context.Context, a ...string) ([]byte, error) {
+		if a[0] == "api" {
+			return []byte(`{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[` + nodes + `],"pageInfo":{"hasNextPage":false}}}}}}`), nil
+		}
+		return fakeGH("abc", false)(ctx, a...)
+	}
+}
+
+// devin-comments-resolved asks only that every thread Devin started is resolved.
+func TestDevinCommentsResolvedReadsOnlyDevinThreads(t *testing.T) {
+	thread := func(resolved bool, count int, login string) string {
+		return `{"isResolved":` + strconv.FormatBool(resolved) + `,"comments":{"totalCount":` + strconv.Itoa(count) + `,"nodes":[{"author":{"login":"` + login + `"}}]}}`
+	}
+	for _, tc := range []struct {
+		name, nodes string
+		ok          bool
+	}{
+		{"devin thread answered and resolved", thread(true, 2, "devin-ai-integration"), true},
+		{"devin thread fixed and resolved without a reply", thread(true, 1, "devin-ai-integration"), true},
+		{"a person's open thread is not Devin's", thread(false, 1, "alice"), true},
+		{"devin thread unresolved", thread(false, 2, "devin-ai-integration"), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := Verify(context.Background(), threadsGH(tc.nodes), nil, "devin-comments-resolved", testURL, "k", "devin", nil)
+			if (err == nil) != tc.ok {
+				t.Fatalf("ok=%v err=%v", tc.ok, err)
+			}
+		})
+	}
+	// threads-resolved keeps every thread and the Devin answer.
+	if _, err := Verify(context.Background(), threadsGH(thread(false, 1, "alice")), nil, "threads-resolved", testURL, "k", "s", nil); err == nil {
+		t.Fatal("threads-resolved passed an open thread")
+	}
+}
+
+func TestVerifyReport(t *testing.T) {
+	reviewed := strings.Repeat("a", 40)
+	gh := func(ctx context.Context, a ...string) ([]byte, error) {
+		return []byte(`{"headRefOid":"` + strings.Repeat("c", 40) + `","baseRefOid":"` + strings.Repeat("b", 40) + `","state":"OPEN","commits":[{"oid":"` + reviewed + `"},{"oid":"` + strings.Repeat("c", 40) + `"}]}`), nil
+	}
+	good := ReportMarker + "\n- **Head:** `" + reviewed + "`\nmajor: x.go:3 nil map, fixed in " + strings.Repeat("c", 40) + "\nCLEAN"
+	e, err := VerifyReport(context.Background(), gh, testURL, "key", "code-review", good)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The evidence names the PR head at close; the step never needs it again.
+	if e.Head != strings.Repeat("c", 40) || e.Verifier != "review-report" || !strings.Contains(e.Finding, reviewed) {
+		t.Fatalf("evidence: %+v", e)
+	}
+	for _, tc := range []struct{ name, report, want string }{
+		{"no report", "", "no report"},
+		{"no head line", ReportMarker + "\nCLEAN", "Head:"},
+		{"short head", ReportMarker + "\nHead: abc\nCLEAN", "Head:"},
+		{"not clean", ReportMarker + "\nHead: " + reviewed + "\nNOT CLEAN", "NOT CLEAN"},
+		{"execution blocked claims no verdict", ReportMarker + "\nHead: " + reviewed + "\nexecution=blocked coverage=partial", "not CLEAN"},
+		{"head not on the PR", ReportMarker + "\nHead: " + strings.Repeat("9", 40) + "\nCLEAN", "not a commit"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := VerifyReport(context.Background(), gh, testURL, "key", "code-review", tc.report); err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("want refusal %q, got %v", tc.want, err)
+			}
+		})
 	}
 }

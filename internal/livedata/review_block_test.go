@@ -14,14 +14,30 @@ import (
 	"github.com/example-user/commander/internal/workflowtemplate"
 )
 
-// seedOpenBlock plugs an open pr-review block before target: the first done
-// steps closed with evidence on head, the next one worked by an Operator.
-func seedOpenBlock(t *testing.T, mem *beads.MemClient, parent, target, block, head string, done int) {
+// legacyReviewTemplate is pr-review version 1, the six-step block plugged
+// before the two-step review; open ones still show and finish.
+func legacyReviewTemplate(t *testing.T) *workflowtemplate.Template {
 	t.Helper()
-	tpl, err := workflowtemplate.Load("pr-review")
+	raw, err := os.ReadFile("../workflowtemplate/testdata/pr-review-v1.json")
 	if err != nil {
 		t.Fatal(err)
 	}
+	tpl, err := workflowtemplate.Parse(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return tpl
+}
+
+// seedOpenBlock plugs an open version 1 pr-review block before target: the
+// first done steps closed with evidence on head, the next one worked by an Operator.
+func seedOpenBlock(t *testing.T, mem *beads.MemClient, parent, target, block, head string, done int) {
+	t.Helper()
+	seedBlockOf(t, legacyReviewTemplate(t), mem, parent, target, block, head, done)
+}
+
+func seedBlockOf(t *testing.T, tpl *workflowtemplate.Template, mem *beads.MemClient, parent, target, block, head string, done int) {
+	t.Helper()
 	inst, err := workflowtemplate.Instantiate(tpl, workflowtemplate.Params{Project: "p", Parent: parent, Before: target, PR: reviewedPR})
 	if err != nil {
 		t.Fatal(err)
@@ -134,67 +150,43 @@ func TestReviewBlock_OpenBlockIsOneStepWithItsChecks(t *testing.T) {
 	}
 }
 
-// A closed block reads done while every check stands on the PR head, and
-// stale (the Manager's move) after a new push, from the same folded steps.
-func TestReviewBlock_ClosedBlockDoneThenStaleAfterAPush(t *testing.T) {
+// A closed block reads done once every check is recorded, and stays done after
+// a new push or before the first PR read: no check is ever rerun.
+func TestReviewBlock_ClosedBlockStaysDoneAfterAPush(t *testing.T) {
 	mem := &beads.MemClient{}
 	seedStage(mem)
 	mem.Seed(beads.Bead{ID: "w.2", Title: "PR merged", Labels: []string{"kind:objective", "gate", "approver:user", "pr:1234"}})
 	seedClosedBlock(t, mem, "w.2", "head1")
-	d := Board(reviewSnapshot(t, mem, &fakeHeads{state: "OPEN", head: "head1"}), 1793000000)
-	w, ds := reviewStep(t, d, "w.9")
-	if w == nil || w.Review == nil || w.Kind != "done" || ds.Review.Done != 6 || ds.Progress != "6 of 6 checks done" {
-		t.Fatalf("complete block: %+v / %+v", w, ds)
-	}
-	d = Board(reviewSnapshot(t, mem, &fakeHeads{state: "OPEN", head: "head2"}), 1793000000)
-	w, ds = reviewStep(t, d, "w.9")
-	if w.Kind != "stalled" || !strings.HasPrefix(w.Text, "Checks need renewal: 6 to rerun") || ds.Text != w.Text {
-		t.Fatalf("stale block: %s %q", w.Kind, w.Text)
-	}
-	c := ds.Review.Checks[0]
-	if !c.Stale || c.Kind != "stalled" || c.Text != "Stale: checked head1, the PR is now at head2" || c.Finding != "passed" {
-		t.Fatalf("stale check: %+v", c)
-	}
-	// graph check agrees: the stale checks are the ones the rule lists.
-	var rule *DiagramFinding
-	for _, f := range d.Workstreams[0].Diagram.Findings {
-		if f.Check == "MERGE_REVIEW_INCOMPLETE" {
-			rule = &f
+	for _, head := range []string{"head1", "head2", ""} {
+		d := Board(reviewSnapshot(t, mem, &fakeHeads{state: "OPEN", head: head}), 1793000000)
+		w, ds := reviewStep(t, d, "w.9")
+		if w == nil || w.Review == nil || w.Kind != "done" || ds.Review.Done != 6 || ds.Review.Stale != 0 || ds.Progress != "6 of 6 checks done" {
+			t.Fatalf("head %q: complete block: %+v / %+v", head, w, ds)
 		}
-	}
-	if rule == nil {
-		t.Fatalf("no MERGE_REVIEW_INCOMPLETE beside the stale block: %+v", d.Workstreams[0].Diagram.Findings)
-	}
-	for _, c := range ds.Review.Checks {
-		if !strings.Contains(rule.Why, c.ID) {
-			t.Errorf("stale check %s is not in the rule's list: %s", c.ID, rule.Why)
+		for _, f := range d.Workstreams[0].Diagram.Findings {
+			if f.Check == "MERGE_REVIEW_INCOMPLETE" {
+				t.Fatalf("head %q: a passed block reads incomplete: %+v", head, f)
+			}
 		}
 	}
 }
 
-// Before the first PR read completion cannot be established.
-func TestReviewBlock_UnknownHeadWaitsForFreshness(t *testing.T) {
+// A two-step block (pr-review version 2) reads its two checks, done on any head.
+func TestReviewBlock_TwoStepBlock(t *testing.T) {
+	tpl, err := workflowtemplate.Load("pr-review")
+	if err != nil {
+		t.Fatal(err)
+	}
 	mem := &beads.MemClient{}
 	seedStage(mem)
 	mem.Seed(beads.Bead{ID: "w.2", Title: "PR merged", Labels: []string{"kind:objective", "gate", "approver:user", "pr:1234"}})
-	seedClosedBlock(t, mem, "w.2", "head1")
-	snap := reviewSnapshot(t, mem, &fakeHeads{state: "OPEN", head: "head1"})
-	var clear func([]SnapStep)
-	clear = func(ss []SnapStep) {
-		for i := range ss {
-			if ss[i].WorkflowCheck != nil {
-				ss[i].WorkflowCheck.Head = ""
-			}
-			for g := range ss[i].GateChecks {
-				ss[i].GateChecks[g].Head = ""
-			}
-			clear(ss[i].Children)
-		}
+	seedBlockOf(t, tpl, mem, "w", "w.2", "w.9", "head1", 1)
+	w, ds := reviewStep(t, Board(reviewSnapshot(t, mem, &fakeHeads{state: "OPEN", head: "head2"}), 1793000000), "w.9")
+	if w == nil || ds.Review == nil || ds.Review.Total != 2 || ds.Review.Done != 1 || ds.Progress != "1 of 2 checks done" {
+		t.Fatalf("two-step block: %+v / %+v", w, ds)
 	}
-	clear(snap.Workstreams[0].Steps)
-	w, _ := reviewStep(t, Board(snap, 1793000000), "w.9")
-	if w.Kind != "stalled" || w.Review.Done != 0 || w.Review.Checks[0].Text != "Waiting for the current PR head" {
-		t.Fatalf("unknown head: %s %q %+v", w.Kind, w.Text, w.Review)
+	if c := ds.Review.Checks; c[0].Step != "devin" || c[0].Kind != "done" || c[1].Step != "code-review" || c[1].Verifier != "review-report" {
+		t.Fatalf("checks: %+v", c)
 	}
 }
 
@@ -235,12 +227,13 @@ func TestReviewBlock_GenerateFixture(t *testing.T) {
 	}
 }
 
-func TestReviewBlock_BindingFreshnessAgreesWithChecker(t *testing.T) {
-	for _, tc := range []struct{ name, revision, pr, head, text string }{
-		{"unbound", "", "", "", "writer binding required"},
-		{"rebound", "rev2", reviewedPR, "head1", "current writer binding"},
-		{"reverted selection", "rev3", reviewedPR, "head1", "current writer binding"},
-		{"foreign PR", "rev", "https://github.com/other/repo/pull/8", "head1", "writer binding differs"},
+// The writer binding only keeps version 1 reviewers apart from writers: a
+// missing, changed or foreign binding never makes a recorded check stale.
+func TestReviewBlock_BindingNeverMakesAPassedCheckStale(t *testing.T) {
+	for _, tc := range []struct{ name, revision, pr string }{
+		{"unbound", "", ""},
+		{"rebound", "rev2", reviewedPR},
+		{"foreign PR", "rev", "https://github.com/other/repo/pull/8"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			mem := &beads.MemClient{}
@@ -254,7 +247,7 @@ func TestReviewBlock_BindingFreshnessAgreesWithChecker(t *testing.T) {
 					if ss[i].BeadID == "w.9" {
 						ss[i].WorkflowCheck.Comments = nil
 						if tc.revision != "" {
-							ss[i].WorkflowCheck.Comments = []beads.Comment{{Text: workflowtemplate.WriterBinding{Revision: tc.revision, PR: tc.pr, Head: tc.head, Tasks: []string{"writer"}}.Comment()}}
+							ss[i].WorkflowCheck.Comments = []beads.Comment{{Text: workflowtemplate.WriterBinding{Revision: tc.revision, PR: tc.pr, Head: "head1", Tasks: []string{"writer"}}.Comment()}}
 						}
 					}
 					replace(ss[i].Children)
@@ -263,22 +256,12 @@ func TestReviewBlock_BindingFreshnessAgreesWithChecker(t *testing.T) {
 			replace(snap.Workstreams[0].Steps)
 			d := Board(snap, 1793000000)
 			w, ds := reviewStep(t, d, "w.9")
-			if w.Kind != "stalled" || ds.Review.Done != 0 || ds.Review.Stale != 6 || ds.Text != w.Text {
+			if w.Kind != "done" || ds.Review.Done != 6 || ds.Review.Stale != 0 {
 				t.Fatalf("display: %+v / %+v", w, ds)
 			}
-			lines := ReviewCheckLines(ds.Review, "", "")
-			for i, c := range ds.Review.Checks {
-				if !c.Stale || !strings.Contains(c.Text, tc.text) || !strings.Contains(lines[i], tc.text) || c.Finding != "passed" {
-					t.Fatalf("check/history: %+v / %q", c, lines[i])
-				}
-				found := false
-				for _, f := range d.Workstreams[0].Diagram.Findings {
-					if f.Check == "MERGE_REVIEW_INCOMPLETE" && strings.Contains(f.Why, c.ID) {
-						found = true
-					}
-				}
-				if !found {
-					t.Fatalf("checker did not list stale check %s", c.ID)
+			for _, f := range CheckDiagram(snap.Workstreams[0], "w.2") {
+				if f.Check == "MERGE_REVIEW_INCOMPLETE" {
+					t.Fatalf("checker: %+v", f)
 				}
 			}
 		})
@@ -298,13 +281,12 @@ func TestReviewBlock_SettledAndInvalidDispositionMatrix(t *testing.T) {
 		{name: "merged bound", state: "MERGED", head: "head1", wantDone: 6},
 		{name: "merged unbound", state: "MERGED", head: "head1", unbound: true, wantDone: 6},
 		{name: "merged invalid exempt", state: "MERGED", head: "head1", invalid: true, wantDone: 6},
-		{name: "closed unmerged unbound", state: "CLOSED", head: "head1", unbound: true, wantFinding: "MERGE_REVIEW_INCOMPLETE"},
-		{name: "open unbound", state: "OPEN", head: "head1", unbound: true, wantFinding: "MERGE_REVIEW_INCOMPLETE"},
-		{name: "changed binding", state: "OPEN", head: "head1", revision: "rev2", wantFinding: "MERGE_REVIEW_INCOMPLETE"},
-		{name: "reverted binding new revision", state: "OPEN", head: "head1", revision: "rev3", wantFinding: "MERGE_REVIEW_INCOMPLETE"},
-		{name: "new head", state: "OPEN", head: "head2", wantFinding: "MERGE_REVIEW_INCOMPLETE"},
-		{name: "missing head", state: "OPEN", wantFinding: "MERGE_REVIEW_INCOMPLETE"},
-		{name: "unknown state and head", wantFinding: "MERGE_REVIEW_INCOMPLETE"},
+		{name: "closed unmerged unbound", state: "CLOSED", head: "head1", unbound: true, wantDone: 6},
+		{name: "open unbound", state: "OPEN", head: "head1", unbound: true, wantDone: 6},
+		{name: "changed binding", state: "OPEN", head: "head1", revision: "rev2", wantDone: 6},
+		{name: "new head", state: "OPEN", head: "head2", wantDone: 6},
+		{name: "missing head", state: "OPEN", wantDone: 6},
+		{name: "unknown state and head", wantDone: 6},
 		{name: "invalid bound snapshot", state: "OPEN", head: "head1", invalid: true, wantFinding: "MERGE_REVIEW_INCOMPLETE"},
 		{name: "reopened stage", state: "OPEN", head: "head1", reopened: true, wantDone: 5, wantFinding: "MERGE_REVIEW_INCOMPLETE"},
 		{name: "merged PR beside live PR", state: "MERGED", head: "head1", unbound: true, extraLive: true, wantDone: 6},

@@ -15,15 +15,20 @@ func completeBlock(t *testing.T) []Node {
 	if err != nil {
 		t.Fatal(err)
 	}
+	return blockOf(t, tpl)
+}
+
+// blockOf is a closed block of tpl before M, every step closed with evidence on head abc.
+func blockOf(t *testing.T, tpl *Template) []Node {
+	t.Helper()
 	inst, err := Instantiate(tpl, Params{Project: "p", Parent: "B", Before: "M", PR: testURL})
 	if err != nil {
 		t.Fatal(err)
 	}
 	nodes := []Node{{Bead: beads.Bead{ID: "M", ParentID: "B", Title: "PR merged", Status: "open", Labels: []string{"gate"}}, Waits: []string{"R"}, Head: "abc"}, {Bead: beads.Bead{ID: "R", ParentID: "B", Status: "closed", Labels: inst.Labels, Description: fmt.Sprintf("for %s\n\n%s", testURL, inst.Snapshot)}}}
-	nodes[1].Comments = []beads.Comment{{Text: WriterBinding{Revision: "rev", PR: testURL, Head: "abc", Tasks: []string{"writer"}}.Comment()}}
 	for i, s := range tpl.Steps {
 		id := fmt.Sprintf("S%d", i)
-		n := Node{Bead: beads.Bead{ID: id, ParentID: "R", Status: "closed", Labels: inst.Steps[i].Labels}, Comments: []beads.Comment{{Text: Evidence{Binding: "rev", Instance: inst.Key, Step: s.ID, Verifier: s.Verifier, PR: testURL, Head: "abc", Finding: "passed"}.Comment()}}}
+		n := Node{Bead: beads.Bead{ID: id, ParentID: "R", Status: "closed", Labels: inst.Steps[i].Labels}, Comments: []beads.Comment{{Text: Evidence{Instance: inst.Key, Step: s.ID, Verifier: s.Verifier, PR: testURL, Head: "abc", Finding: "passed"}.Comment()}}}
 		if i > 0 {
 			n.Waits = []string{fmt.Sprintf("S%d", i-1)}
 		}
@@ -39,7 +44,7 @@ func TestMergeRule(t *testing.T) {
 		{"complete", "", func(n []Node) []Node { return n }},
 		{"missing", "", func(n []Node) []Node { n[0].Waits = nil; return n }},
 		{"open", "MERGE_REVIEW_INCOMPLETE", func(n []Node) []Node { n[2].Bead.Status = "open"; return n }},
-		{"stale head", "MERGE_REVIEW_INCOMPLETE", func(n []Node) []Node { n[0].Head = "new"; return n }},
+		{"a later push changes nothing", "", func(n []Node) []Node { n[0].Head = "new"; return n }},
 		{"missing evidence", "MERGE_REVIEW_INCOMPLETE", func(n []Node) []Node { n[2].Comments = nil; return n }},
 		{"missing child", "MERGE_REVIEW_INCOMPLETE", func(n []Node) []Node { return n[:len(n)-1] }},
 		{"missing edge", "MERGE_REVIEW_INCOMPLETE", func(n []Node) []Node { n[3].Waits = nil; return n }},
@@ -270,48 +275,37 @@ func TestTargetPRs(t *testing.T) {
 
 func TestMergeReviewIncompletePrintsTheCommands(t *testing.T) {
 	nodes := completeBlock(t)
-	nodes[0].Head = "new"
+	nodes[2].Comments = nil
+	nodes[3].Bead.Status = "open"
 	f := MergeRule("p", "o/r", nodes, map[string]bool{"M": true})
 	if len(f) != 1 || f[0].Check != "MERGE_REVIEW_INCOMPLETE" {
 		t.Fatal(f)
 	}
-	want := []string{"cmdr workflow bind-writers --project p --block R --writers <original-task,actual-fix-task> --head <current-full-sha>"}
-	for i := range 6 {
-		if i >= 1 && i <= 4 {
-			want = append(want, fmt.Sprintf(`cmdr internal-comment --project p --bead S%d --text 'workflow-review-proof@v1 {"review_bead":"<separate-review-task>","head":"<full-sha>","fix_commits":["<full-fix-sha>"]}'`, i))
-		}
-		want = append(want, fmt.Sprintf("cmdr internal-close-objective --project p --bead S%d", i))
+	want := strings.Join([]string{
+		"cmdr internal-close-objective --project p --bead S0",
+		"cmdr internal-comment --project p --bead S1 --text '<the ce-code-review report: first line workflow-review-report@v1, a line Head: <full-sha it reviewed>, last line CLEAN>'",
+		"cmdr internal-close-objective --project p --bead S1",
+	}, " ; ")
+	if f[0].Fix != want {
+		t.Fatalf("fix:\n%s\nwant:\n%s", f[0].Fix, want)
 	}
-	if got, w := f[0].Fix, strings.Join(want, " ; "); got != w {
-		t.Fatalf("fix:\n%s\nwant:\n%s", got, w)
-	}
-	if !strings.Contains(f[0].Text, f[0].Fix) || strings.Contains(f[0].Text, "workflow plug") {
-		t.Fatal(f[0].Text)
-	}
-	// F11: no finding is claimed for anyone; it is named as the alternative, in the text only.
-	if strings.Contains(f[0].Fix, "no_findings") || !strings.Contains(f[0].Text, `"no_findings":true,"fix_commits":[]`) || !strings.Contains(f[0].Text, "closed separate review of new") {
+	if !strings.Contains(f[0].Text, f[0].Fix) || strings.Contains(f[0].Text, "workflow plug") || strings.Contains(f[0].Text, "bind-writers") {
 		t.Fatal(f[0].Text)
 	}
 
 	nodes = completeBlock(t)
 	nodes[1].Bead.Status = "open"
-	nodes[0].Head = "abc"
 	if f := MergeRule("p", "o/r", nodes, map[string]bool{"M": true}); len(f) != 1 || f[0].Fix != "cmdr internal-close-objective --project p --bead R" {
 		t.Fatal(f)
 	}
 
-	nodes = completeBlock(t)[:7]
+	nodes = completeBlock(t)[:3]
 	f = MergeRule("p", "o/r", nodes, map[string]bool{"M": true})
 	if len(f) != 1 || !strings.HasPrefix(f[0].Fix, "cmdr workflow plug pr-review") || slices.Contains(f[0].Stale, "") {
 		t.Fatal(f)
 	}
 	// The step plug makes is closed too, after the ones before it.
-	tpl, err := Load("pr-review")
-	if err != nil {
-		t.Fatal(err)
-	}
-	last := "cmdr internal-close-objective --project p --bead <" + tpl.Steps[len(tpl.Steps)-1].ID + "-bead-from-plug>"
-	if !strings.HasSuffix(f[0].Fix, last) {
+	if last := "cmdr internal-close-objective --project p --bead <code-review-bead-from-plug>"; !strings.HasSuffix(f[0].Fix, last) {
 		t.Fatalf("fix does not end with the missing step's close: %s", f[0].Fix)
 	}
 	nodes = completeBlock(t)
@@ -319,6 +313,23 @@ func TestMergeReviewIncompletePrintsTheCommands(t *testing.T) {
 	f = MergeRule("p", "o/r", nodes, map[string]bool{"M": true})
 	if len(f) != 1 || !strings.HasPrefix(f[0].Fix, "cmdr workflow plug pr-review") || !strings.Contains(f[0].Fix, "--bead S1") {
 		t.Fatal(f)
+	}
+}
+
+// A six-step block plugged from version 1 finishes under its snapshot: a push
+// after its steps passed never makes them stale, and its proof steps still
+// print the proof command.
+func TestLegacyBlockFinishesUnderItsSnapshot(t *testing.T) {
+	nodes := blockOf(t, legacyTemplate(t))
+	nodes[0].Head = "new"
+	if f := MergeRule("p", "o/r", nodes, map[string]bool{"M": true}); len(f) != 0 {
+		t.Fatalf("a passed legacy block went stale on a push: %+v", f)
+	}
+	nodes[4].Bead.Status = "open" // fix-review
+	f := MergeRule("p", "o/r", nodes, map[string]bool{"M": true})
+	want := `cmdr internal-comment --project p --bead S2 --text 'workflow-review-proof@v1 {"review_bead":"<separate-review-task>","head":"<full-sha>","fix_commits":["<full-fix-sha>"]}' ; cmdr internal-close-objective --project p --bead S2`
+	if len(f) != 1 || f[0].Fix != want {
+		t.Fatalf("findings: %+v", f)
 	}
 }
 

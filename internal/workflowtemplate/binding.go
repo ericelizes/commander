@@ -27,7 +27,8 @@ type ExternalWriter struct {
 }
 
 // WriterBinding is an explicit Manager selection, never inferred from descendants.
-// Revision changes whenever the selection or head changes, invalidating old checks.
+// Only the retired six-step review's proof steps read it, to keep reviewers
+// apart from writers.
 type WriterBinding struct {
 	Revision string          `json:"revision"`
 	PR       string          `json:"pr"`
@@ -75,27 +76,27 @@ func Binding(cs []beads.Comment) (WriterBinding, error) {
 	}
 	return WriterBinding{}, fmt.Errorf("writer binding required; %s", bindHint)
 }
-func BoundEvidenceFor(n Node, block Node, instance, step, verifier, pr, head string) bool {
-	b, err := Binding(block.Comments)
-	if err != nil || b.PR != pr || b.Head != head {
-		return false
-	}
+
+// HasEvidence: n records a passed check of step for pr, on any head. A head
+// that moved on after the check never makes it stale.
+func HasEvidence(n Node, instance, step, verifier, pr string) bool {
 	for _, c := range n.Comments {
 		e, ok := ParseEvidence(c.Text)
-		if ok && e.Binding == b.Revision && e.Instance == instance && e.Step == step && e.Verifier == verifier && e.PR == pr && e.Head == head && head != "" {
+		if ok && e.Instance == instance && e.Step == step && e.Verifier == verifier && e.PR == pr {
 			return true
 		}
 	}
 	return false
 }
 
-// CheckCurrent is the exact per-step disposition shared by the rule and display.
-// Template identity comes from the validated snapshot, never from its evidence.
-func CheckCurrent(n, block Node, t *Template, step, verifier, pr, head string) bool {
+// StepDone is the exact per-step disposition shared by the rule and display:
+// closed under its block with a recorded check. Template identity comes from
+// the validated snapshot, never from its evidence.
+func StepDone(n, block Node, t *Template, step, verifier, pr string) bool {
 	return n.Bead.Status == "closed" && n.Bead.ParentID == block.Bead.ID &&
 		Label(n.Bead, LabelInstance) == Label(block.Bead, LabelInstance) &&
 		Label(n.Bead, LabelHash) == t.Hash() &&
-		BoundEvidenceFor(n, block, Label(block.Bead, LabelInstance), step, verifier, pr, head)
+		HasEvidence(n, Label(block.Bead, LabelInstance), step, verifier, pr)
 }
 
 // RangeCommits lists the full SHAs of from..to (reachable from to, not from

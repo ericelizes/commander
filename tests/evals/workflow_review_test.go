@@ -25,9 +25,8 @@ func TestWorkflowReviewScenario(t *testing.T) {
 			Block, Complete, Closed, Unbound, Rebound, Invalid bool
 			Head, State, Expected                              string
 			Fix                                                string
-			// NotFix must be absent from the finding (a valid current-head
-			// binding is renewed, never rebound); Reason is the display text
-			// every closed check must carry.
+			// NotFix must be absent from the finding; Reason is the display
+			// text every closed check must carry.
 			NotFix string `json:"not_fix"`
 			Reason string
 		}

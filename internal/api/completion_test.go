@@ -96,12 +96,6 @@ func TestPostgresPlanCompletionUsesFreshSharedVerifier(t *testing.T) {
 		t.Fatalf("raw close bypassed failed CI: %+v", out)
 	}
 	green = true
-	head = "new-unbound-head"
-	_, out = postWrite(t, ts.URL, testToken, single)
-	if out.Exit == 0 || !strings.Contains(out.Error, "stale writer binding") {
-		t.Fatalf("raw close ignored changed head: %+v", out)
-	}
-	head = scenario.Head
 	var ciRevision, rootRevision int64
 	if e = st.DB().QueryRowContext(ctx, `SELECT plan_revision FROM bead_tasks WHERE project_id=? AND id='ci'`, pid).Scan(&ciRevision); e != nil {
 		t.Fatal(e)

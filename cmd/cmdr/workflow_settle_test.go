@@ -21,7 +21,7 @@ func settleProject(t *testing.T) (*beads.MemClient, *workflowPlugResult) {
 	pinOwnerRuns(t, true, true)
 	mem.Seed(beads.Bead{ID: "B", Status: "open"})
 	mem.Seed(beads.Bead{ID: "M", ParentID: "B", Title: "PR merged", Labels: []string{"gate", "kind:objective", "approver:user"}})
-	tpl, err := workflowtemplate.Load("pr-review")
+	tpl, err := legacyTemplateFile()
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -43,7 +43,7 @@ func seedReviewWorkflow(t *testing.T, mem *beads.MemClient) *workflowPlugResult 
 	pinOwnerRuns(t, true, true)
 	mem.Seed(beads.Bead{ID: "B", Status: "open"})
 	mem.Seed(beads.Bead{ID: "M", ParentID: "B", Title: "PR merged", Labels: []string{"gate", "kind:objective", "approver:user"}})
-	res, err := plugWorkflow(context.Background(), mem, "/d", plugInstance(t, testPR))
+	res, err := plugWorkflow(context.Background(), mem, "/d", legacyInstance(t, testPR))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -165,7 +165,8 @@ func TestWorkflowDependencyReadFailsClosed(t *testing.T) {
 	}
 }
 
-func TestWorkflowCompleteBlockAndNewHeadInvalidation(t *testing.T) {
+// A complete version 1 block stays complete after a push: nothing reruns.
+func TestWorkflowCompleteBlockStaysCompleteOnANewHead(t *testing.T) {
 	ctx := context.Background()
 	mem := &beads.MemClient{}
 	res := seedReviewWorkflow(t, mem)
@@ -200,17 +201,13 @@ func TestWorkflowCompleteBlockAndNewHeadInvalidation(t *testing.T) {
 		out, err := workflowFakeGH(ctx, args...)
 		return []byte(strings.ReplaceAll(string(out), "head1", "head2")), err
 	}
-	if err := checkWorkflowClose(ctx, mem, "/d", "p", "M"); err == nil || !strings.Contains(err.Error(), "MERGE_REVIEW_INCOMPLETE") {
-		t.Fatal(err)
-	}
-	final := res.Remaining[len(res.Remaining)-1].BeadID
-	if err := checkWorkflowClose(ctx, mem, "/d", "p", final); err == nil || !strings.Contains(err.Error(), "stale") {
-		t.Fatal(err)
+	if err := checkWorkflowClose(ctx, mem, "/d", "p", "M"); err != nil {
+		t.Fatalf("a passed block went stale on a push: %v", err)
 	}
 }
 
-// After a new push, the close door itself renews a closed step: closing it again
-// runs the same fresh check and records evidence for the new head.
+// After a new push nothing is stale. Closing a closed step again still runs the
+// same fresh check (a refused one records nothing) and records it for the new head.
 func TestWorkflowClosedStepsRenewThroughTheCloseDoor(t *testing.T) {
 	ctx := context.Background()
 	mem := setupGateProject(t)
@@ -218,7 +215,7 @@ func TestWorkflowClosedStepsRenewThroughTheCloseDoor(t *testing.T) {
 	pinOwnerRuns(t, true, true)
 	mem.Seed(beads.Bead{ID: "B", Status: "open"})
 	mem.Seed(beads.Bead{ID: "M", ParentID: "B", Title: "PR merged", Labels: []string{"gate", "kind:objective", "approver:user"}})
-	tpl, err := workflowtemplate.Load("pr-review")
+	tpl, err := legacyTemplateFile()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -268,10 +265,8 @@ func TestWorkflowClosedStepsRenewThroughTheCloseDoor(t *testing.T) {
 		out, err := workflowFakeGH(ctx, args...)
 		return []byte(strings.ReplaceAll(string(out), "head1", "head2")), err
 	}
-	first := res.Remaining[0].BeadID
-	err = checkWorkflowClose(ctx, mem, "/d", "manifest", "M")
-	if err == nil || !strings.Contains(err.Error(), first) {
-		t.Fatalf("a new head must list the closed steps: %v", err)
+	if err := checkWorkflowClose(ctx, mem, "/d", "manifest", "M"); err != nil {
+		t.Fatalf("a new head made passed steps stale: %v", err)
 	}
 
 	// Still fresh: a re-close whose check fails is refused and records nothing.
@@ -692,7 +687,7 @@ func plugBeforeM(t *testing.T, mem *beads.MemClient) *workflowPlugResult {
 	t.Helper()
 	mem.Seed(beads.Bead{ID: "B", Status: "open"})
 	mem.Seed(beads.Bead{ID: "M", ParentID: "B", Title: "Ship it", Labels: []string{"kind:objective"}})
-	tpl, err := workflowtemplate.Load("pr-review")
+	tpl, err := legacyTemplateFile()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -902,7 +897,7 @@ func TestWorkflowCloseMistakenReviewLabelOnALaterStep(t *testing.T) {
 
 	// The plug the fix line used to name (another parent, same PR) is refused, so
 	// the greenlight's block stays the one block.
-	tpl, err := workflowtemplate.Load("pr-review")
+	tpl, err := legacyTemplateFile()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -929,7 +924,7 @@ func TestWorkflowCloseFoldedBlockAgreesWithTheBoard(t *testing.T) {
 		mem.Seed(beads.Bead{ID: "S", ParentID: "B", Title: "Finished stage", Status: "open", Labels: []string{"kind:objective"}})
 		mem.SetParent(ctx, "/d", "S", "B")
 		mem.Seed(beads.Bead{ID: "M", ParentID: "B", Title: "Greenlight merging the fix", Labels: []string{"gate", "kind:objective", "approver:user", "pr:7"}})
-		tpl, err := workflowtemplate.Load("pr-review")
+		tpl, err := legacyTemplateFile()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -955,14 +950,14 @@ func TestWorkflowCloseFoldedBlockAgreesWithTheBoard(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
-	t.Run("a new push is incomplete", func(t *testing.T) {
+	t.Run("a new push changes nothing", func(t *testing.T) {
 		mem := seed(t)
 		pinWorkflowGH(t, func(c context.Context, args ...string) ([]byte, error) {
 			out, err := workflowFakeGH(c, args...)
 			return bytes.ReplaceAll(out, []byte("head1"), []byte("head2")), err
 		})
-		if err := checkWorkflowClose(ctx, mem, "/d", "p", "M"); err == nil || !strings.Contains(err.Error(), "MERGE_REVIEW_INCOMPLETE") {
-			t.Fatalf("stale block: %v", err)
+		if err := checkWorkflowClose(ctx, mem, "/d", "p", "M"); err != nil {
+			t.Fatalf("a passed block went stale: %v", err)
 		}
 	})
 }

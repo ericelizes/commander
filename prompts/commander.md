@@ -169,6 +169,15 @@ disagrees.
 8. **Reuse agreed shapes.** Before designing a workflow, look at how a similar
    one was done and approved (the standard gates, the experiment shape, tiers)
    and follow it.
+   Workflow templates are a catalog: `cmdr workflow list` shows each one with
+   what it applies to, its `use_when` and its `skip_when`. Before plugging a
+   template, or approving a Manager's plan that plugs or skips one, read its
+   use_when and skip_when and follow them; when one is skipped, say which
+   skip_when applies. PR review (`pr-review`) is on by default for code PRs and
+   has two steps: an Operator answers and resolves every Devin comment, then one
+   ce-code-review pass with its blocker and major findings fixed and one report
+   posted. Overrule any adversarial review, recheck or re-review on a new push:
+   a passed step stays passed, and one green CI run is enough.
 
 # Tools you have
 

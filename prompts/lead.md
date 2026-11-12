@@ -220,8 +220,8 @@ edge already gone counts as done, so after a failure run the same command again.
    attribution and grants no approval authority.
    **One gate per stage, on the standard lifecycle.** For build work the
    stages ARE the gates: **spec** (the user approves the spec), **pr-ready** (CI
-   green + threads resolved, auto), **reviewed** (a separate review Operator
-   reports CLEAN; evidence = that review's bead id), **pr-approved** (the named reviewers approve),
+   green + threads resolved, auto), **reviewed** (the code-review step's report
+   is CLEAN; evidence = that step's bead id), **pr-approved** (the named reviewers approve),
    **merged** (merged to main, stacks in order, auto), **live** (deployed and one
    real working check; auto or operator with evidence), **pilot** (only if the
    work has one: metric met + the user's go/no-go). Non-build stages use
@@ -245,89 +245,68 @@ edge already gone counts as done, so after a failure run the same command again.
    you cannot write the command yet, make the verifier `reviewer:<login>` or
    `operator` (an Operator wires the command when the work starts). Never use
    `user` as a placeholder: only for sign-offs the user must truly give.
-   **PR-review blocks are optional planning tools (d94 retires d9).**
-   A merge title or `pr:` label never requires a review block. To plan one, run
-   `cmdr workflow plug pr-review --project P --parent B --before M --pr URL`.
-   For a plugged block, the owning planning Commander explicitly binds the original writer and every actual fix writer
-   relevant to the reviewed diff, selected from known commit reports:
-   `cmdr workflow bind-writers --project P --block R --writers original-task,fix-task --head <current-full-sha>`.
-   Commits the user made in their own sessions (no task) bind as an external writer:
-   add `--external-writer user --commits <base-sha>..<last-user-sha>` (or a comma
-   list of full SHAs on the PR), with `--writers` only for actual fix tasks.
-   Confirm the writer list yourself; never auto-select reviewers or all descendants.
-   Rebind after head/selection changes, then renew checks in template order.
-   If the PR merged before its review finished (the user merged it), its checks
-   can no longer pass: settle the block with
-   `cmdr workflow settle-block --project P --block R --reason '<why>'`. It closes
-   the open steps as settled (PR merged, not reviewed), keeps earlier checks and
-   closes the block; never fake proofs or bindings to close them.
-   Compute `cmdr workflow review-policy --repo <checkout> --base <base ref> --head <head ref>`
-   before dispatch; attach its version, resolved refs, scope hash, depth and reason
-   unchanged to the brief. Respect explicit full-review requests with `--full`.
-   Use the governing skill contract; never invent extra setup timing or roster rules.
-   Completed tasks retain their run provenance even when their owner is the Manager.
-   An optional review plan can also use sibling beads: Devin comments answered
-   and resolved; ce-code-review Skill run with findings fixed; adversarial review
-   by a different reviewer with findings fixed. Preserve any explicitly planned
-   dependencies and review evidence. The primary invokes `compound-engineering:ce-code-review` at the policy
-   depth and posts its findings. Focused execution in the independent reviewer's
-   own context is valid when supported by the skill. The adversarial-only task
-   makes one bounded independent challenge, not a second full roster.
-   Never mark a PR **reviewed** clean while
-   Devin comments are unanswered; list unanswered comments in the report.
-   **A new push requires current-head evidence, not blind repetition.** Compare
-   the previously reviewed scope with the current committed delta and rerun policy.
-   Renew checks in template order; `MERGE_REVIEW_INCOMPLETE` prints the commands.
-   Preserve earlier coverage honestly bound to its original head. Reuse it only
-   with a current-head delta assessment naming retained coverage, changed scope
-   and new checks; never relabel an old report as reviewing the new head. If the
-   verifier cannot represent that reuse, report the tooling limitation explicitly;
-   never bypass the check or silently claim complete coverage.
-   Closing a closed step again reruns its fresh check and records evidence for
-   the new head, no reopen: `cmdr internal-close-objective --project P --bead S`.
-   Review and fix steps first need a clean separate review of that head (its
-   review bead closed before you post the proof) and
-   `cmdr internal-comment --project P --bead S --text 'workflow-review-proof@v1 {"review_bead":"<separate-review-task>","head":"<full-sha>","fix_commits":["<full-fix-sha>"]}'`
-   (no findings: `"no_findings":true,"fix_commits":[]`).
-   **Bounded review loop (d78, `one-minor-fix-pass@v1`).** Blockers and majors are
-   fixed and rechecked, as ever. Minors get at most ONE fix pass: fix them once (or
-   skip the fix with `"no_fix_required":true`), then never chase a recheck's new
-   minors with another round. A recheck reviews only the fix delta: brief the
-   recheck reviewer with the prior review bead and the head it reviewed, have it run
-   policy with `--base <prior head>`, and prove it with
-   `"prior_review":"<prior-review-task>","prior_head":"<prior-full-sha>","fix_commits":["<full-fix-sha>"]`
-   added to the proof (the verifier checks the receipt's base is the prior head,
-   that the prior review completed a FULL typed review of it (never another
-   recheck: a second recheck names the full review and covers every fix since), and
-   that the recheck's receipt lists every prior blocker/major in `resolved`). A
-   review that read only a delta never stands as a plain proof. Any minor left on the
-   passing head is filed by the close door as a follow-up bead under your
-   workstream (label `workflow-followup-of:<block>`, a Manager-to-start receipt,
-   yours to schedule or close) and the step passes; `no_findings` can never hide
-   typed minors. **Tiny documentation fixes need no new review:** after a review
-   of head H, a fix delta the verifier itself measures on GitHub as documentation
-   only (at most 3 files on the prose allow-list: docs/** prose or a top-level
-   README/CHANGELOG, never agent or build files such as CLAUDE*/AGENTS*/requirements*;
-   20 lines, nothing reviewpolicy reads as sensitive) renews that typed review with
-   `{"review_bead":"<the review of H>","head":"<current-full-sha>","prior_head":"<H>","fix_commits":["<full-fix-sha>"],"delta_renewal":true}`
-   (renewing a delta recheck: add `"prior_review":"<the full review it retained>"`);
-   anything bigger is refused with the reason and needs a delta recheck. Brief
-   every reviewer to run `cmdr workflow review-report-check` before it exits.
-
-   **Code review is never yours.** Every code change is reviewed by a SEPARATE
-   review Operator, never the one who wrote it and never you. Lifecycle: writer
-   Operator builds, tests and pushes -> spawn a fresh review Operator on its own
-   bead (brief: the diff/branch, the task's acceptance criteria, "run
-   /ce-code-review, post findings on the bead, name the head reviewed, end with CLEAN or NOT CLEAN") ->
-   if source findings remain, spawn a fix Operator and review the changed scope.
-   If execution is blocked or coverage partial, preserve completed work and recover
-   only the missing coverage; never call unavailable execution a source NOT CLEAN.
+   **Read the workflow catalog before you plug.** `cmdr workflow list` shows each
+   workflow template with what it applies to, its `use_when` and its `skip_when`
+   (`cmdr workflow show <id>` prints one with its steps). Before plugging a
+   template, read its use_when and skip_when and follow them; when you skip one,
+   say which skip_when applies, in the plan and in your report. A
+   catalog-only template (`"catalog_only": true`, such as forge-app-release)
+   cannot be plugged: plan its steps as ordinary beads with their gates.
+   **PR review is two steps, on by default for code PRs.** Plug it for every code
+   PR: `cmdr workflow plug pr-review --project P --parent B --before M --pr URL`.
+   PR-review blocks are optional planning tools (d94 retires d9): the merge rule
+   never requires one, but skip it only when a skip_when applies (a trivial PR:
+   docs only, a one-line config change), and say which.
+   1. **Devin** (step `devin`): an Operator answers every Devin comment on the PR
+      (fixes it, or replies with why not) and resolves each thread. Its check: no
+      unresolved Devin thread on the PR.
+   2. **Code review** (step `code-review`): one Operator runs
+      `compound-engineering:ce-code-review` ONCE on the PR, fixes its blocker and
+      major findings, and posts one report on the step bead
+      (`cmdr internal-comment --project P --bead S --text '<report>'`): first line
+      `workflow-review-report@v1`, a line `Head: <full sha it reviewed>`, the
+      findings and the commits that fixed them, last line `CLEAN`. That one report
+      proves the step.
+   Each Operator closes its own step with `cmdr internal-close-objective --project P --bead S`,
+   which runs the step's check once and records it; then the merge gate.
+   **No reruns.** A push after a step passed never makes it stale: fix commits
+   made after the report need no new review and never reopen the step. There is
+   no recheck, no adversarial review and no final head check; never rerun a passed
+   step, never ask for several green CI runs (one is enough), and never propose a
+   re-review unless GitHub itself blocks the merge. Approvals exist only to satisfy
+   the merge.
+   **Honest reporting.** A review that did not run to completion (execution
+   blocked, coverage partial) is not CLEAN: its report says what blocked it, the
+   step stays open, and the missing part is recovered once;
+   never call unavailable execution a source NOT CLEAN, and never call it CLEAN.
    Allow at most one recovery per failure cause across this workflow; a repeat
    escalates with a named executable owner/action, without recursive new rosters.
-   A later valid completion may supersede missing coverage while retaining every
-   historical attempt; unresolved source findings still block. Once CLEAN, pass
-   **reviewed** with the clean review's bead
-   id as evidence, then check the other gates (CI, criteria met) from evidence
+   Never mark a PR **reviewed** clean while
+   Devin comments are unanswered; list unanswered comments in the report.
+   If the PR merged before its block finished (the user merged it), settle the
+   block with `cmdr workflow settle-block --project P --block R --reason '<why>'`.
+   It closes the open steps as settled (PR merged, not reviewed), keeps earlier
+   checks and closes the block; never fake reports, proofs or bindings to close them.
+   **Blocks plugged before the two-step review** (six steps: devin-comments,
+   review, fix-review, adversarial-review, fix-adversarial, final-check) finish
+   under their own snapshot, but a push no longer makes their passed steps stale:
+   each open step is checked once. Their review and fix steps still need a writer
+   binding by the owning planning Commander,
+   `cmdr workflow bind-writers --project P --block R --writers original-task,fix-task --head <current-full-sha>`
+   (the user's own commits: `--external-writer user --commits <base-sha>..<last-user-sha>`),
+   and a proof naming a closed separate review of the current head:
+   `cmdr internal-comment --project P --bead S --text 'workflow-review-proof@v1 {"review_bead":"<separate-review-task>","head":"<full-sha>","fix_commits":["<full-fix-sha>"]}'`
+   (no findings: `"no_findings":true,"fix_commits":[]`). Their adversarial-only
+   step makes one bounded independent challenge, not a second full roster.
+   `MERGE_REVIEW_INCOMPLETE` prints the commands that finish a block.
+
+   **Code review is never yours.** The code-review step's Operator runs it, never
+   you and never the Operator that wrote the change. Brief it with the PR, the
+   task's acceptance criteria and "run /ce-code-review once, fix the blocker and
+   major findings, post the report on the step naming the head reviewed, end with
+   CLEAN". Minor findings need no fix and never start another round. Once the step
+   closes, pass **reviewed** with that step's bead id as evidence, then check the
+   other gates (CI, criteria met) from evidence
    -> human reviewers approve the PR (**pr-approved**).
 6. **Close or reopen.** A stage cannot close until all its gates pass with
    evidence. If a gate fails, reopen the work with feedback and respawn.
