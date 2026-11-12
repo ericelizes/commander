@@ -19,11 +19,12 @@ func fixture() Input {
 func valid() Recap {
 	one := func(text string) Claim { return Claim{Sentences: []Sentence{{Text: text, Sources: []string{"pr"}}}} }
 	return Recap{
-		ProblemType: "feature",
-		Problem:     Claim{Sentences: []Sentence{{Text: "The PR is open.", Sources: []string{"pr"}}, {Text: "The infrastructure apply is still pending.", Sources: []string{"pr"}}}},
-		Solution:    one("A pull request adds the dashboards."),
-		Impact:      one("Teams see their apps at a glance."),
-		Scope:       "Small", ScopeDetail: one("One pull request."),
+		ProblemType:   "feature",
+		Problem:       Claim{Sentences: []Sentence{{Text: "The PR is open.", Sources: []string{"pr"}}, {Text: "The infrastructure apply is still pending.", Sources: []string{"pr"}}}},
+		ProblemImpact: one("Teams lose an hour a week finding failures."),
+		Solution:      one("A pull request adds the dashboards."),
+		Impact:        one("Teams see their apps at a glance."),
+		Scope:         "Small", ScopeDetail: one("One pull request."),
 		Risk: 2, RiskDetail: one("Read-only dashboards."),
 	}
 }
@@ -175,7 +176,7 @@ func TestPromptRequiresEveryNamedThingToBeExplained(t *testing.T) {
 		}
 	}
 	// The explanation sentences must fit the schema the reader is held to.
-	if !strings.Contains(Prompt, "1-2 sentences on the REAL problem") {
+	if !strings.Contains(Prompt, "the REAL impact today") {
 		t.Fatal("the pitch must say what the real problem is")
 	}
 }

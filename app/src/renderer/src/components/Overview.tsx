@@ -31,6 +31,7 @@ export type RecapResult = {
 type Pitch = {
   problem_type?: string
   problem?: Claim
+  problem_impact?: Claim
   solution?: Claim
   impact?: Claim
   scope?: string
@@ -38,8 +39,11 @@ type Pitch = {
   risk?: number
   risk_detail?: Claim
 }
-const pitchClaims = (p: Pitch): Claim[] => [p.problem, p.solution, p.impact, p.scope_detail, p.risk_detail].filter((c): c is Claim => !!c)
-const typeNames: Record<string, string> = { bug: 'Bug', performance: 'Performance', feature: 'Feature', operations: 'Operations', request: 'Request' }
+const pitchClaims = (p: Pitch): Claim[] => [p.problem, p.problem_impact, p.solution, p.impact, p.scope_detail, p.risk_detail].filter((c): c is Claim => !!c)
+const typeNames: Record<string, string> = { bug: '🐛 Bug', performance: '⚡ Performance', feature: '✨ Feature', operations: '🛠️ Operations', request: '📨 Request' }
+const scopeDot: Record<string, string> = { Small: '🟢', Medium: '🟡', Large: '🔴' }
+const riskDot = (risk: number) => (risk <= 3 ? '🟢' : risk <= 6 ? '🟡' : '🔴')
+const hasText = (c?: Claim) => !!c && sentencesOf(c).length > 0
 
 // The recap's own wording of a wait, so a transient wait never reads as a failure.
 export function waitText(r: RecapResult | null, degraded: boolean, reconnecting: boolean): string {
@@ -308,14 +312,21 @@ export function Overview({ ws, row, track, onTrack }: {
           {shown ? <div>
             {(result?.stale || result?.state === 'updating') && !draftOn && <p className="ov-muted ov-refreshing" role="status"><span className="ov-spin" aria-hidden /> Refreshing summary…</p>}
             <h2>Problem</h2>
-            {shown.problem_type && <p className="ov-field"><span className="ov-label">Type</span>{typeNames[shown.problem_type] ?? shown.problem_type}</p>}
-            <p className="ov-field"><span className="ov-label">Impact</span>{cite(shown.problem)}</p>
+            <p className="ov-field">{cite(shown.problem)}</p>
+            <ul className="ov-fields">
+              {shown.problem_type && <li><b>Type:</b> {typeNames[shown.problem_type] ?? shown.problem_type}</li>}
+              {hasText(shown.problem_impact) && <li><b>Impact:</b> {cite(shown.problem_impact)}</li>}
+            </ul>
             <h2>Solution</h2>
-            <p className="ov-field"><span className="ov-label">Description</span>{cite(shown.solution)}</p>
-            <p className="ov-field"><span className="ov-label">Impact</span>{cite(shown.impact)}</p>
+            <ul className="ov-fields">
+              {hasText(shown.solution) && <li><b>Description:</b> {cite(shown.solution)}</li>}
+              {hasText(shown.impact) && <li><b>Impact:</b> {cite(shown.impact)}</li>}
+            </ul>
             <h2>Appetite</h2>
-            <p className="ov-field"><span className="ov-label">Scope</span>{shown.scope && <strong>{shown.scope}. </strong>}{cite(shown.scope_detail)}</p>
-            {(shown.risk_detail && sentencesOf(shown.risk_detail).length > 0) && <p className="ov-field"><span className="ov-label">Risk</span><strong>{shown.risk ?? 0}/10. </strong>{cite(shown.risk_detail)}</p>}
+            <ul className="ov-fields">
+              {(shown.scope || hasText(shown.scope_detail)) && <li><b>Scope:</b> {shown.scope && <>{scopeDot[shown.scope] ?? ''} {shown.scope}. </>}{cite(shown.scope_detail)}</li>}
+              {hasText(shown.risk_detail) && <li><b>Risk:</b> {riskDot(shown.risk ?? 0)} {shown.risk ?? 0}/10. {cite(shown.risk_detail)}</li>}
+            </ul>
           </div> : <p className="ov-muted" role="status">{waitText(result, degraded, !!error)}</p>}
           {shown && result?.state === 'retrying' && <p className="ov-warning">{waitText(result, false, false)}</p>}
         </section>

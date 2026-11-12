@@ -185,8 +185,10 @@
 
 /* The pitch: labelled fields under Problem, Solution and Appetite. */
 .ov-pitch h2:first-of-type { margin-top: 0; }
-.ov-field { white-space: normal; }
-.ov-label { display: inline-block; min-width: 92px; margin-right: 8px; font: 600 12px/1 var(--font); letter-spacing: .03em; text-transform: uppercase; color: var(--ink-3); }
+.ov-field { white-space: normal; margin: 4px 0 8px; }
+.ov .ov-fields { margin: 4px 0 8px; padding-left: 22px; }
+.ov .ov-fields li { padding: 0 0 6px 2px; }
+.ov-fields b { font-weight: 600; }
 
 /* A grey spinner of its own: not the agents' working spinner. */
 .ov-spin { display: inline-block; width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid color-mix(in srgb, var(--ink-3) 30%, transparent); border-top-color: var(--ink-3); animation: ov-spin .9s linear infinite; }

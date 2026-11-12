@@ -116,6 +116,8 @@ func claimOf(r *Recap, key string) *Claim {
 	switch key {
 	case "problem":
 		return &r.Problem
+	case "problem_impact":
+		return &r.ProblemImpact
 	case "solution":
 		return &r.Solution
 	case "impact":
@@ -224,7 +226,7 @@ func onlyKnown(r Recap, in Input) Recap {
 		return out
 	}
 	out := r
-	out.Problem, out.Solution, out.Impact = fix(r.Problem), fix(r.Solution), fix(r.Impact)
+	out.Problem, out.ProblemImpact, out.Solution, out.Impact = fix(r.Problem), fix(r.ProblemImpact), fix(r.Solution), fix(r.Impact)
 	out.ScopeDetail, out.RiskDetail = fix(r.ScopeDetail), fix(r.RiskDetail)
 	return out
 }
