@@ -19,6 +19,7 @@ import (
 	"github.com/example-user/commander/internal/beads"
 	"github.com/example-user/commander/internal/chat"
 	"github.com/example-user/commander/internal/claudeacct"
+	"github.com/example-user/commander/internal/config"
 	"github.com/example-user/commander/internal/livedata"
 	"github.com/example-user/commander/internal/overview"
 	"github.com/example-user/commander/internal/store"
@@ -530,7 +531,13 @@ func overviewGenerator(opts Options) overview.Generate {
 	if opts.Chat != nil {
 		home = opts.Chat.Home()
 	}
+	prompt := overview.Prompt
+	if cfg, err := config.Load(opts.ConfigPath); err == nil {
+		if name := strings.TrimSpace(config.UserName(cfg)); name != "" {
+			prompt += "\nThe reader is " + name + ": write 'you' and 'your' wherever the records mean them, by first or full name; never their name."
+		}
+	}
 	return func(ctx context.Context, in overview.Input) (overview.Recap, error) {
-		return overview.Claude(claudeacct.Env(home, chat.ReadAccount(home, "commander")))(ctx, in)
+		return overview.ClaudeWith(prompt, claudeacct.Env(home, chat.ReadAccount(home, "commander")))(ctx, in)
 	}
 }
