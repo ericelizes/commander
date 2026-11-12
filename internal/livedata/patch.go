@@ -16,8 +16,10 @@ type StepPatch struct {
 // Patched is s with each patch laid on its step (status, state, owner, waits), Broken derived
 // again and the board rebuilt from the result (invariant I8: a board is never older than a write
 // it answered). A row whose line did not change keeps its age; a changed one reads from now. The
-// patched ids go to Pending until a load shows them. Pure: s is not changed.
-func Patched(s Snapshot, patches map[string]StepPatch, now int64) Snapshot {
+// patched ids go to Pending until a load shows them. finish (nil: none) is the
+// full build's finishing pass, so the rebuilt board reads like any other. Pure:
+// s is not changed.
+func Patched(s Snapshot, patches map[string]StepPatch, now int64, finish func(*Snapshot, *Display)) Snapshot {
 	if len(patches) == 0 {
 		return s
 	}
@@ -43,6 +45,9 @@ func Patched(s Snapshot, patches map[string]StepPatch, now int64) Snapshot {
 	slices.Sort(out.Pending)
 	if s.Display != nil {
 		d := Board(out, now)
+		if finish != nil {
+			finish(&out, &d)
+		}
 		keepAges(&d, *s.Display, now)
 		out.Display = &d
 	}

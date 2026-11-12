@@ -117,6 +117,35 @@ func TestWrittenLinesSurviveARestart(t *testing.T) {
 	}
 }
 
+func TestSameColorKeepsTheOldLineUntilTheNewOne(t *testing.T) {
+	d := &Describer{Call: func(_ context.Context, _, _, _ string, out any) error {
+		raw, _ := json.Marshal(map[string]string{"description": "agent rebuilding the release", "signal": "none"})
+		return json.Unmarshal(raw, out)
+	}}
+	d.Describe("p:ws", "agent", "executing", "Working:", "facts v1")
+	job, _ := d.next()
+	d.write(context.Background(), job)
+	if text, _, ok := d.Describe("p:ws", "agent", "blocked:executing", "Working:", "facts v2"); !ok || text != "Agent rebuilding the release" {
+		t.Fatalf("same color lost its line: %q %v", text, ok)
+	}
+	if _, _, ok := d.Describe("p:ws", "user", "decision", "Needs you:", "facts v3"); ok {
+		t.Fatal("another color showed the old line")
+	}
+}
+
+func TestOneRowIsNeverWrittenTwiceAtOnce(t *testing.T) {
+	d := &Describer{}
+	d.init()
+	d.Describe("p:ws", "agent", "executing", "Working:", "facts v1")
+	if _, ok := d.next(); !ok {
+		t.Fatal("no job")
+	}
+	d.Describe("p:ws", "agent", "executing", "Working:", "facts v2")
+	if _, ok := d.next(); ok {
+		t.Fatal("the same row was handed out while it is being written")
+	}
+}
+
 func TestCommanderLinesNeverClaimTheReadersMove(t *testing.T) {
 	if !strings.Contains(promptFor("commander"), "never write that the reader is needed") {
 		t.Fatal("commander prompt")

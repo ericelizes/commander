@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -155,5 +156,25 @@ func TestPostgresSelectionNeverFallsBack(t *testing.T) {
 	}
 	if _, e := os.Stat(path); !os.IsNotExist(e) {
 		t.Fatalf("created SQLite file: %v", e)
+	}
+}
+
+func TestPostgresWorkstreamMovesCompose(t *testing.T) {
+	st := postgresTestStore(t)
+	ctx := context.Background()
+	present := keysOf("a", "b", "c", "d")
+	if _, err := st.MoveWorkstream(ctx, present, present[2], 1); err != nil {
+		t.Fatal(err)
+	}
+	order, err := st.MoveWorkstream(ctx, present, present[3], 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := []string{}
+	for _, k := range order {
+		got = append(got, k.BeadID)
+	}
+	if strings.Join(got, ",") != "c,d,a,b" {
+		t.Fatalf("order %v", got)
 	}
 }

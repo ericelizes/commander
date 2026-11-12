@@ -198,6 +198,18 @@ const TurnFooter = memo(function TurnFooter({ item }: { item: TurnItem }) {
   if (item.outputTokens) parts.push(`${fmtTokens(item.outputTokens)} out`)
   if (item.costDelta) parts.push(fmtCost(item.costDelta))
   const stopped = item.terminalReason === 'aborted_streaming' || item.terminalReason === 'aborted_tools'
+  if (stopped) {
+    // One marker for a stopped turn: the same "Interrupted" divider the stop
+    // itself draws, or nothing when that divider is already there.
+    if (item.shownAsInterrupted) return null
+    return (
+      <div className="cc-row cc-divider cc-divider-interrupted" title={parts.join(' · ') || undefined}>
+        <span className="cc-divider-label">
+          <Icon name={sysIcon.interrupted} size={11} /> Interrupted
+        </span>
+      </div>
+    )
+  }
   return (
     <div className={`cc-row cc-turn${item.isError && !stopped ? ' cc-turn-error' : ''}`}>
       <span>

@@ -58,6 +58,9 @@ func (s *Store) SetWorkstreamOrder(ctx context.Context, order []WorkstreamKey) e
 // write transaction, so a caller holding an old view cannot undo a newer move
 // and two concurrent moves compose. It returns the new order.
 func (s *Store) MoveWorkstream(ctx context.Context, present []WorkstreamKey, key WorkstreamKey, to int) ([]WorkstreamKey, error) {
+	if s.postgres {
+		return s.moveWorkstreamPostgres(ctx, present, key, to)
+	}
 	conn, err := s.db.Conn(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("store: move workstream: %w", err)
@@ -111,6 +114,52 @@ func (s *Store) MoveWorkstream(ctx context.Context, present []WorkstreamKey, key
 		return nil, fmt.Errorf("store: commit move workstream: %w", err)
 	}
 	committed = true
+	return order, nil
+}
+
+// moveWorkstreamPostgres is MoveWorkstream on PostgreSQL: a transaction-held
+// advisory lock serializes moves the way BEGIN IMMEDIATE does on SQLite.
+func (s *Store) moveWorkstreamPostgres(ctx context.Context, present []WorkstreamKey, key WorkstreamKey, to int) ([]WorkstreamKey, error) {
+	var order []WorkstreamKey
+	err := s.WithTx(ctx, func(q Querier) error {
+		if _, e := q.ExecContext(ctx, `SELECT pg_advisory_xact_lock(734031825)`); e != nil {
+			return fmt.Errorf("store: lock workstream ranks: %w", e)
+		}
+		rows, e := q.QueryContext(ctx, `SELECT project_id, bead_id, rank FROM workstream_ranks`)
+		if e != nil {
+			return fmt.Errorf("store: read workstream ranks: %w", e)
+		}
+		ranks := make(map[WorkstreamKey]int)
+		for rows.Next() {
+			var k WorkstreamKey
+			var rank int
+			if e := rows.Scan(&k.ProjectID, &k.BeadID, &rank); e != nil {
+				rows.Close()
+				return e
+			}
+			ranks[k] = rank
+		}
+		if e := rows.Err(); e != nil {
+			rows.Close()
+			return e
+		}
+		rows.Close()
+		if order, e = movedOrder(present, ranks, key, to); e != nil {
+			return e
+		}
+		if _, e := q.ExecContext(ctx, `DELETE FROM workstream_ranks`); e != nil {
+			return fmt.Errorf("store: clear workstream ranks: %w", e)
+		}
+		for i, k := range order {
+			if _, e := q.ExecContext(ctx, `INSERT INTO workstream_ranks(project_id, bead_id, rank) VALUES (?, ?, ?)`, k.ProjectID, k.BeadID, i+1); e != nil {
+				return fmt.Errorf("store: rank %s: %w", k.BeadID, e)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
 	return order, nil
 }
 

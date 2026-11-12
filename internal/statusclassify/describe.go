@@ -44,6 +44,7 @@ type Describer struct {
 	written int                  // descriptions written since the last summary
 	failed  int                  // failed attempts since the last summary
 	pending map[string]describeJob
+	running map[string]bool // rows being written now
 	wake    chan struct{}
 }
 
@@ -139,13 +140,17 @@ func (d *Describer) Describe(key, actor, reason, opener, facts string) (text, si
 		default:
 		}
 	}
-	if have && got.state == state {
+	if have && strings.SplitN(got.state, "|", 2)[0] == actor {
+		// Same color: the old line stays until the new one replaces it.
 		return got.text, got.signal, true
 	}
 	return "", "", false
 }
 
 // Run writes pending descriptions one at a time until ctx ends.
+// describeWorkers is how many lines are written at once.
+const describeWorkers = 4
+
 func (d *Describer) Run(ctx context.Context) {
 	d.mu.Lock()
 	d.init()
@@ -158,15 +163,27 @@ func (d *Describer) Run(ctx context.Context) {
 	summary := time.NewTicker(10 * time.Minute)
 	defer summary.Stop()
 	for ctx.Err() == nil {
+		// Several at once: after a burst of changes the last row should not
+		// wait a minute behind the others.
+		var wg sync.WaitGroup
+		slots := make(chan struct{}, describeWorkers)
 		for {
+			slots <- struct{}{}
 			job, ok := d.next()
 			if !ok {
+				<-slots
 				break
 			}
-			if d.write(ctx, job) && d.OnReady != nil {
-				d.OnReady()
-			}
+			wg.Add(1)
+			go func(job describeJob) {
+				defer wg.Done()
+				defer func() { <-slots }()
+				if d.write(ctx, job) && d.OnReady != nil {
+					d.OnReady()
+				}
+			}(job)
 		}
+		wg.Wait()
 		select {
 		case <-ctx.Done():
 			return
@@ -190,6 +207,9 @@ func (d *Describer) next() (describeJob, bool) {
 	var pick describeJob
 	found := false
 	for key, job := range d.pending {
+		if d.running[key] {
+			continue
+		}
 		if got, ok := d.done[key]; ok && got.state == job.actor+"|"+job.reason+"|"+job.opener && now.Sub(got.at) < sameStateRefresh {
 			continue
 		}
@@ -202,11 +222,17 @@ func (d *Describer) next() (describeJob, bool) {
 	}
 	if found {
 		delete(d.pending, pick.key)
+		d.running[pick.key] = true
 	}
 	return pick, found
 }
 
 func (d *Describer) write(ctx context.Context, job describeJob) bool {
+	defer func() {
+		d.mu.Lock()
+		delete(d.running, job.key)
+		d.mu.Unlock()
+	}()
 	var answer struct {
 		Description string `json:"description"`
 		Signal      string `json:"signal"`
@@ -323,7 +349,7 @@ func promptFor(actor string) string {
 	case "agent":
 		return describeBase + " Worker agents are on it: say what they are doing right now from their activity, like 'Agent resolving the Navigator conflict', '2 agents running QA Hub parity tests'."
 	case "commander":
-		return describeBase + " Commander, the planning agent, has the next move: say what it is doing or must do, starting with 'Commander', like 'Commander reviewing the SIGINT fix', 'Commander writing your deploy question'. It is not the reader's move yet: never write that the reader is needed."
+		return describeBase + " Commander, the planning agent, has the next move: say what it is doing or must do, starting with 'Commander', like 'Commander reviewing the SIGINT fix', 'Commander writing your deploy question'. It is not the reader's move yet: never write that the reader is needed. It is not stuck either (that is a different color): never call it stuck or blocked; say what Commander is doing about it."
 	case "external":
 		return describeBase + " It waits on someone outside (CI, a reviewer, a date): say who or what, and for what, like 'CI #3592 running unit tests', 'Waiting on Kara's review'."
 	}
@@ -374,7 +400,7 @@ func (w *Worker) monthlyTokens() int64 {
 // init makes the maps and wake channel; callers hold d.mu.
 func (d *Describer) init() {
 	if d.done == nil {
-		d.done, d.tried, d.pending = map[string]described{}, map[string]time.Time{}, map[string]describeJob{}
+		d.done, d.tried, d.pending, d.running = map[string]described{}, map[string]time.Time{}, map[string]describeJob{}, map[string]bool{}
 		d.load()
 	}
 	if d.wake == nil {

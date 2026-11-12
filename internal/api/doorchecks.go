@@ -81,15 +81,47 @@ func checkOp(ctx context.Context, bc beads.Client, dir string, args []string) er
 	switch args[0] {
 	case "create":
 		return checkCreate(args)
+	case "close":
+		for _, id := range args[1:] {
+			if strings.HasPrefix(id, "-") {
+				break
+			}
+			if err := refuseWorkstreamClose(ctx, bc, dir, id); err != nil {
+				return err
+			}
+		}
+		return nil
 	case "update":
 		if len(args) < 2 {
 			return nil
+		}
+		if slices.Contains(flagVals(args, "--status"), "closed") {
+			if err := refuseWorkstreamClose(ctx, bc, dir, args[1]); err != nil {
+				return err
+			}
 		}
 		return checkUpdate(ctx, bc, dir, args[1], args[2:], flagVals(args, "--add-label"), flagVals(args, "--remove-label"))
 	case "label":
 		if len(args) >= 4 && args[1] == "add" {
 			return checkUpdate(ctx, bc, dir, args[2], nil, args[3:], nil)
 		}
+	}
+	return nil
+}
+
+// refuseWorkstreamClose: only the user marks a workstream done. An agent that
+// thinks one is finished asks them on a card instead.
+func refuseWorkstreamClose(ctx context.Context, bc beads.Client, dir, id string) error {
+	b, err := bc.Show(ctx, dir, id)
+	if err != nil || b == nil {
+		if err == nil {
+			err = errors.New("bead not found")
+		}
+		logDoorFailOpen(dir, id, "read bead", err)
+		return nil
+	}
+	if beads.IsWorkstream(b.Labels) {
+		return fmt.Errorf("%s is a workstream and only the user marks a workstream done: put a card on it asking them to confirm it is done, and leave it open", id)
 	}
 	return nil
 }

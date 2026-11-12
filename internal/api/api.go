@@ -53,6 +53,7 @@ type Options struct {
 	Run              Runner                                      // runs allow-listed cmdr argv
 	Interval         time.Duration                               // poll interval; 0 = DefaultInterval
 	LiveData         func() (livedata.Data, bool)                // latest loaded Data for /api/livedata; nil = 503
+	FinishBoard      func(*livedata.Snapshot, *livedata.Display) // a full build's finishing pass, for boards rebuilt after a write
 	// MailToRole delivers a message the user typed in the app to a role that has no native
 	// process yet (still a terminal chat): through the mail path, as the user. nil = none.
 	MailToRole func(ctx context.Context, role, text string) error
@@ -201,7 +202,7 @@ func (s *Server) refreshLocked(ctx context.Context) bool {
 	if s.opts.StateStore != nil && snap.Degraded != nil {
 		s.pending = map[string]pendingPatch{}
 	}
-	snap = livedata.Patched(snap, s.pendingPatches(), time.Now().Unix())
+	snap = livedata.Patched(snap, s.pendingPatches(), time.Now().Unix(), s.opts.FinishBoard)
 	snap.LoadCompletedAt, snap.LoadError = s.cur.LoadCompletedAt, s.cur.LoadError
 	h := contentHash(snap)
 	if s.version > 0 && h == s.hash {
@@ -290,7 +291,7 @@ func (s *Server) patchNow(after map[string]livedata.StepPatch) {
 	if s.version == 0 {
 		return // nothing published yet: the first load shows it
 	}
-	snap := livedata.Patched(s.cur, s.pendingPatches(), now.Unix())
+	snap := livedata.Patched(s.cur, s.pendingPatches(), now.Unix(), s.opts.FinishBoard)
 	h := contentHash(snap)
 	if h == s.hash {
 		return
