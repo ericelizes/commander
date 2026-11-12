@@ -254,6 +254,11 @@ func checkUpdate(ctx context.Context, bc beads.Client, dir, id string, args, add
 	if err := checkWaitLabels(added, kept); err != nil {
 		return err
 	}
+	if slices.Contains(added, beads.NeedsUserLabel) {
+		if labels, ok := read(); ok && beads.IsClosingGate(labels) {
+			return fmt.Errorf("%s is a Confirm done step: it never gets a card; the sidebar shows Complete on it once everything else is finished", id)
+		}
+	}
 	status := flagVals(args, "--status")
 	if len(status) > 0 && status[len(status)-1] == "in_progress" {
 		owner := ""
