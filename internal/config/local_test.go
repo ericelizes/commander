@@ -61,3 +61,17 @@ func TestLinearTeamOptional(t *testing.T) {
 		}
 	}
 }
+
+func TestLinearTeamsList(t *testing.T) {
+	for _, key := range []string{"team", "teams"} {
+		dir := t.TempDir()
+		os.WriteFile(filepath.Join(dir, "local.toml"), []byte("[integrations.linear]\n"+key+"=[' for ', 'ENGCHA', 'FOR', 'ENGINT']"), 0600)
+		got, err := LoadLocal(filepath.Join(dir, "config.toml"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Join(got.Integrations.Linear.Teams, ",") != "FOR,ENGCHA,ENGINT" {
+			t.Fatalf("%+v", got)
+		}
+	}
+}

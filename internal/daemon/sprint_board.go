@@ -72,7 +72,8 @@ func ticketCarriers(d livedata.Display, workstreams []livedata.SnapWorkstream) m
 // line per open ticket that no workstream or track carries, so Commander
 // sees what to map (the sidebar matches tickets by the id in a title or a ticket: label).
 func sprintEntries(d livedata.Display, workstreams []livedata.SnapWorkstream, r linearsync.Response) []boardturn.Entry {
-	if r.State != "ok" || r.Cycle == nil || len(r.Issues) == 0 {
+	r.Issues = r.FreshIssues()
+	if len(r.Issues) == 0 {
 		return nil
 	}
 	carriers := ticketCarriers(d, workstreams)
@@ -86,11 +87,20 @@ func sprintEntries(d livedata.Display, workstreams []livedata.SnapWorkstream, r 
 			open = append(open, i)
 		}
 	}
-	end := ""
-	if t, err := time.Parse(time.RFC3339, r.Cycle.End); err == nil {
-		end = ", ends " + t.Format("Jan 2")
+	name, end := "Sprint", ""
+	if r.Cycle != nil {
+		name = r.Cycle.Name
+		if t, err := time.Parse(time.RFC3339, r.Cycle.End); err == nil {
+			end = ", ends " + t.Format("Jan 2")
+		}
+	} else {
+		for _, t := range r.Teams {
+			if t.State == "ok" && t.Cycle != nil {
+				name += fmt.Sprintf(" · %s: %s (%s to %s)", t.Team, t.Cycle.Name, t.Cycle.Start, t.Cycle.End)
+			}
+		}
 	}
-	summary := fmt.Sprintf("%s%s: %d of %d tickets started or done, %d open on no workstream", r.Cycle.Name, end, started, len(r.Issues), len(open))
+	summary := fmt.Sprintf("%s%s: %d of %d tickets started or done, %d open on no workstream", name, end, started, len(r.Issues), len(open))
 	out := []boardturn.Entry{{ID: "sprint", Label: "Linear sprint", Kind: "sprint", Text: summary, Key: summary}}
 	for _, i := range open {
 		text := fmt.Sprintf("%s %s (%s): on no workstream. If a workstream covers it, add %s to that title or give it the label ticket:%s; if none does, ask the user whether it needs one.", i.ID, i.Title, i.StatusName, i.ID, i.ID)

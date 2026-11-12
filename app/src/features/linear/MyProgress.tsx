@@ -5,7 +5,7 @@ import { SettingsModal } from '../../renderer/src/components/SettingsModal'
 import { openInPanel } from '../inspector/connections'
 import { fmtAge, openNested, wsKey } from '../../renderer/src/viewmodel'
 import type { SnapStep, SnapWorkstream } from '../../shared/snapshot'
-import { useSprint, progressRows, cycleLastDay, cycleDaysLeft, daysLeftText, type Cycle, type LinearIssue, type ProgressRow, type ProgressWorkstream, type Sprint } from './sprint'
+import { useSprint, progressRows, cycleLastDay, cycleDaysLeft, daysLeftText, type Cycle, type LinearIssue, type ProgressRow, type ProgressWorkstream, type Sprint, type TeamSprint } from './sprint'
 import { useIntegrations } from './settings'
 import { splitTickets, ticketIds } from './Ticket'
 
@@ -81,7 +81,7 @@ export function StatusRing({ issue, size = 14 }: { issue: Pick<LinearIssue, 'sta
 }
 
 /** sprintStats is everything the card and the popup say, from the cycle and the workstreams that name its tickets. */
-export function sprintStats(issues: LinearIssue[], workstreams: ProgressWorkstream[], cycle: { start?: string; end?: string } | null | undefined, now: number, timeZone?: string) {
+export function sprintStats(issues: LinearIssue[], workstreams: ProgressWorkstream[], cycle: { start?: string; end?: string } | null | undefined, now: number, timeZone?: string, teams?: TeamSprint[]) {
   const rows = progressRows(issues, workstreams, ticketIds)
   const on = (r: ProgressRow) => r.worked
   const live = rows.filter((r) => !isCanceled(r.issue))
@@ -103,7 +103,11 @@ export function sprintStats(issues: LinearIssue[], workstreams: ProgressWorkstre
     idle: open.filter((r) => r.workstream && !on(r)),
     unassigned: open.filter((r) => !r.workstream),
     // Joined after the first day: planning happens on day one, later adds are ad hoc.
-    added: Number.isFinite(start) ? rows.filter((r) => r.issue.added_at && Date.parse(r.issue.added_at) > start + DAY) : [],
+    added: rows.filter((r) => {
+      const boundary = teams?.find((t) => t.team === r.issue.team)?.cycle?.start
+      const began = boundary ? Date.parse(boundary) : start
+      return Number.isFinite(began) && r.issue.added_at && Date.parse(r.issue.added_at) > began + DAY
+    }),
     doneShare,
     timeGone,
     daysLeft: cycleDaysLeft(cycle?.end, timeZone, now),
@@ -123,14 +127,14 @@ function useSprintStats(workstreams: ProgressWorkstream[]) {
     return () => clearInterval(timer)
   }, [])
   const now = minute * 60_000
-  const s = useMemo(() => sprintStats(data?.issues ?? [], workstreams, data?.cycle, now, zone), [data, workstreams, now, zone])
+  const s = useMemo(() => sprintStats(data?.issues ?? [], workstreams, data?.cycle, now, zone, data?.teams), [data, workstreams, now, zone])
   return { data, s }
 }
 
 /** hasSprint: there are numbers to show, as opposed to a key to connect or no cycle. */
 function hasSprint(data: Sprint) {
   if (data.state === 'off' || data.state === 'no_key' || data.state === 'bad_key') return false
-  return !!data.cycle || (data.state === 'unreachable' && data.issues.length > 0)
+  return !!data.teams?.some((t) => t.cycle) || !!data.cycle || (data.state === 'unreachable' && data.issues.length > 0)
 }
 
 /** The sidebar's heading, with the rail's Progress icon so the two read as one thing. */
@@ -184,11 +188,12 @@ export function MyProgress({ workstreams, onOpen }: { workstreams: ProgressWorks
   }
   const unreachable = data.state === 'unreachable'
   // Nothing to count: between cycles, or the first read failed. Zeros would look like an empty sprint.
-  if (!data.cycle && (!unreachable || data.issues.length === 0)) {
+  if (!data.cycle && !data.teams?.some((t) => t.cycle) && (!unreachable || data.issues.length === 0)) {
     return (
       <section className="my-progress" aria-label="Progress">
         <ProgressHead />
         <p className="my-progress-note">{unreachable ? unreachableNote(data, Date.now()) : 'No active cycle'}</p>
+        <TeamCycles data={data} />
       </section>
     )
   }
@@ -202,6 +207,7 @@ export function MyProgress({ workstreams, onOpen }: { workstreams: ProgressWorks
           <Stat type="started" n={s.started.length} label="in progress" />
           <Stat type="completed" n={s.done.length} label="done" />
         </span>
+        {data.teams && <TeamCycles data={data} />}
         {unreachable && <span className="my-progress-note">{unreachableNote(data, Date.now())}</span>}
       </button>
       {keyModal}
@@ -240,10 +246,18 @@ export function ProgressPage({ workstreams, onOpen }: { workstreams: ProgressWor
       </div>
     )
   }
-  return <SprintBreakdown cycle={data.cycle} s={s} onOpen={onOpen} />
+  return <SprintBreakdown data={data} cycle={data.cycle} s={s} onOpen={onOpen} />
 }
 
-function SprintBreakdown({ cycle, s, onOpen }: { cycle?: Cycle | null; s: ReturnType<typeof sprintStats>; onOpen: (key: string) => void }) {
+function TeamCycles({ data }: { data: Sprint }) {
+  const zone = useIntegrations((x) => x.timezone)
+  return <span className="sp-team-cycles">{data.teams?.map((t) => <span key={t.team} style={{ display: 'block' }}>
+    {t.team}: {t.cycle ? `${t.cycle.name} · ${cycleLastDay(t.cycle.start, zone, false)} to ${cycleLastDay(t.cycle.end, zone)}` : t.state === 'ok' ? 'No active cycle' : ''}
+    {t.state !== 'ok' && ` · ${t.state === 'bad_key' ? 'Linear rejected key' : t.state === 'no_key' ? 'No key' : 'Linear unreachable'}${t.fetched_at ? `, last read ${fmtAge((Date.now() - Date.parse(t.fetched_at)) / 1000)} ago` : ''}`}
+  </span>)}</span>
+}
+
+function SprintBreakdown({ data, cycle, s, onOpen }: { data: Sprint; cycle?: Cycle | null; s: ReturnType<typeof sprintStats>; onOpen: (key: string) => void }) {
   const zone = useIntegrations((x) => x.timezone)
   const name = cycle?.name ?? 'Sprint'
   const pct = (x: number) => `${Math.round(x * 100)}%`
@@ -283,6 +297,7 @@ function SprintBreakdown({ cycle, s, onOpen }: { cycle?: Cycle | null; s: Return
     <div className="progress-page">
       <section className="progress-col" aria-label={name}>
         <h1 className="progress-title">{name}</h1>
+        <TeamCycles data={data} />
         <p className="sp-dates">
           {Number.isFinite(s.start) && Number.isFinite(s.end) && `${cycleLastDay(cycle?.start, zone, false)} to ${cycleLastDay(cycle?.end, zone)}`}
           {s.daysLeft !== null && ` · ${daysLeftText(s.daysLeft)}`}

@@ -3,6 +3,7 @@ package daemon
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/example-user/commander/internal/linearsync"
 	"github.com/example-user/commander/internal/livedata"
@@ -41,5 +42,24 @@ func TestSprintEntriesCountsLabelsAsMapped(t *testing.T) {
 	}}
 	if es := sprintEntries(d, raw, r); len(es) != 1 {
 		t.Fatalf("labelled tickets read as unmapped: %+v", es)
+	}
+}
+
+func TestMultiTeamChecksUseEveryFreshTeam(t *testing.T) {
+	r := linearsync.Response{State: "partial", Teams: []linearsync.TeamResponse{}}
+	for _, team := range []string{"FOR", "ENGCHA", "ENGINT"} {
+		state := "ok"
+		if team == "FOR" {
+			state = "unreachable"
+		}
+		r.Teams = append(r.Teams, linearsync.TeamResponse{Team: team, Response: linearsync.Response{State: state, Cycle: &linearsync.Cycle{Name: team + " cycle"}, Issues: []linearsync.Issue{{ID: team + "-1", Team: team, StatusName: "In Progress", StatusType: "started"}}}})
+	}
+	entries := sprintEntries(livedata.Display{}, nil, r)
+	if len(entries) != 3 || entries[1].ID != "sprint:ENGCHA-1" || entries[2].ID != "sprint:ENGINT-1" {
+		t.Fatalf("%+v", entries)
+	}
+	wrong := wrongOnScreen(livedata.Display{}, nil, r, t.TempDir(), time.Now())
+	if len(wrong) != 2 || wrong[0].Key != "linear:ENGCHA-1" || wrong[1].Key != "linear:ENGINT-1" {
+		t.Fatalf("%+v", wrong)
 	}
 }
