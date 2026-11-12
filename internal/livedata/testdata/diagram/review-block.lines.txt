@@ -6,7 +6,7 @@ Checkout rewrite (w)
         Answer and resolve every Devin comment: Done · found: devin-comments-resolved passed @head1 (w.9.1)
         Run the code review: Done · found: review-clean passed @head1 (w.9.2)
         Fix the review findings and get a clean recheck: Done · found: recheck-clean passed @head1 (w.9.3)
-        Adversarial review by a different reviewer: Operator working · check: review-clean (w.9.4)
+        Adversarial review by a different reviewer: Agent working · check: review-clean (w.9.4)
         Fix the adversarial findings and get a clean recheck: Not started · check: recheck-clean (w.9.5)
         Final check on the current PR head: Not started · check: head-current (w.9.6)
   [You] [gate, you] PR merged: Not reached (w.2) after w.1, w.9

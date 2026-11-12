@@ -215,7 +215,7 @@ func (f flow) leafBaseLine(s SnapStep) line {
 		if s.PlaceText != "" {
 			return line{kind: "working", text: s.PlaceText}
 		}
-		return line{kind: "working", text: "Operator working"}
+		return line{kind: "working", text: "Agent working"}
 	}
 	if f.ws.NowStep == s.BeadID && agentBusy(f.manager, f.hasManager) {
 		return line{kind: "working", text: "Manager working", since: f.manager.Since}

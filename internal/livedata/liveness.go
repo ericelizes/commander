@@ -178,7 +178,7 @@ func NewSnapLive(alive []string, at int64, running []OperatorRow) *SnapLive {
 
 // The why of a claim the liveness fact corrected, and of a settled death.
 const (
-	whyNotRunning = "Operator is no longer running and has not reported"
+	whyNotRunning = "Agent is no longer running and has not reported"
 	whyWaitedGone = "The Operator it waited on is no longer running"
 )
 
@@ -252,9 +252,9 @@ func LiveRuns(ops []OperatorRow, live LiveOperators) []OperatorRow {
 // diedWhy is a settled death's why: what the settler recorded and how often
 // cmdrd restarted the Operator before it gave the step back.
 func diedWhy(reason string, restarts int) string {
-	why := "Operator stopped without a report"
+	why := "Agent stopped without a report"
 	if strings.Contains(reason, "slept") {
-		why = "Operator stopped while the machine slept"
+		why = "Agent stopped while the machine slept"
 	}
 	switch {
 	case restarts == 1:

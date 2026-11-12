@@ -7645,3 +7645,30 @@ button.xf-step.xf-open:hover {
   border-radius: 6px;
   font-size: 12px;
 }
+
+/* Tabs read as plain tabs on the page's own background: a rule under the row,
+   the open tab underlined, lined up with the workstream title above. */
+.app .insp-strip {
+  background: transparent;
+  border-bottom: 1px solid var(--line, color-mix(in srgb, var(--text) 10%, transparent));
+  padding: 0 40px;
+  gap: 22px;
+}
+.app .insp-tabs { gap: 22px; align-self: stretch; align-items: stretch; }
+.app .insp-tab,
+.app .insp-tab:hover,
+.app .insp-tab-active,
+.app .insp-tab-active:hover {
+  height: auto;
+  padding: 0 1px;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.app .insp-tab { color: var(--text-2); font-size: 13px; }
+.app .insp-tab:hover { color: var(--text); }
+.app .insp-tab-active,
+.app .insp-tab-active:hover {
+  color: var(--text);
+  box-shadow: inset 0 -2px 0 var(--text);
+}

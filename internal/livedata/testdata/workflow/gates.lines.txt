@@ -7,7 +7,7 @@
 +   Measure slow-page impact: Not started (lab-t06.2.4)
   Experiment 7: slow restarts: Working on restore the test VM (lab-t06.3)
     Slow restarts: baseline: Done (lab-t06.3.1)
-    Restore the test VM: Operator working (lab-t06.3.2)
+    Restore the test VM: Agent working (lab-t06.3.2)
 +   Measure real-app startup impact: Not started (lab-t06.3.3)
     Wait for CI on the fixture fix: Waiting for CI (lab-t06.3.4)
   Design work approved: Done (lab-t06.4)
@@ -21,7 +21,7 @@
 + = approving it starts these 4, through the next gate
 
 #2 Lab ops
-▶ Rotate the lab keys: Operator working (lab-ops.1)
+▶ Rotate the lab keys: Agent working (lab-ops.1)
   Land the cleanup PR: Waiting for review (lab-ops.2)
   Announce the new keys: Not started (lab-ops.3)
   Old runner cleanup: Agent stopped: the Manager's move (lab-ops.4)

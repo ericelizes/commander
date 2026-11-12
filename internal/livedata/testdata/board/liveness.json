@@ -41,7 +41,7 @@
         "manager_role": "manager-app-w2", "done": 0, "total": 1,
         "steps": [
           {"bead_id": "app-w2.1", "title": "Find why the login test fails on CI", "state": "not-started", "status": "open",
-            "owner_state": "died", "owner_why": "Operator stopped without a report; restarted once, stopped again", "owner_since": 1793213800, "restarts": 1, "broken": true, "viz": 3}
+            "owner_state": "died", "owner_why": "Agent stopped without a report; restarted once, stopped again", "owner_since": 1793213800, "restarts": 1, "broken": true, "viz": 3}
         ]
       },
       {

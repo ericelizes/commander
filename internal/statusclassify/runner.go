@@ -12,8 +12,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
+	"syscall"
 
 	"github.com/example-user/commander/internal/chat"
 	"github.com/example-user/commander/internal/claudeacct"
@@ -91,6 +93,11 @@ func (r CLIRunner) Ask(ctx context.Context, a chat.AccountView, instruction stri
 		for _, feature := range []string{"shell_tool", "multi_agent", "image_generation", "view_image", "hooks"} {
 			args = append(args, "--disable", feature)
 		}
+		// A one-line answer needs no tools: the workstation's managed MCP servers
+		// (browser tools) would otherwise start with every call.
+		for _, name := range managedMCPServers() {
+			args = append(args, "-c", "mcp_servers."+name+".enabled=false")
+		}
 		args = append(args, "-")
 	} else if a.Runtime == chat.RuntimeClaude {
 		command = r.ClaudeBinary
@@ -109,7 +116,12 @@ func (r CLIRunner) Ask(ctx context.Context, a chat.AccountView, instruction stri
 	cmd.Stderr = &stderr
 	var stdout cappedBuffer
 	cmd.Stdout = &stdout
-	if e = cmd.Run(); e != nil {
+	if e = cmd.Start(); e == nil {
+		// Background work: never ahead of cmdrd, the database or the user's chats.
+		_ = syscall.Setpriority(syscall.PRIO_PROCESS, cmd.Process.Pid, 10)
+		e = cmd.Wait()
+	}
+	if e != nil {
 		return usage, fmt.Errorf("%s classifier request failed: %w", a.Runtime, e)
 	}
 	if a.Runtime == chat.RuntimeCodex {
@@ -213,4 +225,23 @@ func subscriptionEnv(home string, a chat.AccountView) []string {
 		out = append(out, claudeacct.Env(home, a.Name)...)
 	}
 	return out
+}
+
+// managedCodexConfig is the workstation's managed Codex config, which can
+// declare MCP servers every codex run starts.
+var managedCodexConfig = "/etc/codex/managed_config.toml"
+
+var mcpServerHeader = regexp.MustCompile(`(?m)^\[mcp_servers\.([A-Za-z0-9_-]+)\]`)
+
+// managedMCPServers are the MCP servers the managed config declares.
+func managedMCPServers() []string {
+	raw, err := os.ReadFile(managedCodexConfig)
+	if err != nil {
+		return nil
+	}
+	var names []string
+	for _, m := range mcpServerHeader.FindAllStringSubmatch(string(raw), -1) {
+		names = append(names, m[1])
+	}
+	return names
 }

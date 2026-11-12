@@ -263,6 +263,7 @@ export interface SnapStep {
   review?: string
   pr?: string[] // PR numbers of its pr: labels
   tickets?: string[] // Linear ids of its ticket:<ID> labels
+  phase?: 'scoping' | 'building' | 'rollout' // its phase label
   // What GitHub says now about the reviews it waits on, looked up live by cmdrd.
   review_fact?: { acted?: boolean; no_pr?: boolean; text: string }
   ask?: string
@@ -337,6 +338,7 @@ export interface SnapWorkstream {
   bead_id: string
   title: string
   tickets?: string[] // Linear ids of its ticket:<ID> labels
+  phase?: 'scoping' | 'building' | 'rollout' // its phase label
   state: StepState
   working?: boolean // an agent under it is working now (derived; the app fills it when cmdrd is older)
   status: string

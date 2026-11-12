@@ -122,7 +122,7 @@ func TestReviewBlock_OpenBlockIsOneStepWithItsChecks(t *testing.T) {
 	if c.Step != "devin-comments" || c.Kind != "done" || c.Verifier != "devin-comments-resolved" || c.Head != "head1" || !strings.Contains(c.Finding, "passed") {
 		t.Fatalf("first check: %+v", c)
 	}
-	if c := rb.Checks[3]; c.Kind != "working" || c.Text != "Operator working" || c.Finding != "" {
+	if c := rb.Checks[3]; c.Kind != "working" || c.Text != "Agent working" || c.Finding != "" {
 		t.Fatalf("worked check: %+v", c)
 	}
 	if c := rb.Checks[5]; c.Kind != "idle" || c.Text != "Not started" {

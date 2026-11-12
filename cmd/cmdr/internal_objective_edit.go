@@ -71,6 +71,7 @@ func runInternalSetObjective(args []string, stdout, stderr *os.File) int {
 	noNotify := fs.Bool("no-notify", false, "don't mail Commander when moving a step to needs-user")
 	owner := fs.String("owner", "", "who owns the step (e.g. operator-x, user); \"none\" clears")
 	until := fs.String("until", "", "make the step an owned job its owner keeps at until this finish line (merged, approved, live, adopted); \"none\" clears")
+	phaseArg := fs.String("phase", "", "the workstream's phase: scoping (pitch and acceptance criteria still being defined), building or rollout; \"none\" clears")
 	runtimeArg := fs.String("runtime", "", "the runtime this step's agents launch on first: claude or codex (the other is the fallback); on a nested workstream, all its steps; \"none\" clears")
 	viz := fs.String("viz", "", "the bead's level in the app's Graph: 1 (gates), 2 (stages) or 3 (everything); \"none\" restores the default (gate 1, stage 2, task 3)")
 	lane := fs.String("lane", "", "whose move the step is in the diagram, only where owner, waits, gates and needs-user cannot say it: you, agents, elsewhere or elsewhere:<who in plain words>; \"none\" clears")
@@ -95,9 +96,8 @@ func runInternalSetObjective(args []string, stdout, stderr *os.File) int {
 		emitErr(stderr, fmt.Sprintf("parse flags: %v", err))
 		return 1
 	}
-	if *projectName == "" || *beadID == "" || (*star == "" && *status == "" && *state == "" && *owner == "" && *review == "" && *until == "" && *viz == "" && *lane == "" && *maxOps == "" && *runOn == "" && *runtimeArg == "" && *decisionArg == "" && len(waiting) == 0 && !*track && !*noTrack && *holdArg == "" && !*noHold && !*park && !*unpark && *cardCheckArg == "" && !*pushReset) {
-		emitErr(stderr, "missing required flag(s): --project, --bead, and one of --star, --status, --state, --owner, --review, --until, --viz, --lane, --max-operators, --run-on, --runtime, --decision, --waiting, --workstream, --no-workstream, --hold, --no-hold, --park, --unpark, --card-check, --push-reset")
-
+	if *projectName == "" || *beadID == "" || (*star == "" && *status == "" && *state == "" && *owner == "" && *review == "" && *until == "" && *viz == "" && *lane == "" && *maxOps == "" && *runOn == "" && *runtimeArg == "" && *phaseArg == "" && *decisionArg == "" && len(waiting) == 0 && !*track && !*noTrack && *holdArg == "" && !*noHold && !*park && !*unpark && *cardCheckArg == "" && !*pushReset) {
+		emitErr(stderr, "missing required flag(s): --project, --bead, and one of --star, --status, --state, --owner, --review, --until, --viz, --lane, --max-operators, --run-on, --runtime, --phase, --decision, --waiting, --workstream, --no-workstream, --hold, --no-hold, --park, --unpark, --card-check, --push-reset")
 		return 1
 	}
 	if *pushReset {
@@ -141,6 +141,10 @@ func runInternalSetObjective(args []string, stdout, stderr *os.File) int {
 	laneValue, err := laneFlagValue(*lane)
 	if err != nil {
 		emitErr(stderr, err.Error())
+		return 1
+	}
+	if *phaseArg != "" && *phaseArg != "scoping" && *phaseArg != "building" && *phaseArg != "rollout" && *phaseArg != "none" {
+		emitErr(stderr, "--phase must be scoping, building, rollout or none")
 		return 1
 	}
 	if *runtimeArg != "" && *runtimeArg != "claude" && *runtimeArg != "codex" && *runtimeArg != "none" {
@@ -416,6 +420,11 @@ func runInternalSetObjective(args []string, stdout, stderr *os.File) int {
 		}
 		if *holdArg != "" || *noHold {
 			if err := applyHold(ctx, bc, dir, *beadID, *holdArg, *noHold); err != nil {
+				return result, err
+			}
+		}
+		if *phaseArg != "" {
+			if err := applySoleLabel(ctx, bc, dir, *beadID, "phase:", *phaseArg); err != nil {
 				return result, err
 			}
 		}

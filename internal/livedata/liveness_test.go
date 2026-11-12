@@ -124,10 +124,10 @@ func TestMarkDiedFromTheSettleEvent(t *testing.T) {
 			Reason: sql.NullString{String: reason, Valid: true}, OccurredAt: at}
 	}
 	got := markDied(rows, []store.CostEvent{ev("a", 10, "x"), ev("a", 20, "y"), ev("b", 30, "session gone after the Mac slept")})
-	if got[0].OwnerSince != 20 || got[0].OwnerWhy != "Operator stopped without a report; restarted once, stopped again" {
+	if got[0].OwnerSince != 20 || got[0].OwnerWhy != "Agent stopped without a report; restarted once, stopped again" {
 		t.Fatalf("a: %+v", got[0])
 	}
-	if got[1].OwnerSince != 30 || got[1].OwnerWhy != "Operator stopped while the machine slept" {
+	if got[1].OwnerSince != 30 || got[1].OwnerWhy != "Agent stopped while the machine slept" {
 		t.Fatalf("b: %+v", got[1])
 	}
 }

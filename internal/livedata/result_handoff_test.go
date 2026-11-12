@@ -28,7 +28,7 @@ func TestResultHandoffDoesNotOutrankResumedOperator(t *testing.T) {
 	live := opTask("in_progress", "working")
 	live.BeadID = "new"
 	_, d := taskBoard(t, SnapStep{Status: "in_progress", State: "in-progress", Owner: "manager-lab-x", Children: []SnapStep{receipt, live}})
-	if d.Actor != ActorOperators || d.Text != "Operator working" {
+	if d.Actor != ActorOperators || d.Text != "Agent working" {
 		t.Fatalf("old result masks resumed work: %+v", d)
 	}
 }

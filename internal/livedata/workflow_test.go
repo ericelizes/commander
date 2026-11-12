@@ -96,7 +96,7 @@ func TestWorkflow_GateUnlocksThroughNextGate(t *testing.T) {
 func TestWorkflow_StepWords(t *testing.T) {
 	w := fixtureWorkflow(t, "gates", "lab:lab-ops")
 	for id, want := range map[string]string{
-		"lab-ops.1": "working|Operator working",
+		"lab-ops.1": "working|Agent working",
 		"lab-ops.2": "waiting|Waiting for review",
 		"lab-ops.3": "idle|Not started",
 		"lab-ops.4": "stalled|Agent stopped: the Manager's move",

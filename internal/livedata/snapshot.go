@@ -153,6 +153,7 @@ type SnapProject struct {
 // SnapWorkstream is one workstream with its step tree.
 type SnapWorkstream struct {
 	Withdrawn            bool            `json:"withdrawn,omitempty"`   // a cancelled request
+	Phase                string          `json:"phase,omitempty"`       // scoping, building or rollout
 	ProgressAt           int64           `json:"progress_at,omitempty"` // last recorded progress (unix s)
 	TypedWaits           []beads.Wait    `json:"-"`                     // the root's recorded waits
 	PlanningPending      bool            `json:"planning_pending,omitempty"`
@@ -267,7 +268,7 @@ type SnapStep struct {
 	Owner                string                  `json:"owner,omitempty"`
 	OwnerState           string                  `json:"owner_state,omitempty"` // its Operator: working | finished (exited, reported) | died (exited, step still open)
 	OwnerWhy             string                  `json:"owner_why,omitempty"`   // why, when cmdrd corrected the claim against what runs or settled a death
-	OwnerSince           int64                   `json:"owner_since,omitempty"` // unix s its Operator stopped, when known
+	OwnerSince           int64                   `json:"owner_since,omitempty"` // unix s its Agent stopped, when known
 	Restarts             int                     `json:"restarts,omitempty"`    // automatic restarts cmdrd made of its Operator
 	Starred              bool                    `json:"starred,omitempty"`
 	Review               string                  `json:"review,omitempty"` // PR number while in review ("?" = unknown)
@@ -288,6 +289,7 @@ type SnapStep struct {
 	Until       string           `json:"until,omitempty"`            // owned job: its finish line; its children are the owner's pipeline
 	Gate        bool             `json:"gate,omitempty"`             // a human approval gate: approved when closed
 	ClosingGate bool             `json:"closing_gate,omitempty"`     // its workstream's "Confirm done" step
+	Phase       string           `json:"phase,omitempty"`            // a nested workstream's phase: scoping, building or rollout
 	Approvers   []string         `json:"approvers,omitempty"`        // who approves the gate
 	Waiting     string           `json:"waiting,omitempty"`          // what its owner waits on: "CI #4101", "review (reviewer-a, reviewer-b)", "you"
 	WaitSince   int64            `json:"waiting_since,omitempty"`    // unix s its oldest wait was recorded
@@ -501,7 +503,7 @@ func snapWorkstream(n int, ws Workstream, live LiveAgent) SnapWorkstream {
 		PlanningPending: r.PlanningPending, PlanningCommander: r.PlanningCommander, JurisdictionRevision: r.JurisdictionRevision,
 		BlockedBy: slices.Clone(r.BlockedBy), N: n, Project: ws.Project.Name, Repo: GitHubRepo(ws.Project.Path), ProjectID: ws.Project.ID, BeadID: r.BeadID, Title: r.Title, Tickets: r.Tickets,
 		State: state, Working: working, Status: r.Status, Owner: r.Owner, Starred: r.Starred, Hold: r.Hold, HoldReason: r.HoldReason, Review: r.Review,
-		Withdrawn: r.Withdrawn, ProgressAt: r.ProgressAt, TypedWaits: r.Waits,
+		Withdrawn: r.Withdrawn, ProgressAt: r.ProgressAt, TypedWaits: r.Waits, Phase: r.Phase,
 		Ask: r.Ask, Note: r.Note, Decision: r.Decision,
 		ManagerRole: store.WorkstreamManagerRole(r.BeadID), NowStep: now,
 		Total: len(ws.Steps), Steps: snapSteps(roots, now, live, true),
@@ -593,7 +595,7 @@ func snapSteps(nodes []*StepNode, now string, live LiveAgent, stage bool) []Snap
 			WorkflowCheck: o.WorkflowCheck, BeadID: o.BeadID, Title: o.Title, State: o.State, Status: o.Status, Owner: o.Owner, OwnerState: o.OwnerState,
 			OwnerWhy: o.OwnerWhy, OwnerSince: o.OwnerSince, Restarts: o.Restarts, PlaceText: o.PlaceText,
 			Starred: o.Starred, Review: o.Review, PR: o.PR, Tickets: o.Tickets, PRRepo: o.PRRepo, Ask: o.Ask, Note: o.Note, Decision: o.Decision, SpecHash: o.SpecHash, Basis: o.Basis, PushCount: o.PushCount, PushFirst: o.PushFirst,
-			Now: o.BeadID != "" && o.BeadID == now, BlockedBy: o.BlockedBy, Until: o.Until, Gate: o.Gate, ClosingGate: o.ClosingGate, Approvers: o.Approvers,
+			Now: o.BeadID != "" && o.BeadID == now, BlockedBy: o.BlockedBy, Until: o.Until, Gate: o.Gate, ClosingGate: o.ClosingGate, Phase: o.Phase, Approvers: o.Approvers,
 			Superseded: o.Superseded, Lane: o.Lane, Criteria: o.Criteria, CloseReason: o.CloseReason, FinishedTasks: o.FinishedTasks, DoneBlockers: o.DoneBlockers, Waiting: beads.WaitsText(o.Waits), ParkedUntil: o.ParkedUntil, Gates: snapGates(o.Gates, o.GateIDs),
 		}
 		if o.Owns {
@@ -963,7 +965,7 @@ func (s *Source) build(ctx context.Context, data Data) Snapshot {
 	}
 	snap.Live = live
 	if s.Deps.Store != nil && s.Deps.Store.IsPostgres() && liveRead != nil && live == nil {
-		snap.Degraded = &SnapDegraded{Reason: "Operator process activity could not be verified"}
+		snap.Degraded = &SnapDegraded{Reason: "Agent process activity could not be verified"}
 	}
 	if s.ManagerCapacity != nil {
 		snap.ManagerCapacity = s.ManagerCapacity()

@@ -116,6 +116,7 @@ type ObjectiveRow struct {
 	Until                                               string       // owned job: the finish line its owner keeps at ("merged"), from the until:<x> label
 	Gate                                                bool         // a human approval gate (label gate)
 	ClosingGate                                         bool         // its workstream's "Confirm done" step
+	Phase                                               string       // scoping, building or rollout (its phase: label)
 	Approvers                                           []string     // who approves a gate (approver:<who> labels)
 	AskAnswered                                         bool         // the last ask was answered; only an explicit re-flag raises another
 	GateNote                                            string       // a gate's write-up (the bead description)
@@ -896,6 +897,7 @@ func projectObjectiveRows(ctx context.Context, bc beads.Client, project store.Pr
 			Until:         UntilLabel(objective.Labels),
 			Gate:          slices.Contains(objective.Labels, beads.GateLabel) || approvalOnly[objective.ID],
 			ClosingGate:   beads.IsClosingGate(objective.Labels),
+			Phase:         phaseOf(objective.Labels),
 			Approvers:     Approvers(objective.Labels),
 			AskAnswered:   slices.Contains(objective.Labels, beads.DecisionAnsweredLabel),
 			GateNote:      gateNote(objective),
@@ -1391,4 +1393,15 @@ func dropOrphans(rows []ObjectiveRow, closed map[string]bool) []ObjectiveRow {
 		}
 		rows = kept
 	}
+}
+
+// phaseOf is a workstream's phase from its phase: label: scoping (the pitch
+// and acceptance criteria are still being defined), building or rollout.
+func phaseOf(labels []string) string {
+	for _, l := range labels {
+		if v, ok := strings.CutPrefix(l, "phase:"); ok && (v == "scoping" || v == "building" || v == "rollout") {
+			return v
+		}
+	}
+	return ""
 }

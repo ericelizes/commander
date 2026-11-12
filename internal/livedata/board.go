@@ -317,7 +317,7 @@ func (b board) row(ws SnapWorkstream) BoardRow {
 	l := pickingUp(b.workstreamLine(ws, manager, hasManager, asks))
 	if b.s.OrchestrationMode != "active" && (l.kind == "quiet" || l.kind == "stalled" || l.kind == "idle") {
 		if hidden, ok := b.hiddenOperator(ws); ok {
-			l = line{kind: "working", text: "Operator working", why: "Its step was closed while it still runs (" + hidden + ")"}
+			l = line{kind: "working", text: "Agent working", why: "Its step was closed while it still runs (" + hidden + ")"}
 		}
 	}
 	l = b.capacityLine(ws.ManagerRole, rollUp(l, level, ownOpen(ws.Steps)))
@@ -650,7 +650,7 @@ func (b board) gatePhase(ws SnapWorkstream, g *gateVM, active bool) line {
 }
 
 // liveSteps are the steps work is on now: those a live Operator is on first, then in flow.current's order the
-// workstream's current step and open in-progress leaves. A step whose Operator stopped, that a recorded wait
+// workstream's current step and open in-progress leaves. A step whose Agent stopped, that a recorded wait
 // holds, or that nothing holds is not work under way.
 func (b board) liveSteps(ws SnapWorkstream) []SnapStep {
 	var flat []SnapStep
@@ -713,7 +713,7 @@ func servedStep(steps []SnapStep, s SnapStep) SnapStep {
 	return s
 }
 
-// stoppedTask: an open task bead under s whose Operator stopped, so s reads in progress only from that claim.
+// stoppedTask: an open task bead under s whose Agent stopped, so s reads in progress only from that claim.
 func stoppedTask(s SnapStep) bool {
 	return slices.ContainsFunc(s.Children, func(c SnapStep) bool { return c.Task && !stepClosed(c) && !parked(c) && !stepAlive(c) })
 }
@@ -1936,7 +1936,7 @@ func lower(t string) string {
 type heldAsk struct{ ask, op SnapStep }
 
 func (h *heldAsk) line() line {
-	return line{kind: "working", text: "Operator working on " + lower(plainTitle(h.op.Title)), why: h.why()}
+	return line{kind: "working", text: "Agent working on " + lower(plainTitle(h.op.Title)), why: h.why()}
 }
 
 func (h *heldAsk) why() string { return "An Operator is still on it; the ask waits for its report" }

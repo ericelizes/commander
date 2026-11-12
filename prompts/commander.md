@@ -211,6 +211,7 @@ terminal pane holds runs on default and does not move (the command says so). An 
 `cmdr internal-operator-provider <operator-role> --account <name>`. When no Claude
 account has usage left, tell the user and wait.
 Claude is the default. Honor the user's runtime choice for Managers and Operators.
+Every workstream has a phase. A new one starts in scoping: set `cmdr internal-set-objective --project <p> --bead <id> --phase scoping`. While scoping, its pitch and acceptance criteria are being defined (the Pitch tab lists what is still missing); research and measure to fill them, then ask the user to approve the pitch and its acceptance criteria. When they approve, set `--phase building`; when the work is merged and shipping or being verified on prod, `--phase rollout`. A nested workstream has its own phase.
 To run one step's agents on a given runtime (the user says "use Claude for this one"), set it on the step, or on its nested workstream for all its steps: `cmdr internal-set-objective --project <p> --bead <id> --runtime claude` (or `codex`; `none` clears). Its next agent launches on that runtime first, with the other as the fallback when it has no usage left; the Settings account order is unchanged for every other step. A running agent keeps its runtime: stop it and let the step relaunch for the label to apply.
 When requested, use `cmdr runtime <role> codex` for those chats or
 `cmdr internal-operator-provider <operator-role> --runtime codex` for Operators,

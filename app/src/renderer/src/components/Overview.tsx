@@ -44,8 +44,9 @@ type Pitch = {
   scope_detail?: Claim
   risk?: number
   risk_detail?: Claim
+  still_to_define?: Claim
 }
-const pitchClaims = (p: Pitch): Claim[] => [p.goal, p.progress, p.now, p.recent, p.next, p.problem, p.problem_impact, p.solution, p.impact, p.scope_detail, p.risk_detail].filter((c): c is Claim => !!c)
+const pitchClaims = (p: Pitch): Claim[] => [p.still_to_define, p.goal, p.progress, p.now, p.recent, p.next, p.problem, p.problem_impact, p.solution, p.impact, p.scope_detail, p.risk_detail].filter((c): c is Claim => !!c)
 // SHOW_SOURCES draws each sentence's evidence numbers; off, the text reads clean.
 const SHOW_SOURCES = false
 const typeNames: Record<string, string> = { bug: '🐛 Bug', performance: '⚡ Performance', feature: '✨ Feature', operations: '🛠️ Operations', request: '📨 Request' }
@@ -134,6 +135,12 @@ function Words({ text, settled }: { text: string; settled: number }) {
 // recap's place) starts over: while the draft is live it is paced and faded
 // from its first character, never shown whole up to the old length.
 export function StreamSentence({ s, done, live = false }: { s: Sentence; done: (s: Sentence) => React.ReactNode; live?: boolean }) {
+  if (!live && !s.partial) return <>{done(s)}</>
+  return <LiveSentence s={s} done={done} />
+}
+
+function LiveSentence({ s, done }: { s: Sentence; done: (s: Sentence) => React.ReactNode }) {
+  const live = true
   const prev = useRef(s.text)
   const restarts = useRef(0)
   if (!s.text.startsWith(prev.current)) restarts.current++
@@ -155,14 +162,23 @@ function toneOf(kind?: LineKind): Tone {
 }
 
 // WorkstreamHeader is the workstream's title and tickets above the pane's tabs.
+const phaseNames: Record<string, string> = { scoping: 'Scoping', building: 'Building', rollout: 'Rolling out' }
+
+// scopePhase is the phase of the workstream or nested workstream in view.
+export function scopePhase(ws: SnapWorkstream, track?: string): string | undefined {
+  if (!track) return ws.phase
+  return scopedSteps(ws, track)[0]?.phase
+}
+
 export function WorkstreamHeader({ ws, row, track }: { ws: SnapWorkstream; row: BoardRow; track?: string }) {
+  const phase = scopePhase(ws, track)
   const nested = findTrack(row, track)
   const step = track && track !== row.scope ? scopedSteps(ws, track)[0] : undefined
   const title = nested?.title ?? step?.title ?? row.title
   const tickets = overviewTickets(ws, track)
   return (
     <header className="ws-header">
-      <div className="ws-header-label">Workstream {row.n}{nested?.letter ?? ''}</div>
+      <div className="ws-header-label">Workstream {row.n}{nested?.letter ?? ''}{phase && <span className={`ws-phase ws-phase-${phase}`}>{phaseNames[phase]}</span>}</div>
       <h1>{splitTickets(title).text}</h1>
       {(nested ?? row).text && (nested ?? row).kind !== 'done' && <p className="ws-header-line">{(nested ?? row).text}</p>}
       {tickets.length > 0 && <div className="ov-tickets"><TicketPills tickets={tickets} progress={(nested ?? row).milestones ?? (nested ?? row).progress} /></div>}
@@ -241,7 +257,7 @@ export function Overview({ ws, row, track, onTrack, part = 'status' }: {
       try {
         const r = await fetch(`${cfg.apiUrl}/api/overview`, {
           method: 'POST', headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ project: ws.project, bead_id: ws.bead_id, track_id: track ?? '', stream: true }), signal: controller.signal,
+          body: JSON.stringify({ project: ws.project, bead_id: ws.bead_id, track_id: track ?? '', part, stream: true }), signal: controller.signal,
         })
         if (!r.ok) throw new Error('not ready')
         const take = (line: string) => {
@@ -279,10 +295,12 @@ export function Overview({ ws, row, track, onTrack, part = 'status' }: {
     }
     void loop()
     return () => { cancelled = true; clearTimeout(timer); controller?.abort() }
-  }, [cfg, ws.project, ws.bead_id, track, degraded])
+  }, [cfg, ws.project, ws.bead_id, track, degraded, part])
 
   // While the reader is writing, its draft stands in for the earlier recap.
-  const draftOn = result?.state === 'updating' && !!result.draft?.now && sentencesOf(result.draft.now).length > 0
+  // Only a first summary streams in; a rewrite of one already shown keeps the old
+  // one on screen and swaps in whole when it is done.
+  const draftOn = result?.state === 'updating' && !result.recap && !!result.draft?.now && sentencesOf(result.draft.now).length > 0
   const shown: Pitch | undefined = draftOn ? result!.draft : result?.recap
 
   // One number per source across the whole recap, so a source cited twice reads
@@ -348,20 +366,25 @@ export function Overview({ ws, row, track, onTrack, part = 'status' }: {
             </div>
           ))}
           {asks.length === 0 && (pendingDecision || stalled) && <p>{noAsk}</p>}
-          {shown && (hasText(shown.goal) || hasText(shown.now) || hasText(shown.recent) || hasText(shown.next)) && <div className="ov-status-story">
-            {hasText(shown.goal) && <ul className="ov-fields ov-target">
-              <li><b>Goal:</b> {cite(shown.goal)}</li>
-              {hasText(shown.progress) && <li><b>Where it stands:</b> {cite(shown.progress)}</li>}
-            </ul>}
-            {hasText(shown.now) && <p className="ov-field">{cite(shown.now)}</p>}
+          {shown && (hasText(shown.goal) || hasText(shown.now) || hasText(shown.recent) || hasText(shown.next)) && <div className="ov-status-story ov-fade" key={result?.recap?.generated_at ?? 'draft'}>
+            {hasText(shown.goal) && <>
+              <h3>Goal</h3>
+              <p className="ov-field">{cite(shown.goal)}</p>
+              {hasText(shown.progress) && <p className="ov-field"><b>Progress:</b> {cite(shown.progress)}</p>}
+            </>}
+            {hasText(shown.now) && <><h3>Right now</h3><p className="ov-field">{cite(shown.now)}</p></>}
             {hasText(shown.recent) && <><h3>Done lately</h3><ul className="ov-fields">{sentencesOf(shown.recent!).map((s, i) => <li key={i}><StreamSentence s={s} done={cited} live={draftOn} /></li>)}</ul></>}
             {hasText(shown.next) && <><h3>Up next</h3><ul className="ov-fields">{sentencesOf(shown.next!).map((s, i) => <li key={i}><StreamSentence s={s} done={cited} live={draftOn} /></li>)}</ul></>}
           </div>}
         </section>}
         {/* The pitch: what this is and why it matters, after the status. */}
         {part === 'pitch' && <section className="ov-pitch" aria-label="Pitch">
-          {(!shown || result?.stale || result?.state === 'updating' || result?.state === 'retrying') && !draftOn && <Refreshing />}
-          {shown ? <div>
+          {(!shown || result?.state === 'updating' || result?.state === 'retrying') && !draftOn && <Refreshing />}
+          {shown ? <div className="ov-fade" key={result?.recap?.generated_at ?? 'draft'}>
+            {hasText(shown.still_to_define) && <div className="ov-todo">
+              <h3>Still to define</h3>
+              <ul className="ov-fields">{sentencesOf(shown.still_to_define!).map((s, i) => <li key={i}><StreamSentence s={s} done={cited} live={draftOn} /></li>)}</ul>
+            </div>}
             {/* Each section appears once it has words, so a summary being written
                 builds top to bottom instead of showing empty headings early. */}
             {hasText(shown.problem) && <>

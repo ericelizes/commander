@@ -136,6 +136,8 @@ func claimOf(r *Recap, key string) *Claim {
 		return &r.ScopeDetail
 	case "risk_detail":
 		return &r.RiskDetail
+	case "still_to_define":
+		return &r.StillToDefine
 	}
 	return nil
 }
@@ -238,6 +240,6 @@ func onlyKnown(r Recap, in Input) Recap {
 	out := r
 	out.Goal, out.Progress, out.Now, out.Recent, out.Next = fix(r.Goal), fix(r.Progress), fix(r.Now), fix(r.Recent), fix(r.Next)
 	out.Problem, out.ProblemImpact, out.Solution, out.Impact = fix(r.Problem), fix(r.ProblemImpact), fix(r.Solution), fix(r.Impact)
-	out.ScopeDetail, out.RiskDetail = fix(r.ScopeDetail), fix(r.RiskDetail)
+	out.ScopeDetail, out.RiskDetail, out.StillToDefine = fix(r.ScopeDetail), fix(r.RiskDetail), fix(r.StillToDefine)
 	return out
 }

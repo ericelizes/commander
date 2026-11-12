@@ -23,7 +23,7 @@ var handoffs = []struct{ ref, pending, overdue string }{
 	{beads.ManagerStartWait, startPendingText, startOverdueText},
 	{beads.ManagerCloseWait, resultReviewText, "Manager review overdue"},
 	{beads.ManagerPlanWait, managerPlanningText, "Manager planning deadline missed"},
-	{beads.ManagerRecoverWait, "Operator recovery required", "Operator recovery deadline missed"},
+	{beads.ManagerRecoverWait, "Agent recovery required", "Agent recovery deadline missed"},
 }
 
 // handoffText: text is a line resultHandoff writes, or a wait line naming a receipt.

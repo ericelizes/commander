@@ -571,8 +571,8 @@ func TestSingleOperatorTaskIsOneBox(t *testing.T) {
 	if one == nil || parent == nil {
 		t.Fatalf("steps missing: %v %v", one, parent)
 	}
-	if len(one.Children) != 0 || !strings.Contains(one.Text, "Operator working") {
-		t.Errorf("single task step = %+v, want a childless box reading Operator working", *one)
+	if len(one.Children) != 0 || !strings.Contains(one.Text, "Agent working") {
+		t.Errorf("single task step = %+v, want a childless box reading Agent working", *one)
 	}
 	if len(parent.Children) < 2 {
 		t.Errorf("parent has %d nested steps, want several", len(parent.Children))
@@ -619,8 +619,8 @@ func TestLiveTaskUnderStepReadsAsOperator(t *testing.T) {
 	for name, c := range cases {
 		row, d := taskBoard(t, c.step)
 		if c.operators {
-			if !strings.Contains(d.Text, "Operator working") || d.Lane != "agents" || d.Actor != ActorOperators || d.Kind != "working" {
-				t.Errorf("%s: box = %+v, want Operator working in the agents lane", name, *d)
+			if !strings.Contains(d.Text, "Agent working") || d.Lane != "agents" || d.Actor != ActorOperators || d.Kind != "working" {
+				t.Errorf("%s: box = %+v, want Agent working in the agents lane", name, *d)
 			}
 			if !strings.HasPrefix(row.Text, "Working on importer ships") {
 				t.Errorf("%s: row = %q", name, row.Text)
@@ -628,7 +628,7 @@ func TestLiveTaskUnderStepReadsAsOperator(t *testing.T) {
 			if row.Workflow == nil || row.Workflow.Current != "lab-x.1" {
 				t.Errorf("%s: current = %+v", name, row.Workflow)
 			}
-		} else if strings.Contains(d.Text, "Operator working") {
+		} else if strings.Contains(d.Text, "Agent working") {
 			t.Errorf("%s: box = %q, a dead/closed task is not working", name, d.Text)
 		}
 		if len(d.Children) != 0 {
@@ -639,7 +639,7 @@ func TestLiveTaskUnderStepReadsAsOperator(t *testing.T) {
 
 func TestLiveTaskUnderGateStaysAGate(t *testing.T) {
 	_, d := taskBoard(t, SnapStep{State: "open", Status: "open", Gate: true, Approvers: []string{"user"}, Criteria: "ok", Children: []SnapStep{opTask("in_progress", "")}})
-	if !d.Gate || len(d.Children) != 0 || strings.Contains(d.Text, "Operator working") {
+	if !d.Gate || len(d.Children) != 0 || strings.Contains(d.Text, "Agent working") {
 		t.Errorf("gate box = %+v", *d)
 	}
 }
@@ -682,8 +682,8 @@ func TestDiagram_NeedsYouLaneCatchesACardDrawnElsewhere(t *testing.T) {
 	ask := SnapStep{BeadID: "w.1", Title: "Approve the sign-in", Status: "open", State: "needs-user"}
 	ws, b := needsYouLaneFixture(ask)
 	// The old behaviour: the card's step drawn as its Operator's work.
-	agents := BoardRow{Kind: "working", Text: "Operator working", Diagram: &Diagram{ID: "w", Steps: []DiagramStep{
-		{ID: "w.1", Lane: "agents", Actor: ActorOperators, Kind: "working", Text: "Operator working"}}}}
+	agents := BoardRow{Kind: "working", Text: "Agent working", Diagram: &Diagram{ID: "w", Steps: []DiagramStep{
+		{ID: "w.1", Lane: "agents", Actor: ActorOperators, Kind: "working", Text: "Agent working"}}}}
 	got := b.needsYouLane(ws, agents)
 	if len(got) != 1 || got[0].Check != CheckNeedsYouLane || got[0].Bead != "w.1" || got[0].Fix == "" ||
 		!strings.Contains(got[0].Why, "lane agents") || !strings.Contains(got[0].Why, "its row reads") {
@@ -691,7 +691,7 @@ func TestDiagram_NeedsYouLaneCatchesACardDrawnElsewhere(t *testing.T) {
 	}
 
 	// Each half is enough on its own.
-	rowOnly := BoardRow{Kind: "working", Text: "Operator working", Diagram: &Diagram{ID: "w", Steps: []DiagramStep{
+	rowOnly := BoardRow{Kind: "working", Text: "Agent working", Diagram: &Diagram{ID: "w", Steps: []DiagramStep{
 		{ID: "w.1", Lane: "you", Actor: ActorYou, Kind: "needs", Text: "Needs you"}}}}
 	if got := b.needsYouLane(ws, rowOnly); len(got) != 1 || strings.Contains(got[0].Why, "lane") {
 		t.Fatalf("row only: %+v", got)
@@ -711,9 +711,9 @@ func TestDiagram_NeedsYouLaneInATrackAndNested(t *testing.T) {
 	ask := SnapStep{BeadID: "w.1", Title: "Approve the sign-in", Status: "open", State: "needs-user"}
 	track := SnapStep{BeadID: "w.t", Title: "T", Status: "open", Track: true, Children: []SnapStep{ask}}
 	ws, b := needsYouLaneFixture(track)
-	r := BoardRow{Kind: "needs", Text: "Needs you", Tracks: []BoardTrack{{BeadID: "w.t", Kind: "working", Text: "Operator working"}},
+	r := BoardRow{Kind: "needs", Text: "Needs you", Tracks: []BoardTrack{{BeadID: "w.t", Kind: "working", Text: "Agent working"}},
 		Diagram: &Diagram{ID: "w", Tracks: []Diagram{{ID: "w.t", Steps: []DiagramStep{
-			{ID: "w.0", Kind: "working", Children: []DiagramStep{{ID: "w.1", Lane: "agents", Kind: "working", Text: "Operator working"}}}}}}}}
+			{ID: "w.0", Kind: "working", Children: []DiagramStep{{ID: "w.1", Lane: "agents", Kind: "working", Text: "Agent working"}}}}}}}}
 	b.addNeedsYouLane(ws, &r)
 	if len(r.Diagram.Findings) != 1 || len(r.Diagram.Tracks[0].Findings) != 1 {
 		t.Fatalf("workstream %+v, track %+v", r.Diagram.Findings, r.Diagram.Tracks[0].Findings)
@@ -725,8 +725,8 @@ func TestDiagram_NeedsYouLaneInATrackAndNested(t *testing.T) {
 
 // The deliberate exceptions are not findings, whatever is drawn.
 func TestDiagram_NeedsYouLaneLeavesDeliberateExceptions(t *testing.T) {
-	working := BoardRow{Kind: "working", Text: "Operator working on the build", Diagram: &Diagram{ID: "w", Steps: []DiagramStep{
-		{ID: "w.1", Lane: "agents", Actor: ActorOperators, Kind: "working", Text: "Operator working"}}}}
+	working := BoardRow{Kind: "working", Text: "Agent working on the build", Diagram: &Diagram{ID: "w", Steps: []DiagramStep{
+		{ID: "w.1", Lane: "agents", Actor: ActorOperators, Kind: "working", Text: "Agent working"}}}}
 
 	// heldByLive: a live Operator is on the work the decision waits on.
 	prereq := SnapStep{BeadID: "w.0", Title: "Build", Status: "open", State: "in-progress", Owner: "operator-a", OwnerState: "working"}
