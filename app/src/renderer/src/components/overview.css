@@ -164,3 +164,10 @@
   align-items: center;
   gap: 6px;
 }
+
+/* The overview is a document: its text can be selected and copied. */
+.ov { user-select: text; cursor: auto; }
+.ov button { user-select: none; }
+
+/* Code-like text the recap marks with backticks. */
+.ov-code { font-family: var(--mono); font-size: 0.88em; padding: 1px 5px; border-radius: 5px; background: color-mix(in srgb, var(--ink) 7%, transparent); overflow-wrap: anywhere; }

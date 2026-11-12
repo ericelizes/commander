@@ -182,3 +182,9 @@ func TestPromptLeadsWithOutcomesNotReviewMechanics(t *testing.T) {
 		t.Fatal("outcome rule must come before the explain rule")
 	}
 }
+
+func TestPromptMarksCodeLikeText(t *testing.T) {
+	if !strings.Contains(Prompt, "wrap code-like text") {
+		t.Fatal("the recap prompt must ask for code-like text in backticks")
+	}
+}
