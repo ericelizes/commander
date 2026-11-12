@@ -351,3 +351,41 @@ func TestSingleflightPanicRecovery(t *testing.T) {
 		t.Fatal("flight not cleared")
 	}
 }
+
+func TestMultipleTeamsMergeAndRetainIndependently(t *testing.T) {
+	home := t.TempDir()
+	os.WriteFile(filepath.Join(home, "local.toml"), []byte("[integrations.linear]\nteam=['FOR','ENGCHA']"), 0600)
+	WriteKey(home, "secret")
+	fail := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload struct{ Variables map[string]string }
+		json.NewDecoder(r.Body).Decode(&payload)
+		team := payload.Variables["team"]
+		if fail && team == "FOR" {
+			w.WriteHeader(503)
+			return
+		}
+		body := strings.ReplaceAll(fixture, "TEAM-1", team+"-1")
+		if team == "ENGCHA" {
+			body = strings.ReplaceAll(body, "Cycle 46", "CareHub cycle")
+		}
+		io.WriteString(w, body)
+	}))
+	defer server.Close()
+	now := time.Now()
+	c := New(Options{Home: home, Endpoint: server.URL, HTTP: server.Client().Do, Now: func() time.Time { return now }})
+	got := c.Get(context.Background())
+	if got.State != "ok" || len(got.Issues) != 2 || got.Cycle != nil || got.Issues[1].Team != "ENGCHA" {
+		t.Fatalf("merge: %+v", got)
+	}
+	fail = true
+	now = now.Add(TTL)
+	got = c.Get(context.Background())
+	if got.State != "partial" || len(got.Issues) != 2 || got.Teams[0].StaleSince == nil || got.Teams[1].State != "ok" {
+		t.Fatalf("partial: %+v", got)
+	}
+	got.Teams[0].Cycle.Name = "mutated"
+	if c.Peek().Teams[0].Cycle.Name == "mutated" {
+		t.Fatal("cache exposed")
+	}
+}

@@ -197,3 +197,21 @@ func TestPartialRecapHoldsAHighSurrogateBack(t *testing.T) {
 		t.Fatalf("%q", got)
 	}
 }
+
+func TestWholePageDraftShowsOnceEitherPartHasWords(t *testing.T) {
+	step, release := make(chan struct{}), make(chan struct{})
+	c := New(func(ctx context.Context, in Input) (Recap, error) {
+		progressFrom(ctx)(Recap{Problem: Claim{Sentences: []Sentence{{Text: "A problem.", Sources: []string{"pr"}}}}})
+		close(step)
+		<-release
+		return valid(), nil
+	})
+	in := fixture() // Part "": the whole page in one generation
+	c.Get(in)
+	<-step
+	if r := c.Get(in); r.State != "updating" || r.Draft == nil || len(r.Draft.Problem.Sentences) != 1 {
+		t.Fatalf("a pitch-first draft of the whole page must show: %+v", r)
+	}
+	close(release)
+	waitReady(t, c, in)
+}

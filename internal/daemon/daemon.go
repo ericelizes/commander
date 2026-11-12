@@ -962,6 +962,7 @@ func (d *Daemon) startAPI(ctx context.Context) {
 	}
 	srv := api.New(opts)
 	d.apiServer.Store(srv)
+	go srv.WarmOverviews(ctx)
 	port := 0
 	if d.cfg != nil {
 		port = d.cfg.API.Port

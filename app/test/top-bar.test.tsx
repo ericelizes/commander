@@ -19,10 +19,11 @@ describe('the top bar', () => {
     expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument()
   })
 
-  it('names the focus and the chat over their panes, and Home leaves focus', () => {
+  it('names the focus\'s workstream number and the chat over their panes, and Home leaves focus', () => {
     useStore.setState({ selected: { kind: 'ws', key: 'p/w' }, focus: { n: 1, title: 'Data Entry Hub' } })
     render(<><TopBar left={397} chat={640} /><Rail /></>)
-    expect(screen.getByRole('heading')).toHaveTextContent('Workstream 1: Data Entry Hub')
+    expect(screen.getByText('Workstream 1')).toHaveClass('app-top-label')
+    expect(screen.queryByRole('button', { name: /Commander ▾/ })).toBeNull()
     expect(screen.getByText('Commander')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Home' }))
     expect(useStore.getState().selected).toEqual({ kind: 'commander' })
@@ -41,7 +42,7 @@ describe('the top bar', () => {
   it('names only the pane on screen in a narrow window', () => {
     useStore.setState({ selected: { kind: 'ws', key: 'p/w' }, focus: { n: 1, title: 'Data Entry Hub' }, narrow: true, chatTab: false })
     render(<TopBar left={397} chat={640} />)
-    expect(screen.getByRole('heading')).toBeInTheDocument()
+    expect(screen.getByText('Workstream 1')).toBeInTheDocument()
     expect(screen.queryByText('Commander')).toBeNull()
   })
 })

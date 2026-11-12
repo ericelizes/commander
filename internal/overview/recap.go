@@ -196,7 +196,8 @@ func (c *Cache) Get(in Input) Result {
 			ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 			defer cancel()
 			ctx = WithProgress(ctx, func(d Recap) {
-				if (in.Part == "pitch" && len(d.Problem.Sentences) == 0) || (in.Part != "pitch" && len(d.Now.Sentences) == 0) {
+				now, problem := len(d.Now.Sentences) > 0, len(d.Problem.Sentences) > 0
+				if (in.Part == "pitch" && !problem) || (in.Part == "status" && !now) || (in.Part == "" && !now && !problem) {
 					return // nothing the app can show yet
 				}
 				d = onlyKnown(d, in)
@@ -309,7 +310,7 @@ func ClaudeWith(prompt string, accountEnv []string) Generate {
 		prompt := PromptFor(prompt, in.Part)
 		payload, _ := json.Marshal(in)
 		schema, _ := json.Marshal(readerSchema(in))
-		cmd := exec.CommandContext(ctx, "claude", "-p", "--safe-mode", "--tools", "", "--strict-mcp-config", "--mcp-config", `{"mcpServers":{}}`, "--setting-sources", "", "--no-session-persistence", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--json-schema", string(schema), "--system-prompt", prompt)
+		cmd := exec.CommandContext(ctx, "claude", "-p", "--safe-mode", "--tools", "", "--strict-mcp-config", "--mcp-config", `{"mcpServers":{}}`, "--setting-sources", "", "--no-session-persistence", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--json-schema", string(schema), "--model", "haiku", "--system-prompt", prompt)
 		dir, err := os.MkdirTemp("", "commander-recap-")
 		if err != nil {
 			return Recap{}, err
