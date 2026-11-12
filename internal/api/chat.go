@@ -57,6 +57,7 @@ type chatRequest struct {
 	Runtime  string            `json:"runtime"`  // runtime: "claude" or "codex"
 	Account  string            `json:"account"`  // account: a Claude account name
 	Continue bool              `json:"continue"` // runtime/account: send the agent a continue message after the switch
+	By       string            `json:"by"`       // interrupt: the agent role that sent mail (not the user): a labelled note follows
 	chat.Decision
 }
 
@@ -192,7 +193,11 @@ func (s *Server) serveChatAction(w http.ResponseWriter, r *http.Request) {
 		}
 		err = e.SendWithAttachments(ctx, role, req.Text, req.Files)
 	case "interrupt":
-		err = e.Interrupt(ctx, role)
+		if req.By != "" { // an agent's mail, never the user: label it
+			err = e.InterruptForMail(ctx, role, req.By)
+		} else {
+			err = e.Interrupt(ctx, role)
+		}
 	case "typing":
 		err = e.MarkTalking(role)
 	case "mail-now":

@@ -100,12 +100,12 @@ func AuditSnapshot(s Snapshot, nowSec int64, opt AuditOptions) []Suspect {
 			}
 		}
 
-		// (3) The flag shows iff the row is red.
+		// (3) Flags identify user asks; red automation failures need no flag.
 		red := row.Colour == "red"
 		if row.Flag > 0 && !red {
 			add(ws.BeadID, ws.ManagerRole, RuleFlag, fmt.Sprintf("flag %d but the row is %s (%q)", row.Flag, row.Colour, row.Line.Text))
 		}
-		if row.Flag == 0 && red {
+		if row.Flag == 0 && red && row.Line.Kind == "needs" {
 			add(ws.BeadID, ws.ManagerRole, RuleFlag, fmt.Sprintf("row is red (%q) but has no flag", row.Line.Text))
 		}
 

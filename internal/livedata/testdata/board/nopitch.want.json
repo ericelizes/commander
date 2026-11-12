@@ -108,7 +108,8 @@
     "at": false,
     "for_you": false
    },
-   "tracks": []
+   "tracks": [],
+   "why": "Automation failure: Pitch for greenlight merging the sample list test fix still not written: the Manager's move. Owner: manager-w3. Next: inspect current evidence and record the next guarded recovery action on w3. Commander owns escalation if recovery fails."
   },
   {
    "key": "p:w4",

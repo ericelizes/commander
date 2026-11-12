@@ -361,6 +361,7 @@ function Workstream({ w, tracks, folded, onToggle, selected, cursor, mod }: { w:
               {w.why && <span className="ws-state-why" title={w.why} aria-label={w.why}>⚠</span>}
             </div>
             <WorkstreamState w={w} />
+            {w.kind === 'stalled' && w.why && <p className="ws-recovery">{w.why}</p>}
           </div>
         </div>
       </button>
@@ -411,6 +412,7 @@ function TrackRow({ t, n, wsKey, parentOwner }: { t: BoardTrack; n: number; wsKe
             {t.planning_commander !== parentOwner && <PlanningOwner owner={t.planning_commander} />}
           </div>
           <StateLine kind={t.kind} text={t.text} agents={t.working} age={age(t.since, nowSec)} />
+          {t.kind === 'stalled' && t.why && <p className="ws-recovery">{t.why}</p>}
           {t.why && <span className="ws-state-why" title={t.why} aria-label={t.why}>⚠</span>}
         </div>
       </button>
@@ -610,7 +612,7 @@ function StateLine({ kind, text, title, agents, age, unread = 0 }: { kind: strin
     <div className={`ws-state agent-${kind}`}>
       {text && (
         <span className="ws-state-text" title={title ?? text}>
-          {text}
+          {kind === 'stalled' ? (text === 'Stalled' ? 'Automation failure' : `Automation failure: ${text}`) : text}
         </span>
       )}
       <span className="ws-state-meta">

@@ -1,0 +1,11 @@
+{
+  "generated_at": "2026-11-10T12:00:00Z",
+  "workstreams": [{"n":1,"project":"sample","bead_id":"sample-root","title":"Example work","manager_role":"manager-sample-root","status":"open","steps":[
+    {"bead_id":"sample-root.1","title":"Nested owner","track":true,"status":"open","manager_role":"manager-sample-nested","children":[
+      {"bead_id":"sample-root.1.1","title":"First inherited track","track":true,"status":"open"},
+      {"bead_id":"sample-root.1.2","title":"Second inherited track","track":true,"status":"open"}
+    ]},
+    {"bead_id":"sample-root.2","title":"Sibling","track":true,"status":"open"}
+  ]}],
+  "agents":{"manager-sample-nested":{"state":"idle"}}
+}

@@ -1,0 +1,135 @@
+cat > internal/beads/postgres_qualified_regression_test.go <<'EOF'
+package beads
+
+import (
+ "context"
+ "database/sql"
+ "encoding/json"
+ "errors"
+ "fmt"
+ "net/http"
+ "net/http/httptest"
+ "os"
+ "path/filepath"
+ "reflect"
+ "strings"
+ "testing"
+ "time"
+
+ "github.com/example-user/commander/internal/store"
+)
+
+func TestPostgresQualifiedClientDoor(t *testing.T) {
+ // A marker alone suffices: a client must not even open the configured store.
+ home := t.TempDir()
+ t.Setenv("COMMANDER_HOME", home)
+ t.Setenv(DoorEnv, "off")
+ t.Setenv("COMMANDER_ROLE", "operator-fixture.7")
+ t.Setenv("COMMANDER_RUN_ID", "57")
+ t.Setenv("COMMANDER_RUN_SESSION", "fixture-session")
+ if e := os.WriteFile(filepath.Join(home,"state.postgres"), []byte("unreachable"),0600); e != nil { t.Fatal(e) }
+ prior := inDoorServer; SetDoorServer(false); defer SetDoorServer(prior)
+ ctx := WithIntent(context.Background(),DoorIntent{Bead:"fixture-source",Verb:"dep"})
+ call := func() error { return QualifiedDependency(ctx,"/fixture/source","/fixture/target","add","fixture-source","fixture-target") }
+ if e := call(); e == nil || !strings.Contains(e.Error(),"cannot be disabled") { t.Fatalf("disabled: %v",e) }
+ t.Setenv(DoorEnv,"on")
+ if e := call(); e == nil || !strings.Contains(e.Error(),"require the Commander service") { t.Fatalf("unavailable: %v",e) }
+ calls := 0
+ server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter,r *http.Request) {
+  calls++
+  var req DoorRequest
+  if e := json.NewDecoder(r.Body).Decode(&req); e != nil { t.Error(e) }
+  want := []string{"dep","add","fixture-source","fixture-target","--source-project","/fixture/source","--target-project","/fixture/target"}
+  if r.URL.Path != DoorPath || req.Dir != "/fixture/source" || !reflect.DeepEqual(req.Args,want) || req.Intent == nil || req.Intent.Bead != "fixture-source" || !req.NoWait { t.Errorf("request: %+v",req) }
+  caller := WithDoorEnv(context.Background(),req.Env)
+  if pgActor(caller) != "operator-fixture.7" || pgCallerValue(caller,"COMMANDER_RUN_ID") != "57" || pgCallerValue(caller,"COMMANDER_RUN_SESSION") != "fixture-session" { t.Errorf("identity lost: %v",req.Env) }
+  json.NewEncoder(w).Encode(DoorResponse{Exit:1,Error:"fixture intent refusal"})
+ }))
+ defer server.Close()
+ os.WriteFile(filepath.Join(home,"api-url"),[]byte(server.URL),0600)
+ os.WriteFile(filepath.Join(home,"api-token"),[]byte("fixture-token"),0600)
+ if e := call(); e == nil || e.Error() != "fixture intent refusal" || calls != 1 { t.Fatalf("door result calls=%d: %v",calls,e) }
+}
+
+func TestPostgresQualifiedReplacedCaller(t *testing.T) {
+ f := newQualifiedFixture(t); ctx := context.Background()
+ role := "operator-fixture.57"
+ makeRun := func(session string) int64 {
+  run,e := f.s.InsertAgentRun(ctx,store.AgentRun{ProjectID:f.pid,TaskBeadID:f.source,AgentName:role,OpencodeSessionID:session,SpawnTime:time.Now().Unix()})
+  if e != nil { t.Fatal(e) }; return run
+ }
+ actor := func(run int64,session string) context.Context { return WithDoorEnv(ctx,[]string{"COMMANDER_ROLE="+role,fmt.Sprint("COMMANDER_RUN_ID=",run),"COMMANDER_RUN_SESSION="+session}) }
+ old := makeRun("fixture-old")
+ if e := f.link(actor(old,"fixture-old")); e != nil { t.Fatal(e) }
+ if _,e := f.s.DB().Exec(`UPDATE agent_runs SET status='done' WHERE id=?`,old); e != nil { t.Fatal(e) }
+ next := makeRun("fixture-new")
+ for _,caller := range []context.Context{actor(old,"fixture-old"),actor(next,"fixture-old"),actor(old,"fixture-new"),WithDoorEnv(ctx,[]string{"COMMANDER_ROLE="+role})} {
+  if e := QualifiedDependency(caller,f.dir,f.foreign,"rm",f.source,f.target); !IsCrossProjectError(e) { t.Fatalf("old/mixed caller accepted: %v",e) }
+ }
+ deps,e := f.c.Deps(ctx,f.dir,f.source)
+ if e != nil || len(deps)!=1 { t.Fatalf("stale removal changed edge: %v %v",deps,e) }
+ if e := QualifiedDependency(actor(next,"fixture-new"),f.dir,f.foreign,"rm",f.source,f.target); e != nil { t.Fatal(e) }
+}
+
+func TestPostgresQualifiedCanonicalCustodyRollback(t *testing.T) {
+ for _,state := range []string{"stopped","retired","replaced"} {
+  for _,op := range [][]string{{"close"},{"update","--status","deferred"},{"update","--add-label","superseded"}} {
+   t.Run(state+strings.Join(op,"-"),func(t *testing.T) {
+    f:=newQualifiedFixture(t); ctx:=context.Background(); role:="operator-fixture.57"
+    if e:=f.c.SetLabel(ctx,f.dir,f.source,"owner:"+OwnerLabelName(role),true); e!=nil { t.Fatal(e) }
+    run,e:=f.s.InsertAgentRun(ctx,store.AgentRun{ProjectID:f.pid,TaskBeadID:f.source,AgentName:role,SpawnTime:1}); if e!=nil {t.Fatal(e)}
+    if e=f.link(ctx); e!=nil {t.Fatal(e)}
+    if state=="stopped" {
+     _,e=f.s.DB().Exec(`INSERT INTO run_observations(run_id,alive,checked_at) VALUES(?,FALSE,?)`,run,time.Now().Unix())
+    } else {
+     _,e=f.s.DB().Exec(`UPDATE agent_runs SET status='done' WHERE id=?`,run)
+     if e==nil && state=="replaced" {
+      run,e=f.s.InsertAgentRun(ctx,store.AgentRun{ProjectID:f.pid,TaskBeadID:f.source,AgentName:OwnerLabelName(role),SpawnTime:2})
+      if e==nil { _,e=f.s.DB().Exec(`INSERT INTO run_observations(run_id,alive,checked_at) VALUES(?,FALSE,?)`,run,time.Now().Unix()) }
+     }
+    }
+    if e!=nil {t.Fatal(e)}
+    var before,after int
+    f.s.DB().QueryRow(`SELECT COUNT(*) FROM state_events`).Scan(&before)
+    transition:=append([]string{op[0],f.target},op[1:]...)
+    result:=postgresApplyOps(ctx,f.foreign,[][]string{{"update",f.target,"--title","Must roll back"},transition})
+    if result.Exit==0 || result.Applied!=0 { t.Fatalf("accepted: %+v",result) }
+    f.s.DB().QueryRow(`SELECT COUNT(*) FROM state_events`).Scan(&after)
+    b,e:=f.c.Show(ctx,f.foreign,f.target)
+    if e!=nil || b.Title!="Synthetic target" || b.Status!="open" || Superseded(b.Labels) || before!=after {t.Fatalf("rollback: %+v %v events=%d/%d",b,e,before,after)}
+   })
+  }
+ }
+}
+
+type qualifiedQueryProbe struct { store.Querier; count int; fail bool }
+func (q *qualifiedQueryProbe) QueryContext(ctx context.Context,query string,args ...any)(*sql.Rows,error) {
+ q.count++
+ if q.fail { return nil,errors.New("fixture query failure") }
+ return q.Querier.QueryContext(ctx,query,args...)
+}
+func TestPostgresQualifiedLocalErrorAndDetailBatch(t *testing.T) {
+ f:=newQualifiedFixture(t); ctx:=context.Background(); failure:=errors.New("fixture scan failure")
+ for _,foreign:=range []bool{false,true} {
+  if foreign { if e:=f.link(ctx);e!=nil {t.Fatal(e)} }
+  e:=withQualifiedView(ctx,f.dir,func(context.Context,*qualifiedView)error{return failure})
+  if !errors.Is(e,failure) || IsCrossProjectError(e)!=foreign {t.Fatalf("foreign=%v error=%v",foreign,e)}
+ }
+ for _,id:=range []string{f.source,f.target} {
+  dir:=f.dir; if id==f.target {dir=f.foreign}
+  for _,text:=range []string{"First","Second"} {if e:=f.c.AddComment(ctx,dir,id,text);e!=nil {t.Fatal(e)}}
+ }
+ e:=ReadPostgresSnapshot(ctx,func(ctx context.Context)error{
+  return withQualifiedView(ctx,f.dir,func(ctx context.Context,v *qualifiedView)error{
+   q:=&qualifiedQueryProbe{Querier:postgresQuery(ctx,f.s)}
+   details,e:=v.details(ctx,q,[]string{f.source,f.target,f.source,"fixture-missing"})
+   if e!=nil || q.count!=1 || len(details)!=2 {t.Fatalf("batch: %v count=%d %v",details,q.count,e)}
+   for _,id:=range []string{f.source,f.target} { cs:=details[id].Comments; if len(cs)!=2 || cs[0].Text!="First" || cs[1].Text!="Second" {t.Fatalf("order: %+v",cs)} }
+   q.fail=true
+   if _,e=v.details(ctx,q,[]string{f.source});e==nil {t.Fatal("query failure swallowed")}
+   return nil
+  })
+ }); if e!=nil {t.Fatal(e)}
+}
+EOF
+rg -n 'AddComment|func Superseded' internal/beads/*.go | head

@@ -98,6 +98,10 @@ doctor:
 # Run all tests (Go unit + integration scripts)
 test: test-go test-integration
 
+# Register an explicitly selected Rust backend for all Go/eval/ship entrypoints.
+setup-eval-backend backend:
+    @python3 scripts/setup-eval-backend.py {{quote(backend)}}
+
 # Run the tmux-backed Commander eval scenarios only
 test-evals:
     @go test ./tests/evals

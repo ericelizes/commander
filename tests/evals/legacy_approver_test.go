@@ -50,7 +50,7 @@ func TestLegacyApproverScenario(t *testing.T) {
 	t.Setenv("COMMANDER_STATE_DB", "")
 	t.Setenv("COMMANDER_WRITE_DOOR", "off")
 	t.Setenv("COMMANDER_LEGACY_OWNER_ALIASES", "")
-	t.Setenv("AM_HTTP_URL", "http://127.0.0.1:1")
+	isolateSpawnMail(t)
 	st, err := store.Open(filepath.Join(home, "state.db"))
 	if err != nil {
 		t.Fatal(err)

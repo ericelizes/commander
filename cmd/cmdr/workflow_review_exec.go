@@ -27,6 +27,8 @@ func runWorkflowReviewExec(args []string, stdout, stderr *os.File) int {
 	fs.StringVar(&req.PromptFile, "prompt-file", "", "original prompt file")
 	fs.StringVar(&req.Dir, "run-dir", "", "new absolute private run directory")
 	fs.BoolVar(&req.Full, "full", false, "explicit full-depth override")
+	fs.Func("context-file", "exact required context file (repeatable; snapshot only, no action authority)", func(path string) error { req.ContextFiles = append(req.ContextFiles, path); return nil })
+	fs.BoolVar(&req.PrivateGit, "private-git", false, "stage private Git object and temporary directories (sandbox permissions unchanged)")
 	budget := fs.Duration("timeout", 10*time.Minute, "bounded execution time (max30m)")
 	if err := fs.Parse(args); err != nil {
 		return 2

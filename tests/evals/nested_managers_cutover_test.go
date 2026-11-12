@@ -357,7 +357,8 @@ echo "[$out]"
 	}
 
 	// The Operator still names its nested Manager: its report goes back to the
-	// root, the nested Manager copied once.
+	// root. The obsolete nested Manager owns no work after undo, so no stale
+	// copy may wake it (the cutover notice above already told it to stop).
 	t.Setenv("COMMANDER_ROLE", sc.Operator)
 	run("internal-mail", "--from", sc.Operator, "--to", "manager-demo-a1", "--subject", "done again", "--body", "report")
 	t.Setenv("COMMANDER_ROLE", "")
@@ -366,7 +367,7 @@ echo "[$out]"
 		to = append(to, m.to+"|"+m.subject)
 	}
 	slices.Sort(to)
-	if want := []string{"manager-demo-a1|[cc: moved to manager-demo-r] done again", "manager-demo-r|done again"}; !slices.Equal(to, want) {
+	if want := []string{"manager-demo-r|done again"}; !slices.Equal(to, want) {
 		t.Fatalf("after undo the report went to %v, want %v", to, want)
 	}
 }

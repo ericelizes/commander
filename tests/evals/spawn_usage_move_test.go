@@ -144,7 +144,11 @@ func TestSpawnUsageMoveScenario(t *testing.T) {
 				t.Fatalf("agent %s, want %s", res.AgentName, role)
 			}
 			got := chat.ProviderOf(home, role)
-			if res.Runtime != c.Runtime || res.Account != c.Account || got != (chat.Provider{Runtime: c.Runtime, Account: c.Account}) {
+			providerAccount := c.Account
+			if c.Runtime == chat.RuntimeCodex {
+				providerAccount = ""
+			}
+			if res.Runtime != c.Runtime || res.Account != c.Account || got != (chat.Provider{Runtime: c.Runtime, Account: providerAccount}) {
 				t.Fatalf("result %s/%s, recorded %+v, want %s/%s", res.Runtime, res.Account, got, c.Runtime, c.Account)
 			}
 			if i := chat.ReadAccountIntent(home, role); i != c.Intent {

@@ -1,0 +1,69 @@
+{
+  "generated_at": "2026-11-10T12:00:00Z",
+  "workstreams": [
+    {
+      "n": 1,
+      "project": "demo",
+      "bead_id": "demo-root",
+      "title": "Example work",
+      "manager_role": "manager-demo-root",
+      "status": "open",
+      "steps": [
+        {
+          "bead_id": "demo-root.1",
+          "title": "First track",
+          "track": true,
+          "status": "open",
+          "state": "not-started",
+          "manager_role": "manager-demo-root.1",
+          "children": [
+            {
+              "bead_id": "demo-root.1.1",
+              "title": "Build example",
+              "status": "open",
+              "state": "not-started"
+            }
+          ]
+        },
+        {
+          "bead_id": "demo-root.2",
+          "title": "Second track",
+          "track": true,
+          "status": "open",
+          "state": "not-started",
+          "manager_role": "manager-demo-root.2",
+          "children": [
+            {
+              "bead_id": "demo-root.2.1",
+              "title": "Check example",
+              "status": "open",
+              "state": "not-started"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "agents": {
+    "manager-demo-root": {
+      "state": "idle"
+    },
+    "manager-demo-root.1": {
+      "state": "idle"
+    },
+    "manager-demo-root.2": {
+      "state": "idle"
+    }
+  },
+  "unread": {
+    "manager-demo-root": 2,
+    "manager-demo-root.1": 1,
+    "manager-demo-root.2": 1
+  },
+  "manager_capacity": {
+    "manager-demo-root": "chat: no account has usage left",
+    "manager-demo-root.1": "chat: no account has usage left",
+    "manager-demo-root.2": "chat: no account has usage left"
+  },
+  "integration_expectation": "Clearing capacity retains stalled failed handoffs until guarded recovery begins; unread mail alone does not establish working."
+}

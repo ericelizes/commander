@@ -58,12 +58,84 @@ const UpdateAPIDenyReason = "Installing Commander is the user's decision: the ap
 // network tool aimed at cmdrd's port or api-url that mentions update is refused
 // too.
 func TouchesUpdateAPI(command string) bool {
-	flat := strings.ToLower(decodeANSIC(command))
+	return touchesUpdateAPI(command, 0)
+}
+
+func touchesUpdateAPI(command string, depth int) bool {
+	// Use the shared shell parser to keep heredoc source data out of the
+	// endpoint heuristic. Preserve executable substitutions and interpreter
+	// input, including text piped from a heredoc into an interpreter. Keep the
+	// conservative whole-command heuristic for all remaining words.
+	var executable strings.Builder
+	// Decode while ANSI-C quote delimiters still exist. The parser removes
+	// those delimiters, after which their escapes cannot be recognized.
+	segs := parse(decodeANSIC(command))
+	interpreter := false
+	pipeline := false
+	for _, seg := range segs {
+		pipeline = pipeline || seg.piped
+		words := unwrap(stripGroup(seg.words), false)
+		if len(words) > 0 && (tmuxSinks[baseName(words[0])] || networkTool.MatchString(baseName(words[0]))) {
+			interpreter = true
+		}
+	}
+	for _, seg := range segs {
+		if !interpreter && !pipeline && inertSourceSearch(seg) {
+			continue
+		}
+		executable.WriteString(strings.Join(seg.words, " "))
+		executable.WriteByte('\n')
+		for _, sub := range seg.subs {
+			if depth >= 4 {
+				executable.WriteString(sub) // conservative at the parser's depth bound
+			} else if touchesUpdateAPI(sub, depth+1) {
+				return true
+			}
+		}
+		if interpreter || seg.piped {
+			executable.WriteString(seg.inputText)
+			executable.WriteByte('\n')
+		}
+	}
+	flat := strings.ToLower(decodeANSIC(executable.String()))
 	squashed := strings.NewReplacer("'", "", `"`, "", "\\", "", " ", "", "\t", "", "\n", "", "`", "").Replace(flat)
 	if strings.Contains(squashed, "/api/up") || strings.Contains(squashed, "api/update") {
 		return true
 	}
 	return networkTool.MatchString(flat) && cmdrdTarget.MatchString(flat) && strings.Contains(squashed, "update")
+}
+
+// Search patterns and paths are argv data, not shell programs. Only omit a
+// proven search with no executable expansion, output redirection or pipeline;
+// consumers of search output retain the conservative endpoint heuristic.
+func inertSourceSearch(seg segment) bool {
+	if seg.piped || len(seg.subs) != 0 || len(seg.redirects) != 0 || seg.inputText != "" || !pureSegment(seg.words, false) {
+		return false
+	}
+	words := unwrap(seg.words, true)
+	if len(words) == 0 {
+		return false
+	}
+	switch baseName(words[0]) {
+	case "rg", "grep", "egrep", "fgrep":
+		return true
+	case "git":
+		args := words[1:]
+		for len(args) > 0 {
+			switch args[0] {
+			case "-C", "--git-dir", "--work-tree":
+				if len(args) < 2 {
+					return false
+				}
+				args = args[2:]
+			case "--no-pager":
+				args = args[1:]
+			default:
+				return args[0] == "grep"
+			}
+		}
+	}
+	return false
 }
 
 var (

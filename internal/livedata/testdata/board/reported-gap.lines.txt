@@ -1,10 +1,10 @@
 0 Commander: no agent yet
 1 Report in, Manager idle: Result ready for Manager review (0% done, no gates, for 20s)
 2 Report in beside live work: Working on build the next wave (0% done, no gates, 2 working)
-3 Stopped with no report: Agent stopped on trace the slow query: the Manager's move (0% done, no gates) · why: Operator is no longer running and has not reported
-4 Report in, timer run out: Manager review overdue (0% done, no gates, for 1h)
+3 Stopped with no report: Agent stopped on trace the slow query: the Manager's move (0% done, no gates) · why: Operator is no longer running and has not reported · Automation failure: Agent stopped on trace the slow query: the Manager's move. Owner: manager-app-w3. Next: inspect the stopped run and current holder, then resume or replan through guarded dispatch on app-w3.1. Commander owns escalation if recovery fails.
+4 Report in, timer run out: Manager review overdue (0% done, no gates, for 1h) · why: Automation failure: Manager review overdue. Owner: manager-app-w4. Next: review the existing report and close or return the existing task on app-w4.1. Commander owns escalation if recovery fails.
 5 Report in beside a step nothing holds: Result ready for Manager review (0% done, no gates, for 20s)
 6 Settle half written: Result ready for Manager review (0% done, no gates, for 20s)
-7 Another Operator claimed it since: Agent stopped on split the worker: the Manager's move (0% done, no gates) · why: Operator is no longer running and has not reported
+7 Another Operator claimed it since: Agent stopped on split the worker: the Manager's move (0% done, no gates) · why: Operator is no longer running and has not reported · Automation failure: Agent stopped on split the worker: the Manager's move. Owner: manager-app-w7. Next: inspect the stopped run and current holder, then resume or replan through guarded dispatch on app-w7.1. Commander owns escalation if recovery fails.
 8 Settle half written, promoted step: Result ready for Manager review (0% done, no gates, for 20s)
-9 Left over report, step reopened: State missing (0% done, no gates)
+9 Left over report, step reopened: State missing (0% done, no gates) · why: Automation failure: open work has no valid holder. Owner: manager-app-w9. Next: inspect current evidence and record the next guarded recovery action on app-w9.1. Commander owns escalation if recovery fails.

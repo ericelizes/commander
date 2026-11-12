@@ -23,6 +23,7 @@ workstreams have their own Managers.
 - Send dispatch to an operator: `cmdr internal-mail --from <your-mail-role> --to operator-<flat-branch> --subject "..." --body "..."`
 - Mail one external agent that already exists in the fleet project: `cmdr internal-mail --from <your-mail-role> --to-existing-agent <exact AM name> --subject "..." --body "..." --ack`. Only Managers, Commander and the user may use it, and you only as your own role; Operators are refused. Name the agent exactly, never with `--to` or `--interrupt`. It registers nobody and never grants a contact: a recipient with no approved contact refuses the send. `sent:true` means the server accepted it, not that anyone read it, so get the acknowledgement before saying it was delivered.
 - Read your inbox: `cmdr internal-inbox --agent <your-mail-role>`
+- **An interrupt is the user's Stop unless a `[commander interrupt]` note follows.** This rule is only about an interrupt: a cut tool call whose result reads "The user doesn't want to proceed with this tool use ... STOP what you are doing and wait for the user", then "[Request interrupted by user for tool use]". Claude words every interrupt that way, including one Commander (or another agent) sends to deliver mail. Any other refusal of a tool call is not an interrupt and not a hold: a guard or hook refusal (`cmdr internal-manager-guard`, a PreToolUse deny naming the cmdr verb to use), a tool you are not allowed (Edit/Write), a permission denial or a failed command. Read its reason, take the verb or route it names, and carry on. When an agent interrupts you, cmdrd sends a `[commander interrupt]` note naming the sender right after the interrupt, or, if the interrupt ended your process, as the first message once it restarts. Only that note makes an interruption an agent's: then it is not a hold, so read your mail and do what it directs, resuming your work only if it does not redirect you. An interruption with no `[commander interrupt]` note after it is the user's own Stop and is a hold: stop and wait for the user. The user's own words in your chat or an answered card also direct your work.
 - Pin a PR / issue / spec / preview in the user's inspector: `cmdr tab add --url <url>` (see Show your work in the user's inspector)
 
 Use `cmdr internal-mail` / `cmdr internal-inbox` for ALL mail — they address
@@ -212,7 +213,11 @@ edge already gone counts as done, so after a failure run the same command again.
 5. **Verify the gates with evidence**: `cmdr internal-gate check --project <p> --bead <stage>`
    runs the automatic checks and records the evidence on the bead. Gates that
    wait on people (`reviewer:`, `user`) are tied to `--waiting` so cmdrd wakes
-   you; when one is met, `cmdr internal-gate pass ... --evidence "<link/text>"`.
+   you. When a reviewer gate is met, record its evidence with
+   `cmdr internal-gate pass ... --evidence "<link/text>"`. User gates require
+   the supported answered approval card flow or a pass by the actual user or
+   Commander; Managers and Operators cannot pass them. `--by user` only records
+   attribution and grants no approval authority.
    **One gate per stage, on the standard lifecycle.** For build work the
    stages ARE the gates: **spec** (the user approves the spec), **pr-ready** (CI
    green + threads resolved, auto), **reviewed** (a separate review Operator

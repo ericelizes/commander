@@ -142,15 +142,16 @@ func TestRunInternalCloseObjective(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit=%d stderr=%s", code, errOut)
 	}
-	// the workflow door reads the bead and its own edges (a plugged review block), the stage's
+	// The parent-completion guard first reads the bead and actual child edges.
+	// The workflow door then reads the bead and its own edges (a plugged review block), the stage's
 	// gate beads are looked up, the holder check reads the closure fresh (batched List by id,
 	// Show, Details, Dependents), then the close, then a read for push labels to clear; the close
 	// is the only write
 	n := len(mock.Calls)
-	if n < 5 || !strings.HasPrefix(mock.Calls[0], "Show:") || !strings.HasPrefix(mock.Calls[1], "Deps:obj-1") || !strings.HasPrefix(mock.Calls[2], "List:") || !strings.HasPrefix(mock.Calls[n-2], "Close:obj-1") || !strings.HasPrefix(mock.Calls[n-1], "Show:obj-1") {
+	if n < 7 || !strings.HasPrefix(mock.Calls[0], "Show:") || !strings.HasPrefix(mock.Calls[1], "Dependents:obj-1") || !strings.HasPrefix(mock.Calls[2], "Show:") || !strings.HasPrefix(mock.Calls[3], "Deps:obj-1") || !strings.HasPrefix(mock.Calls[4], "List:") || !strings.HasPrefix(mock.Calls[n-2], "Close:obj-1") || !strings.HasPrefix(mock.Calls[n-1], "Show:obj-1") {
 		t.Fatalf("unexpected beads calls: %v", mock.Calls)
 	}
-	for _, c := range mock.Calls[3 : n-2] {
+	for _, c := range mock.Calls[5 : n-2] {
 		if !strings.HasPrefix(c, "Show:") && !strings.HasPrefix(c, "Details:") && !strings.HasPrefix(c, "Dependents:") && !strings.HasPrefix(c, "List:") {
 			t.Fatalf("the holder check wrote: %v", mock.Calls)
 		}

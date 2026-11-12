@@ -115,31 +115,26 @@ func TestLastGoodFingerprintMismatchRetriesListAndDetails(t *testing.T) {
 }
 
 func TestFreshDetailsSeesDBEdgeBehindDisplayExport(t *testing.T) {
-	binary, err := exec.LookPath("br")
-	if err != nil {
-		t.Skip("br not installed")
-	}
+	// Exercise the legacy export/show contract independently of whichever CLI
+	// (native bd, beads_rust, or a cutover fence) is installed on the host.
+	t.Setenv("COMMANDER_HOME", t.TempDir())
 	dir := t.TempDir()
-	c := &cmdClient{run: func(ctx context.Context, dir, _ string, args ...string) ([]byte, []byte, error) {
-		return defaultRunInDir(ctx, dir, binary, append([]string{"--no-auto-flush", "--no-auto-import"}, args...)...)
-	}}
+	if err := os.Mkdir(filepath.Join(dir, ".beads"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	step, gate := "sample-step", "sample-gate"
+	// The process fixture represents the authoritative database after an edge
+	// was added without refreshing the display export.
+	binary := fakeBr(t, `test "$1" = show && test "$2" = sample-step && test "$3" = --json && test "$#" = 3 || exit 1
+cat authoritative.json`)
+	t.Setenv("COMMANDER_BEADS_BIN", binary)
+	if err := os.WriteFile(filepath.Join(dir, "authoritative.json"), []byte(`[{"id":"sample-step","dependencies":[{"id":"sample-gate","dependency_type":"blocks"}]}]`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	c := &cmdClient{run: defaultRunInDir}
 	ctx := context.Background()
-	if err := c.Init(ctx, dir); err != nil {
-		t.Fatal(err)
-	}
-	step, err := c.Create(ctx, dir, "Example step", CreateOptions{Silent: true})
-	if err != nil {
-		t.Fatal(err)
-	}
-	gate, err := c.Create(ctx, dir, "Example gate", CreateOptions{Silent: true})
-	if err != nil {
-		t.Fatal(err)
-	}
 	path := filepath.Join(dir, ".beads", "issues.jsonl")
 	if err := os.WriteFile(path, []byte(`{"id":"`+step+`","dependencies":[]}`+"\n"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	if err := c.DependOn(ctx, dir, step, gate); err != nil {
 		t.Fatal(err)
 	}
 	cached := NewCached(c)

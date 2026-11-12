@@ -91,7 +91,13 @@ func (e *Engine) settleLimit(c *chatRole, p *process, ev Event) {
 		if !failed {
 			c.limit = nil
 		}
+		current := c.proc == p
 		c.mu.Unlock()
+		// Only a real successful result from the current process proves that a
+		// refused move recovered. Errors, replay and late old-process results do not.
+		if current && ev.Result != nil && ev.Result.Subtype == "success" && !failed {
+			e.recordCapacity(c.role, nil)
+		}
 		return
 	}
 	u.Runtime, u.At = p.runtime(), e.opts.Now()

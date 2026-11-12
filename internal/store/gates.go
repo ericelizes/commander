@@ -12,9 +12,10 @@ import (
 
 // Gate statuses.
 const (
-	GateOpen   = "open"
-	GatePassed = "passed"
-	GateFailed = "failed"
+	GateOpen      = "open"
+	GatePassed    = "passed"
+	GateFailed    = "failed"
+	GateWithdrawn = "withdrawn" // cancellation never satisfies a gate
 )
 
 // Gate verifiers: auto runs Check as a command; reviewer:<login> and user are people.

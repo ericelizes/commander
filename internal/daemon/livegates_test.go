@@ -33,7 +33,7 @@ func newGateRig(gate beads.Bead) gateRig {
 	runs, pass := 0, true
 	now := epoch
 	heads := map[string]string{"pr": "aaa", "api": "m1"}
-	b := &beads.MockClient{ListResult: []beads.Bead{gate}}
+	b := &beads.MockClient{ListResult: []beads.Bead{gate}, ShowResults: map[string]*beads.Bead{gate.ID: &gate}}
 	w := &gateWatcher{
 		projects: fakeProjects{}, beads: b, last: map[string]gateSeen{}, failing: map[string]int{},
 		gh: func(_ context.Context, args ...string) ([]byte, error) { return []byte(heads[args[0]]), nil },
@@ -322,5 +322,13 @@ func TestLiveGatePassHolds(t *testing.T) {
 	}
 	if !strings.Contains(r.calls(), "Close:p-g1") {
 		t.Errorf("passed gate not closed: %s", r.calls())
+	}
+}
+
+func TestWithdrawnAutoGateNeverRunsOrApproves(t *testing.T) {
+	r := newGateRig(gateBead("p-g1", "auto", "deferred", beads.WithdrawnLabel))
+	r.poll(0)
+	if *r.runs != 0 || len(*r.sent) != 0 || strings.Contains(r.calls(), "AddComment") || strings.Contains(r.calls(), "Close:") {
+		t.Fatalf("withdrawn auto gate ran: %s", r.calls())
 	}
 }

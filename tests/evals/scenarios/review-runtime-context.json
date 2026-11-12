@@ -1,0 +1,6 @@
+{
+  "schema": "review-runtime-context@v1",
+  "runner": "internal/reviewrun:TestReviewRuntimeContextScenario",
+  "about": "Pre-seal snapshots bind exact context bytes; read-only merge inspection writes transient objects only to private run scratch. Sandbox policy is unchanged.",
+  "cases": ["context", "remerge"]
+}

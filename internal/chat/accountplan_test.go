@@ -151,3 +151,39 @@ func TestAccountOrderReadFailureCannotLaunchOnDefaults(t *testing.T) {
 		t.Fatal("started an account without its saved preferences")
 	}
 }
+
+// Integration guard: Commander preferences permit provider fallback, while a
+// Manager's Claude pin still refuses it. Both paths retain capacity recovery.
+func TestUnifiedPlanCapacityRecoveryPreservesRolePolicy(t *testing.T) {
+	for _, role := range []string{"commander", "manager-example"} {
+		t.Run(role, func(t *testing.T) {
+			h := accountHarness(t)
+			h.e.opts.CodexHooksReady = func() bool { return true }
+			if err := WriteRuntime(h.home, role, RuntimeClaude); err != nil {
+				t.Fatal(err)
+			}
+			now := time.Now()
+			h.e.Usage().MarkOut(RuntimeClaude, "default", role, now.Add(time.Hour).Unix(), now)
+			h.e.Usage().MarkOut(RuntimeCodex, "", role, now.Add(time.Hour).Unix(), now)
+			if _, _, err := h.e.steerManager(role, false); !errors.Is(err, ErrNoUsage) {
+				t.Fatalf("exhausted plan: %v", err)
+			}
+			if h.e.CapacityFailures()[role] == "" {
+				t.Fatal("capacity refusal missing")
+			}
+			h.e.Usage().Record(RuntimeCodex, "", role, []byte(`{"status":"allowed"}`), now)
+			_, _, err := h.e.steerManager(role, false)
+			if role == "commander" {
+				if err != nil || ReadRuntime(h.home, role) != RuntimeCodex || len(h.e.CapacityFailures()) != 0 {
+					t.Fatalf("unified fallback failed: runtime=%s capacity=%v err=%v", ReadRuntime(h.home, role), h.e.CapacityFailures(), err)
+				}
+			} else if !errors.Is(err, ErrNoUsage) || h.e.CapacityFailures()[role] == "" {
+				t.Fatalf("Manager pin lost: capacity=%v err=%v", h.e.CapacityFailures(), err)
+			}
+			h.e.Usage().Record(RuntimeClaude, "default", role, []byte(`{"status":"allowed"}`), now)
+			if _, _, err := h.e.steerManager(role, false); err != nil || ReadRuntime(h.home, role) != RuntimeClaude || len(h.e.CapacityFailures()) != 0 {
+				t.Fatalf("Claude recovery failed: runtime=%s capacity=%v err=%v", ReadRuntime(h.home, role), h.e.CapacityFailures(), err)
+			}
+		})
+	}
+}

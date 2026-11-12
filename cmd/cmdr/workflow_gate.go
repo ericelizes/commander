@@ -39,7 +39,7 @@ func isGateBead(b beads.Bead) bool {
 }
 
 func isRetiredBead(b beads.Bead) bool {
-	return slices.Contains(b.Labels, "retired") || slices.Contains(b.Labels, "superseded")
+	return slices.Contains(b.Labels, beads.WithdrawnLabel) || slices.Contains(b.Labels, "retired") || slices.Contains(b.Labels, "superseded")
 }
 
 // workflowGateScope is the bead whose first gate covers id: the nearest track

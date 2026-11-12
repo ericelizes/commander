@@ -2,6 +2,7 @@ package beads
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"sync"
@@ -138,21 +139,33 @@ func (c *blockingClient) Comments(ctx context.Context, dir, id string) ([]Commen
 	return c.countingClient.Comments(ctx, dir, id)
 }
 
-func TestDetailsIsOneShowPerBatch(t *testing.T) {
+func TestDetailsIsOneShowPerID(t *testing.T) {
 	var calls [][]string
 	out := `[{"id":"p-1.2","dependencies":[{"id":"p-1","dependency_type":"parent-child"},{"id":"p-1.1","dependency_type":"blocks"}],
 	  "comments":[{"author":"a","text":"gate passed by auto at 1: ok","created_at":"2026-10-22T00:00:00Z"}]},
 	 {"id":"p-1.1.1","dependencies":[{"id":"p-2","dependency_type":"parent-child"}]}]`
 	c := &cmdClient{run: func(_ context.Context, _, name string, args ...string) ([]byte, []byte, error) {
 		calls = append(calls, append([]string{name}, args...))
-		return []byte(out), nil, nil
+		var records []json.RawMessage
+		if err := json.Unmarshal([]byte(out), &records); err != nil {
+			t.Fatal(err)
+		}
+		if args[1] == "p-1.2" {
+			return append(append([]byte{'['}, records[0]...), ']'), nil, nil
+		}
+		return append(append([]byte{'['}, records[1]...), ']'), nil, nil
 	}}
 	got, err := c.Details(context.Background(), "/p", []string{"p-1.2", "p-1.1.1"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(calls) != 1 || calls[0][1] != "show" || calls[0][len(calls[0])-1] != "--json" {
-		t.Fatalf("want one br show ... --json, got %v", calls)
+	if len(calls) != 2 {
+		t.Fatalf("want one show per ID, got %v", calls)
+	}
+	for i, id := range []string{"p-1.2", "p-1.1.1"} {
+		if len(calls[i]) != 4 || calls[i][1] != "show" || calls[i][2] != id || calls[i][3] != "--json" {
+			t.Fatalf("single-ID calls: %v", calls)
+		}
 	}
 	if got["p-1.2"].Parent != "p-1" || len(got["p-1.2"].Deps) != 2 || got["p-1.2"].Deps[1] != (Dep{IssueID: "p-1.2", DependsOnID: "p-1.1", Type: "blocks"}) {
 		t.Fatalf("p-1.2 = %+v", got["p-1.2"])

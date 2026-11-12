@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -37,6 +38,41 @@ func idsN(n int) []string {
 		out[i] = fmt.Sprintf("p-%d", i)
 	}
 	return out
+}
+
+// PostgreSQL's bead command accepts exactly one ID per show.
+func TestDetailsSingleIDBackend(t *testing.T) {
+	for _, fresh := range []bool{false, true} {
+		t.Run(fmt.Sprint(fresh), func(t *testing.T) {
+			var mu sync.Mutex
+			var asked []string
+			c := &cmdClient{run: func(_ context.Context, _, _ string, args ...string) ([]byte, []byte, error) {
+				if len(args) != 3 || args[0] != "show" || args[2] != "--json" {
+					return nil, []byte("show requires one bead"), errors.New("exit status 1")
+				}
+				mu.Lock()
+				asked = append(asked, args[1])
+				mu.Unlock()
+				return []byte(fmt.Sprintf(`{"id":%q,"dependencies":[{"depends_on_id":"root","type":"parent-child"}],"comments":[{"text":%q}]}`, args[1], args[1])), nil, nil
+			}}
+			ids := []string{"p-3", "p-1", "p-2", "p-0"}
+			got, err := c.details(context.Background(), t.TempDir(), ids, fresh, true)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(asked) != len(ids) || len(got) != len(ids) {
+				t.Fatalf("asked %v, got %v", asked, got)
+			}
+			for _, id := range ids {
+				if got[id].Parent != "root" || len(got[id].Comments) != 1 || got[id].Comments[0].Text != id {
+					t.Fatalf("%s: incorrect detail: %+v", id, got[id])
+				}
+			}
+			if !fresh && !slices.Equal(asked, ids) {
+				t.Fatalf("display order %v, want %v", asked, ids)
+			}
+		})
+	}
 }
 
 // A cold start asks for a whole project (more ids than one br show survives):

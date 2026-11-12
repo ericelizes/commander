@@ -39,6 +39,9 @@ type workflowPlugResult struct {
 
 // runWorkflow: `workflow plug <template> --project P --parent B --before M --pr URL`.
 func runWorkflow(args []string, stdout, stderr *os.File) int {
+	if len(args) > 0 && args[0] == "own-run" {
+		return runWorkflowOwnRun(args[1:], stdout, stderr)
+	}
 	if len(args) > 0 && args[0] == "review-exec" {
 		return runWorkflowReviewExec(args[1:], stdout, stderr)
 	}

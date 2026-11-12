@@ -10,6 +10,9 @@ import (
 )
 
 func TestGateFreshEvidenceBypassesDisplayCache(t *testing.T) {
+	// This fixture exercises the CLI/export cache, independently of any
+	// PostgreSQL selector in the caller's Commander home.
+	t.Setenv("COMMANDER_HOME", t.TempDir())
 	dir := t.TempDir()
 	if err := os.Mkdir(filepath.Join(dir, ".beads"), 0700); err != nil {
 		t.Fatal(err)

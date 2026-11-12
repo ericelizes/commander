@@ -25,7 +25,8 @@
     "id": "lab-ops.4",
     "title": "Old runner cleanup",
     "kind": "stalled",
-    "text": "Agent stopped: the Manager's move"
+    "text": "Agent stopped: the Manager's move",
+    "why": "Automation failure: Agent stopped: the Manager's move. Owner: manager-lab-ops. Next: inspect the stopped run and current holder, then resume or replan through guarded dispatch on lab-ops.4. Commander owns escalation if recovery fails."
    }
   ]
  },

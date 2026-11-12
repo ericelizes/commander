@@ -87,7 +87,7 @@ func brOutput(dir string, args ...string) ([]byte, error) {
 }
 
 // brBeads is every bead of a project with its edges: `br list --all`, then
-// `br show` in batches (list carries only counts).
+// single-ID `br show` calls (list carries only counts).
 func brBeads(run brRunner, dir string) (json.RawMessage, error) {
 	raw, err := run(dir, "list", "--json", "--all", "--limit", "0")
 	if err != nil {
@@ -110,22 +110,51 @@ func brBeads(run brRunner, dir string) (json.RawMessage, error) {
 		}
 	}
 	all := []json.RawMessage{}
-	for start := 0; start < len(listed.Issues); start += 40 {
-		end := min(start+40, len(listed.Issues))
-		args := []string{"show"}
-		for _, i := range listed.Issues[start:end] {
-			args = append(args, i.ID)
-		}
-		out, err := run(dir, append(args, "--json")...)
+	// The PostgreSQL backend accepts one ID per show. Reading in list order
+	// also preserves the result order and the first backend error.
+	for _, issue := range listed.Issues {
+		out, err := run(dir, "show", issue.ID, "--json")
 		if err != nil {
 			return nil, err
 		}
-		var batch []json.RawMessage
-		if err := json.Unmarshal(out, &batch); err != nil {
-			return nil, fmt.Errorf("br show: decode: %w", err)
+		var shown []json.RawMessage
+		if err := json.Unmarshal(out, &shown); err != nil {
+			// The PostgreSQL compatibility command returns a single object;
+			// upstream br/bd returns an array even for one ID.
+			var one map[string]json.RawMessage
+			if err := json.Unmarshal(out, &one); err != nil || one == nil {
+				return nil, fmt.Errorf("br show: decode: %w", err)
+			}
+			// Adapt canonical edge fields to the graph checker's br wire format.
+			var deps []struct {
+				ID            string `json:"id"`
+				Type          string `json:"dependency_type"`
+				DependsOnID   string `json:"depends_on_id"`
+				CanonicalType string `json:"type"`
+			}
+			if raw := one["dependencies"]; len(raw) > 0 {
+				if err := json.Unmarshal(raw, &deps); err != nil {
+					return nil, fmt.Errorf("br show: dependencies: %w", err)
+				}
+				for i := range deps {
+					if deps[i].ID == "" {
+						deps[i].ID = deps[i].DependsOnID
+					}
+					if deps[i].Type == "" {
+						deps[i].Type = deps[i].CanonicalType
+					}
+				}
+				one["dependencies"], _ = json.Marshal(deps)
+			}
+			normalized, err := json.Marshal(one)
+			if err != nil {
+				return nil, fmt.Errorf("br show: encode: %w", err)
+			}
+			shown = []json.RawMessage{normalized}
 		}
-		all = append(all, batch...)
+		all = append(all, shown...)
 	}
+
 	return json.Marshal(all)
 }
 

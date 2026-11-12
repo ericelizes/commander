@@ -407,7 +407,11 @@ func pureGit(args []string) bool {
 	rest := args[1:]
 	for _, a := range rest {
 		switch {
-		case longOptionOf(a, "--output", 4), strings.HasPrefix(a, "-O"), longOptionOf(a, "--open-files-in-pager", 4),
+		// Git grep accepts -O (a pager program) anywhere in a short
+		// option cluster, including -nOprogram and -inO program.
+		case longOptionOf(a, "--output", 4), strings.HasPrefix(a, "-O"),
+			args[0] == "grep" && strings.HasPrefix(a, "-") && !strings.HasPrefix(a, "--") && strings.Contains(a[1:], "O"),
+			longOptionOf(a, "--open-files-in-pager", 4),
 			longOptionOf(a, "--upload-pack", 4), longOptionOf(a, "--exec", 4), longOptionOf(a, "--receive-pack", 4),
 			longOptionOf(a, "--ext-diff", 4), longOptionOf(a, "--textconv", 4), longOptionOf(a, "--filters", 4),
 			strings.Contains(a, "::"):

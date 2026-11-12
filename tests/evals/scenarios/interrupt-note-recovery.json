@@ -1,0 +1,7 @@
+{
+  "description": "Private fake-provider restart of a mid-turn session: a retained agent interrupt explanation replaces generic resume; absence of a note retains normal resume behavior.",
+  "cases": [
+    {"role": "manager-note", "sender": "commander", "keep_note": true},
+    {"role": "manager-resume", "sender": "commander", "keep_note": false}
+  ]
+}

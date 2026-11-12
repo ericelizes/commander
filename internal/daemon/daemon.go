@@ -309,7 +309,13 @@ func New() (*Daemon, error) {
 	// One snapshot source for the API and the watch (which judges workstreams by it).
 	health := newHealthBoard(time.Now)
 	live := &livedata.Source{
-		Health:      health.list,
+		Health: health.list,
+		ManagerCapacity: func() map[string]string {
+			if chatEngine == nil {
+				return nil
+			}
+			return chatEngine.CapacityFailures()
+		},
 		OnSnapshot:  func(snap *livedata.Snapshot) { checkPlans(health, snap); checkStuck(health, snap, time.Now()) },
 		Deps:        livedata.Deps{Store: st, Beads: reads, Scrape: livedata.ScrapeAgentStates},
 		UnreadEvery: 5 * time.Second, // Unread is set below from the waker's inbox reads
@@ -352,6 +358,11 @@ func New() (*Daemon, error) {
 	}
 
 	watch := opWatch{store: st, issues: st, activeAt: transcriptActiveAt, now: time.Now, latest: func() (livedata.Snapshot, bool) {
+		if st.IsPostgres() {
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
+			return live.WatchSnapshot(ctx), true
+		}
 		data, ok := live.Last()
 		if !ok {
 			if err := live.LastLoadErr(); err != nil {

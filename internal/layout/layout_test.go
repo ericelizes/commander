@@ -830,7 +830,11 @@ func TestRefresh_RebuildsExistingCommanderOwnedWindows(t *testing.T) {
 func TestRefresh_DoesNotCreateUnopenedLeadOrOperatorWindows(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("COMMANDER_HOME", tmp)
-	t.Setenv("COMMANDER_WORKSPACE_ROOT", t.TempDir())
+	workspace := filepath.Join(t.TempDir(), "op-fixture")
+	if err := os.Mkdir(workspace, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("COMMANDER_WORKSPACE_ROOT", workspace)
 	if err := os.WriteFile(filepath.Join(tmp, CommanderSessionFileName), []byte("ses_cmdr\n"), 0o644); err != nil {
 		t.Fatalf("seed commander session: %v", err)
 	}
@@ -871,9 +875,17 @@ func TestRefresh_DoesNotCreateUnopenedLeadOrOperatorWindows(t *testing.T) {
 		t.Fatalf("Refresh: %v", err)
 	}
 
-	for _, c := range mr.CallStrings() {
-		if strings.Contains(c, "lead-") || strings.Contains(c, "op-") {
-			t.Fatalf("unexpected lead/operator rebuild call: %s", c)
+	// Inspect window names and targets, not commands or working directories:
+	// the caller's temporary directory may itself contain "op-".
+	for _, args := range mr.Calls {
+		for i := 1; i < len(args); i++ {
+			if args[i-1] != "-n" && args[i-1] != "-t" {
+				continue
+			}
+			window := strings.TrimPrefix(args[i], CommanderSessionName+":")
+			if strings.HasPrefix(window, "lead-") || strings.HasPrefix(window, "op-") || isManagerWindowName(window) {
+				t.Fatalf("unexpected lead/operator rebuild call: %q", args)
+			}
 		}
 	}
 }

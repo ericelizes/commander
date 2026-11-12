@@ -87,7 +87,7 @@
     "for_you": false
    },
    "tracks": [],
-   "why": "its session ended"
+   "why": "its session ended · Automation failure: Agent stopped on interrupted work: the Manager's move. Owner: manager-app-m. Next: inspect the stopped run and current holder, then resume or replan through guarded dispatch on app-m.1. Commander owns escalation if recovery fails."
   },
   {
    "key": "example-app:app-n",

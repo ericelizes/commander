@@ -39,6 +39,13 @@ func fixture(t *testing.T) Request {
 
 func TestOriginalManifestExistsBeforeReviewerRuns(t *testing.T) {
 	r := fixture(t)
+	contextFile := filepath.Join(t.TempDir(), "dispatch.txt")
+	if err := os.WriteFile(contextFile, []byte("dispatch context independent of original prompt"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	r.ContextFiles = []string{contextFile}
+	r.PrivateGit = true
+	r.Command = []string{"/bin/sh", "-c", `test -r "$COMMANDER_REVIEW_RUN_DIR/started.json" && test -r "$COMMANDER_REVIEW_RUN_DIR/context/0000.txt" && test "$GIT_OBJECT_DIRECTORY" = "$COMMANDER_REVIEW_RUN_DIR/git-scratch/objects" && printf done`}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	result, err := Run(ctx, r)
@@ -65,6 +72,9 @@ func TestOriginalManifestExistsBeforeReviewerRuns(t *testing.T) {
 	}
 	if m.RunID != 7 || m.Task != r.Task || m.Actor != r.Actor || m.Policy.Head == "" || m.Policy.Base != r.Base || m.PromptHash == "" {
 		t.Fatalf("%+v", m)
+	}
+	if len(m.Context) != 2 || m.Context[0].SHA256 == m.PromptHash || len(m.GitEnvironment) == 0 || m.GitScratch == "" {
+		t.Fatalf("staged context or private Git not sealed: %+v", m)
 	}
 	_ = os.WriteFile(r.PromptFile, []byte("later mutation"), 0600)
 	b, _ = os.ReadFile(filepath.Join(r.Dir, "prompt.txt"))

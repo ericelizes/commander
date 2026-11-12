@@ -22,7 +22,7 @@ func (l RowLine) Colour() string { return kindColour(l.Kind) }
 
 func kindColour(kind string) string {
 	switch kind {
-	case "needs":
+	case "needs", "stalled", "stuck":
 		return "red"
 	case "waiting":
 		return "yellow"

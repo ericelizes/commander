@@ -353,8 +353,21 @@ func TestManagerStartRefusedWhenEveryAccountIsOut(t *testing.T) {
 	if !errors.Is(err, ErrNoUsage) {
 		t.Fatalf("err = %v", err)
 	}
+	if !strings.Contains(h.e.CapacityFailures()["manager-z"], ErrNoUsage.Error()) {
+		t.Fatal("refused start missing from capacity state")
+	}
+	copy := h.e.CapacityFailures()
+	delete(copy, "manager-z")
+	if len(h.e.CapacityFailures()) != 1 {
+		t.Fatal("capacity state is not a copy")
+	}
 	if _, err := os.Stat(AccountFile(h.home, "manager-z")); !os.IsNotExist(err) {
 		t.Error("account written")
+	}
+	h.e.Usage().Record(RuntimeClaude, "", "manager-x", json.RawMessage(`{"status":"allowed"}`), time.Now())
+	h.start("manager-z")
+	if len(h.e.CapacityFailures()) != 0 {
+		t.Fatal("successful start did not clear capacity")
 	}
 }
 
@@ -500,5 +513,76 @@ func TestManagerAccountChoiceStillFallsBackToCodex(t *testing.T) {
 	}
 	if b, _ := os.ReadFile(filepath.Join(h.e.logDir(), "manager-d.jsonl")); strings.Contains(string(b), "usage_limit_switch") {
 		t.Fatalf("a drawn Codex Manager that never left Codex was reported moved: %s", b)
+	}
+}
+
+// A refused move leaves the current process alive. Its next successful turn
+// proves recovery without any new start/plan; another refusal must stay visible.
+func TestCapacityFailureClearsOnSameProcessRecovery(t *testing.T) {
+	h := accountHarness(t)
+	h.opts.CodexHooksReady = func() bool { return false }
+	h.e = New(h.opts)
+	h.role("manager-recovery")
+	before := h.start("manager-recovery")
+	sub := h.subscribe("manager-recovery")
+	if err := h.e.Send(context.Background(), "manager-recovery", "usagelimit"); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, sub, func(ev Event) bool { return ev.Kind == KindNotice && strings.Contains(ev.Text, "Not moved:") })
+	if len(h.e.CapacityFailures()) != 1 {
+		t.Fatal("refused move not retained")
+	}
+	if err := h.e.Send(context.Background(), "manager-recovery", "usagelimit"); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, sub, func(ev Event) bool { return ev.Kind == KindNotice && strings.Contains(ev.Text, "Not moved:") })
+	if len(h.e.CapacityFailures()) != 1 {
+		t.Fatal("failed turn cleared capacity")
+	}
+	if err := h.e.Send(context.Background(), "manager-recovery", "recovered"); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, sub, isKind(KindResult))
+	// Result publication precedes settling its capacity state.
+	deadline := time.Now().Add(5 * time.Second)
+	for len(h.e.CapacityFailures()) != 0 && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	if len(h.e.CapacityFailures()) != 0 {
+		t.Fatal("successful same-process result left capacity refusal")
+	}
+	after, err := h.e.Status("manager-recovery")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if before.PID != after.PID || !after.Running {
+		t.Fatalf("process changed: before %+v after %+v", before, after)
+	}
+}
+
+func TestCapacityFailureRequiresPositiveCurrentProcessEvidence(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		result *Result
+		stale  bool
+	}{
+		{name: "missing result"},
+		{name: "failed result", result: &Result{Subtype: "success", IsError: true}},
+		{name: "unknown result", result: &Result{}},
+		{name: "old process", result: &Result{Subtype: "success"}, stale: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := New(Options{Home: t.TempDir()})
+			p := &process{}
+			c := &chatRole{role: "manager-proof", proc: p}
+			if tc.stale {
+				c.proc = &process{}
+			}
+			e.recordCapacity(c.role, ErrNoUsage)
+			e.settleLimit(c, p, Event{Kind: KindResult, Result: tc.result})
+			if len(e.CapacityFailures()) != 1 {
+				t.Fatal("non-recovery evidence cleared refusal")
+			}
+		})
 	}
 }

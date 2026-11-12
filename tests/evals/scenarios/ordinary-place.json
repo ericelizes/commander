@@ -1,0 +1,8 @@
+{
+  "root": "sample-flow",
+  "wrapper": "sample-flow.1",
+  "step": "sample-flow.2",
+  "gate": "sample-flow.3",
+  "moving": "sample-moving",
+  "descendant": "sample-leaf"
+}

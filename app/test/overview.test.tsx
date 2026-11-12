@@ -137,8 +137,10 @@ describe('Overview', () => {
   })
   it('distinguishes a stalled agent from a user decision', () => {
     render(<Overview ws={ws} row={{ ...row, kind: 'stalled', working: 0, text: 'Operator stopped without reporting' }} onWorkflow={vi.fn()} onTrack={vi.fn()} />)
-    expect(screen.getByRole('heading', { name: 'Recovery needed' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Automation failure — Manager recovery needed' })).toBeInTheDocument()
     expect(screen.getByText('No decision is requested from you. Agent recovery is needed.')).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Automation failure' })).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Needs you' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Answer this' })).toBeNull()
   })
   it('marks stale narrative and keeps live state visible while the reader retries', async () => {

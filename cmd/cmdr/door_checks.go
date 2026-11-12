@@ -563,25 +563,10 @@ func prRefs(d *store.Decision, labels []string) map[string]bool {
 	return livedata.PRRefs(d, labels)
 }
 
-// approvalAsk: the card asks the user to approve (an approves option, or on a
-// card without the flag an approving label).
+// approvalAsk uses explicit card authority. Ordinary access/action choices do
+// not become approval gates because their labels happen to say "continue".
 func approvalAsk(d *store.Decision) bool {
-	if d == nil {
-		return false
-	}
-	flagged := false
-	for _, o := range d.Options {
-		flagged = flagged || o.Approves
-	}
-	if flagged {
-		return true
-	}
-	for _, o := range d.Options {
-		if legacyApprovingLabel(o.Label) {
-			return true
-		}
-	}
-	return false
+	return d != nil && slices.ContainsFunc(d.Options, func(o store.DecisionOption) bool { return o.Approves })
 }
 
 const waitHeldTail = "A new card about it is refused until that wait clears (cmdrd clears it and mails you when it does); keep waiting"

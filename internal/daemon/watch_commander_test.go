@@ -287,7 +287,7 @@ func TestCheckinHeadlineScenario(t *testing.T) {
 			if strings.Contains(got, suspectLine) != c.SuspectLine {
 				t.Errorf("suspect line present = %v, want %v:\n%s", !c.SuspectLine, c.SuspectLine, got)
 			}
-			if lines := reportList(got, livedata.StalledHeader); !slices.Equal(lines, c.StalledLines) {
+			if lines := reportList(got, livedata.StalledHeader); !sameStalledCauses(lines, c.StalledLines) {
 				t.Errorf("stalled lines\n got %q\nwant %q\n%s", lines, c.StalledLines, got)
 			}
 			if lines := reportList(got, livedata.MismatchHeader); !slices.Equal(lines, c.MismatchLines) {
@@ -392,4 +392,18 @@ func TestCommanderCandidatesHoldQuietsOnlyWhatNobodyIsMoving(t *testing.T) {
 	if got := keys(snap); !slices.Equal(got, []string{"commander"}) {
 		t.Fatalf("held, waiting on Commander: %v", got)
 	}
+}
+
+// Existing scenarios retain their cause assertions; the new recovery detail is
+// independently asserted by the automation-failure scenario and unit tests.
+func sameStalledCauses(got, want []string) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	for i := range got {
+		if got[i] != want[i] && !strings.HasPrefix(got[i], want[i]+" · why: Automation failure:") && !strings.HasPrefix(got[i], want[i]+" · Automation failure:") {
+			return false
+		}
+	}
+	return true
 }

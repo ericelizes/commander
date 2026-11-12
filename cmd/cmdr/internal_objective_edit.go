@@ -868,6 +868,9 @@ func runInternalCloseObjective(args []string, stdout, stderr *os.File) int {
 	}
 	return editObjective(*projectName, stdout, stderr, func(ctx context.Context, dir string) (internalObjectiveEditResult, error) {
 		result := internalObjectiveEditResult{BeadID: *beadID}
+		if err := requireParentFinished(ctx, newBeadsClientFn(), dir, *beadID); err != nil {
+			return result, err
+		}
 		if err := checkWorkflowClose(ctx, newBeadsClientFn(), dir, *projectName, *beadID); err != nil {
 			return result, err
 		}

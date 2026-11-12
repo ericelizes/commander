@@ -15,7 +15,8 @@
     "internal/store:TestConsolidationOwnerTraversalMatchesCanonicalDatabase",
     "internal/livedata:TestActiveBoardPlanningObligationDoesNotInventAgentActivity",
     "internal/livedata:TestActiveBoardPreservesWaitsHoldsAndRealDecisionPriority",
-    "internal/livedata:TestActiveBoardCountsOnlyCurrentExecutionAndChecksUnknownCustody"
+    "internal/livedata:TestActiveBoardCountsOnlyCurrentExecutionAndChecksUnknownCustody",
+    "internal/livedata:TestActiveBoardIgnoresRetiredManagerCapacity"
   ],
   "invariants": [
     "Only an explicit consolidation receipt nominates a planning identity",

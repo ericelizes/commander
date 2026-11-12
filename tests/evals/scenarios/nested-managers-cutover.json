@@ -1,5 +1,5 @@
 {
-  "goal": "The cutover turns a project's nested Managers on with no lost mail: the dry run changes nothing; apply registers every nested Manager with a mail cursor before flipping the switch, hands each one its running Operators and the root's unread mail about its beads (listed, never moved or marked read) and tells the root; afterwards a running Operator's report to the root lands at its nested Manager; undo flips back, tells the root what returns to it and each nested Manager to stop, and an Operator still naming its nested Manager reports to the root again.",
+  "goal": "The cutover turns a project's nested Managers on with no lost mail: the dry run changes nothing; apply registers every nested Manager with a mail cursor before flipping the switch, hands each one its running Operators and the root's unread mail about its beads (listed, never moved or marked read) and tells the root; afterwards a running Operator's report to the root lands at its nested Manager; undo flips back, tells the root what returns to it and each nested Manager to stop, and an Operator still naming its nested Manager reports to the root again, with no copy sent to the obsolete nested Manager.",
   "project": "example",
   "operator": "operator-op-fix-demo-s",
   "task": "demo-s",

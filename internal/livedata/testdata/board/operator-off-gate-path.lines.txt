@@ -5,5 +5,5 @@
   3.1 Sprint track: Working on land the sprint polish · then: sprint confirmed done (33% done, 1 working)
   3.2 Second track: Waiting for CI (0% done, for 8m)
 4 Live track with a broken step beside a waiting track: Waiting for CI (0% done, no gates, 2 working, for 8m)
-  4.1 Sprint track: State missing (0% done, 1 working) · why: Working on land the sprint polish; nothing holds check the sprint numbers
+  4.1 Sprint track: State missing (0% done, 1 working) · why: Working on land the sprint polish; nothing holds check the sprint numbers · Automation failure: open work has no valid holder. Owner: manager-app-w4. Next: inspect current evidence and record the next guarded recovery action on app-w4.1.2. Commander owns escalation if recovery fails.
   4.2 Second track: Waiting for CI (0% done, for 8m)

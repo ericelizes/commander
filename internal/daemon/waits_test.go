@@ -25,6 +25,12 @@ func (f fakeProjects) ListProjects(context.Context) ([]store.Project, error) {
 var epoch = time.Unix(1_000_000, 0)
 
 func watcher(b *beads.MockClient, gh map[string]string, sent *[]sentMail, now time.Time) *waitWatcher {
+	if b.ShowResult == nil && b.ShowResults == nil {
+		b.ShowResults = map[string]*beads.Bead{}
+		for i := range b.ListResult {
+			b.ShowResults[b.ListResult[i].ID] = &b.ListResult[i]
+		}
+	}
 	return &waitWatcher{
 		projects: fakeProjects{}, beads: b, woken: map[string]bool{},
 		gh: func(_ context.Context, args ...string) ([]byte, error) {

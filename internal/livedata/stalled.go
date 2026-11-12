@@ -1,6 +1,7 @@
 package livedata
 
 import (
+	"maps"
 	"slices"
 
 	"github.com/example-user/commander/internal/store"
@@ -20,10 +21,19 @@ type stalledPlace struct {
 // stalled. The row's line stops at its most urgent and a line names one thing, so each
 // open step is read alone through workstreamLine, deepest first (an open parent and child
 // are one place), and then the whole level, for what no step says (a stuck Manager, a
-// pitch owed on the workstream bead). A reacting Manager is picking all of it up.
+// pitch owed on the workstream bead). Manager reaction quiets generic inactivity,
+// but cannot resolve factual handoff or stopped-run failures.
 func (b board) stalledPlaces(ws SnapWorkstream, stalledTrack map[string]bool) []stalledPlace {
 	if managerReacting(b.s, ws.ManagerRole) {
-		return nil
+		// Unread mail grants the same generic inactivity grace as a live turn.
+		// Use a private map: Checkin must never mutate its caller's snapshot.
+		b.s.Agents = maps.Clone(b.s.Agents)
+		if b.s.Agents == nil {
+			b.s.Agents = map[string]SnapAgent{}
+		}
+		manager := b.s.Agents[ws.ManagerRole]
+		manager.State = store.AgentWorking
+		b.s.Agents[ws.ManagerRole] = manager
 	}
 	b.steps = map[string]SnapStep{}
 	for s := range stepValues(ws.Steps) {
@@ -62,7 +72,7 @@ func (b board) stalledLevel(ws SnapWorkstream, title string) []stalledPlace {
 	var out []stalledPlace
 	if t, isTrack := b.steps[ws.BeadID]; isTrack && b.holdsChildren(t) {
 		ws.Steps = heldSteps(ws.Steps)
-		out = stoppedOwner(t)
+		out = stoppedOwner(t, ws)
 	}
 	out = append(out, b.stalledSteps(ws, ws.Steps)...)
 	whole := ws
@@ -94,7 +104,7 @@ func (b board) stalledSteps(ws SnapWorkstream, steps []SnapStep) []stalledPlace 
 		var stopped []stalledPlace
 		if b.holdsChildren(x) {
 			kids = heldSteps(kids)
-			stopped = stoppedOwner(x)
+			stopped = stoppedOwner(x, ws)
 		}
 		if under := b.stalledSteps(ws, kids); len(stopped)+len(under) > 0 {
 			out = append(append(out, stopped...), under...)
@@ -116,9 +126,10 @@ func (b board) stalledSteps(ws SnapWorkstream, steps []SnapStep) []stalledPlace 
 
 // stoppedOwner names a stopped Operator on a held step with open children. The board reads
 // an Operator only on a leaf, so here nothing else would say it: the hold quiets the children.
-func stoppedOwner(s SnapStep) []stalledPlace {
+func stoppedOwner(s SnapStep, ws SnapWorkstream) []stalledPlace {
 	if l, ok := goneLine([]SnapStep{s}); ok && hasOpen(s.Children) {
-		return []stalledPlace{{s.BeadID, truncate(titleOf(s.Title, s.BeadID), 80), l}}
+		ws.BeadID, ws.Steps = s.BeadID, []SnapStep{s}
+		return []stalledPlace{{s.BeadID, truncate(titleOf(s.Title, s.BeadID), 80), recoveryLine(l, ws)}}
 	}
 	return nil
 }

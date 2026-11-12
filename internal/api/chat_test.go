@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -282,5 +283,57 @@ func TestChatAPIRuntime(t *testing.T) {
 	code, r = postChat(t, ts, "/api/chat/operator-api/runtime", map[string]any{"runtime": "claude"})
 	if code != http.StatusOK || r.Status.Runtime != chat.RuntimeClaude {
 		t.Fatalf("back to claude: %d %+v", code, r)
+	}
+}
+
+// An interrupt with "by" is an agent's mail and gets the labelled note; one
+// without it is the app's stop button, the user's, and stays a plain interrupt.
+func TestChatAPIInterruptLabelsOnlyAnAgentsInterrupt(t *testing.T) {
+	_, ts := newChatServer(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	notePath := filepath.Join(os.Getenv(chattest.DirVar), "interrupt-note.json")
+
+	ws := "ws" + strings.TrimPrefix(ts.URL, "http") + "/api/chat/operator-api/events?since=0&token=" + testToken
+	c, _, err := websocket.Dial(ctx, ws, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.CloseNow()
+	readUntil(t, ctx, c, chat.KindReplayDone)
+
+	cut := func(body map[string]any) []chat.Event {
+		t.Helper()
+		code, r := postChat(t, ts, "/api/chat/operator-api/send", map[string]any{"text": "long story", "start": true})
+		if code != http.StatusOK || !r.OK {
+			t.Fatalf("send: %d %+v", code, r)
+		}
+		readUntil(t, ctx, c, chat.KindTextDelta)
+		if code, r := postChat(t, ts, "/api/chat/operator-api/interrupt", body); code != http.StatusOK || !r.OK {
+			t.Fatalf("interrupt %v: %d %+v", body, code, r)
+		}
+		return readUntil(t, ctx, c, chat.KindResult)
+	}
+
+	cut(nil)
+	time.Sleep(200 * time.Millisecond)
+	if _, err := os.Stat(notePath); err == nil {
+		t.Fatal("the user's stop (no by) got a Commander note")
+	}
+
+	seen := cut(map[string]any{"by": "commander"})
+	note := ""
+	for note == "" { // the note may land before or after the cut turn's result
+		for _, ev := range seen {
+			if ev.Kind == chat.KindUser && note == "" {
+				note = ev.Text
+			}
+		}
+		if note == "" {
+			seen = readUntil(t, ctx, c, chat.KindUser)
+		}
+	}
+	if !strings.HasPrefix(note, "[commander interrupt] commander ") {
+		t.Fatalf("by=commander: first message after the cut = %q, want the labelled note", note)
 	}
 }

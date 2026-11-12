@@ -16,6 +16,9 @@ import (
 	"time"
 )
 
+// WithdrawnLabel records cancellation, never approval. Keep it on retained gates.
+const WithdrawnLabel = "withdrawn"
+
 // Bead is the minimal projection of a beads issue commander cares about.
 type Bead struct {
 	QuestionWaiting       bool     `json:"question_waiting,omitempty"`

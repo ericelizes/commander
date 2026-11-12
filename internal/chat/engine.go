@@ -104,7 +104,8 @@ type Engine struct {
 	// first start attempt; nil before ResumeRunning (nothing to wait for).
 	resumed chan struct{}
 
-	crashes map[string][]time.Time // role -> recent crash restarts, guarded by mu
+	capacity map[string]string      // last refused Manager usage start, guarded by mu
+	crashes  map[string][]time.Time // role -> recent crash restarts, guarded by mu
 }
 
 // WaitResumed blocks until the chats running before a restart have been picked
@@ -209,6 +210,7 @@ type process struct {
 	reqN    int
 
 	stopping bool        // guarded by chatRole.mu
+	noteStop bool        // guarded by chatRole.mu: a mail interrupt's SIGINT ended it; the next process gets the kept note
 	detached bool        // guarded by chatRole.mu: Close let go of the host; claude keeps running
 	info     SessionInfo // last init, guarded by chatRole.mu
 	handoff  atomic.Bool // the Claude handoff note went out (takeClaudeHandoff)
@@ -378,22 +380,24 @@ type StartOptions struct {
 // transcript for it). It is a no-op when the role is already running. It
 // refuses with *OwnedError when anything else owns the session id.
 func (e *Engine) Start(ctx context.Context, role string, o StartOptions) (Status, error) {
-	st, _, err := e.start(ctx, role, o)
+	st, _, _, err := e.start(ctx, role, o)
 	return st, err
 }
 
 // start is Start; spawned reports that it launched a new claude process (not a
-// no-op, not an adopted host).
-func (e *Engine) start(ctx context.Context, role string, o StartOptions) (st Status, spawned bool, err error) {
+// no-op, not an adopted host), noted that its first message was a kept
+// interrupt note (sendPendingInterruptNote), which already tells the role what
+// to do next, so callers send no resume message after it.
+func (e *Engine) start(ctx context.Context, role string, o StartOptions) (st Status, spawned, noted bool, err error) {
 	c, err := e.chat(role)
 	if err != nil {
-		return Status{}, false, err
+		return Status{}, false, false, err
 	}
 	c.mu.Lock()
 	if c.proc != nil || c.starting {
 		c.mu.Unlock()
 		st, err = e.Status(role)
-		return st, false, err
+		return st, false, false, err
 	}
 	c.starting = true
 	c.mu.Unlock()
@@ -404,48 +408,48 @@ func (e *Engine) start(ctx context.Context, role string, o StartOptions) (st Sta
 	}()
 
 	if e.opts.Resolver == nil {
-		return Status{}, false, errors.New("chat: no resolver configured")
+		return Status{}, false, false, errors.New("chat: no resolver configured")
 	}
 	if err = e.flushNativeExits(ctx, role); err != nil {
-		return Status{}, false, err
+		return Status{}, false, false, err
 	}
 	spec, err := e.opts.Resolver.Resolve(ctx, role)
 	if err != nil {
-		return Status{}, false, err
+		return Status{}, false, false, err
 	}
 	if o.Model != "" {
 		spec.Model = o.Model
 	}
 	if spec.SessionID == "" {
-		return Status{}, false, fmt.Errorf("chat: %s has no session id", role)
+		return Status{}, false, false, fmt.Errorf("chat: %s has no session id", role)
 	}
 	if err := e.claimSession(spec.SessionID, role); err != nil {
-		return Status{}, false, err
+		return Status{}, false, false, err
 	}
 	// A host that survived a cmdrd restart holds the session: adopt it.
 	hc, hello, hostErr := e.findHost(role, spec.SessionID, spec.ExecutionRunID > 0)
 	if hostErr != nil {
 		e.releaseSession(spec.SessionID)
-		return Status{}, false, hostErr
+		return Status{}, false, false, hostErr
 	}
 	if hc != nil {
 		if spec.ExecutionRunID > 0 && hello.Info.ExecutionRunID != spec.ExecutionRunID {
 			hc.close()
 			e.releaseSession(spec.SessionID)
-			return Status{}, false, errors.New("native host execution identity is missing or differs from the current claim")
+			return Status{}, false, false, errors.New("native host execution identity is missing or differs from the current claim")
 		}
 		e.adopt(c, spec, hc, hello)
 		st, err = e.Status(role)
-		return st, false, err
+		return st, false, false, err
 	}
 	if spec.ExecutionBlocked {
 		e.releaseSession(spec.SessionID)
-		return Status{}, false, errors.New("current execution is held, blocked or awaiting planning review; a new process cannot start")
+		return Status{}, false, false, errors.New("current execution is held, blocked or awaiting planning review; a new process cannot start")
 	}
 	lock, err := e.checkAndLock(ctx, spec.SessionID, role)
 	if err != nil {
 		e.releaseSession(spec.SessionID)
-		return Status{}, false, err
+		return Status{}, false, false, err
 	}
 	// A Manager a share drew onto Codex goes back to Claude at a new process
 	// only: an adopted host above keeps running as it is, and a host findHost
@@ -461,7 +465,7 @@ func (e *Engine) start(ctx context.Context, role string, o StartOptions) (st Sta
 		if moved, changed, err = e.steerManager(role, e.NeverStarted(role)); err != nil {
 			lock.release()
 			e.releaseSession(spec.SessionID)
-			return Status{}, false, err
+			return Status{}, false, false, err
 		}
 		resolve = resolve || changed
 	}
@@ -470,7 +474,7 @@ func (e *Engine) start(ctx context.Context, role string, o StartOptions) (st Sta
 		if err != nil {
 			lock.release()
 			e.releaseSession(spec.SessionID)
-			return Status{}, false, err
+			return Status{}, false, false, err
 		}
 		if o.Model != "" {
 			again.Model = o.Model
@@ -484,22 +488,23 @@ func (e *Engine) start(ctx context.Context, role string, o StartOptions) (st Sta
 			lock.release()
 			e.releaseSession(spec.SessionID)
 			if checkErr != nil {
-				return Status{}, false, checkErr
+				return Status{}, false, false, checkErr
 			}
-			return Status{}, false, errors.New("native execution custody or authority changed before process launch")
+			return Status{}, false, false, errors.New("native execution custody or authority changed before process launch")
 		}
 		spec = current
 	}
 	if err := e.spawn(ctx, c, spec, lock); err != nil {
 		lock.release()
 		e.releaseSession(spec.SessionID)
-		return Status{}, false, err
+		return Status{}, false, false, err
 	}
 	if moved != "" {
 		e.startMoved(c, moved)
 	}
+	noted = e.sendPendingInterruptNote(role)
 	st, err = e.Status(role)
-	return st, true, err
+	return st, true, noted, err
 }
 
 func (e *Engine) claimSession(id, role string) error {
@@ -1073,8 +1078,13 @@ func (e *Engine) onExit(c *chatRole, p *process, hx *hostExit) {
 		return
 	}
 	ex.Expected = p.stopping
+	noteStop := p.noteStop
 	midTurn := c.tracker.turn
 	c.mu.Unlock()
+	// A mail interrupt's SIGINT fallback is our own stop, not a crash: the
+	// role comes back (where crashes would) with the kept note as its first
+	// message, never the crash notice and resume message.
+	autoRestart := p.spec.ExecutionRunID == 0 && e.opts.CrashRestart != nil && e.opts.CrashRestart(c.role)
 	if !ex.Expected && (ex.Code != 0 || ex.Signal != "") {
 		if tail := strings.TrimSpace(hx.Stderr); tail != "" {
 			c.publishFrom(p, Event{Kind: KindError, Source: SourceEngine, Error: tail})
@@ -1088,7 +1098,7 @@ func (e *Engine) onExit(c *chatRole, p *process, hx *hostExit) {
 	if c.proc == p {
 		c.proc = nil
 	}
-	if !ex.Expected {
+	if !ex.Expected || (noteStop && !autoRestart) {
 		c.meta.Running = false
 	}
 	_ = writeMeta(e.logDir(), c.role, c.meta)
@@ -1104,8 +1114,29 @@ func (e *Engine) onExit(c *chatRole, p *process, hx *hostExit) {
 		}
 		cancel()
 	}
-	if p.spec.ExecutionRunID == 0 && !ex.Expected && e.opts.CrashRestart != nil && e.opts.CrashRestart(c.role) {
+	switch {
+	case p.spec.ExecutionRunID == 0 && noteStop && autoRestart:
+		go e.restartInterrupted(c)
+	case p.spec.ExecutionRunID == 0 && !ex.Expected && autoRestart:
 		go e.restartCrashed(c, midTurn)
+	}
+}
+
+// restartInterrupted starts c's role again after a mail interrupt's SIGINT
+// fallback ended its process. start sends the kept interrupt note first; no
+// crash is counted and no resume message follows.
+func (e *Engine) restartInterrupted(c *chatRole) {
+	time.Sleep(e.opts.CrashRestartDelay)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	_, spawned, _, err := e.start(ctx, c.role, StartOptions{})
+	if err != nil {
+		e.opts.Logf("chat: restart %s after a mail interrupt: %v", c.role, err)
+		c.publish(Event{Kind: KindNotice, Source: SourceEngine, Subtype: "interrupt_restart", Text: "Could not restart the session after the interrupt: " + err.Error()})
+		return
+	}
+	if spawned {
+		c.publish(Event{Kind: KindNotice, Source: SourceEngine, Subtype: "interrupt_restart", Text: "Restarted the session after the interrupt"})
 	}
 }
 
@@ -1141,7 +1172,7 @@ func (e *Engine) restartCrashed(c *chatRole, midTurn bool) {
 	time.Sleep(e.opts.CrashRestartDelay)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	_, spawned, err := e.start(ctx, c.role, StartOptions{})
+	_, spawned, noted, err := e.start(ctx, c.role, StartOptions{})
 	if err != nil {
 		e.opts.Logf("chat: restart %s after crash: %v", c.role, err)
 		c.publish(Event{Kind: KindNotice, Source: SourceEngine, Subtype: "crash_restart", Text: "Could not restart the session: " + err.Error()})
@@ -1151,7 +1182,7 @@ func (e *Engine) restartCrashed(c *chatRole, midTurn bool) {
 		return // something else started it first
 	}
 	c.publish(Event{Kind: KindNotice, Source: SourceEngine, Subtype: "crash_restart", Text: "Restarted the session after the crash"})
-	if midTurn {
+	if midTurn && !noted {
 		if err := e.send(c.role, CrashResumeMessage, "mail"); err != nil {
 			e.opts.Logf("chat: crash resume message to %s: %v", c.role, err)
 		}
@@ -1303,23 +1334,180 @@ func withLeadingText(note string, content any) any {
 // not acknowledge it within InterruptGrace the process gets SIGINT (which ends
 // the turn and the process; Start resumes it).
 func (e *Engine) Interrupt(ctx context.Context, role string) error {
+	_, err := e.interrupt(ctx, role, nil)
+	return err
+}
+
+// interrupt is Interrupt that also says whether the turn was ended by the
+// SIGINT fallback (no ack in time): that process is going away, though
+// Running stays true until its exit is seen. beforeSignal, when set, runs
+// right before the SIGINT.
+func (e *Engine) interrupt(ctx context.Context, role string, beforeSignal func(*chatRole, *process)) (fellBack bool, err error) {
 	c, p, err := e.live(role)
 	if err != nil {
-		return err
+		return false, err
 	}
 	ack := e.sendInterrupt(p)
 	c.publish(Event{Kind: KindStatus, Source: SourceEngine, Status: "interrupting"})
 	select {
 	case <-ack:
-		return nil
+		return false, nil
 	case <-p.done:
-		return nil
+		return true, nil
 	case <-ctx.Done():
-		return ctx.Err()
+		return false, ctx.Err()
 	case <-time.After(e.opts.InterruptGrace):
 	}
 	c.publish(Event{Kind: KindNotice, Source: SourceEngine, Subtype: "interrupt_fallback", Text: "no interrupt ack; sending SIGINT"})
-	return p.signal(syscall.SIGINT)
+	if beforeSignal != nil {
+		beforeSignal(c, p)
+	}
+	return true, p.signal(syscall.SIGINT)
+}
+
+// InterruptForMail stops role's current turn so it reads mail from by (a
+// Commander or Manager role, never the user). Claude records any interrupt as
+// the user's: the cut tool call's result reads "The user doesn't want to
+// proceed with this tool use ... STOP ... wait for the user" and a
+// "[Request interrupted by user for tool use]" line follows. Agents took that
+// for the user saying stop and held, so the interrupt is followed at once by
+// InterruptNote, which says who it was and to read the mail and act on it.
+// When the interrupt ends the process (the SIGINT fallback) that is an
+// expected stop, not a crash: the note is kept and sent as the next process's
+// first message, and a role that restarts on a crash is started again at once
+// (restartInterrupted). The note is kept before the interrupt, so a start
+// racing the end of the process finds it. Idle, there is no
+// turn to cut: nothing is interrupted and no note is sent (the mail is
+// delivered as the next message, as ever).
+func (e *Engine) InterruptForMail(ctx context.Context, role, by string) error {
+	c, _, err := e.live(role)
+	if err != nil {
+		return err
+	}
+	c.mu.Lock()
+	busy := c.tracker.turn || len(c.tracker.order) > 0
+	c.mu.Unlock()
+	if !busy {
+		return nil
+	}
+	note := InterruptNote(by, role)
+	if err := e.keepInterruptNote(role, note); err != nil {
+		return err
+	}
+	fellBack, err := e.interrupt(ctx, role, func(c *chatRole, p *process) {
+		c.mu.Lock()
+		p.stopping, p.noteStop = true, true
+		c.mu.Unlock()
+	})
+	if err != nil {
+		e.dropInterruptNote(role)
+		return err
+	}
+	if fellBack || !e.Running(role) {
+		// The process is ending: its resumed session still shows the "user"
+		// rejection, so the next process started for the role gets the kept
+		// note first (sendPendingInterruptNote).
+		return nil
+	}
+	// The turn was cut and the process lives: the note goes now. A start
+	// that already took the kept note (the process died meanwhile) sent it.
+	if !e.dropInterruptNote(role) {
+		return nil
+	}
+	if err := e.send(role, note, "mail"); err != nil {
+		// A transport failure can race the live check after the interrupt ACK.
+		// Keep the explanation for the replacement process on every failure.
+		keepErr := e.keepInterruptNote(role, note)
+		if errors.Is(err, ErrNotRunning) {
+			return keepErr
+		}
+		return errors.Join(err, keepErr)
+	}
+	return nil
+}
+
+// dropInterruptNote removes role's kept note, reporting whether one was there.
+func (e *Engine) dropInterruptNote(role string) bool {
+	return os.Remove(InterruptNoteFile(e.opts.Home, role)) == nil
+}
+
+// InterruptNoteFile holds the note for a role whose interrupt ended its
+// process; the next start sends it.
+func InterruptNoteFile(home, role string) string {
+	return filepath.Join(home, "chat", role+".interrupt-note")
+}
+
+// interruptNoteMaxAge bounds a kept note: one older than this no longer sits
+// right under the interrupt it explains.
+const interruptNoteMaxAge = time.Hour
+
+func (e *Engine) keepInterruptNote(role, note string) error {
+	path := InterruptNoteFile(e.opts.Home, role)
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, []byte(note), 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
+}
+
+// sendPendingInterruptNote sends a kept interrupt note to role's new process,
+// once, as its first message (origin mail), unless it is stale; it reports
+// whether the note went. A note whose send fails stays for the next start.
+func (e *Engine) sendPendingInterruptNote(role string) bool {
+	path := InterruptNoteFile(e.opts.Home, role)
+	fi, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil || e.opts.Now().Sub(fi.ModTime()) > interruptNoteMaxAge || strings.TrimSpace(string(raw)) == "" {
+		_ = os.Remove(path)
+		return false
+	}
+	// Taken by rename, so two starts never both send it.
+	taken := path + ".sending"
+	if os.Rename(path, taken) != nil {
+		return false
+	}
+	if err := e.send(role, string(raw), "mail"); err != nil {
+		e.opts.Logf("chat: interrupt note to %s: %v", role, err)
+		_ = os.Rename(taken, path)
+		return false
+	}
+	_ = os.Remove(taken)
+	return true
+}
+
+// InterruptNote is the labelled note that follows an interrupt sent to
+// deliver mail: it names the sender and says the "user" rejection just above
+// is not the user's.
+func InterruptNote(by, role string) string {
+	by = cleanRole(by)
+	if by == "" {
+		by = "commander"
+	}
+	return "[commander interrupt] " + by + " interrupted your turn to deliver mail. This is NOT the user: the user typed nothing. " +
+		"The \"[Request interrupted by user for tool use]\" line and any tool result saying \"The user doesn't want to proceed with this tool use\" " +
+		"or \"STOP what you are doing and wait for the user\" just above came from this interrupt. It is not a hold: do not stop or wait for the user. " +
+		"Read the new mail (it arrives with this message or right after; `cmdr internal-inbox --agent " + role + " --unread` lists it), " +
+		"and do what it directs; only if it does not redirect you, resume your work, rerunning the cut-off tool call if it is still needed."
+}
+
+// cleanRole keeps a role name to one short line of name characters.
+func cleanRole(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		if b.Len() >= 64 {
+			break
+		}
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-' || r == '.' || r == '_' {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }
 
 func (e *Engine) sendInterrupt(p *process) chan struct{} {
@@ -1593,9 +1781,9 @@ func (e *Engine) resumeRole(ctx context.Context, role string, firstDone func()) 
 	orphanKilled := false
 	cut := e.turnCutShort(role)
 	for {
-		_, spawned, err := e.start(ctx, role, StartOptions{})
+		_, spawned, noted, err := e.start(ctx, role, StartOptions{})
 		once.Do(firstDone)
-		if err == nil && spawned && cut {
+		if err == nil && spawned && cut && !noted {
 			// The restart killed claude mid-turn: nothing would start
 			// another turn, so tell the role to carry on. Once per
 			// interruption: the loop returns right after.

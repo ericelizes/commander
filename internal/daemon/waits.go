@@ -122,7 +122,7 @@ func (w *waitWatcher) pollUntil(ctx context.Context) {
 		return
 	}
 	for _, p := range projects {
-		all, err := w.beads.List(ctx, p.Path, beads.ListOptions{Labels: []string{"kind:objective"}, Status: "all"})
+		all, err := w.beads.List(ctx, p.Path, beads.ListOptions{Status: "all"})
 		if err != nil {
 			continue
 		}
@@ -275,8 +275,15 @@ func (w *waitWatcher) wake(ctx context.Context, p store.Project, b beads.Bead, w
 			log.Printf("daemon: waits: read %s: %v", b.ID, err)
 			return
 		}
-		if fresh != nil && (fresh.Status == "closed" || !slices.Contains(fresh.Labels, label) || (handoff && slices.Contains(fresh.Labels, receipt))) {
+		if fresh == nil {
 			return
+		}
+		if fresh.Status == "closed" || !slices.Contains(fresh.Labels, label) || (handoff && slices.Contains(fresh.Labels, receipt)) {
+			return
+		}
+		state, owner := beads.StepState(fresh.Status, fresh.Labels)
+		if handoff && (fresh.Status == beads.StatusDeferred || beads.Superseded(*fresh) || state == beads.StateNeedsUser || strings.HasPrefix(owner, "operator-")) {
+			return // current custody has moved; never wake the old handoff over it
 		}
 		manager := wsmgr.Role(wsmgr.Owner(ctx, w.beads, p.Path, b.ID))
 		if err := w.mail(ctx, manager, subject, body); err != nil {
@@ -363,7 +370,7 @@ func (w *waitWatcher) poll(ctx context.Context) {
 		}
 	}
 	for _, p := range projects {
-		all, err := w.beads.List(ctx, p.Path, beads.ListOptions{Labels: []string{"kind:objective"}, Status: "all"})
+		all, err := w.beads.List(ctx, p.Path, beads.ListOptions{Status: "all"})
 		if err != nil {
 			continue
 		}
@@ -474,6 +481,9 @@ func (w *waitWatcher) event(ctx context.Context, projectRepo string, b beads.Bea
 			return
 		}
 		label := wt.Text()
+		if beads.IsManagerHandoff(wt) {
+			return "[failure] " + label + " deadline missed", fmt.Sprintf("Automation failure on %s: %s deadline missed. You own recovery. Read the current bead and current-holder/run evidence. Accept the existing result and close it, or dispatch the existing ready work through the canonical guarded door. Do not restart an old actor over a healthy replacement, duplicate workers/reviews, or ask the user to repair this handoff. If blocked, report the concrete cause and recovery target to Commander.", b.ID, label), true
+		}
 		return "[wait] " + label + " time reached", fmt.Sprintf("%s: time reached. You were waiting on it (%s). Pick the work back up.", label, b.ID), true
 	case beads.WaitReview:
 		pr, _ := strconv.Atoi(livedata.ReviewPR(b.Labels))

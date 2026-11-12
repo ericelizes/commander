@@ -219,7 +219,7 @@ func TestBoardPickingUp(t *testing.T) {
 		t.Fatalf("%+v", r)
 	}
 	s.Unread["manager-w"] = 1 // mail to read: it is acting on it
-	if r := Board(s, caseNow).Workstreams[0]; r.Kind != "working" || r.Text != "Manager picking it up" {
+	if r := Board(s, caseNow).Workstreams[0]; r.Kind != "stalled" || r.Text != "Stalled" {
 		t.Fatalf("%+v", r)
 	}
 }
@@ -390,7 +390,7 @@ func TestBoardGateRowSameBusyAndIdle(t *testing.T) {
 		if r := boardOne(steps, &idle); r.Kind != "stalled" || !strings.HasPrefix(r.Text, "Agent stopped") {
 			t.Errorf("idle died unit: %s %q", r.Kind, r.Text)
 		}
-		if r := boardOne(steps, &busy); r.Text != "Manager picking it up" {
+		if r := boardOne(steps, &busy); r.Kind != "stalled" || !strings.HasPrefix(r.Text, "Agent stopped") {
 			t.Errorf("busy died unit: %s %q", r.Kind, r.Text)
 		}
 	}

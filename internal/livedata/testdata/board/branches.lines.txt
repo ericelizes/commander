@@ -1,23 +1,23 @@
 0 Commander: waiting · CI #40 (for 15m)
 1 no manager: No Manager yet (0% done, no gates)
 2 needs card: Needs you: Which name should the service use? (0% done, no gates, ⚑ 1, for 5m)
-3 stuck: Stuck (0% done, no gates)
+3 stuck: Stuck (0% done, no gates) · why: Automation failure: Manager cannot accept its queued work. Owner: manager-w3. Next: inspect current evidence and record the next guarded recovery action on w3. Commander owns escalation if recovery fails.
 4 working on now step: Working on write the parser (0% done, no gates, 1 working, for 2m)
 5 working operator: Working on port the tests (0% done, no gates, 2 working)
 6 working no step: Working (0% done, no gates, 1 working, for 2m)
-7 agent died: Agent stopped on fix the build: the Manager's move (0% done, no gates)
-8 agent finished: Agent finished fix the lint, step not closed: the Manager's move (0% done, no gates)
-9 review acted: a-reviewer approved #12: the Manager's move (0% done, no gates)
-10 review no pr: Waiting for a review of no PR: nothing can clear it (0% done, no gates)
+7 agent died: Agent stopped on fix the build: the Manager's move (0% done, no gates) · why: Automation failure: Agent stopped on fix the build: the Manager's move. Owner: manager-w7. Next: inspect the stopped run and current holder, then resume or replan through guarded dispatch on w7.1. Commander owns escalation if recovery fails.
+8 agent finished: Agent finished fix the lint, step not closed: the Manager's move (0% done, no gates) · why: Automation failure: Agent finished fix the lint, step not closed: the Manager's move. Owner: manager-w8. Next: inspect the stopped run and current holder, then resume or replan through guarded dispatch on w8.1. Commander owns escalation if recovery fails.
+9 review acted: a-reviewer approved #12: the Manager's move (0% done, no gates) · why: Automation failure: a-reviewer approved #12: the Manager's move. Owner: manager-w9. Next: inspect current evidence and record the next guarded recovery action on w9. Commander owns escalation if recovery fails.
+10 review no pr: Waiting for a review of no PR: nothing can clear it (0% done, no gates) · why: Automation failure: Waiting for a review of no PR: nothing can clear it. Owner: manager-w10. Next: inspect current evidence and record the next guarded recovery action on w10. Commander owns escalation if recovery fails.
 11 review pending: Waiting for review: waiting on a-reviewer (#12) (0% done, no gates)
 12 recorded wait: Waiting for review (0% done, no gates, for 2h)
 13 time wait today: Waiting for reconcile · 04:33 AM (0% done, no gates, for 1m)
 14 time wait another day: Waiting for reconcile · Thu 03:33 AM (0% done, no gates, for 1m)
 15 in review: Waiting for review (0% done, no gates)
-16 state missing: State missing (0% done, no gates)
-17 stalled: Stalled (0% done, no gates)
+16 state missing: State missing (0% done, no gates) · why: Automation failure: open work has no valid holder. Owner: manager-w16. Next: inspect current evidence and record the next guarded recovery action on w16.1. Commander owns escalation if recovery fails.
+17 stalled: Stalled (0% done, no gates) · why: Automation failure: no live worker or recorded next action. Owner: manager-w17. Next: inspect current evidence and record the next guarded recovery action on w17. Commander owns escalation if recovery fails.
 18 nothing to do: Nothing to do (100% done, no gates)
-19 picking it up: Manager picking it up (0% done, no gates)
+19 picking it up: Stalled (0% done, no gates) · why: Automation failure: no live worker or recorded next action. Owner: manager-w19. Next: inspect current evidence and record the next guarded recovery action on w19. Commander owns escalation if recovery fails.
 20 waits on an operator: Waiting for an Operator: write the docs (0% done, no gates, for 1m)
 21 operator owner: Working on write the docs (0% done, no gates, 2 working)
 22 waits on an unknown operator: Waiting for an Operator (0% done, no gates, for 1m)
@@ -33,8 +33,8 @@
 32 other time wait: Waiting for reconcile · 04:03 AM (0% done, next gate: Merge approval, approved by a-reviewer, for 13m)
 33 ask on the workstream: Needs you (0% done, next gate: Merge approval, approved by a-reviewer, ⚑ 1)
 34 your gate not ready: Needs you (0% done, next gate: Spec approval, approved by you, ⚑ 1)
-35 stalled before gate: Stalled (0% done, next gate: Merge approval, approved by a-reviewer)
-36 state missing before gate: State missing (0% done, next gate: Merge approval, approved by a-reviewer)
+35 stalled before gate: Stalled (0% done, next gate: Merge approval, approved by a-reviewer) · why: Automation failure: no live worker or recorded next action. Owner: manager-w35. Next: inspect current evidence and record the next guarded recovery action on w35. Commander owns escalation if recovery fails.
+36 state missing before gate: State missing (0% done, next gate: Merge approval, approved by a-reviewer) · why: Automation failure: open work has no valid holder. Owner: manager-w36. Next: inspect current evidence and record the next guarded recovery action on w36.1. Commander owns escalation if recovery fails.
 37 decisions: Needs you: Pick a region (+1 more) (0% done, next gate: Merge approval, approved by a-reviewer, ⚑ 2, 2 working)
 38 your gate not listed: Waiting for CI (50% done, next gate: Spec approval, approved by you, for 50s)
 39 stage gate first: Working on w39.1.2 · then: build approved (33% done, next gate: Build approved, approved by a-reviewer, 2 working)
@@ -44,14 +44,14 @@
 41 Only track: Working on w41.1.1 (0% done, no gates, 2 working)
 42 manager in one track: Working on w42.1.1 · then: merge approval (0% done, next gate: Merge approval, approved by a-reviewer, 1 working, for 2m)
   42.1 Parser: Working on w42.1.1 · then: merge approval (0% done, for 2m)
-  42.2 Docs: Manager picking it up (0% done)
+  42.2 Docs: Stalled (0% done) · why: Automation failure: no live worker or recorded next action. Owner: manager-w42. Next: inspect current evidence and record the next guarded recovery action on w42.2. Commander owns escalation if recovery fails.
 43 cards in two tracks: Needs you: Beta choice (+1 more) (0% done, no gates, ⚑ 2, 2 working)
   43.1 Alpha: Needs you: Alpha choice (0% done)
   43.2 Beta: Needs you: Beta choice (0% done)
 44 one track beside open work: Waiting for CI (0% done, no gates, 2 working, for 30s)
   44.1 Deploy script: Waiting for CI (0% done, for 30s)
-45 closed and parked tracks: Stalled (33% done, no gates)
-  45.1 Live track: Stalled (0% done)
+45 closed and parked tracks: Stalled (33% done, no gates) · why: Automation failure: no live worker or recorded next action. Owner: manager-w45. Next: inspect current evidence and record the next guarded recovery action on w45.3. Commander owns escalation if recovery fails.
+  45.1 Live track: Stalled (0% done) · why: Automation failure: no live worker or recorded next action. Owner: manager-w45. Next: inspect current evidence and record the next guarded recovery action on w45.3. Commander owns escalation if recovery fails.
   45.2 Second live track: Nothing to do (100% done)
 46 tracks wait on your gate: Needs you: Greenlight starting the reviews (0% done, next gate: Greenlight starting the reviews, approved by you, ⚑ 1, for 2h)
   46.1 Review A: Needs you: Greenlight starting the reviews (0% done, for 2h)
@@ -60,10 +60,10 @@
 48 wait outside the gate's work: Waiting for example-auth-config · 04:33 AM (0% done, next gate: Rule approved, approved by a-reviewer, for 20m)
 49 wait on a container: Waiting for review (0% done, no gates, for 15m)
 50 deferred gate first: Working on w50.1 · then: tier 1 passed (0% done, next gate: Tier 1 passed, approved by you, 2 working)
-51 agent died before gate: Agent stopped on run the audit: the Manager's move (0% done, next gate: Audit reviewed, approved by a-reviewer)
+51 agent died before gate: Agent stopped on run the audit: the Manager's move (0% done, next gate: Audit reviewed, approved by a-reviewer) · why: Automation failure: Agent stopped on run the audit: the Manager's move. Owner: manager-w51. Next: inspect the stopped run and current holder, then resume or replan through guarded dispatch on w51.1. Commander owns escalation if recovery fails.
 52 finished, manager to close: Result ready for Manager review (0% done, no gates, for 10m)
 53 finished before gate, manager to close: Result ready for Manager review (0% done, next gate: Build reviewed, approved by a-reviewer, for 10m)
-54 time wait passed: Stalled (0% done, next gate: Merge approval, approved by a-reviewer)
+54 time wait passed: Stalled (0% done, next gate: Merge approval, approved by a-reviewer) · why: Automation failure: no live worker or recorded next action. Owner: manager-w54. Next: inspect current evidence and record the next guarded recovery action on w54. Commander owns escalation if recovery fails.
 55 long wait label: Waiting for the slow pages safety… · 04:33 AM (0% done, no gates, for 10m)
 56 long card title: Needs you: Does the team approve scope for automating… (0% done, no gates, ⚑ 1)
 57 open card with live login: Needs you: Sign in to the service (0% done, no gates, ⚑ 1, 2 working)

@@ -12,10 +12,12 @@ import (
 )
 
 func TestRestoreExactBackend(t *testing.T) {
-	// This is a legacy fake-backend fixture, not an installed Commander. Keep
-	// ancestry reads on the same isolated backend as its private state database.
+	// This exercises the legacy CLI wire contract with a fake executable, not
+	// the backend selected by the caller's live Commander installation.
 	t.Setenv("COMMANDER_HOME", t.TempDir())
-
+	if beads.PostgresConfigured() {
+		t.Fatal("legacy fixture unexpectedly selected Postgres")
+	}
 	for _, tc := range []struct {
 		name, raw string
 		deny      bool

@@ -44,7 +44,7 @@ On-call tooling (lab-ops)
   [Automatic, a timer, then the Manager confirms] Pager vendor contract renewed: Waiting for renewal lands · 09:26 PM (lab-ops.5)
   [You] [gate, you] Greenlight shipping the paging change: Not reached (lab-ops.7) after lab-ops.6
       passes when: The user says ship.
-  [Operators] Paging change released: Manager picking it up (lab-ops.6) after lab-ops.4, lab-ops.7
+  [Operators] Paging change released: Stalled (lab-ops.6) after lab-ops.4, lab-ops.7
       [Operators] Release notes prepared: Not started (lab-ops.6.1)
       [Operators] Paging change shipped: Not started (lab-ops.6.2)
 

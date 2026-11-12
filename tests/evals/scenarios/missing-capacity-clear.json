@@ -1,0 +1,8 @@
+{
+  "generated_at": "2026-11-10T12:00:00Z",
+  "workstreams": [{"n":1,"project":"sample","bead_id":"sample-flow","title":"Example work","manager_role":"manager-sample-flow","status":"open","steps":[
+    {"bead_id":"sample-flow.1","title":"Unheld example","status":"open","state":"not-started","broken":true}
+  ]}],
+  "agents":{"manager-sample-flow":{"state":"working"}},
+  "manager_capacity":{"manager-sample-flow":"no account has usage left"}
+}

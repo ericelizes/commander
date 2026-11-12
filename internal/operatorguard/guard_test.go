@@ -166,6 +166,15 @@ func TestClassify_RefusesTheInstallEndpoints(t *testing.T) {
 	if v := Classify("curl $U/api/snapshot"); v.Deny {
 		t.Errorf("snapshot read refused: %+v", v)
 	}
+	// ANSI-C quoting around the path (review finding R1, .204.6.82.1).
+	for _, c := range []string{
+		`curl -X POST $U/$'\x61pi/\x75pdate/install'`, `curl $U/$'\x61pi/up\x64ate'`,
+		`curl $U/api/$'\165pdate'`, `curl $U/$'api/update/install'`,
+	} {
+		if v := Classify(c); !v.Deny {
+			t.Errorf("%q was allowed", c)
+		}
+	}
 }
 
 func TestOperatorGuardTmuxRefusesKills(t *testing.T) {
