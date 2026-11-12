@@ -55,18 +55,19 @@ func TestCacheOwnsOneReaderAndMarksChangedEvidenceStale(t *testing.T) {
 	}
 	other := in
 	other.Scope = "other"
-	if r := c.Get(other); r.State != "waiting" {
-		t.Fatal(r)
+	if r := c.Get(other); r.State != "updating" {
+		t.Fatal("another scope's recap is written alongside, not after:", r)
 	}
 	close(release)
 	r = waitReady(t, c, in)
-	if calls.Load() != 1 || r.Stale || r.Recap == nil {
+	waitReady(t, c, other)
+	if calls.Load() != 2 || r.Stale || r.Recap == nil {
 		t.Fatal(r, calls.Load())
 	}
 	for i := 0; i < 12; i++ {
 		c.Get(in)
 	}
-	if calls.Load() != 1 {
+	if calls.Load() != 2 {
 		t.Fatal("unchanged evidence reran reader")
 	}
 	in.Evidence[0].Text = "PR now merged"

@@ -103,8 +103,11 @@ type Cache struct {
 	changed  chan struct{}
 	entries  map[string]*entry
 	generate Generate
-	busy     bool
+	running  int // readers writing now
 }
+
+// maxReaders is how many recaps are written at once: each is its own model call.
+const maxReaders = 4
 
 func New(generate Generate) *Cache {
 	return &Cache{entries: map[string]*entry{}, generate: generate, changed: make(chan struct{})}
@@ -161,12 +164,12 @@ func (c *Cache) Get(in Input) Result {
 	if same {
 		e.err = "" // the evidence is back to what the recap shows: nothing to retry
 	}
-	if !same && !e.pending && !c.busy && !(in.Hold && e.recap != nil) && (e.attempt.IsZero() || now.Sub(e.attempt) >= wait) {
+	if !same && !e.pending && c.running < maxReaders && !(in.Hold && e.recap != nil) && (e.attempt.IsZero() || now.Sub(e.attempt) >= wait) {
 		e.pending = true
 		e.attempt = now
 		e.err = ""
 		e.draft = nil
-		c.busy = true
+		c.running++
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 			defer cancel()
@@ -188,7 +191,7 @@ func (c *Cache) Get(in Input) Result {
 			defer c.mu.Unlock()
 			defer c.notifyLocked()
 			e.pending = false
-			c.busy = false
+			c.running--
 			e.draft = nil
 			if err != nil {
 				e.err = "The last attempt to write the recap did not finish. Trying again shortly; live status and decisions are shown below."
@@ -201,8 +204,8 @@ func (c *Cache) Get(in Input) Result {
 		}()
 	}
 	r := Result{State: "waiting", Recap: e.recap, Evidence: in.Evidence, Stale: !same, WaitingFor: "the reader to start on this recap"}
-	if c.busy && !e.pending {
-		r.WaitingFor = "another recap to finish being written"
+	if c.running >= maxReaders && !e.pending {
+		r.WaitingFor = "other recaps to finish being written"
 	}
 	if e.recap != nil {
 		r.State = "ready"

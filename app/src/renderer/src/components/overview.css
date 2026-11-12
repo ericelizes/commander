@@ -190,6 +190,7 @@
 .ov .ov-fields li { padding: 0 0 6px 2px; }
 .ov-fields b { font-weight: 600; }
 
-/* A grey spinner of its own: not the agents' working spinner. */
-.ov-spin { display: inline-block; width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid color-mix(in srgb, var(--ink-3) 30%, transparent); border-top-color: var(--ink-3); animation: ov-spin .9s linear infinite; }
-@keyframes ov-spin { to { transform: rotate(360deg); } }
+/* Refreshing: a grey dotted-circle spinner of its own, not the agents' one. */
+.ov .ov-refreshing { font: 400 15px/1.4 var(--font); color: var(--ink-3); gap: 8px; }
+.ov-dots { flex: none; fill: var(--ink-3); animation: ov-dots 0.9s steps(8) infinite; }
+@keyframes ov-dots { to { transform: rotate(360deg); } }
