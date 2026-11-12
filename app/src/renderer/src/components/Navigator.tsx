@@ -326,7 +326,7 @@ function Workstream({ w, tracks, folded, onToggle, selected, cursor, mod }: { w:
   const progress = w.milestones ?? w.progress
   const progressLabel = `${progress.done}/${progress.total} ${w.milestones ? 'stages' : 'tasks'} completed`
   return (
-    <div className={`ws${w.tracks.length ? ' has-tracks' : ''}${w.kind === 'quiet' ? ' can-complete' : ''}${leaving ? ' is-leaving' : ''}${lifted === w.key ? ' is-lifted' : ''}`}>
+    <div className={`ws${w.tracks.length ? ' has-tracks' : ''}${leaving ? ' is-leaving' : ''}${lifted === w.key ? ' is-lifted' : ''}`}>
       {w.tracks.length > 0 && (
         <button
           type="button"
@@ -366,7 +366,6 @@ function Workstream({ w, tracks, folded, onToggle, selected, cursor, mod }: { w:
           </div>
         </div>
       </button>
-      {w.kind === 'quiet' && <CompleteButton project={w.project} bead={w.bead_id} title={w.title} />}
       {!folded && tracks.length > 0 && (
         <div className="ws-tracks" role="group" aria-label={`Workstreams under ${w.title}`}>
           {tracks.map((t) => (
@@ -404,7 +403,7 @@ function TrackRow({ t, n, wsKey, parentOwner }: { t: BoardTrack; n: number; wsKe
   const project = t.key.slice(0, t.key.length - t.bead_id.length - 1)
   const children = t.children ?? []
   return (
-    <div className={`track-wrap${t.kind === 'quiet' ? ' can-complete' : ''}${leaving ? ' is-leaving' : ''}${lifted === t.key ? ' is-lifted' : ''}`}>
+    <div className={`track-wrap${leaving ? ' is-leaving' : ''}${lifted === t.key ? ' is-lifted' : ''}`}>
       <button className={`row track-row${openNested === t.bead_id ? ' selected' : ''}`} aria-current={openNested === t.bead_id || undefined} data-nav-key={t.key} onClick={() => useStore.getState().openWorkflow(wsKey, t.bead_id)} title={t.title}>
         <div className="row-body">
           <div className="row-head">
@@ -418,7 +417,6 @@ function TrackRow({ t, n, wsKey, parentOwner }: { t: BoardTrack; n: number; wsKe
           {t.why && <span className="ws-state-why" title={t.why} aria-label={t.why}>⚠</span>}
         </div>
       </button>
-      {t.kind === 'quiet' && <CompleteButton project={project} bead={t.bead_id} title={t.title} />}
       {children.length > 0 && (
         <button type="button" className={`track-fold${open ? '' : ' folded'}`} aria-expanded={open} aria-label={`${open ? 'Hide' : 'Show'} ${children.length} workstreams under ${t.title}`} onClick={() => toggleOpen(t.key)}>
           <ChevronDown size={13} strokeWidth={2} aria-hidden />
