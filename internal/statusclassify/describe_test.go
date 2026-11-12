@@ -87,7 +87,7 @@ func TestTooLongAnswerIsRewrittenOnceBeforeCutting(t *testing.T) {
 }
 
 func TestShortenDropsATrailingClauseBeforeCutting(t *testing.T) {
-	if got := shorten("stop staging or all Notify, unblocking the rollout plan", 30); got != "stop staging or all Notify" {
+	if got := shorten("stop staging or all Notify, unblocking the rollout plan", 44); got != "stop staging or all Notify" {
 		t.Fatalf("%q", got)
 	}
 }
@@ -95,6 +95,12 @@ func TestShortenDropsATrailingClauseBeforeCutting(t *testing.T) {
 func TestFinishDescriptionKeepsOneOpeningAndRejectsJunk(t *testing.T) {
 	if got, ok := finishDescription("Working:", "Working: QA Hub parity tests"); !ok || got != "Working: QA Hub parity tests" {
 		t.Fatalf("%q", got)
+	}
+	if got, _ := finishDescription("Needs you:", "Choose platform access or wait?"); got != "Needs you: choose platform access or wait?" {
+		t.Fatalf("capital after the opening: %q", got)
+	}
+	if got, _ := finishDescription("Working:", "QA Hub parity tests"); got != "Working: QA Hub parity tests" {
+		t.Fatalf("acronym lowered: %q", got)
 	}
 	if _, ok := finishDescription("Working:", "   "); ok {
 		t.Fatal("empty accepted")

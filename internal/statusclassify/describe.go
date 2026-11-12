@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/example-user/commander/internal/store"
 )
@@ -285,6 +286,11 @@ func finishDescription(opener, words string) (string, bool) {
 	if words == "" {
 		return "", false
 	}
+	// "Needs you: Choose…" reads as two sentences; keep acronyms like "QA".
+	if r := []rune(words); len(r) > 1 && unicode.IsUpper(r[0]) && !unicode.IsUpper(r[1]) {
+		r[0] = unicode.ToLower(r[0])
+		words = string(r)
+	}
 	return opener + " " + shorten(words, maxDescriptionWords), true
 }
 
@@ -328,8 +334,8 @@ func clip(s string, n int) string {
 	return s
 }
 
-// maxDescriptionWords keeps a row's line short enough to read at a glance.
-const maxDescriptionWords = 30
+// maxDescriptionWords is what two sidebar lines hold after the opening.
+const maxDescriptionWords = 44
 
 // trailing clauses a short line can lose without losing its point.
 var trailingClauses = []string{", which ", ", unblocking ", " to unblock ", " unblocking ", ", so ", " so ", " before ", ", and ", " because "}
