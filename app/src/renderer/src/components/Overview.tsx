@@ -332,22 +332,30 @@ export function Overview({ ws, row, track, onTrack }: {
         <section className="ov-pitch" aria-label="Pitch">
           {shown ? <div>
             {(result?.stale || result?.state === 'updating' || result?.state === 'retrying') && !draftOn && <Refreshing />}
-            <h2>Problem</h2>
-            <p className="ov-field">{cite(shown.problem)}</p>
-            <ul className="ov-fields">
-              {shown.problem_type && <li><b>Type:</b> {typeNames[shown.problem_type] ?? shown.problem_type}</li>}
-              {hasText(shown.problem_impact) && <li><b>Impact:</b> {cite(shown.problem_impact)}</li>}
-            </ul>
-            <h2>Solution</h2>
-            <ul className="ov-fields">
-              {hasText(shown.solution) && <li><b>Description:</b> {cite(shown.solution)}</li>}
-              {hasText(shown.impact) && <li><b>Impact:</b> {cite(shown.impact)}</li>}
-            </ul>
-            <h2>Appetite</h2>
-            <ul className="ov-fields">
-              {(shown.scope || hasText(shown.scope_detail)) && <li><b>Scope:</b> {shown.scope && <>{scopeDot[shown.scope] ?? ''} {shown.scope}. </>}{cite(shown.scope_detail)}</li>}
-              {hasText(shown.risk_detail) && <li><b>Risk:</b> {riskDot(shown.risk ?? 0)} {shown.risk ?? 0}/10. {cite(shown.risk_detail)}</li>}
-            </ul>
+            {/* Each section appears once it has words, so a summary being written
+                builds top to bottom instead of showing empty headings early. */}
+            {hasText(shown.problem) && <>
+              <h2>Problem</h2>
+              <p className="ov-field">{cite(shown.problem)}</p>
+              <ul className="ov-fields">
+                {shown.problem_type && <li><b>Type:</b> {typeNames[shown.problem_type] ?? shown.problem_type}</li>}
+                {hasText(shown.problem_impact) && <li><b>Impact:</b> {cite(shown.problem_impact)}</li>}
+              </ul>
+            </>}
+            {(hasText(shown.solution) || hasText(shown.impact)) && <>
+              <h2>Solution</h2>
+              <ul className="ov-fields">
+                {hasText(shown.solution) && <li><b>Description:</b> {cite(shown.solution)}</li>}
+                {hasText(shown.impact) && <li><b>Impact:</b> {cite(shown.impact)}</li>}
+              </ul>
+            </>}
+            {(hasText(shown.scope_detail) || hasText(shown.risk_detail)) && <>
+              <h2>Appetite</h2>
+              <ul className="ov-fields">
+                {hasText(shown.scope_detail) && <li><b>Scope:</b> {shown.scope && <>{scopeDot[shown.scope] ?? ''} {shown.scope}. </>}{cite(shown.scope_detail)}</li>}
+                {hasText(shown.risk_detail) && <li><b>Risk:</b> {riskDot(shown.risk ?? 0)} {shown.risk ?? 0}/10. {cite(shown.risk_detail)}</li>}
+              </ul>
+            </>}
           </div> : <Refreshing />}
         </section>
         {below.length > 0 && <section aria-label="Workstreams under this one"><h2>Across this workstream</h2><div className="ov-tracks">{below.map((t) => <button type="button" key={t.bead_id} onClick={() => onTrack(t.bead_id)}><strong>{plainTitle(t.title)}</strong><span data-tone={toneOf(t.kind)}>{t.text}</span></button>)}</div></section>}
