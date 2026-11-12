@@ -33,6 +33,7 @@ export type RecapResult = {
 type Pitch = {
   goal?: Claim
   progress?: Claim
+  targets?: { name: string; target: string; was: string; now: string; met: boolean }[]
   now?: Claim
   recent?: Claim
   next?: Claim
@@ -202,7 +203,7 @@ export function OverviewPage(props: OverviewProps) {
   // one is written, and is swapped in whole.
   const result = useRecap(props.ws, props.track, '', true)
   const { shown } = shownOf(result)
-  const parts = order.filter((part) => !!shown && (part === 'status' ? statusFields : pitchFields).some((k) => hasText(shown[k] as Claim | undefined)))
+  const parts = order.filter((part) => !!shown && ((part === 'status' && hasTargets(shown)) || (part === 'status' ? statusFields : pitchFields).some((k) => hasText(shown[k] as Claim | undefined))))
   return (
     <div className="ov-pane">
       <ActivityFreshness />
@@ -227,6 +228,7 @@ export function OverviewPage(props: OverviewProps) {
 }
 
 const statusFields: (keyof Pitch)[] = ['goal', 'progress', 'now', 'recent', 'next']
+const hasTargets = (p?: Pitch) => !!p?.targets?.length
 const pitchFields: (keyof Pitch)[] = ['still_to_define', 'problem', 'problem_impact', 'solution', 'impact', 'scope_detail', 'risk_detail']
 
 // shownOf is what a summary shows: the summary written, or, only while a first
@@ -427,6 +429,15 @@ export function Overview({ ws, row, track, onTrack, part = 'status', embedded = 
               <p className="ov-field">{cite(shown.goal)}</p>
               {hasText(shown.progress) && <p className="ov-field"><b>Progress:</b> {cite(shown.progress)}</p>}
             </>}
+            {!!shown.targets?.length && <table className="ov-targets">
+              <thead><tr><th>Measure</th><th>Target</th><th>Was</th><th>Now</th><th aria-label="Met" /></tr></thead>
+              <tbody>{shown.targets.map((t, i) => (
+                <tr key={i} className={t.met ? 'is-met' : ''}>
+                  <td>{t.name}</td><td>{t.target}</td><td>{t.was}</td><td className="ov-target-now">{t.now}</td>
+                  <td aria-label={t.met ? 'Met' : 'Not met'}>{t.met ? '🟢' : '🔴'}</td>
+                </tr>
+              ))}</tbody>
+            </table>}
             {hasText(shown.now) && <><h3 className="ov-sub">Right now</h3><p className="ov-field">{cite(shown.now)}</p></>}
             {hasText(shown.recent) && <><h3 className="ov-sub">Done lately</h3><ul className="ov-fields">{sentencesOf(shown.recent!).map((s, i) => <li key={i}><StreamSentence s={s} done={cited} live={draftOn} /></li>)}</ul></>}
             {hasText(shown.next) && <><h3 className="ov-sub">Up next</h3><ul className="ov-fields">{sentencesOf(shown.next!).map((s, i) => <li key={i}><StreamSentence s={s} done={cited} live={draftOn} /></li>)}</ul></>}

@@ -328,3 +328,15 @@ describe('a source page reads as the board does', () => {
     })
   })
 })
+
+describe("Overview targets", () => {
+  it("shows the goal targets as a table, one row each", async () => {
+    const withTargets = { ...result, recap: { ...result.recap!, goal: { sentences: [{ text: "Every endpoint at most 500 ms.", sources: ["apply"] }] }, targets: [{ name: "Worklist (Needs Review)", target: "≤ 500 ms", was: "20.2 s", now: "726 ms", met: false }, { name: "Worklist counts", target: "≤ 500 ms", was: "3.4 s", now: "346 ms", met: true }] } }
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(withTargets), { status: 200 })))
+    render(<OverviewPage ws={ws} row={row} onWorkflow={vi.fn()} onTrack={vi.fn()} />)
+    const table = await screen.findByRole("table")
+    expect(within(table).getAllByRole("row")).toHaveLength(3)
+    expect(within(table).getByText("726 ms")).toBeInTheDocument()
+    expect(within(table).getByLabelText("Not met")).toBeInTheDocument()
+  })
+})
