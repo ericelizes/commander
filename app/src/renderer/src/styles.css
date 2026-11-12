@@ -4159,6 +4159,11 @@ body.nav-dragging * {
   color: var(--text-2);
 }
 
+/* The Linear logo takes its title's color. */
+.nav .row.track-row .row-linear {
+  color: var(--text-2);
+}
+
 /* A track's group in the Graph: a small tag, no extra rule or border. */
 .canvas-box .track-tag {
   margin-right: 6px;
