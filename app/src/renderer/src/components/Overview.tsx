@@ -347,11 +347,12 @@ export function Overview({ ws, row, track, onTrack, part = 'status' }: {
           ))}
           {asks.length === 0 && (pendingDecision || stalled) && <p>{noAsk}</p>}
           {shown && (hasText(shown.goal) || hasText(shown.now) || hasText(shown.recent) || hasText(shown.next)) && <div className="ov-status-story">
-            {hasText(shown.goal) && <ul className="ov-fields ov-target">
-              <li><b>Goal:</b> {cite(shown.goal)}</li>
-              {hasText(shown.progress) && <li><b>Where it stands:</b> {cite(shown.progress)}</li>}
-            </ul>}
-            {hasText(shown.now) && <p className="ov-field">{cite(shown.now)}</p>}
+            {hasText(shown.goal) && <>
+              <h3>Goal</h3>
+              <p className="ov-field">{cite(shown.goal)}</p>
+              {hasText(shown.progress) && <p className="ov-field"><b>Progress:</b> {cite(shown.progress)}</p>}
+            </>}
+            {hasText(shown.now) && <><h3>Right now</h3><p className="ov-field">{cite(shown.now)}</p></>}
             {hasText(shown.recent) && <><h3>Done lately</h3><ul className="ov-fields">{sentencesOf(shown.recent!).map((s, i) => <li key={i}><StreamSentence s={s} done={cited} live={draftOn} /></li>)}</ul></>}
             {hasText(shown.next) && <><h3>Up next</h3><ul className="ov-fields">{sentencesOf(shown.next!).map((s, i) => <li key={i}><StreamSentence s={s} done={cited} live={draftOn} /></li>)}</ul></>}
           </div>}

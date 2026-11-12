@@ -232,3 +232,5 @@
 .ws-header-line { font: 400 15px/1.45 var(--font); color: var(--ink-2); margin: 0 0 10px; }
 .ws-header .ov-tickets { margin: 0; }
 .ov { margin: 0; padding: 24px 40px 64px; max-width: 820px; }
+
+.ov .ov-status-story > h3:first-child { margin-top: 0; }
