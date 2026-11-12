@@ -27,3 +27,11 @@ func TestTerminalBoardUsesDeliveryMilestones(t *testing.T) {
 		t.Fatalf("legacy progress: %s", lines)
 	}
 }
+
+func TestTerminalNestedManagerUsesDeliveryMilestones(t *testing.T) {
+	d := Display{Workstreams: []BoardRow{{N: 1, Title: "Delivery", ManagerRole: "manager-root", Milestones: Progress{Done: 2, Total: 3}, Tracks: []BoardTrack{{BeadID: "nested", Letter: ".1", Title: "Nested", ManagerRole: "manager-nested", Progress: Progress{Done: 4, Total: 5}, Milestones: Progress{Total: 1}}}}}}
+	lines := strings.Join(BoardLines(d, 100, "manager-nested"), "\n")
+	if strings.Contains(lines, "80%") || strings.Contains(lines, "67%") || !strings.Contains(lines, "0% done") {
+		t.Fatalf("nested scope used another progress calculation: %s", lines)
+	}
+}
