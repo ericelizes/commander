@@ -2,7 +2,7 @@
 // decision card in the inspector column, which submits through /api/cmd;
 // a workstream shows its tabs (web mode: no commanderHost); the chat slot
 // falls back when cmdrd has no chat engine.
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -60,7 +60,7 @@ describe('integrated renderer', () => {
     await waitFor(() => expect(screen.getByRole('link', { name: 'ACME-7' })).toHaveAttribute('href', 'https://linear.app/acme/issue/ACME-7'))
   })
 
-  it('opens a NEEDS YOU item as its pitch; a choice goes to Commander as a chat message', async () => {
+  it('records a pitch answer, removes it from NEEDS YOU, then sends Commander an FYI', async () => {
     const user = userEvent.setup()
     render(
       <>
@@ -82,17 +82,18 @@ describe('integrated renderer', () => {
 
     await waitFor(() => expect(calls.some((c) => c.url.endsWith('/api/chat/commander/send'))).toBe(true))
     const sent = calls.find((c) => c.url.endsWith('/api/chat/commander/send'))!.body as { text: string }
-    expect(sent.text.split('\n')[0]).toBe('Ask the mirror admin to release catalog-parser 2.4.1')
-    expect(sent.text).toMatch(/\nPitch: .+\nWhere: #\d+ .+\nId: example-app-t03\.2$/)
-    expect(await screen.findByText(/^Sent to Commander: Ask the mirror admin/)).toBeInTheDocument()
-    // The pitch stays open; the next thing waiting opens only from its button.
+    expect(sent.text.split('\n')[0]).toBe('FYI: Answer already recorded: Ask the mirror admin to release catalog-parser 2.4.1')
+    const resolved = calls.find((c) => c.url.endsWith('/api/cmd'))!
+    expect((resolved.body as { argv: string[] }).argv).toEqual(expect.arrayContaining([
+      'internal-resolve-needs', '--project', 'example-app', '--bead', 'example-app-t03.2',
+      '--action', 'decide', '--choice', 'Ask the mirror admin to release catalog-parser 2.4.1', '--text',
+    ]))
+    expect(calls.indexOf(resolved)).toBeLessThan(calls.findIndex((c) => c.url.endsWith('/api/chat/commander/send')))
+    expect(useStore.getState().snapshot!.needs_you.some((n) => n.bead_id === 'example-app-t03.2')).toBe(false)
+    expect(screen.getByRole('tab', { name: /^Needs you\s*2$/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Ask the mirror admin/ })).toBeNull()
+    // Recording the answer does not select another ask on the user's behalf.
     expect(useStore.getState().selected).toEqual({ kind: 'ask', key: 'ask:example-app:example-app-t03.2' })
-    const next = screen.queryByText(/^Next: /)
-    if (next) {
-      fireEvent.click(next)
-      expect(useStore.getState().selected).not.toEqual({ kind: 'ask', key: 'ask:example-app:example-app-t03.2' })
-    } else expect(screen.getByText('Nothing else needs you.')).toBeInTheDocument()
-    expect(useStore.getState().selected.kind).toBe('ask')
   })
 
   it('a workstream click only selects it: no steps, gates or "no gates" in the sidebar', async () => {
