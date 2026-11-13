@@ -12,7 +12,7 @@ or on a Linux box/VM), and the Electron app that shows it.
 ## Set up
 
 1. **Install the prerequisites**: Go ≥1.22, Node ≥20 (for the app), `bd`
-   (`cargo install beads_rust`), `git`, `jq`, `tmux`, and the Claude Code CLI
+   (`brew install beads`), `git`, `jq`, `tmux`, and the Claude Code CLI
    (`npm i -g @anthropic-ai/claude-code`). `just doctor` lists what is missing.
 2. **Run the installer** from this checkout:
 
@@ -109,7 +109,7 @@ shapes. Headline pins:
 |------------|-------------|---------------------------------------------|
 | `go`       | 1.22        | Build toolchain.                            |
 | `opencode` | 1.14.0      | Agent runtime. Install via `npm i -g opencode-ai`. |
-| `bd`       | 1.0.0       | Beads task tracker. `cargo install beads_rust`. |
+| `bd`       | 1.0.0       | Beads task tracker. `brew install beads` (or `npm i -g @beads/bd`). |
 | `am`       | 0.2.40      | Agent Mail.                                 |
 | `docker`   | 20.10       | Code-type operator sandboxing.              |
 | `tmux`     | 3.3         | Knowledge-type operator panes.              |
