@@ -151,8 +151,38 @@ body {
   color: var(--text);
   font: 13px/1.4 var(--font);
   -webkit-font-smoothing: antialiased;
-  user-select: none;
+  user-select: text;
   cursor: default;
+}
+
+/* Keep controls and drag grips inert while readable content can be copied. */
+button,
+select,
+summary,
+.avatar,
+[role='tab'],
+[role='radio'],
+[role='switch'],
+[role='menuitem'],
+[role='separator'],
+.ws-ring,
+.track-rank {
+  user-select: none;
+}
+
+/* These buttons contain readable content as well as opening a view. Nested
+   controls still use the rule above. */
+button.row,
+button.op,
+button.sp-card,
+button.sp-item-title,
+button.sp-item-ws,
+button.canvas-box-title,
+button.flow-block-title,
+button.stage-row,
+button.flow-step,
+button.nav-move-error {
+  user-select: text;
 }
 
 /* Glass in a browser has no window vibrancy to sit on: give it an ambient wash. */
@@ -170,6 +200,7 @@ body {
 body.resizing,
 body.resizing * {
   cursor: col-resize !important;
+  user-select: none !important;
 }
 
 button {

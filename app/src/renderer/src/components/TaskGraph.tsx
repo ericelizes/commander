@@ -134,7 +134,7 @@ export function TaskGraph() {
 
   const drag = useRef<{ x: number; y: number } | null>(null)
   const onPointerDown = (e: React.PointerEvent) => {
-    if ((e.target as HTMLElement).closest('button, a, [role=button]')) return
+    if ((e.target as HTMLElement).closest('button, a, [role=button], .canvas-box')) return
     drag.current = { x: e.clientX, y: e.clientY }
     ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
   }
