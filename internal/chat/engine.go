@@ -178,6 +178,7 @@ type chatRole struct {
 	e    *Engine
 	role string
 
+	restartMu sync.Mutex // serializes mail restart admission/start with explicit Stop
 	mu        sync.Mutex
 	log       *eventLog
 	seq       uint64
@@ -1125,7 +1126,7 @@ func (e *Engine) onExit(c *chatRole, p *process, hx *hostExit) {
 	}
 	switch {
 	case p.spec.ExecutionRunID == 0 && noteStop && autoRestart:
-		go e.restartInterrupted(c)
+		go e.restartInterrupted(c, p)
 	case p.spec.ExecutionRunID == 0 && !ex.Expected && autoRestart:
 		go e.restartCrashed(c, midTurn)
 	}
@@ -1134,8 +1135,20 @@ func (e *Engine) onExit(c *chatRole, p *process, hx *hostExit) {
 // restartInterrupted starts c's role again after a mail interrupt's SIGINT
 // fallback ended its process. start sends the kept interrupt note first; no
 // crash is counted and no resume message follows.
-func (e *Engine) restartInterrupted(c *chatRole) {
+func (e *Engine) restartInterrupted(c *chatRole, p *process) {
 	time.Sleep(e.opts.CrashRestartDelay)
+	// Keep the check and start indivisible with respect to Stop. If Stop wins,
+	// the captured onExit flag cannot revive the role; if start wins, Stop
+	// waits for it and ends the replacement before returning successfully.
+	c.restartMu.Lock()
+	defer c.restartMu.Unlock()
+	c.mu.Lock()
+	restart := c.meta.Running && p.noteStop && c.proc == nil
+	c.mu.Unlock()
+	if !restart {
+		c.publish(Event{Kind: KindNotice, Source: SourceEngine, Subtype: "interrupt_restart", Text: "Skipped the interrupt restart: the session was stopped or replaced"})
+		return
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	_, spawned, _, err := e.start(ctx, c.role, StartOptions{})
@@ -1659,6 +1672,8 @@ func (e *Engine) Stop(ctx context.Context, role string) error {
 	if err != nil {
 		return err
 	}
+	c.restartMu.Lock()
+	defer c.restartMu.Unlock()
 	c.mu.Lock()
 	p := c.proc
 	if p == nil {
