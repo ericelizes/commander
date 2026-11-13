@@ -444,6 +444,9 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("DELETE /api/linear/key", s.auth(http.HandlerFunc(s.serveLinearKey)))
 	mux.Handle("GET /api/linear", s.auth(http.HandlerFunc(s.serveLinear)))
 	mux.Handle("GET /api/workflows", s.auth(http.HandlerFunc(s.serveWorkflows)))
+	// Report files for workstream tabs. The app's tab browser cannot send the
+	// token; a report's name is its content hash, unguessable, on loopback.
+	mux.Handle("GET /reports/{name}", http.HandlerFunc(s.serveReport))
 	s.machineRoutes(mux)
 	s.updateRoutes(mux)
 	s.placeRoutes(mux)

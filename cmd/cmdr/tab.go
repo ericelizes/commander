@@ -7,17 +7,20 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/example-user/commander/internal/inspector"
+	"github.com/example-user/commander/internal/reports"
 	"github.com/example-user/commander/internal/store"
 	"github.com/example-user/commander/internal/wsmgr"
 )
 
 const tabUsage = `usage:
-  cmdr tab add  (--url U | --cmd "..." | --decision STEP) [--title T] [--ws BEAD --project P] [--focus] [--refresh 30s]
+  cmdr tab add  (--url U | --file PATH | --cmd "..." | --decision STEP) [--title T] [--ws BEAD --project P] [--focus] [--refresh 30s]
+                --file: a report (html, md, txt, json, svg, png, jpg, pdf) copied into Commander so the app can open it
                 [--renderer browser]   (a picture of the page via headless Chrome)
   cmdr tab rm   <n|#id|url>  [--ws BEAD --project P]
   cmdr tab ls   [--json]     [--ws BEAD --project P]
@@ -156,6 +159,31 @@ type tabWindow struct {
 
 func (w tabWindow) add(ctx context.Context, flags map[string]string, stdout, stderr io.Writer) int {
 	target, kind := flags["url"], inspector.KindURL
+	// A file on this machine is out of the app's reach: it opens the copy
+	// cmdrd serves instead.
+	if path, ok := strings.CutPrefix(target, "file://"); ok && flags["file"] == "" {
+		flags["file"], target = path, ""
+	}
+	if path := flags["file"]; path != "" {
+		if target != "" || flags["cmd"] != "" || flags["decision"] != "" {
+			fmt.Fprintln(stderr, "cmdr tab add: --file stands alone (no --url/--cmd/--decision)")
+			return 2
+		}
+		home := appCommanderHome()
+		name, err := reports.Import(home, path)
+		if err != nil {
+			fmt.Fprintf(stderr, "cmdr tab add: --file: %v\n", err)
+			return 1
+		}
+		base := "http://127.0.0.1:8787"
+		if raw, err := os.ReadFile(filepath.Join(home, "api-url")); err == nil && strings.TrimSpace(string(raw)) != "" {
+			base = strings.TrimRight(strings.TrimSpace(string(raw)), "/")
+		}
+		target = base + "/reports/" + name
+		if flags["title"] == "" {
+			flags["title"] = strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+		}
+	}
 	if step := flags["decision"]; step != "" {
 		if target != "" || flags["cmd"] != "" {
 			fmt.Fprintln(stderr, "cmdr tab add: --decision stands alone (no --url/--cmd)")
@@ -337,7 +365,7 @@ func parseRefreshSecs(v string) (int, error) {
 }
 
 var tabBoolFlags = map[string]bool{"focus": true, "json": true}
-var tabValueFlags = map[string]bool{"url": true, "cmd": true, "title": true, "ws": true, "project": true, "refresh": true, "renderer": true, "by": true, "decision": true}
+var tabValueFlags = map[string]bool{"url": true, "cmd": true, "title": true, "ws": true, "project": true, "refresh": true, "renderer": true, "by": true, "decision": true, "file": true}
 
 // splitTabArgs separates --flag [value] pairs from positionals, in any order
 // (the stdlib flag package stops at the first positional, which would make

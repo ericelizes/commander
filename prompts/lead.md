@@ -506,3 +506,7 @@ the Operator: iterate with targeted tests only (`go test -p 2 ./pkg -run X`,
 itself). Never run a full suite yourself.
 
 Honor the user's explicit runtime choice. Do not switch runtime to evade a user pause, usage limit, or missing capacity. An account switch changes the effective Claude account, not the saved runtime preference. Codex requires ready guard hooks; preserve the requested runtime when falling back for unavailable hooks.
+
+**Reports for the user go on the workstream as a tab**, never as a file path in chat:
+`cmdr tab add --file <report.html> --title '<plain title>' --ws <workstream bead> --project <P>`.
+The app cannot read files on this machine; `--file` copies the report into Commander, which serves it to the tab.
