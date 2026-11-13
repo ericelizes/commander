@@ -341,4 +341,14 @@ describe("Overview targets", () => {
     expect(within(table).getByText("726 ms")).toBeInTheDocument()
     expect(within(table).getByLabelText("Not met")).toBeInTheDocument()
   })
+  it("leads with the goal and a met count, and drops the progress sentence the table repeats", async () => {
+    const withTargets = { ...result, recap: { ...result.recap!, goal: { sentences: [{ text: "Every endpoint at most 500 ms.", sources: [] }] }, progress: { sentences: [{ text: "Two still above 500 ms.", sources: [] }] }, now: { sentences: [{ text: "Shipping to prod.", sources: [] }] }, next: { sentences: [{ text: "Re-measure.", sources: [] }] }, targets: [{ name: "A", target: "≤ 500 ms", was: "2 s", now: "726 ms", met: false }, { name: "B", target: "≤ 500 ms", was: "3 s", now: "346 ms", met: true }] } }
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(withTargets), { status: 200 })))
+    render(<OverviewPage ws={ws} row={row} onWorkflow={vi.fn()} onTrack={vi.fn()} />)
+    expect(await screen.findByText("1 of 2 targets met")).toBeInTheDocument()
+    expect(screen.queryByText(/Two still above/)).toBeNull()
+    const labels = [...document.querySelectorAll(".ov-status .ov-row dt")].map((d) => d.textContent)
+    expect(labels).toEqual(["Now", "Next"])
+    expect(document.querySelector(".ov-sub")).toBeNull()
+  })
 })

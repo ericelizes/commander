@@ -293,3 +293,33 @@
 @media (prefers-reduced-motion: reduce) { .ov-skel { animation: none; } }
 @media (prefers-color-scheme: dark) { .ov-skeleton { --skel: rgba(255,255,255,.07); --skel-hi: rgba(255,255,255,.13); } }
 .ov-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* Structure: no part or section numbers. The goal and its scoreboard lead;
+   Now / Done / Next and the pitch read as labelled rows, label on the left,
+   so the eye scans the labels and stops where it needs to. */
+.ov .ov-sec > .ov-section-title::before, .ov h3.ov-sub::before { content: none; }
+.ov .ov-sec > .ov-section-title { font: 650 13px/1.4 var(--font); letter-spacing: .05em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 14px; }
+.ov .ov-sec > .ov-section-title svg { display: inline; color: var(--ink-3); }
+.ov .ov-divider { margin: 32px 0 28px; }
+
+.ov .ov-goal { margin: 0 0 14px; }
+.ov .ov-goal .ov-field { font: 500 18px/1.5 var(--serif); color: var(--ink); margin: 2px 0 0; }
+.ov-label { display: block; font: 600 11.5px/1.4 var(--font); letter-spacing: .05em; text-transform: uppercase; color: var(--ink-3); }
+
+.ov .ov-targets { margin: 4px 0 22px; }
+.ov .ov-targets caption { caption-side: top; text-align: left; font: 600 13px/1.4 var(--font); color: var(--ink-2); padding: 0 0 6px; }
+
+.ov .ov-rows { margin: 0; display: grid; }
+.ov .ov-row { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 0 16px; padding: 12px 0; border-top: 1px solid var(--hairline); }
+.ov .ov-row:first-child { border-top: 0; padding-top: 4px; }
+.ov .ov-row dt { font: 600 11.5px/1.4 var(--font); letter-spacing: .05em; text-transform: uppercase; color: var(--ink-3); padding-top: 4px; }
+.ov .ov-row dd { margin: 0; min-width: 0; }
+.ov .ov-row .ov-field { margin: 0; font-size: 15.5px; line-height: 1.6; }
+.ov .ov-row .ov-fields { margin: 0; padding-left: 18px; }
+.ov .ov-row .ov-fields li { font-size: 15.5px; line-height: 1.6; padding: 0 0 4px 2px; }
+.ov .ov-row .ov-fields li:last-child { padding-bottom: 0; }
+.ov .ov-tag { display: inline-block; margin: 0 0 4px; padding: 1px 8px; border-radius: 999px; background: var(--raised-2); font: 500 12px/1.5 var(--font); color: var(--ink-2); }
+@media (max-width: 650px) {
+  .ov .ov-row { grid-template-columns: 1fr; }
+  .ov .ov-row dt { padding: 0 0 2px; }
+}

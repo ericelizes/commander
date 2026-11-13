@@ -417,6 +417,7 @@ export function Overview({ ws, row, track, onTrack, part = 'status', embedded = 
       <StreamSentence s={s} done={cited} live={draftOn} />
     </Fragment>
   ))
+  const list = (claim: Claim) => <ul className="ov-fields">{sentencesOf(claim).map((s, i) => <li key={i}><StreamSentence s={s} done={cited} live={draftOn} /></li>)}</ul>
   const stalled = target.kind === 'stalled' || target.kind === 'stuck'
   const pendingDecision = asks.length === 0 && (target.kind === 'needs' || (!track && row.flag > 0))
   const noAsk = pendingDecision ? 'A decision is recorded, but its details are not available yet.' : 'No decision is requested from you. Agent recovery is needed.'
@@ -445,12 +446,14 @@ export function Overview({ ws, row, track, onTrack, part = 'status', embedded = 
           ))}
           {asks.length === 0 && (pendingDecision || stalled) && <p>{noAsk}</p>}
           {shown && (hasText(shown.goal) || hasText(shown.now) || hasText(shown.recent) || hasText(shown.next)) && <div className="ov-status-story ov-fade" key={result?.recap?.generated_at ?? 'draft'}>
-            {hasText(shown.goal) && <>
-              <h3 className="ov-sub">Goal</h3>
+            {hasText(shown.goal) && <div className="ov-goal">
+              <span className="ov-label">Goal</span>
               <p className="ov-field">{cite(shown.goal)}</p>
-              {hasText(shown.progress) && <p className="ov-field"><b>Progress:</b> {cite(shown.progress)}</p>}
-            </>}
+            </div>}
+            {/* The table already says how far along the goal is; the sentence is only for a goal without one. */}
+            {hasText(shown.progress) && !shown.targets?.length && <p className="ov-field"><b>Progress:</b> {cite(shown.progress)}</p>}
             {!!shown.targets?.length && <table className="ov-targets">
+              <caption>{shown.targets.filter((t) => t.met).length} of {shown.targets.length} targets met</caption>
               <thead><tr><th>Measure</th><th>Target</th><th>Was</th><th>Now</th><th aria-label="Met" /></tr></thead>
               <tbody>{shown.targets.map((t, i) => (
                 <tr key={i} className={t.met ? 'is-met' : ''}>
@@ -459,9 +462,11 @@ export function Overview({ ws, row, track, onTrack, part = 'status', embedded = 
                 </tr>
               ))}</tbody>
             </table>}
-            {hasText(shown.now) && <><h3 className="ov-sub">Right now</h3><p className="ov-field">{cite(shown.now)}</p></>}
-            {hasText(shown.recent) && <><h3 className="ov-sub">Done lately</h3><ul className="ov-fields">{sentencesOf(shown.recent!).map((s, i) => <li key={i}><StreamSentence s={s} done={cited} live={draftOn} /></li>)}</ul></>}
-            {hasText(shown.next) && <><h3 className="ov-sub">Up next</h3><ul className="ov-fields">{sentencesOf(shown.next!).map((s, i) => <li key={i}><StreamSentence s={s} done={cited} live={draftOn} /></li>)}</ul></>}
+            {(hasText(shown.now) || hasText(shown.recent) || hasText(shown.next)) && <dl className="ov-rows">
+              {hasText(shown.now) && <Row label="Now"><p className="ov-field">{cite(shown.now)}</p></Row>}
+              {hasText(shown.recent) && <Row label="Done">{list(shown.recent!)}</Row>}
+              {hasText(shown.next) && <Row label="Next">{list(shown.next!)}</Row>}
+            </dl>}
           </div>}
         </section>}
         {/* The pitch: what this is and why it matters, after the status. */}
@@ -475,28 +480,17 @@ export function Overview({ ws, row, track, onTrack, part = 'status', embedded = 
             </div>}
             {/* Each section appears once it has words, so a summary being written
                 builds top to bottom instead of showing empty headings early. */}
-            {hasText(shown.problem) && <>
-              <h3 className="ov-sub">Problem</h3>
-              <p className="ov-field">{cite(shown.problem)}</p>
-              <ul className="ov-fields">
-                {shown.problem_type && <li><b>Type:</b> {typeNames[shown.problem_type] ?? shown.problem_type}</li>}
-                {hasText(shown.problem_impact) && <li><b>Impact:</b> {cite(shown.problem_impact)}</li>}
-              </ul>
-            </>}
-            {(hasText(shown.solution) || hasText(shown.impact)) && <>
-              <h3 className="ov-sub">Solution</h3>
-              <ul className="ov-fields">
-                {hasText(shown.solution) && <li><b>Description:</b> {cite(shown.solution)}</li>}
-                {hasText(shown.impact) && <li><b>Impact:</b> {cite(shown.impact)}</li>}
-              </ul>
-            </>}
-            {(hasText(shown.scope_detail) || hasText(shown.risk_detail)) && <>
-              <h3 className="ov-sub">Appetite</h3>
-              <ul className="ov-fields">
-                {hasText(shown.scope_detail) && <li><b>Scope:</b> {shown.scope && <>{scopeDot[shown.scope] ?? ''} {shown.scope}. </>}{cite(shown.scope_detail)}</li>}
-                {hasText(shown.risk_detail) && <li><b>Risk:</b> {riskDot(shown.risk ?? 0)} {shown.risk ?? 0}/10. {cite(shown.risk_detail)}</li>}
-              </ul>
-            </>}
+            <dl className="ov-rows">
+              {hasText(shown.problem) && <Row label="Problem">
+                {shown.problem_type && <span className="ov-tag">{typeNames[shown.problem_type] ?? shown.problem_type}</span>}
+                <p className="ov-field">{cite(shown.problem)}</p>
+              </Row>}
+              {hasText(shown.problem_impact) && <Row label="Cost"><p className="ov-field">{cite(shown.problem_impact)}</p></Row>}
+              {hasText(shown.solution) && <Row label="Solution"><p className="ov-field">{cite(shown.solution)}</p></Row>}
+              {hasText(shown.impact) && <Row label="Payoff"><p className="ov-field">{cite(shown.impact)}</p></Row>}
+              {hasText(shown.scope_detail) && <Row label="Scope"><p className="ov-field">{shown.scope && <b>{scopeDot[shown.scope] ?? ''} {shown.scope}. </b>}{cite(shown.scope_detail)}</p></Row>}
+              {hasText(shown.risk_detail) && <Row label="Risk"><p className="ov-field"><b>{riskDot(shown.risk ?? 0)} {shown.risk ?? 0}/10. </b>{cite(shown.risk_detail)}</p></Row>}
+            </dl>
           </div> : null}
         </section>}
         {part === 'status' && below.length > 0 && <section aria-label="Workstreams under this one"><h2>Across this workstream</h2><div className="ov-tracks">{below.map((t) => <button type="button" key={t.bead_id} onClick={() => onTrack(t.bead_id)}><strong>{plainTitle(t.title)}</strong><span data-tone={toneOf(t.kind)}>{t.text}</span></button>)}</div></section>}
@@ -516,6 +510,11 @@ export function Overview({ ws, row, track, onTrack, part = 'status', embedded = 
     {reader}
     </div>
   )
+}
+
+// Row is one labelled line of the summary: a short label beside its text.
+function Row({ label, children }: { label: string; children: React.ReactNode }) {
+  return <div className="ov-row"><dt>{label}</dt><dd>{children}</dd></div>
 }
 
 function decisionPreview(text: string): string {
