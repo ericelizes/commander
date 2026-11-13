@@ -35,6 +35,15 @@ or on a Linux box/VM), and the Electron app that shows it.
    to add CSV export to billing". Commander picks the project under `~/code`
    (or `COMMANDER_WORKSPACE_ROOT`).
 
+**Using a fork?** In `bd` 1.3.4, the default `routing.mode=auto` treats the
+checkout as a contributor's and routes every write to `~/.beads-planning`,
+outside the project database. Commander's reads keep that embedded store
+locked, so every `cmdr` write fails with `embeddeddolt: store is read-only`.
+Run `bd config set routing.mode maintainer` in the project, then remove the
+`repos.additional` key and its list item from `.beads/config.yaml` by hand.
+Avoid `bd config unset repos.additional`: it comments out the key but leaves
+the list item, producing invalid YAML.
+
 ### Optional: connect things
 
 All optional; nothing needs them.
