@@ -37,8 +37,8 @@ func TestCheckPlacement(t *testing.T) {
 		{"a workstream under a step", step, Placement{Workstream: true}, "is a step"},
 		{"a workstream beside open steps", leaf, Placement{Workstream: true}, "--take-open-steps"},
 		{"a workstream taking those steps", leaf, Placement{Workstream: true, TakingSteps: true}, ""},
-		{"a step beside open workstreams", parent, Placement{}, "put this under one of them"},
-		{"a gate beside an old track", legacy, Placement{}, "put this under one of them"},
+		{"a step beside open workstreams", parent, Placement{}, ""},
+		{"a gate beside an old track", legacy, Placement{}, ""},
 		{"a second workstream", parent, Placement{Workstream: true}, ""},
 		{"a workstream under an unlabelled top-level bead", legacy, Placement{Workstream: true}, ""},
 		{"a step under a leaf", leaf, Placement{}, ""},
@@ -108,5 +108,23 @@ func TestIsNested(t *testing.T) {
 		if got := IsNested(c.labels, c.parent); got != c.want {
 			t.Errorf("IsNested(%v, %q) = %v", c.labels, c.parent, got)
 		}
+	}
+}
+
+func TestCheckPlacementConfirmDoneAndCrossArea(t *testing.T) {
+	ctx := context.Background()
+	m, add := placementTree(t)
+	parent := add("QA Hub", "", WorkstreamLabel)
+	add("Confirm done", parent, ClosingGateLabel, "kind:gate", "verifier:user")
+	if err := CheckPlacement(ctx, m, "", parent, Placement{Workstream: true}); err != nil {
+		t.Fatal(err)
+	}
+	add("Area A", parent, WorkstreamLabel)
+	step := add("Ship across areas", parent)
+	if err := m.SetStatus(ctx, "", step, StatusDeferred); err != nil {
+		t.Fatal(err)
+	}
+	if err := CheckPlacement(ctx, m, "", parent, Placement{Self: step}); err != nil {
+		t.Fatal(err)
 	}
 }

@@ -24,7 +24,7 @@ func pgCheckCompletion(ctx context.Context, q store.Querier, pid int64, id, oldS
 	// All close callers, including roleless and legacy callers, share these
 	// invariants. pgWrite holds the project graph lock before reading the bead.
 	for _, w := range WaitsOf(labels) {
-		if w.Kind == WaitReview {
+		if w.Kind == WaitReview && !retiringIn(ctx, id) {
 			return fmt.Errorf("cannot close %s: Waiting for review (%s); record the required review first", id, w.Ref)
 		}
 	}
@@ -48,6 +48,9 @@ func pgCheckCompletion(ctx context.Context, q store.Querier, pid int64, id, oldS
 	}
 	if len(unfinished) > 0 {
 		return fmt.Errorf("cannot close %s: unfinished children (%s); finish them first (deferred work is unfinished)", id, strings.Join(unfinished, ", "))
+	}
+	if retiringIn(ctx, id) {
+		return nil
 	}
 	active, e := pgActiveExecution(ctx, q)
 	if e != nil || !active {

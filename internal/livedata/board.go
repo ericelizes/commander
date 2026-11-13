@@ -1490,7 +1490,7 @@ func unfinishedBlocker(g SnapStep, byID map[string]SnapStep) bool {
 		if id == g.BeadID {
 			continue
 		}
-		if b, ok := byID[id]; ok && !stepClosed(b) && !parked(b) {
+		if b, ok := byID[id]; ok && !stepClosed(b) {
 			return true
 		}
 	}
@@ -1595,20 +1595,22 @@ type gateStat struct {
 func gateStatusOf(ws SnapWorkstream) *gateStat {
 	byID := map[string]SnapStep{}
 	var ids []string
-	var index func([]SnapStep)
-	index = func(steps []SnapStep) {
+	paused := map[string]bool{}
+	var index func([]SnapStep, bool)
+	index = func(steps []SnapStep, parentPaused bool) {
 		for _, s := range steps {
-			if parked(s) {
+			if s.Superseded {
 				continue
 			}
 			if _, dup := byID[s.BeadID]; !dup {
 				ids = append(ids, s.BeadID)
 			}
 			byID[s.BeadID] = s
-			index(s.Children)
+			paused[s.BeadID] = parentPaused || parked(s)
+			index(s.Children, paused[s.BeadID])
 		}
 	}
-	index(ws.Steps)
+	index(ws.Steps, false)
 	type cand struct {
 		g           SnapStep
 		units       []SnapStep
@@ -1670,7 +1672,7 @@ func gateStatusOf(ws SnapWorkstream) *gateStat {
 	var cands []cand
 	for _, id := range ids {
 		// A superseded gate was dropped from the plan: it is never an approval to wait for.
-		if byID[id].Gate && !byID[id].Superseded {
+		if byID[id].Gate && !byID[id].Superseded && !paused[id] {
 			cands = append(cands, before(byID[id]))
 		}
 	}
@@ -1709,7 +1711,7 @@ func gateStatusOf(ws SnapWorkstream) *gateStat {
 	units := next.units
 	if len(units) == 0 {
 		for _, id := range ids {
-			if s := byID[id]; !s.Gate && len(s.Children) == 0 {
+			if s := byID[id]; !s.Gate && (len(s.Children) == 0 || parked(s)) {
 				units = append(units, s)
 			}
 		}
@@ -1781,12 +1783,12 @@ func gateVMOf(ws SnapWorkstream, needsIDs map[string]bool, asks int) *gateVM {
 // its own (only closing the stage finishes it).
 func workUnits(s SnapStep) []SnapStep {
 	if parked(s) {
-		return nil
+		return []SnapStep{s}
 	}
 	var units []SnapStep
 	kids := 0
 	for _, c := range s.Children {
-		if !parked(c) {
+		if !c.Superseded {
 			kids++
 			units = append(units, workUnits(c)...)
 		}
@@ -2089,7 +2091,7 @@ func DeliveryMilestones(ws SnapWorkstream) Progress {
 	var walk func([]SnapStep)
 	walk = func(steps []SnapStep) {
 		for _, st := range steps {
-			if parked(st) || st.Superseded || st.Task || st.Gate {
+			if st.Superseded || st.Task || st.Gate {
 				continue
 			}
 			if st.Track {
@@ -2097,7 +2099,7 @@ func DeliveryMilestones(ws SnapWorkstream) Progress {
 				continue
 			}
 			p.Total++
-			if !stepClosed(st) {
+			if parked(st) || !stepClosed(st) {
 				continue
 			}
 			passed := true

@@ -300,7 +300,7 @@ func TestBoardParked(t *testing.T) {
 		st("b", title("B"), kids(st("b-flow", gateOf("Workflow approved (B)", "user")), st("b1", inProgress, ownedBy("operator-b1", ""), blockedBy("b-flow")))),
 	}
 	r := boardOne(t02, &idle)
-	if r.Progress != (Progress{Done: 0, Total: 1}) || r.Working != 2 || r.Gate == nil || r.Gate.Title != "Workflow approved (B)" {
+	if r.Progress != (Progress{Done: 0, Total: 2}) || r.Working != 2 || r.Gate == nil || r.Gate.Title != "Workflow approved (B)" {
 		t.Fatalf("parked work counts: %+v", r)
 	}
 	expectLine(t, boardOne([]SnapStep{st("a1", ownedBy("operator-a1", ""), needsUser, waiting("you"), park)}, &idle), "quiet", "Nothing to do")

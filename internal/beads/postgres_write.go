@@ -240,6 +240,9 @@ func pgWrite(ctx context.Context, q store.Querier, pid int64, args []string) ([]
 	if len(args) < 2 {
 		return nil, errors.New("missing bead arguments")
 	}
+	if args[0] == "retire" {
+		return pgRetire(ctx, q, pid, args[1:])
+	}
 	if args[0] == "comments" {
 		// The place write door terminates flags before arbitrary report text.
 		if len(args) == 5 && args[1] == "add" && args[3] == "--" {

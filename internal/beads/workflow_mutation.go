@@ -40,6 +40,9 @@ func pgVerifyCompletion(ctx context.Context, q store.Querier, pid int64, id stri
 // definition while it is still visible. Workflow snapshots and their generated
 // identities remain immutable; re-planning creates a new explicit instance.
 func pgCheckWorkflowMutation(ctx context.Context, q store.Querier, pid int64, b Bead, verb string, pos []string, f pgFlags) error {
+	if retiringIn(ctx, b.ID) {
+		return nil
+	}
 	active, e := pgActiveExecution(ctx, q)
 	if e != nil || !active {
 		return e

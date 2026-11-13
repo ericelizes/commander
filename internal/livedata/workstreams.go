@@ -295,7 +295,7 @@ func waitsOnOpenStage(r ObjectiveRow, byID map[string]ObjectiveRow) bool {
 			continue
 		}
 		if b.Status == beads.StatusDeferred {
-			continue // parked: out of play, never blocks
+			return true // parked work is unfinished and still blocks approval
 		}
 		if b.Status != "closed" && b.State != beads.StateDone {
 			return true

@@ -99,7 +99,7 @@ func pgCheckPlanBasis(ctx context.Context, q store.Querier, pid int64, ops [][]s
 			}
 			continue
 		}
-		pos, f, e := parsePGFlags(op[1:], "--title --description --acceptance --notes --status --priority --type --labels --add-label --remove-label --parent --assignee --reason --force --silent --no-inherit-labels --claim --ref")
+		pos, f, e := parsePGFlags(op[1:], "--title --description --acceptance --notes --status --priority --type --labels --add-label --remove-label --parent --assignee --reason --force --silent --no-inherit-labels --claim --ref --mode --dry-run")
 		if e != nil {
 			return e
 		}

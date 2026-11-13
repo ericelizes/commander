@@ -66,9 +66,8 @@ func OpenChildren(ctx context.Context, c Client, dir, parent string) ([]Bead, er
 	return out, nil
 }
 
-// CheckPlacement enforces the shape of the tree: a workstream sits at the top or
-// directly under a workstream, and a workstream's open children are all
-// workstreams or all steps.
+// CheckPlacement keeps workstreams under scopes. Cross-area steps can sit
+// beside nested workstreams; Confirm done never obstructs a scope split.
 func CheckPlacement(ctx context.Context, c Client, dir, parent string, p Placement) error {
 	if parent == "" {
 		return nil
@@ -93,22 +92,20 @@ func CheckPlacement(ctx context.Context, c Client, dir, parent string, p Placeme
 	if err != nil {
 		return fmt.Errorf("could not read the children of %s (%v); nothing written, retry in a minute", parent, err)
 	}
-	var steps, workstreams []string
+	var steps []string
 	for _, k := range children {
 		switch {
 		// Parked is not open: it is checked when it comes back.
-		case k.ID == p.Self || k.Status == StatusDeferred:
+		case k.ID == p.Self || k.Status == StatusDeferred || IsClosingGate(k.Labels):
 		case IsWorkstream(k.Labels):
-			workstreams = append(workstreams, k.ID)
+			// Cross-area steps may share a parent with workstreams.
 		default:
 			steps = append(steps, k.ID)
 		}
 	}
 	if p.Workstream && len(steps) > 0 && !p.TakingSteps {
-		return fmt.Errorf("%s has open steps (%s), and a workstream's open children are all workstreams or all steps: create the workstream with --take-open-steps to move them into it", parent, strings.Join(steps, ", "))
+		return fmt.Errorf("%s has open steps (%s): create the workstream with --take-open-steps to move them into it", parent, strings.Join(steps, ", "))
 	}
-	if !p.Workstream && len(workstreams) > 0 {
-		return fmt.Errorf("%s has open workstreams under it (%s), and a workstream's open children are all workstreams or all steps: put this under one of them, or make it a workstream with --workstream", parent, strings.Join(workstreams, ", "))
-	}
+
 	return nil
 }

@@ -52,7 +52,7 @@ func runInternalGate(args []string, stdout, stderr *os.File) int {
 	before := fs.String("before", "", "link: comma-separated bead ids that wait on --bead")
 	parent := fs.String("parent", "", "publish: existing parent of the guarded stage")
 	repairWaiters := fs.String("repair-ancestor-waits", "", "publish: explicit comma-separated redundant strict ancestors; requires --reason, preserves guarded leaf wait")
-	replacement := fs.String("replacement", "", "retire-legacy: exact genuine open user gate")
+	replacement := fs.String("replacement", "", "retire-legacy: retain this genuine open user gate; omitted retires the stage and its auto gates")
 	expectedState := fs.String("expected-state", "", "withdraw: exact original gate state (open)")
 	expectedSnapshot := fs.String("expected-snapshot", "", "withdraw: exact dry-run snapshot SHA256")
 	generation := fs.Int("generation", 0, "withdraw: exact unanswered pitch generation")

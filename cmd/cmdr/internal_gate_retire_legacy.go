@@ -23,6 +23,23 @@ func gateRetireLegacy(ctx context.Context, st *store.Store, project, id, replace
 	if callerIsOperator(role) {
 		return fmt.Errorf("retire-legacy: Operators must ask the owning Manager")
 	}
+	if replacement == "" {
+		p, err := st.GetProjectByName(ctx, project)
+		if err != nil {
+			return err
+		}
+		if p == nil {
+			return fmt.Errorf("project %q not added", project)
+		}
+		response, err := beads.Retire(ctx, p.Path, id, "legacy-stage", reason, dry)
+		if err != nil {
+			return err
+		}
+		if response.Exit != 0 || response.Error != "" {
+			return fmt.Errorf("retire-legacy: %s %s", response.Error, response.Stderr)
+		}
+		return nil
+	}
 	if replacement == "" || replacement == id || strings.TrimSpace(reason) == "" {
 		return fmt.Errorf("retire-legacy requires distinct --replacement and --reason")
 	}
@@ -58,7 +75,7 @@ func gateRetireLegacy(ctx context.Context, st *store.Store, project, id, replace
 			return fail("missing replacement")
 		}
 		safe := func(x beads.Bead) bool {
-			if x.Status != "open" || beads.Superseded(x) {
+			if (x.Status != "open" && (x.ID != id || x.Status != beads.StatusDeferred)) || beads.Superseded(x) {
 				return false
 			}
 			for _, l := range x.Labels {

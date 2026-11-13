@@ -39,6 +39,9 @@ type workflowPlugResult struct {
 
 // runWorkflow: `workflow plug <template> --project P --parent B --before M --pr URL`.
 func runWorkflow(args []string, stdout, stderr *os.File) int {
+	if len(args) > 0 && args[0] == "retire-block" {
+		return runWorkflowRetireBlock(args[1:], stdout, stderr)
+	}
 	if len(args) > 0 && args[0] == "own-run" {
 		return runWorkflowOwnRun(args[1:], stdout, stderr)
 	}
@@ -64,7 +67,7 @@ func runWorkflow(args []string, stdout, stderr *os.File) int {
 		return runWorkflowCatalog(args, stdout, stderr)
 	}
 	if len(args) == 0 || args[0] != "plug" {
-		emitErr(stderr, "usage: workflow list | workflow show <template> | workflow plug <template> --project P --parent B --before M --pr URL | workflow bind-writers --project P --block B --writers original-task,fix-task [--external-writer user --commits base-sha..last-sha] --head full-sha | workflow settle-block --project P --block B --reason R")
+		emitErr(stderr, "usage: workflow list | workflow show <template> | workflow plug <template> --project P --parent B --before M --pr URL | workflow bind-writers --project P --block B --writers original-task,fix-task [--external-writer user --commits base-sha..last-sha] --head full-sha | workflow settle-block --project P --block B --reason R | workflow retire-block --project P --block B --reason R")
 		return 1
 	}
 	return runWorkflowPlug(args[1:], stdout, stderr)
@@ -80,7 +83,7 @@ func canonicalPR(raw string) (string, error) {
 func runWorkflowPlug(args []string, stdout, stderr *os.File) int {
 	// The template name comes first, flags after.
 	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
-		emitErr(stderr, "usage: workflow plug <template> --project P --parent B --before M --pr URL | workflow bind-writers --project P --block B --writers original-task,fix-task [--external-writer user --commits base-sha..last-sha] --head full-sha | workflow settle-block --project P --block B --reason R")
+		emitErr(stderr, "usage: workflow plug <template> --project P --parent B --before M --pr URL | workflow bind-writers --project P --block B --writers original-task,fix-task [--external-writer user --commits base-sha..last-sha] --head full-sha | workflow settle-block --project P --block B --reason R | workflow retire-block --project P --block B --reason R")
 		return 1
 	}
 	name, args := args[0], args[1:]

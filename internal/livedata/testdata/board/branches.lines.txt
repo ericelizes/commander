@@ -21,7 +21,7 @@
 20 waits on an operator: Waiting for an Operator: write the docs (0% done, no gates, for 1m)
 21 operator owner: Working on write the docs (0% done, no gates, 2 working)
 22 waits on an unknown operator: Waiting for an Operator (0% done, no gates, for 1m)
-23 parked work: Parked work returns 03:43 AM (100% done, no gates)
+23 parked work: Parked work returns 03:43 AM (50% done, no gates)
 24 needs your gate: Needs you · merge approval (100% done, next gate: Merge approval, approved by you, ⚑ 1)
 25 gate waits on reviewers: Waiting for review (a-reviewer) (100% done, next gate: PR approval, approved by a-reviewer)
 26 gate others approve: Waiting for deploy approval (100% done, next gate: Deploy approval, approved by a-reviewer)

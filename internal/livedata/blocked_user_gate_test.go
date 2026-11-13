@@ -35,7 +35,7 @@ func TestBlockedUserGate_FlaggedGateNotListedWhileBlocked(t *testing.T) {
 	}
 }
 
-func TestBlockedUserGate_DeferredBlockerIsReady(t *testing.T) {
+func TestBlockedUserGate_DeferredBlockerIsNotReady(t *testing.T) {
 	d := fleet()
 	d.Objectives = append(d.Objectives,
 		ObjectiveRow{BeadID: "a.6", ParentBeadID: "a", Title: "Parked", ProjectID: 1, State: beads.StateNotStarted, Status: beads.StatusDeferred},
@@ -49,8 +49,7 @@ func TestBlockedUserGate_DeferredBlockerIsReady(t *testing.T) {
 	}
 	for _, n := range NeedsYouList(d) {
 		if n.BeadID == "a.7" {
-			return
+			t.Fatal("parked work must block approval")
 		}
 	}
-	t.Fatal("a gate blocked only by a deferred bead is ready")
 }
