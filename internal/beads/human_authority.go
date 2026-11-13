@@ -317,15 +317,8 @@ func DependencyComplete(b Bead) bool {
 func HumanApprovalGate(b Bead) bool { return humanGate(b.Labels) }
 
 func pgCheckCompletedStructure(ctx context.Context, q store.Querier, pid int64, id string) error {
-	if pgCallerValue(ctx, "COMMANDER_ROLE") == "" {
-		return nil
-	}
-	active, e := pgActiveExecution(ctx, q)
-	if e != nil || !active {
-		return e
-	}
 	var status string
-	if e = q.QueryRowContext(ctx, `SELECT status FROM bead_tasks WHERE project_id=? AND id=? AND deleted_at IS NULL`, pid, id).Scan(&status); e != nil {
+	if e := q.QueryRowContext(ctx, `SELECT status FROM bead_tasks WHERE project_id=? AND id=? AND deleted_at IS NULL`, pid, id).Scan(&status); e != nil {
 		return e
 	}
 	if status == "closed" {

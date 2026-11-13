@@ -501,16 +501,16 @@ export function trackTitle(title: string): string {
 }
 
 const openTracksIn = (steps: SnapStep[] | undefined): SnapStep[] =>
-  (steps ?? []).filter((s) => isTrack(s) && !parked(s) && !s.superseded && s.status !== 'closed' && s.state !== 'done')
+  (steps ?? []).filter((s) => isTrack(s) && !s.superseded && s.status !== 'closed' && s.state !== 'done')
 
 /** openTracks are the open workstreams directly under a workstream, in priority order. */
 export function openTracks(ws: SnapWorkstream): SnapStep[] {
   return openTracksIn(ws.steps)
 }
 
-/** openNested is every open nested workstream, at any depth, each before its children. */
-export function openNested(ws: SnapWorkstream): SnapStep[] {
-  const walk = (steps: SnapStep[] | undefined): SnapStep[] => openTracksIn(steps).flatMap((s) => [s, ...walk(s.children)])
+/** Visible nested workstreams, each before its children; active progress can exclude paused subtrees. */
+export function openNested(ws: SnapWorkstream, includePaused = true): SnapStep[] {
+  const walk = (steps: SnapStep[] | undefined): SnapStep[] => openTracksIn(steps).filter((s) => includePaused || !parked(s)).flatMap((s) => [s, ...walk(s.children)])
   return walk(ws.steps)
 }
 

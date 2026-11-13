@@ -45,7 +45,7 @@ export function progressWorkstreams(workstreams: SnapWorkstream[], rows: { key: 
     title: w.title,
     tickets: w.tickets,
     working: working.get(wsKey(w)),
-    tracks: openNested(w).map((x) => ({ title: x.title, tickets: x.tickets, working: liveOperators([x]) })),
+    tracks: openNested(w, false).map((x) => ({ title: x.title, tickets: x.tickets, working: liveOperators([x]) })),
   }))
 }
 

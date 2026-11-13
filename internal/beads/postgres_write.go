@@ -467,7 +467,7 @@ func pgWrite(ctx context.Context, q store.Querier, pid int64, args []string) ([]
 		_, e = q.ExecContext(ctx, `INSERT INTO bead_dependencies(project_id,issue_id,depends_on_id,type) VALUES(?,?,?,?) ON CONFLICT DO NOTHING`, pid, from, to, kind)
 		return nil, e
 	}
-	if verb == "update" && f.has("--parent") {
+	if verb == "update" || verb == "close" || verb == "set-state" || verb == "label" {
 		if _, e = q.ExecContext(ctx, `SELECT pg_advisory_xact_lock(?)`, pid); e != nil {
 			return nil, e
 		}
@@ -580,10 +580,17 @@ func pgWrite(ctx context.Context, q store.Querier, pid int64, args []string) ([]
 	default:
 		return nil, fmt.Errorf("unsupported Postgres bead operation %s", verb)
 	}
+	if oldStatus == "closed" && newStatus == "closed" {
+		for _, w := range WaitsOf(labels) {
+			if w.Kind == WaitReview && !slices.Contains(beforeLabels, w.Label()) {
+				return nil, errors.New("reopen completed work before adding a review wait")
+			}
+		}
+	}
 	if e := pgCheckHumanMutation(ctx, q, pid, id, verb, oldStatus, newStatus, beforeLabels, labels, f.has("--parent") && f.one("--parent") != parent, f); e != nil {
 		return nil, e
 	}
-	if e := pgCheckCompletion(ctx, q, pid, id, oldStatus, newStatus, slices.Contains(labels, "retired") || slices.Contains(labels, "superseded")); e != nil {
+	if e := pgCheckCompletion(ctx, q, pid, id, oldStatus, newStatus, slices.Contains(labels, "retired") || slices.Contains(labels, "superseded"), labels); e != nil {
 		return nil, e
 	}
 	raw, e := json.Marshal(labels)

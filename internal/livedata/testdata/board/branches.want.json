@@ -1491,9 +1491,27 @@
    "gate": null,
    "tracks": [
     {
+     "key": "p:w45.2",
+     "bead_id": "w45.2",
+     "letter": ".1",
+     "title": "Parked track",
+     "kind": "idle",
+     "text": "Paused",
+     "since": 0,
+     "progress": {
+      "done": 0,
+      "total": 0
+     },
+     "milestones": {
+      "done": 0,
+      "total": 0
+     },
+     "working": 0
+    },
+    {
      "key": "p:w45.3",
      "bead_id": "w45.3",
-     "letter": ".1",
+     "letter": ".2",
      "title": "Live track",
      "kind": "stalled",
      "text": "Stalled",
@@ -1512,7 +1530,7 @@
     {
      "key": "p:w45.4",
      "bead_id": "w45.4",
-     "letter": ".2",
+     "letter": ".3",
      "title": "Second live track",
      "kind": "quiet",
      "text": "Nothing to do",

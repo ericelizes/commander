@@ -12,6 +12,7 @@ it('names root ownership only when more than one Commander owns rows, nested ove
   const s = JSON.parse(readFileSync(join(__dirname, 'fixtures/snapshot.json'), 'utf8')) as Snapshot
   const root = s.display!.workstreams[0]
   root.planning_commander = 'commander'
+  // Root ownership is named when multiple root Commanders are visible.
   s.display!.workstreams[1].planning_commander = 'commander-other'
   root.tracks = [{key:root.key+'.urgent',bead_id:'nested-urgent',letter:'.1',title:'Urgent work',kind:'waiting',text:'Commander to plan the next action',since:0,progress:{done:0,total:1},working:0,planning_commander:'commander-urgent'}]
   localStorage.clear()
