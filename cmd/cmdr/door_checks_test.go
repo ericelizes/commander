@@ -8,8 +8,10 @@ import (
 	"strings"
 	"testing"
 
+	"fmt"
 	"github.com/example-user/commander/internal/beads"
 	"github.com/example-user/commander/internal/store"
+	"github.com/example-user/commander/internal/workflowtemplate"
 )
 
 // registerRunningOperator records a running agent run so in-progress writes
@@ -262,5 +264,51 @@ func TestReviewLabel_AnyRepo(t *testing.T) {
 		if _, err := reviewLabel(bad); err == nil {
 			t.Errorf("%q passed", bad)
 		}
+	}
+}
+
+func TestDoor_ReviewCardWaitsForGreenCI(t *testing.T) {
+	t.Setenv("COMMANDER_ROLE", "commander")
+	heads := map[string]workflowtemplate.Head{}
+	oldRepo, oldRead := prRepoOf, readPRHead
+	t.Cleanup(func() { prRepoOf, readPRHead = oldRepo, oldRead })
+	prRepoOf = func(string) string { return "o/r" }
+	readPRHead = func(_ context.Context, pr string) (workflowtemplate.Head, error) {
+		h, ok := heads[pr[strings.LastIndex(pr, "/")+1:]]
+		if !ok {
+			return h, fmt.Errorf("GraphQL: Could not resolve to a PullRequest with the number of 9")
+		}
+		return h, nil
+	}
+	green := workflowtemplate.Check{Kind: "CheckRun", Name: "tests", Status: "COMPLETED", Conclusion: "SUCCESS"}
+	red := workflowtemplate.Check{Kind: "CheckRun", Name: "Sidecar package checks (forge-notify)", Status: "COMPLETED", Conclusion: "FAILURE"}
+	heads["3651"] = workflowtemplate.Head{SHA: "73c3d05d2eca", State: "OPEN", Checks: []workflowtemplate.Check{green, red}}
+	heads["3657"] = workflowtemplate.Head{SHA: "100fd27ef825", State: "OPEN"}
+	heads["3622"] = workflowtemplate.Head{SHA: "aaaa", State: "MERGED", Checks: []workflowtemplate.Check{red}}
+	mock := &beads.MockClient{ShowResult: &beads.Bead{ID: "g", Status: "open", Title: "Review and merge PR 3651"}}
+	card := &store.Decision{Question: "Review and merge the two Notify PRs?", Context: "Merge https://github.com/o/r/pull/3657 into PR 3651, then 3651 into main."}
+
+	err := checkReviewAskGreen(context.Background(), mock, "", "g", card)
+	if err == nil || !strings.Contains(err.Error(), "PR 3651 at 73c3d05d is not green: Sidecar package checks (forge-notify) (failure)") || !strings.Contains(err.Error(), "PR 3657 at 100fd27e has no CI checks") || !strings.Contains(err.Error(), "--checks-not-green") {
+		t.Fatalf("a review card over red CI must be refused, naming the checks: %v", err)
+	}
+	heads["3651"] = workflowtemplate.Head{SHA: "73c3d05d2eca", State: "OPEN", Checks: []workflowtemplate.Check{green}}
+	heads["3657"] = workflowtemplate.Head{SHA: "100fd27ef825", State: "MERGED"}
+	if err := checkReviewAskGreen(context.Background(), mock, "", "g", card); err != nil {
+		t.Fatalf("green, or merged, PRs pass: %v", err)
+	}
+	// A merged PR named in passing, a number that is not a PR, a card that
+	// asks something else, and the user's own write are all left alone.
+	if err := checkReviewAskGreen(context.Background(), mock, "", "g", &store.Decision{Question: "Merge the follow-up now that PR 3622 and PR 9 landed?"}); err != nil {
+		t.Fatal(err)
+	}
+	heads["3651"] = workflowtemplate.Head{SHA: "73c3d05d2eca", State: "OPEN", Checks: []workflowtemplate.Check{red}}
+	other := &beads.MockClient{ShowResult: &beads.Bead{ID: "s", Status: "open", Title: "Pick the Slack channel"}}
+	if err := checkReviewAskGreen(context.Background(), other, "", "s", &store.Decision{Question: "Which channel should PR 3651 post to?"}); err != nil {
+		t.Fatalf("a card that asks no review or merge is not held for CI: %v", err)
+	}
+	t.Setenv("COMMANDER_ROLE", "")
+	if err := checkReviewAskGreen(context.Background(), mock, "", "g", card); err != nil {
+		t.Fatalf("the user's own write is not refused: %v", err)
 	}
 }

@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -16,6 +18,7 @@ import (
 	"github.com/example-user/commander/internal/ownercompat"
 	"github.com/example-user/commander/internal/spawn"
 	"github.com/example-user/commander/internal/store"
+	"github.com/example-user/commander/internal/workflowtemplate"
 	"github.com/example-user/commander/internal/wsmgr"
 )
 
@@ -945,4 +948,76 @@ func logSecondCard(ctx context.Context, bc beads.Client, dir, gate, ancestor, re
 		}
 	}
 	return nil
+}
+
+// reviewAskRE is a card that asks the user to review, merge or land something.
+var reviewAskRE = regexp.MustCompile(`(?i)\b(review\w*|merg\w*|land(s|ed|ing)?)\b`)
+
+// prRepoOf and readPRHead are GitHub, swapped in tests.
+var (
+	prRepoOf   = livedata.GitHubRepo
+	readPRHead = func(ctx context.Context, pr string) (workflowtemplate.Head, error) {
+		return workflowtemplate.ReadHead(ctx, workflowtemplate.RunGH, pr)
+	}
+)
+
+// checkReviewAskGreen refuses a card that asks the user to review or merge an
+// open PR whose head is not green: getting a PR green (fix, push, watch CI) is
+// an agent's step before the ask, never the user's. Every PR the card names
+// (its words and the bead's pr: labels) is read fresh from GitHub; merged or
+// closed PRs, and numbers that are not PRs of the project's repo, are skipped.
+// The user's own write (no role) is not refused; --checks-not-green is how an
+// agent asks with CI red on purpose, and the card then says why.
+func checkReviewAskGreen(ctx context.Context, bc beads.Client, dir, beadID string, d *store.Decision) error {
+	if os.Getenv("COMMANDER_ROLE") == "" || d == nil {
+		return nil
+	}
+	b, err := freshReader(bc).Show(ctx, dir, beadID)
+	if err != nil {
+		return fmt.Errorf("could not read %s (busy): %v. Nothing was written; retry in a minute", beadID, err)
+	}
+	words := []string{d.Question, d.Context}
+	var labels []string
+	if b != nil {
+		words, labels = append(words, b.Title), b.Labels
+	}
+	for _, o := range d.Options {
+		words = append(words, o.Label)
+	}
+	if !reviewAskRE.MatchString(strings.Join(words, "\n")) {
+		return nil
+	}
+	prs := slices.Sorted(maps.Keys(livedata.PRRefs(d, labels)))
+	repo := prRepoOf(dir)
+	if len(prs) == 0 || repo == "" {
+		return nil
+	}
+	var red []string
+	for _, n := range prs {
+		h, err := readPRHead(ctx, "https://github.com/"+repo+"/pull/"+n)
+		if err != nil {
+			if strings.Contains(err.Error(), "Could not resolve to a PullRequest") {
+				continue
+			}
+			return fmt.Errorf("--state needs-user on %s: could not read PR %s's checks on GitHub (%v). Nothing was written; retry in a minute", beadID, n, err)
+		}
+		if h.State != "OPEN" || workflowtemplate.CIGreen(h) == nil {
+			continue
+		}
+		head := h.SHA
+		if len(head) > 8 {
+			head = head[:8]
+		}
+		if failed := workflowtemplate.NotGreen(h); len(h.Checks) > 0 && len(failed) > 0 {
+			red = append(red, fmt.Sprintf("PR %s at %s is not green: %s", n, head, strings.Join(failed, ", ")))
+		} else if len(h.Checks) == 0 {
+			red = append(red, fmt.Sprintf("PR %s at %s has no CI checks (a PR whose base is another PR's branch runs none: merge it into that branch and get that PR green)", n, head))
+		} else {
+			red = append(red, fmt.Sprintf("PR %s at %s is not green: no check succeeded", n, head))
+		}
+	}
+	if len(red) == 0 {
+		return nil
+	}
+	return fmt.Errorf("--state needs-user on %s: this card asks the user to review or merge, but %s. Getting a PR green is an agent's step before the ask: give a step to an agent that fixes, pushes and watches CI until every check passes, then raise the card naming the green head. If the user must decide with CI red on purpose (for example whether to drop the PR), pass --checks-not-green \"<why>\" and the card shows the reason", beadID, strings.Join(red, "; "))
 }
