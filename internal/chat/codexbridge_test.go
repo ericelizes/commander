@@ -2,6 +2,7 @@ package chat
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"github.com/example-user/commander/internal/chat/chattest"
@@ -9,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -153,6 +155,24 @@ func TestCodexBridgeOneShotExitsAfterTheTurn(t *testing.T) {
 	}
 }
 
+// Bridge rate-limit notifications can finish after RunCodexBridge returns.
+// Keep test output readable while those background emitters finish.
+type bridgeTestBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *bridgeTestBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+func (b *bridgeTestBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
 // A hooked bridge trusts its own -c hooks for the thread, and its result line
 // carries the turn's tokens the way Claude's does (uncached input + output),
 // summed over the turn's model calls, not the thread's carried-over total.
@@ -163,9 +183,25 @@ func TestCodexBridgeHooksTrustAndTokenUsage(t *testing.T) {
 	codexInR, codexIn := io.Pipe()
 	codexOutR, codexOut := io.Pipe()
 	var sent strings.Builder
-	go fakeCodex(io.TeeReader(codexInR, &sent), codexOut, nil)
-	var out strings.Builder
-	if err := RunCodexBridge(context.Background(), cfg, strings.NewReader(""), &out, codexOutR, codexIn); err != nil {
+	fakeDone := make(chan struct{})
+	go func() {
+		defer close(fakeDone)
+		fakeCodex(io.TeeReader(codexInR, &sent), codexOut, nil)
+	}()
+	defer codexIn.Close()
+	defer codexOutR.Close()
+	var out bridgeTestBuffer
+	err := RunCodexBridge(context.Background(), cfg, strings.NewReader(""), &out, codexOutR, codexIn)
+	// The bridge returning does not join the fake's TeeReader. End its I/O
+	// and join it before inspecting the builder it owns.
+	_ = codexIn.Close()
+	_ = codexOutR.Close()
+	select {
+	case <-fakeDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("fake Codex did not finish")
+	}
+	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(sent.String(), `"method":"thread/start","params":{`) || !strings.Contains(sent.String(), `"config":{"bypass_hook_trust":true}`) {
