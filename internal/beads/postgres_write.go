@@ -355,6 +355,18 @@ func pgWrite(ctx context.Context, q store.Querier, pid int64, args []string) ([]
 		if f.has("--labels") {
 			labels = strings.Split(f.one("--labels"), ",")
 		}
+		// A task the Commander or a Manager adds under a step is a step itself:
+		// without a kind label an agent could run it while the board never
+		// draws it, and the row's status line is written without it.
+		if parent != "" && !strings.HasPrefix(pgCallerValue(ctx, "COMMANDER_ROLE"), "operator-") && !slices.ContainsFunc(labels, func(l string) bool { return strings.HasPrefix(l, "kind:") }) {
+			var parentIsStep bool
+			if e := q.QueryRowContext(ctx, `SELECT jsonb_exists(labels,'kind:objective') FROM bead_tasks WHERE project_id=? AND id=?`, pid, parent).Scan(&parentIsStep); e != nil {
+				return nil, e
+			}
+			if parentIsStep {
+				labels = append([]string{"kind:objective"}, labels...)
+			}
+		}
 		if pgCallerValue(ctx, "COMMANDER_ROLE") != "" && slices.Contains(labels, DecisionAnsweredLabel) {
 			active, err := pgActiveExecution(ctx, q)
 			if err != nil {

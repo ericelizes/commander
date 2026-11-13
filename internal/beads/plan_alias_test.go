@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -82,5 +83,46 @@ func TestPlanAliasResolutionPreservesFlagValuesAndOptionOrder(t *testing.T) {
 		if e != nil || ref != test.ref || !reflect.DeepEqual(actual, test.want) {
 			t.Fatalf("resolution=%v ref=%s error=%v, want=%v", actual, ref, e, test.want)
 		}
+	}
+}
+
+func TestPostgresPlanChildOfStepIsAStep(t *testing.T) {
+	c, dir, st := postgresBeads(t)
+	ctx := context.Background()
+	if e := c.Init(ctx, dir); e != nil {
+		t.Fatal(e)
+	}
+	basis := PlanBasis{JurisdictionRevision: 1, Beads: map[string]int64{}}
+	req := WithPlanBasis(ctx, &basis)
+	r := postgresApplyOps(req, dir, [][]string{
+		{"create", "Workstream", "--labels", "kind:objective", "--ref", "ws"},
+		{"create", "Spec PR", "--parent", "$ws", "--labels", "runtime:codex,pr:3651", "--ref", "spec"},
+		{"create", "Gate", "--parent", "$ws", "--labels", "kind:gate", "--ref", "gate"},
+		{"create", "Loose", "--labels", "runtime:codex", "--ref", "loose"},
+	})
+	if r.Exit != 0 {
+		t.Fatalf("plan failed: %+v", r)
+	}
+	labels := map[string]string{}
+	rows, e := st.DB().QueryContext(ctx, `SELECT title, labels::text FROM bead_tasks`)
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var title, l string
+		if e := rows.Scan(&title, &l); e != nil {
+			t.Fatal(e)
+		}
+		labels[title] = l
+	}
+	if !strings.Contains(labels["Spec PR"], "kind:objective") {
+		t.Fatalf("a child of a step must be drawn as a step: %s", labels["Spec PR"])
+	}
+	if strings.Contains(labels["Gate"], "kind:objective") {
+		t.Fatalf("an explicit kind is kept: %s", labels["Gate"])
+	}
+	if strings.Contains(labels["Loose"], "kind:objective") {
+		t.Fatalf("a bead with no parent is left alone: %s", labels["Loose"])
 	}
 }
