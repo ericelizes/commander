@@ -1767,6 +1767,9 @@ func (e *Engine) Status(role string) (Status, error) {
 		// Outside c.mu: this resolves the role and scans processes.
 		owner := e.foreignOwner(role)
 		s.OwnedBy, s.OwnerPID, s.OwnerUnknown = owner.by, owner.pid, owner.unknown
+		// Publish the current session even before its first native start, so
+		// clients can recover when its file appears after an early start failed.
+		s.SessionID = owner.session
 		if s.OwnedBy != "" {
 			e.syncForeign(c, owner.session)
 			s.LastSeq = e.lastSeq(c)
@@ -1825,6 +1828,7 @@ func (e *Engine) foreignOwner(role string) ownerHit {
 	case err != nil:
 		hit.unknown = true
 	case spec.SessionID != "":
+		hit.session = spec.SessionID
 		procs, err := e.opts.Procs(ctx, spec.SessionID)
 		if err != nil {
 			hit.unknown = true

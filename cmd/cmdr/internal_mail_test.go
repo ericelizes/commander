@@ -889,3 +889,29 @@ func TestManagerRoleMail_BothSpellingsFindTheNestedRegistration(t *testing.T) {
 		t.Fatalf("got %v, %v", got, err)
 	}
 }
+
+func TestSendRoleMail_RegistersDefaultCommanderBeforeItsFirstInboxRead(t *testing.T) {
+	st := newFakeAmStore()
+	st.m[amKey+"\x00user"] = "BlueLake"
+	failed := &errMailer{}
+	if err := sendRoleMail(context.Background(), st, failed, amKey, "user", []string{"commander"}, "Sample request", "Please check the sample workspace", agentmail.SendOptions{}); err == nil || !strings.Contains(err.Error(), "boom") {
+		t.Fatalf("registration failure must reach the caller: %v", err)
+	}
+	if len(failed.sent) != 0 || st.m[amKey+"\x00commander"] != "" {
+		t.Fatal("failed registration was treated as delivered")
+	}
+	m := &fakeMailer{nextNames: []string{"GoldTiger"}}
+	for range 2 {
+		if err := sendRoleMail(context.Background(), st, m, amKey, "user", []string{"commander"}, "Sample request", "Please check the sample workspace", agentmail.SendOptions{}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(m.registered) != 1 || m.registered[0] != "agent for commander" || len(m.sent) != 2 {
+		t.Fatalf("registration/delivery: %+v %+v", m.registered, m.sent)
+	}
+	for _, got := range m.sent {
+		if got.sender != "BlueLake" || len(got.to) != 1 || got.to[0] != "GoldTiger" {
+			t.Fatalf("wrong routing: %+v", got)
+		}
+	}
+}

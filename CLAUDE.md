@@ -1089,7 +1089,14 @@ it): status `owned_by` (or a 409 on start) shows the chat in terminal mode
 `delivered:"mail"` and the bubble says "delivered by mail to <role>" (raw "no
 running process" errors are rewritten). Only an unowned stopped chat gets the
 Start card. Running: header menu Pop out to terminal. Both handover/popout go
-through `ConfirmDialog` and POST `{confirm:true}`; nothing starts on its own.
+through `ConfirmDialog` and POST `{confirm:true}`. Unowned Commander/Manager
+chats auto-start once per observed session; status exposes the resolved
+`session_id` even before native start, so a late session file permits another
+attempt without looping on failures. The fixed default Commander mail recipient
+is registered lazily on send if its inbox hook has not run. Regression:
+`TestLateCommanderSessionScenario` (`scenarios/late-commander-session.json`),
+`TestSendRoleMail_RegistersDefaultCommanderBeforeItsFirstInboxRead`, and
+`app/test/chat-attach.test.tsx`.
 "chat engine not available" when `GET /api/chat` is 404/503) |
 `components/InspectorColumn` (`features/inspector` `<InspectorPane>` for the
 selected window, or the `<DecisionCard>` of the selected ask; picking a ⚑

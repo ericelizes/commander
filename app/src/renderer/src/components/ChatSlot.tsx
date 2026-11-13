@@ -100,7 +100,7 @@ function ChatSlotInner() {
   const nowSec = useStore((s) => s.nowSec)
   const backend = useMemo(() => (config ? chatBackend(config) : null), [config])
 
-  // Per-role UI state: who owns the session (from a 409), the last error, a call in flight.
+  // Per-session UI state: who owns the session (from a 409), the last error, a call in flight.
   const [owned, setOwned] = useState<{ by: string; pid?: number } | null>(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState<ChatVerb | null>(null)
@@ -109,16 +109,18 @@ function ChatSlotInner() {
     setOwned(null)
     setError('')
     setDialog(null)
-  }, [target.role])
+  }, [target.role, status?.session_id])
   useEffect(() => demoDialog(setDialog), [])
 
-  // Auto-start: once per role per app session, so a failure shows instead of looping.
+  // Auto-start once per observed session. A late session file allows a new
+  // attempt after an early failure; repeated polls of the same session do not.
   const tried = useRef(new Set<string>())
   const ownedBy = owned?.by ?? status?.owned_by
   const canAutoStart = engine === 'on' && !!backend && target.kind !== 'operator' && !status?.running && !ownedBy && !busy
+  const startKey = `${target.role}:${status?.session_id ?? ''}`
   useEffect(() => {
-    if (!canAutoStart || tried.current.has(target.role)) return
-    tried.current.add(target.role)
+    if (!canAutoStart || tried.current.has(startKey)) return
+    tried.current.add(startKey)
     void run('start')
   })
 
