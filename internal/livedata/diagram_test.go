@@ -813,3 +813,14 @@ func TestDiagram_PlainUserOwnedDecisionLane(t *testing.T) {
 		}
 	}
 }
+
+func TestGateTitleLeavesConfirmDoneAlone(t *testing.T) {
+	step := SnapStep{BeadID: "w.9", Title: "Confirm done", Gate: true, Approvers: []string{"user"}}
+	if gateTitleProblem(step) == "" {
+		t.Fatal("an ordinary gate titled as an order is still a finding")
+	}
+	step.ClosingGate = true
+	if why := gateTitleProblem(step); why != "" {
+		t.Fatalf("the workstream's own Confirm done step is not a finding: %s", why)
+	}
+}
