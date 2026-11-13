@@ -5,7 +5,8 @@
 // diagrams, or an older saved version, shows the drawn one (ExecutionFlow).
 import { ChevronRight, Pencil } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { askWhere, type NeedsYouItem } from '../../../features/decisions'
+import { askWhere, resolveNeeds, type NeedsYouItem } from '../../../features/decisions'
+import { commanderApi } from '../api'
 import { chatBackend } from '../chatApi'
 import { fetchPitches, type SavedPitch } from '../pitchesApi'
 import { useStore } from '../store'
@@ -81,19 +82,43 @@ export function PitchChoices({ item, question, where, version }: { item: NeedsYo
   const [sent, setSent] = useState('')
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
+  const [gone, setGone] = useState(false)
   const options = item.decision?.options?.length ? item.decision.options : [{ label: 'Approve', recommended: true }, { label: 'Not yet' }]
   const choose = async (label: string) => {
-    if (!cfg || busy) return
+    if (!cfg || busy || sent || gone) return
     setBusy(label)
     setError('')
     try {
-      // The buttons stay plain; the message carries what Commander needs to act on the right card.
-      const text = [label, `Pitch: ${item.title}${version > 1 ? ` (v${version})` : ''}`, `Where: ${where}`, `Id: ${item.bead_id}`].join('\n')
-      await chatBackend(cfg).transport.send('commander', { text, clientId: `pitch-${item.bead_id}-${Date.now()}` })
-      // The pitch stays open after a choice; the next ask opens only when the user asks for it.
-      setSent(label)
+      const note = [`Pitch: ${item.title}${version > 1 ? ` (v${version})` : ''}`, `Where: ${where}`, `Id: ${item.bead_id}`].join('\n')
+      const res = await resolveNeeds(commanderApi(cfg), item, 'decide', label, note)
+      if (res.status === 'error') {
+        setError(`Could not record answer: ${res.message}`)
+        return
+      }
+      if (res.status === 'gone') setGone(true)
+      else setSent(label)
+      // Remove only this revision after the durable command succeeds. The live
+      // snapshot supplies the resulting gate/workstream state.
+      useStore.setState((s) => {
+        const snap = s.snapshot
+        if (!snap?.needs_you.some((n) => askKey(n) === askKey(item) && n.plan_revision === item.plan_revision)) return {}
+        return { snapshot: {
+          ...snap,
+          needs_you: snap.needs_you.filter((n) => askKey(n) !== askKey(item)),
+          display: snap.display ? { ...snap.display, asks: snap.display.asks.filter((a) => a.key !== askKey(item)) } : undefined,
+        } }
+      })
+      if (res.status === 'gone') return
+      try {
+        await chatBackend(cfg).transport.send('commander', {
+          text: `FYI: Answer already recorded: ${label}\nProject: ${item.project}\n${note}`,
+          clientId: `pitch-${item.bead_id}-${Date.now()}`,
+        })
+      } catch (e) {
+        setError(`Answer recorded, but could not notify Commander: ${(e as Error).message ?? e}`)
+      }
     } catch (e) {
-      setError(`Could not reach Commander: ${(e as Error).message ?? e}`)
+      setError(`Could not record answer: ${(e as Error).message ?? e}`)
     } finally {
       setBusy('')
     }
@@ -102,15 +127,15 @@ export function PitchChoices({ item, question, where, version }: { item: NeedsYo
   return (
     <section className="pitch-choices" aria-label={question}>
       {item.stale_why && <p className="fx-note">{item.stale_why}</p>}
-      <div className="pitch-choices-q">{sent ? `Sent to Commander: ${sent}` : question}</div>
+      <div className="pitch-choices-q">{gone ? 'Already answered elsewhere.' : sent ? `Answer recorded: ${sent}` : question}</div>
       <ul>
         {options.map((o, i) => (
           <li key={o.label}>
-            <button type="button" className={`pitch-choice${o.recommended ? ' is-rec' : ''}${sent === o.label ? ' is-sent' : ''}`} disabled={!!busy || !!sent} onClick={() => void choose(o.label)}>
+            <button type="button" className={`pitch-choice${o.recommended ? ' is-rec' : ''}${sent === o.label ? ' is-sent' : ''}`} disabled={!!busy || !!sent || gone} onClick={() => void choose(o.label)}>
               <span className="pitch-choice-n">{sent === o.label ? '✓' : i + 1}</span>
               <span className="pitch-choice-text">
                 <span className="pitch-choice-label">
-                  {busy === o.label ? 'Sending…' : spaceNumbers(o.label)}
+                  {busy === o.label && !sent && !gone ? 'Recording…' : spaceNumbers(o.label)}
                   {o.recommended && <span className="pitch-choice-rec">Recommended</span>}
                 </span>
                 {o.implications && <span className="pitch-choice-sub">{spaceNumbers(o.implications)}</span>}
@@ -118,12 +143,12 @@ export function PitchChoices({ item, question, where, version }: { item: NeedsYo
             </button>
           </li>
         ))}
-        {sent && (
+        {(sent || gone) && (
           <li>
             <NextAsk done={item} />
           </li>
         )}
-        {!sent && (
+        {!sent && !gone && (
           <li>
             <button type="button" className="pitch-choice" onClick={typeOwn}>
               <span className="pitch-choice-n">

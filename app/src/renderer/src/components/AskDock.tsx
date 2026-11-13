@@ -1,6 +1,6 @@
 // AskDock puts the selected ask's choices above Commander's input bar, so the
-// user answers where they type. A click sends the choice to Commander as a chat
-// message (PitchChoices); an answered or unwritten ask has no dock.
+// user answers where they type. PitchChoices records the answer, then sends
+// Commander an FYI; an answered or unwritten ask has no dock.
 
 import { useState } from 'react'
 import { ChevronDown, ChevronUp } from 'lucide-react'
