@@ -41,8 +41,8 @@
 .ov-attention p:last-child { margin-bottom: 0; }
 .ov .ov-needs { background: var(--attn-wash); }
 .ov-needs h2 { color: var(--attn); }
-.ov .ov-stalled { background: color-mix(in srgb, var(--err) 7%, transparent); }
-.ov-stalled h2 { color: var(--err); }
+.ov .ov-stalled { background: color-mix(in srgb, var(--peach) 7%, transparent); }
+.ov-stalled h2 { color: var(--peach); }
 .ov-ask + .ov-ask { margin-top: 24px; border-top: 1px solid var(--hairline-2); padding-top: 22px; }
 .ov .ov-ask h3 { font: 600 21px/1.32 var(--serif); letter-spacing: -.008em; margin: 0 0 10px; text-wrap: balance; }
 .ov .ov-action { margin-top: 6px; border: 0; border-radius: 8px; background: var(--accent); color: var(--on-accent); padding: 8px 15px; font: 550 13px/1.2 var(--font); }
@@ -51,6 +51,7 @@
 .ov-live { display: flex; align-items: baseline; gap: 9px; margin: 0 0 28px; color: var(--ink-2); font: 500 14px/1.5 var(--font); white-space: normal; }
 .ov-dot { height: 7px; width: 7px; flex: 0 0 7px; border-radius: 50%; background: var(--ink-3); transform: translateY(-1px); }
 .ov-dot[data-tone='you'] { background: var(--err); }
+.ov-dot[data-tone='stuck'] { background: var(--peach); }
 .ov-dot[data-tone='agent'], .ov-dot[data-tone='done'] { background: var(--ok); }
 .ov-dot[data-tone='waiting'] { background: var(--attn); }
 
@@ -86,6 +87,7 @@
 .ov-tracks strong { display: block; font: 500 16px/1.4 var(--serif); }
 .ov-tracks span { display: block; color: var(--ink-3); font: 400 13px/1.45 var(--font); margin-top: 2px; }
 .ov-tracks span[data-tone='you'] { color: var(--err); }
+.ov-tracks span[data-tone='stuck'] { color: var(--peach); }
 .ov-tracks span[data-tone='agent'] { color: var(--ok); }
 .ov-tracks span[data-tone='waiting'] { color: var(--attn); }
 
@@ -135,6 +137,7 @@
 .ov-reader-meta time { color: inherit; }
 .ov-reader-status { display: flex; align-items: baseline; gap: 8px; margin: 0 0 10px; color: var(--ink-3); font: 500 12.5px/1.5 var(--font); }
 .ov-reader-status[data-tone='you'] { color: var(--err); }
+.ov-reader-status[data-tone='stuck'] { color: var(--peach); }
 .ov-reader-status[data-tone='agent'], .ov-reader-status[data-tone='done'] { color: var(--ok); }
 .ov-reader-status[data-tone='waiting'] { color: var(--attn); }
 .ov-reader-lead { font-size: 15px; line-height: 1.5; margin: 8px 0; text-wrap: pretty; }

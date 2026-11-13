@@ -8,7 +8,7 @@ import { plainTitle } from '../viewmodel'
 import { failedDetail } from './GateChecklist'
 
 export type Evidence = { id: string; label: string; text: string; at?: string }
-export type Tone = 'you' | 'agent' | 'waiting' | 'quiet' | 'done'
+export type Tone = 'you' | 'stuck' | 'agent' | 'waiting' | 'quiet' | 'done'
 
 type Gate = { name: string; verifier?: string; status?: string; evidence?: string; by?: string; at?: number }
 type Record = {

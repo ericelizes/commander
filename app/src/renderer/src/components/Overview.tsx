@@ -178,7 +178,8 @@ function PacedSentence({ s, done, start }: { s: Sentence; done: (s: Sentence) =>
 }
 
 function toneOf(kind?: LineKind): Tone {
-  if (kind === 'needs' || kind === 'stuck' || kind === 'stalled') return 'you'
+  if (kind === 'needs') return 'you'
+  if (kind === 'stuck' || kind === 'stalled') return 'stuck'
   if (kind === 'working') return 'agent'
   if (kind === 'waiting') return 'waiting'
   return 'quiet'
