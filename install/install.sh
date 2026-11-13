@@ -86,7 +86,7 @@ check_cmd() {
 say "checking prereqs (see share/contracts.md for pinned versions)"
 check_cmd go "brew install go (≥1.22)"
 check_cmd opencode "npm install -g opencode-ai"
-check_cmd bd "cargo install beads_rust"
+check_cmd bd "brew install beads (or npm i -g @beads/bd)"
 check_cmd docker "Docker Desktop or Docker Engine ≥20.10"
 check_cmd sqlite3
 check_cmd tmux "brew/apt install tmux (≥3.3)"
