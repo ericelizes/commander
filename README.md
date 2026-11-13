@@ -1,144 +1,99 @@
-# commander
+# Commander
 
-A desktop app for running a team of AI agents across your projects. You talk
-to **Commander**; it starts a **Manager** per piece of work (a workstream), and
-each Manager runs **Operators** that do the steps in their own git worktrees.
-The sidebar shows every workstream and what needs you; the right pane shows a
-workstream's plan, its chat and any web pages you pin.
+Commander is an app for planning and running work with AI agents across your
+projects. You message Commander, and together you decide what the workstreams
+are and what each workflow looks like: its steps, checks and decision points.
+Commander keeps that plan on one priority-ordered board. A shared scheduler
+runs execution agents using Codex or Claude on steps that are ready.
 
-Two parts: `cmdrd`, the background service that runs the agents (on your Mac
-or on a Linux box/VM), and the Electron app that shows it.
+## Work with Commander
+
+Start with the outcome you want. Commander proposes workstreams, breaks them
+into steps, identifies dependencies and checks, and marks the points that need
+your decision. Adjust the plan in chat before work starts, or as you learn.
+
+For example:
+
+1. **Ask for an outcome:** “Let customers export their invoices as CSV.”
+2. **Shape the workflow:** Commander proposes an export workstream: agree on
+   fields → implement → test → review a PR → merge → verify the result.
+   Each step has a check; scope approval and merge are marked as your decisions.
+   If the work calls for a separate outcome, Commander proposes another
+   workstream and shows how they depend on each other.
+3. **Adjust it in chat:** “Include refunds. Show me a sample CSV before you
+   implement it, and keep rollout separate.” Commander updates the steps,
+   checks and decision points with you.
+4. **Let agents run:** Ready steps go to execution agents. They do the work,
+   run checks and bring back evidence. Dependent steps wait for their inputs
+   and required approvals.
+5. **Decide at the marked points:** Review the sample, approve the next stage,
+   and merge the PR when it is ready. Production changes wait for your approval.
+6. **Confirm done:** Inspect the result and click **Confirm done**. This is
+   always your last click; an agent finishing does not complete the workstream.
+
+Keep steering through the same chat: “Move this ahead of the export work,”
+“Change the acceptance check,” or “Pause this workstream.” Commander updates
+the plan and coordinates stopping or redirecting execution. You can ask what is
+running, what is blocked and what happens next.
+
+### Read the board and answer decisions
+
+The sidebar is your priority list. Numbered rows are workstreams; indented rows
+show nested outcomes. Each row has a **% done** progress indicator and a status
+line explaining the current activity or wait. Progress reflects delivery
+milestones, not time spent; read the status line to see what needs to happen
+next. Paused work stays visible.
+
+**Needs you** cards collect decisions and questions. Read what the card asks,
+the evidence and what approving it unlocks: approval allows the named next
+stage to proceed once its other prerequisites are met. It does not approve the
+whole workstream. **Confirm done** is the final user decision after the work
+and required checks are complete.
+
+Tell Commander a **standing decision** once—such as “Always show me a preview
+before publishing”—and it holds for later work within its scope. You can revise
+it in chat without repeating it for each agent or step.
+
+### Review results and ship
+
+For code work, agents open PRs, run checks, handle CI failures and address review
+comments. They bring the PR back when it is ready; **you merge**. Production
+changes and outward messages always wait for your approval.
+
+Open a workstream to inspect its workflow and results. Reports appear as
+workstream tabs, so findings and evidence stay alongside the work they explain.
+Ask Commander to clarify a report or change the next step.
 
 ## Set up
 
-1. **Install the prerequisites**: Go ≥1.22, Node ≥20 (for the app), `bd`
-   (`cargo install beads_rust`), `git`, `jq`, `tmux`, and the Claude Code CLI
-   (`npm i -g @anthropic-ai/claude-code`). `just doctor` lists what is missing.
-2. **Run the installer** from this checkout:
+Commander has a background service, `cmdrd`, and a desktop app. It supports
+macOS and Linux; a headless Linux machine can serve the web app.
+
+1. Install Go 1.25+, Node.js with npm, Git, tmux, jq and the agent CLI you intend to
+   use (Codex or Claude), and sign in to that CLI. The installer checks other
+   prerequisites and sets up Agent Mail, which is required for mail and adding
+   projects.
+2. From this checkout, run:
 
    ```bash
    bash install/install.sh
+   cmdr app install
+   cmdr app
    ```
 
-   It builds and installs `cmdr`/`cmdrd`, creates `~/.commander`, and sets up
-   **Agent Mail** (the server agents use to message each other). Safe to re-run.
-3. **Sign in to Claude** once: run `claude` and log in.
-4. **Open the app**:
+   Ensure `~/.local/bin` is on your PATH. On a headless machine, use
+   `cmdr app --web` to print the web app link.
+3. Message Commander to add your project and describe the outcome you want.
+   Include its local path when needed.
 
-   ```bash
-   cmdr app install   # build the desktop app into /Applications (macOS)
-   cmdr app           # open it; starts cmdrd if it is not running
-   ```
+## Reference
 
-   On a Linux box with no display, `cmdr app --web` prints a link instead.
-5. **Start working**: type to Commander in the chat, e.g. "set up a workstream
-   to add CSV export to billing". Commander picks the project under `~/code`
-   (or `COMMANDER_WORKSPACE_ROOT`).
+| Command | Purpose |
+| --- | --- |
+| `cmdr app` | Open the app and start the service if needed. |
+| `cmdr app --web` | Print the web app link. |
+| `cmdr --help` | Inspect the installed CLI's commands and flags. |
 
-### Optional: connect things
-
-All optional; nothing needs them.
-
-- **Linear**: Settings → Connections → Linear API key (or `cmdr linear
-  set-key`). Adds the My sprint card and ticket chips on workstreams.
-- **Signed-in web pages** in the right pane: `cmdr browser login` signs the
-  pane's browser in to GitHub, Linear, Notion, Slack or Datadog.
-
-### Updating
-
-The download icon in the sidebar's bottom bar shows when `main` has new
-commits; click it and Update. From a terminal: `git pull && just build &&
-just install --yes --restart-cmdrd`. Chats keep running through a restart.
-
-Builds go to `bin/staged/` only (`just build`); nothing running changes until
-`just install` (`cmdr install`) copies them to `~/.commander/bin/` (the
-previous build is kept: `cmdr install --rollback`).
-
-Two CLI entry points (both point at the same binary):
-
-- `cmdr` — primary, 3-char. Bare `cmdr` launches or attaches the tmux session.
-- `commander` — full-name alias.
-
-Commander opens as a cross-project top-tier session rooted at `~/code` by
-default. Override that with `COMMANDER_WORKSPACE_ROOT=/abs/path` if your
-multi-project workspace lives elsewhere.
-
-## Choosing the agent runtime (opencode or Claude Code)
-
-Every tier runs on opencode by default. To run any tier on Claude Code
-instead, add a `[runtime]` table to `~/.commander/config.toml`:
-
-```toml
-[runtime]
-default   = "claude"     # "opencode" (default) or "claude"
-# commander = "opencode" # optional per-tier overrides: commander, lead, operator
-```
-
-`COMMANDER_RUNTIME=claude cmdr` overrides every tier for one launch. Running
-`cmdr` after a change rebuilds the Commander window on the new runtime;
-`cmdr refresh` does the same for open Manager/Operator windows. Each runtime
-keeps its own session ids (`*.session-id` vs `*.claude.session-id`), so
-switching back resumes where you left off.
-
-Claude panes load the role prompt with `--append-system-prompt-file` from
-`~/.commander/claude-agents/`; nothing is installed into `~/.claude/agents`.
-Models come from `[models]`: family names map to Claude aliases
-(`anthropic/claude-opus-4-7` → `opus`). Code-type operators in Docker need the
-`commander/operator` image to contain `claude`, plus `CLAUDE_CODE_OAUTH_TOKEN`
-(from `claude setup-token`) or `ANTHROPIC_API_KEY` in the environment, because
-the macOS Keychain login is not visible inside a container.
-
-## Daily commands
-
-| Command | Does |
-|---------|------|
-| `cmdr` | Launch or attach the `commander` tmux session. |
-| `cmdr --project commander` | Create or focus the Lead window for a project. |
-| `cmdr --task fro-001` | Create or focus the Operator window for a task. |
-| `cmdr refresh` | Recreate currently open Commander-owned windows so layout/code changes land during development. |
-| `cmdr restart` | Kill the current Commander session and start a fresh Commander brain. |
-| `cmdr --version` | Print the version (currently `0.0.1`). |
-| `cmdr --help` | Print the command surface. |
-
-## Requirements
-
-See `share/contracts.md` for the full pinned-version table and verified CLI
-shapes. Headline pins:
-
-| Tool       | Min version | Notes                                       |
-|------------|-------------|---------------------------------------------|
-| `go`       | 1.22        | Build toolchain.                            |
-| `opencode` | 1.14.0      | Agent runtime. Install via `npm i -g opencode-ai`. |
-| `bd`       | 1.0.0       | Beads task tracker. `cargo install beads_rust`. |
-| `am`       | 0.2.40      | Agent Mail.                                 |
-| `docker`   | 20.10       | Code-type operator sandboxing.              |
-| `tmux`     | 3.3         | Knowledge-type operator panes.              |
-| `sqlite3`  | 3.35        | Bundled with macOS / present on most Linux. |
-| `jq`       | 1.6         | Stream parsing.                             |
-
-`just doctor` checks all of these and prints status.
-
-## Layout
-
-```
-commander/
-├── cmd/cmdr/            # CLI entry point + session capture/activation helpers
-├── internal/layout/     # tmux session/window/pane orchestration
-├── internal/cli/        # help + version
-├── install/             # install.sh + commander.toml apps fragment
-├── share/contracts.md   # verified external CLI shapes (single source of truth)
-├── docs/                # plans, requirements
-├── tests/integration/   # contract verification scripts
-├── tests/evals/         # tmux-backed Commander interaction eval harness
-├── Justfile             # task runner
-└── go.mod
-```
-
-## Uninstall
-
-```bash
-just uninstall
-```
-
-Removes `~/.local/bin/{cmdr,commander}` and `~/.commander/`. Does not touch
-your dotfiles or shell config.
+- [Contributor instructions](CLAUDE.md): builds, tests and isolated cockpit verification.
+- [Orchestration architecture](docs/architecture/commander-jurisdictions.md): planning ownership, shared scheduling and execution.
+- [PostgreSQL live state](docs/architecture/postgres-live-state.md): state architecture and migration rules.
