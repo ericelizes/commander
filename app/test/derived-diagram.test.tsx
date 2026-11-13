@@ -45,7 +45,7 @@ const row = (d?: Diagram) => ({ key: 'lab:lab-bex', title: 'Billing exports', pr
 describe('DerivedDiagram', () => {
   it('draws the execution workflow: a line per actor, steps in order on their actor, an arrow at each handoff', () => {
     const { container } = render(<DerivedDiagram diagram={track} />)
-    expect([...container.querySelectorAll('.xf-actor')].map((e) => e.textContent)).toEqual(['You', 'Operators', 'Reviewers', 'Automatic'])
+    expect([...container.querySelectorAll('.xf-actor')].map((e) => e.textContent)).toEqual(['You', 'Agents', 'Reviewers', 'Automatic'])
     const col = (title: string) => (screen.getByText(title).closest('.xf-step') as HTMLElement).style.gridColumn
     expect(col('Export job built')).toBe('2')
     expect(col('CI green on the export PR')).toBe('4')
@@ -83,7 +83,7 @@ describe('DerivedDiagram', () => {
     await userEvent.click(screen.getByRole('button', { name: /Nightly export/ }))
     expect(open).toHaveBeenCalledWith('lab-bex.2')
     const lost = screen.getByText('Backfill last quarter').closest('.xf-step') as HTMLElement
-    expect(lost.style.gridColumn).toBe(String([...container.querySelectorAll('.xf-actor')].findIndex((e) => e.textContent === 'Manager') + 1))
+    expect(lost.style.gridColumn).toBe(String([...container.querySelectorAll('.xf-actor')].findIndex((e) => e.textContent === 'Commander') + 1))
     expect(lost).toHaveClass('is-noactor')
     expect(container.querySelector('.is-now')).toHaveTextContent('Finance sign-off')
   })
@@ -208,7 +208,7 @@ describe('every header draws the sequence', () => {
   it('draws a second line even when every step is on one, and says when nothing is planned', () => {
     const one: Diagram = { id: 'a', title: 'A', steps: [{ id: 'a.1', title: 'Decide', kind: 'needs', text: 'Needs you', lane: 'you', actor: 'you' }] }
     const { container } = render(<DerivedDiagram diagram={one} />)
-    expect([...container.querySelectorAll('.xf-actor')].map((e) => e.textContent)).toEqual(['You', 'Manager'])
+    expect([...container.querySelectorAll('.xf-actor')].map((e) => e.textContent)).toEqual(['You', 'Commander'])
     cleanup()
     render(<DerivedDiagram diagram={{ id: 'b', title: 'B', steps: [] }} />)
     expect(screen.getByText('Nothing planned yet')).toBeInTheDocument()

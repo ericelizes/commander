@@ -28,8 +28,8 @@ export type Actor = 'you' | 'manager' | 'operators' | 'reviewers' | 'automatic'
 
 export const ACTORS: { id: Actor; label: string }[] = [
   { id: 'you', label: 'You' },
-  { id: 'manager', label: 'Manager' },
-  { id: 'operators', label: 'Operators' },
+  { id: 'manager', label: 'Commander' },
+  { id: 'operators', label: 'Agents' },
   { id: 'reviewers', label: 'Reviewers' },
   { id: 'automatic', label: 'Automatic' },
 ]
@@ -51,7 +51,7 @@ export interface FlowStep {
   meta?: string
   track?: boolean
   inside?: string // the title of the step this one is nested under (drawn indented in its box)
-  noActor?: boolean // nothing in beads says whose move it is: drawn on the Manager's line, dashed
+  noActor?: boolean // nothing in beads says whose move it is: drawn on the Commander's line, dashed
   review?: ReviewBlock // a plugged review block: one card, its checks open on a click
 }
 

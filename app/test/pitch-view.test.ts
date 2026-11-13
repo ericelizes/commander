@@ -62,7 +62,7 @@ describe('flowSteps', () => {
         { title: 'PR reviewed', gate: true, approvers: ['reviewer-a'] },
       ],
     })
-    expect(actors.map((a) => a.label)).toEqual(['You', 'Manager', 'Operators', 'Reviewers', 'Automatic'])
+    expect(actors.map((a) => a.label)).toEqual(['You', 'Commander', 'Agents', 'Reviewers', 'Automatic'])
     expect(steps.map((s) => [s.title, s.actor, s.checkpoint, s.done])).toEqual([
       ['Fix merged', 'you', true, true],
       ['Deploy the fix', 'automatic', false, false],

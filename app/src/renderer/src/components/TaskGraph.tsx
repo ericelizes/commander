@@ -286,7 +286,7 @@ export function CanvasWorld({ canvas, highlight, toggleStage }: { canvas: Canvas
 
 const CHANGE_WORD = { add: 'Proposed: new', remove: 'Proposed: remove', edit: 'Proposed: change' } as const
 
-const GATE_LABEL = { yours: 'Your greenlight', reviewer: 'Reviewer', operator: 'Operator', auto: 'Auto check' } as const
+const GATE_LABEL = { yours: 'Your greenlight', reviewer: 'Reviewer', operator: 'Agent', auto: 'Auto check' } as const
 
 /** GateBand is a gate bead as a labelled strip: who it is for, where it stands, its whole title. */
 function GateBand({ card, open, highlight }: { card: Card; open: () => void; highlight?: boolean }) {
@@ -447,16 +447,16 @@ function BoxView({ box, highlight }: { box: Box; highlight?: boolean }) {
   )
 }
 
-// who is an agent role as words: "Background jobs Manager", "Operator · get ci green",
-// "You". An Operator's role is op-<task words>-<its bead id>; the bead id
-// starts with the project name. A Manager is named for its workstream.
-function who(role: string, project = '', workstream = ''): string {
+// who is an agent role as words: "Commander", "Agent · get ci green", "You".
+// An agent's role is op-<task words>-<its bead id>; the bead id starts with
+// the project name. A workstream's old Manager role reads as the Commander.
+function who(role: string, project = ''): string {
   if (role === 'user') return 'You'
   if (role === 'commander') return 'Commander'
-  if (role.startsWith('manager-')) return workstream ? `${workstream} Manager` : 'Manager'
+  if (role.startsWith('manager-')) return 'Commander'
   const rest = role.replace(/^operator-/, '').replace(/^op-/, '')
   const slug = project && rest.includes(`-${project}-`) ? rest.slice(0, rest.indexOf(`-${project}-`)) : rest
-  return `Operator · ${slug.split('-').filter(Boolean).join(' ')}`
+  return `Agent · ${slug.split('-').filter(Boolean).join(' ')}`
 }
 
 // A role's colour: the same agent is the same colour everywhere.
@@ -484,8 +484,7 @@ function useAgent(owner: string, project?: string, active?: boolean) {
   const role = useStore((s) => liveRole([...Object.keys(s.snapshot?.agents ?? {}), ...Object.keys(s.chats)], owner))
   const agent = useStore((s) => s.snapshot?.agents[role])
   const chat = useStore((s) => s.chats[role])
-  const title = useStore((s) => s.snapshot?.workstreams.find((w) => w.manager_role === role)?.title)
-  const name = who(role, project, title ? splitTickets(title).text : '')
+  const name = who(role, project)
   const state = agent?.state ?? (chat?.running ? chat.state || 'idle' : role.startsWith('operator-') && active ? 'working' : undefined)
   return { role, name, state }
 }

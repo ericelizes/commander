@@ -69,7 +69,7 @@ export function nowLine(d: Diagram): string {
 // approves is a checkpoint's "<who> approve(s)".
 function approves(s: DiagramStep): string {
   if (s.actor === 'automatic') return s.who ?? 'automatic'
-  if (s.actor === 'manager') return 'Manager approves'
+  if (s.actor === 'manager') return 'Commander approves'
   const who = s.approvers || 'nobody'
   if (who === 'you') return 'you approve'
   return `${who} ${who.includes(',') ? 'approve' : 'approves'}`
