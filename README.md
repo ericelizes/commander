@@ -31,7 +31,11 @@ or on a Linux box/VM), and the Electron app that shows it.
    ```
 
    On a Linux box with no display, `cmdr app --web` prints a link instead.
-5. **Start working**: type to Commander in the chat, e.g. "set up a workstream
+5. **Move Commander to the app**: after the first cockpit (`cmdr`) start, open
+   the Commander chat in the app and click **Move to app** when Commander is
+   not mid-reply. Until then, messages from the app arrive by mail and wait
+   for Commander's turn to end.
+6. **Start working**: type to Commander in the chat, e.g. "set up a workstream
    to add CSV export to billing". Commander picks the project under `~/code`
    (or `COMMANDER_WORKSPACE_ROOT`).
 
