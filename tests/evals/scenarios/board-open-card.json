@@ -3,7 +3,7 @@
   "workstream": "w57",
   "cases": [
     {"name": "open login card", "card": "step", "kind": "needs", "step_text": "Needs you", "lane": "you"},
-    {"name": "login card closed", "card": "none", "kind": "working", "step_text": "Operator working", "lane": "agents"},
-    {"name": "gate waits for operator work", "card": "gate", "kind": "working", "step_text": "Operator working", "lane": "agents"}
+    {"name": "login card closed", "card": "none", "kind": "working", "step_text": "Agent working", "lane": "agents"},
+    {"name": "gate waits for operator work", "card": "gate", "kind": "working", "step_text": "Agent working", "lane": "agents"}
   ]
 }

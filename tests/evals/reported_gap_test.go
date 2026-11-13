@@ -36,7 +36,7 @@ func TestReportedGapScenario(t *testing.T) {
 			t.Fatalf("reported step flagged: %+v", f)
 		}
 	}
-	if stopped.Kind != "stalled" || !strings.HasPrefix(stopped.Why, "Operator is no longer running and has not reported") || !strings.Contains(stopped.Why, "Owner: manager-app-w3") || !strings.Contains(stopped.Why, "current holder") || !strings.Contains(stopped.Why, "app-w3.1") {
+	if stopped.Kind != "stalled" || !strings.HasPrefix(stopped.Why, "Agent is no longer running and has not reported") || !strings.Contains(stopped.Why, "Owner: manager-app-w3") || !strings.Contains(stopped.Why, "current holder") || !strings.Contains(stopped.Why, "app-w3.1") {
 		t.Fatalf("no report reads %q, why %q", stopped.Text, stopped.Why)
 	}
 }

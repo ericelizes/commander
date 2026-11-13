@@ -35,7 +35,7 @@ func TestWrongOnScreenCollectsEveryMismatch(t *testing.T) {
 	if strings.Join(keys, " ") != want {
 		t.Fatalf("keys = %v\nwant %s", keys, want)
 	}
-	if es := wrongEntries(got); len(es) != len(got) || !strings.HasPrefix(es[0].Text, "#1 Jobs: an agent stopped without reporting back") {
+	if es := wrongEntries(got); len(es) != len(got) || !strings.HasPrefix(es[0].Text, "#1 Jobs: agent is no longer running and has not reported. The planning Commander needs to inspect this mismatch.") {
 		t.Fatalf("entries = %+v", es)
 	}
 }
