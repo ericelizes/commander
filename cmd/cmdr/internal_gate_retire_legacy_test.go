@@ -333,3 +333,21 @@ func TestGateRetireLegacyChangedEvidenceRefusesPartialRetry(t *testing.T) {
 		t.Fatal("partial retry wrote after drift")
 	}
 }
+
+func TestRetireLegacyParkedStageRetainsReplacement(t *testing.T) {
+	m, st, args := retirementFixture(t)
+	if err := m.SetStatus(context.Background(), "", args[4], beads.StatusDeferred); err != nil {
+		t.Fatal(err)
+	}
+	before := retirementSnapshot(t, m, st)
+	if code, _, msg := gateCmd(t, args...); code != 0 {
+		t.Fatal(msg)
+	}
+	if after := retirementSnapshot(t, m, st); after != before {
+		t.Fatal("retirement changed retained user approval")
+	}
+	b, err := m.Show(context.Background(), "", args[4])
+	if err != nil || b.Status != beads.StatusDeferred {
+		t.Fatal("parked stage resumed", b, err)
+	}
+}

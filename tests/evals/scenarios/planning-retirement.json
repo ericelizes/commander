@@ -1,0 +1,7 @@
+{
+  "project": "retirement",
+  "legacy_stage": "commander-il9.202.14",
+  "legacy_gate": "commander-il9.202.15",
+  "review_blocks": ["bead-e11cfcf5b2f0.4.5", "vibe-apps-en1h.9.24.22"],
+  "reason": "Superseded obsolete delivery and withdrawn PR review; preserve history"
+}

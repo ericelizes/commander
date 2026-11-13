@@ -96,6 +96,9 @@ func retirementMarked(labels []string, reason string) bool {
 // Coordination approvals are not human approvals. Clearing markers cannot be
 // used to make a later close forget the decision that was required.
 func pgCheckHumanMutation(ctx context.Context, q store.Querier, pid int64, id, verb, oldStatus, newStatus string, before, after []string, parentChanged bool, flags pgFlags) error {
+	if retiringIn(ctx, id) {
+		return nil
+	}
 	if pgCallerValue(ctx, "COMMANDER_ROLE") == "" {
 		return nil
 	}

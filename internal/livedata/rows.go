@@ -50,7 +50,9 @@ type Row struct {
 	Total       int     `json:"total"`
 }
 
-func stepClosed(s SnapStep) bool { return s.Status == "closed" || s.State == "done" }
+func stepClosed(s SnapStep) bool {
+	return s.Status != statusDeferred && (s.Status == "closed" || s.State == "done")
+}
 
 // stepAlive: a claim's process decorates it; without owner_state (older cmdrd)
 // the claim is taken as live.

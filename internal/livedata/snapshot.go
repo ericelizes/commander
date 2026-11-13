@@ -519,7 +519,7 @@ func snapWorkstream(n int, ws Workstream, live LiveAgent) SnapWorkstream {
 		}
 	}
 	for _, st := range ws.Steps {
-		if st.Row.State == beads.StateDone || st.Row.Status == "closed" {
+		if st.Row.Status != beads.StatusDeferred && (st.Row.State == beads.StateDone || st.Row.Status == "closed") {
 			out.Done++
 		}
 	}

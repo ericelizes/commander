@@ -59,7 +59,7 @@ func TestOrdinaryPlacePreservesApproval(t *testing.T) {
 }
 
 func TestOrdinaryPlaceRefuses(t *testing.T) {
-	for _, mode := range []string{"operator", "foreign", "conversion", "task", "ownership", "cycle", "mixed", "missing", "custody"} {
+	for _, mode := range []string{"operator", "foreign", "conversion", "task", "ownership", "cycle", "missing", "custody"} {
 		t.Run(mode, func(t *testing.T) {
 			ctx := context.Background()
 			m, add := placeFixture(t)

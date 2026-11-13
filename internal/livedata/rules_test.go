@@ -53,7 +53,7 @@ func TestPlanRules(t *testing.T) {
 		// one review on two steps
 		open("lab-x.8", review("70")),
 		open("lab-x.9", review("70"), after("lab-x.8")),
-		// a parked blocker holds nothing; started behind it is fine
+		// A parked blocker is unfinished; work behind it started early.
 		open("lab-x.10", parkedStep),
 		open("lab-x.11", after("lab-x.10"), started),
 		// a step whose parent waits on open work cannot start either
@@ -66,6 +66,7 @@ func TestPlanRules(t *testing.T) {
 		"duplicate-gate lab-x.2",
 		"duplicate-wait lab-x.8",
 		"stage-done lab-x.7",
+		"started-early lab-x.11",
 		"started-early lab-x.12.1",
 		"started-early lab-x.4",
 	}

@@ -330,7 +330,7 @@ func isWrite(args []string) bool {
 		return false
 	}
 	switch args[0] {
-	case "update", "close", "create", "reopen", "defer", "undefer", "delete", "label", "init", "rename", "batch", "set-state", "state", "sync", "export":
+	case "retire", "update", "close", "create", "reopen", "defer", "undefer", "delete", "label", "init", "rename", "batch", "set-state", "state", "sync", "export":
 		return true
 	case "dep", "comments", "comment":
 		return len(args) > 1 && (args[1] == "add" || args[1] == "remove" || args[1] == "rm")
