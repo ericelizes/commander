@@ -294,28 +294,37 @@
 @media (prefers-color-scheme: dark) { .ov-skeleton { --skel: rgba(255,255,255,.07); --skel-hi: rgba(255,255,255,.13); } }
 .ov-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
-/* Hierarchy: three sizes, one left edge. A part title (Current status, Pitch)
-   is large, each heading inside it is clearly bigger and bolder than the text,
-   and every paragraph, bullet, table and heading starts at the same x; bullet
-   dots hang in the margin so bulleted text lines up with paragraphs. */
+/* Hierarchy. Three type sizes on one left edge: a part title (Current status,
+   Pitch), the headings inside it, and text. What needs you is a tinted card,
+   the one boxed thing on the page. Each heading below it opens a block ruled
+   off from the one before, with more room above a heading than below it, so
+   the eye sees where each part starts and ends. */
 .ov .ov-sec > .ov-section-title::before, .ov h3.ov-sub::before { content: none; }
-.ov .ov-sec > .ov-section-title { display: flex; align-items: center; gap: 10px; font: 700 26px/1.25 var(--serif); letter-spacing: -.012em; color: var(--ink); margin: 0 0 6px; }
+.ov .ov-sec > .ov-section-title { display: block; font: 700 26px/1.25 var(--serif); letter-spacing: -.012em; color: var(--ink); margin: 0 0 18px; }
 .ov .ov-sec > .ov-section-title svg { display: none; }
 .ov .ov-sec { margin-bottom: 0; }
-.ov .ov-divider { margin: 36px 0 32px; }
+.ov .ov-divider { border: 0; border-top: 2px solid var(--hairline); margin: 52px 0 40px; }
+
+.ov .ov-ask { margin: 0; padding: 16px 20px 18px; border-radius: 12px; background: var(--attn-wash); border: 1px solid color-mix(in srgb, var(--attn) 24%, transparent); }
+.ov .ov-ask + .ov-ask { margin-top: 12px; padding-top: 16px; border-top: 1px solid color-mix(in srgb, var(--attn) 24%, transparent); }
+.ov .ov-ask-label { font: 650 13px/1.4 var(--font); color: var(--attn); margin: 0 0 4px; }
+.ov .ov-ask h3 { font: 600 18px/1.4 var(--serif); letter-spacing: -.004em; color: var(--ink); margin: 0 0 6px; text-wrap: balance; }
+.ov .ov-ask p { margin: 0 0 12px; font-size: 15px; line-height: 1.55; color: var(--ink-2); }
+.ov .ov-ask .ov-action { margin-top: 2px; }
+.ov .ov-ask ~ .ov-status-story { margin-top: 32px; }
 
 .ov .ov-blocks { margin: 0; }
-.ov .ov-block { margin: 0; }
-.ov .ov-block + .ov-block, .ov .ov-targets + .ov-blocks .ov-block:first-child { margin-top: 26px; }
-.ov h3.ov-h { font: 650 19px/1.35 var(--serif); letter-spacing: -.004em; color: var(--ink); margin: 22px 0 6px; padding: 0; }
-.ov .ov-block:first-child > h3.ov-h { margin-top: 14px; }
-.ov .ov-block .ov-field { margin: 0; font-size: 16px; line-height: 1.65; }
+.ov .ov-block { margin: 30px 0 0; padding-top: 22px; border-top: 1px solid var(--hairline); }
+.ov .ov-status-story > .ov-block:first-child, .ov .ov-fade > .ov-blocks:first-child > .ov-block:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+.ov h3.ov-h, .ov .ov-block:first-child > h3.ov-h { font: 650 19px/1.35 var(--serif); letter-spacing: -.004em; color: var(--ink); margin: 0 0 8px; padding: 0; }
+.ov .ov-block .ov-field, .ov .ov-status-story > .ov-field { margin: 0; font-size: 16px; line-height: 1.65; }
+.ov .ov-status-story > .ov-block + .ov-field { margin-top: 10px; }
 .ov .ov-block .ov-fields { margin: 0; padding: 0; list-style: none; }
 .ov .ov-block .ov-fields li { position: relative; padding: 0 0 6px; font-size: 16px; line-height: 1.65; }
 .ov .ov-block .ov-fields li:last-child { padding-bottom: 0; }
 .ov .ov-block .ov-fields li::before { content: ''; position: absolute; left: -15px; top: .72em; width: 5px; height: 5px; border-radius: 50%; background: var(--ink-4); }
 
-.ov .ov-targets { margin: 16px 0 0; }
+.ov .ov-targets { margin: 18px 0 0; }
 .ov .ov-targets caption { caption-side: top; text-align: left; font: 650 15px/1.4 var(--font); color: var(--ink); padding: 0 0 8px; }
 .ov .ov-targets th, .ov .ov-targets td { padding-left: 0; }
 
