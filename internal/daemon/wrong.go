@@ -183,7 +183,7 @@ func plain(title string) string { return strings.TrimSpace(ticketGroup.ReplaceAl
 
 // whyWords is a row's "why" as part of a sentence.
 func whyWords(why string) string {
-	if strings.HasPrefix(why, "Operator is no longer running") {
+	if strings.HasPrefix(why, "Agent is no longer running") || strings.HasPrefix(why, "Operator is no longer running") {
 		return "an agent stopped without reporting back"
 	}
 	return strings.ToLower(why[:1]) + why[1:]
