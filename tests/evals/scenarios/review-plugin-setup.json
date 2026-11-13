@@ -1,0 +1,7 @@
+{
+  "cases": [
+    {"name": "fresh setup warns and continues", "installed": false, "required": false, "continues": true},
+    {"name": "first review stops before dispatch", "installed": false, "required": true, "continues": false},
+    {"name": "review after setup can proceed", "installed": true, "required": true, "continues": true}
+  ]
+}

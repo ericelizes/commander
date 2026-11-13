@@ -76,6 +76,7 @@ doctor:
             printf "  ✗ %-10s MISSING\n" "$t"
         fi
     done
+    bash install/check-review-plugin.sh
     echo
     echo "Layout:"
     for p in "$HOME/.commander" \

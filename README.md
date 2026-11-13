@@ -14,6 +14,17 @@ or on a Linux box/VM), and the Electron app that shows it.
 1. **Install the prerequisites**: Go ≥1.22, Node ≥20 (for the app), `bd`
    (`cargo install beads_rust`), `git`, `jq`, `tmux`, and the Claude Code CLI
    (`npm i -g @anthropic-ai/claude-code`). `just doctor` lists what is missing.
+   Review steps also require the **Compound Engineering** plugin, which supplies
+   `compound-engineering:ce-code-review`. Install it before your first review:
+
+   ```bash
+   claude plugin marketplace add EveryInc/compound-engineering-plugin && claude plugin install compound-engineering
+   ```
+
+   These names follow the [plugin's installation instructions](https://github.com/EveryInc/compound-engineering-plugin#install).
+   Restart the review session after installing; its runtime must expose the skill.
+   The installer and `just doctor` warn if the registered skill file is missing;
+   the warning does not fail installation or install the plugin for you.
 2. **Run the installer** from this checkout:
 
    ```bash
