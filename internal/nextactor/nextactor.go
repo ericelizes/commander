@@ -407,7 +407,9 @@ type Row struct {
 }
 
 // Rollup combines decisions into a row. The lead is the highest-ranked actor;
-// among equals the oldest. Beads carried by their children do not count.
+// among equal agents, one running a step itself leads over a step that only
+// waits for one (the row is working, not waiting); otherwise the oldest.
+// Beads carried by their children do not count.
 func Rollup(results []Result) Row {
 	row := Row{Counts: map[Actor]int{}}
 	agents := map[string]bool{}
@@ -419,8 +421,11 @@ func Rollup(results []Result) Row {
 		if r.Actor == Agent && r.Reason == "executing" {
 			agents[firstNonEmpty(r.Who, r.Bead)] = true
 		}
+		running := func(x Result) bool { return x.Actor == Agent && len(x.Via) == 0 }
+		same := Rank(r.Actor) == Rank(row.Lead.Actor)
 		if row.Lead.Actor == "" || Rank(r.Actor) > Rank(row.Lead.Actor) ||
-			(Rank(r.Actor) == Rank(row.Lead.Actor) && r.Since > 0 && (row.Lead.Since == 0 || r.Since < row.Lead.Since)) {
+			(same && running(r) && !running(row.Lead)) ||
+			(same && running(r) == running(row.Lead) && r.Since > 0 && (row.Lead.Since == 0 || r.Since < row.Lead.Since)) {
 			row.Lead = r
 		}
 	}

@@ -289,3 +289,17 @@ func TestCardWaitsOnItsBlocker(t *testing.T) {
 		t.Fatalf("without lookup a blocked card waits on its dependency: %+v", r)
 	}
 }
+
+func TestRollupLeadsWithTheRunningAgentOverAStepWaitingForIt(t *testing.T) {
+	waiting := Result{Actor: Agent, Reason: "blocked:executing", Bead: "review", Since: 100, Via: []string{"Spec PR"}}
+	running := Result{Actor: Agent, Reason: "executing", Bead: "spec", Since: 200, Who: "op-1"}
+	for _, order := range [][]Result{{waiting, running}, {running, waiting}} {
+		if got := Rollup(order).Lead; got.Bead != "spec" {
+			t.Fatalf("the row is the agent at work, got lead %+v", got)
+		}
+	}
+	// With no agent running in the row, the step waiting on another one leads.
+	if got := Rollup([]Result{waiting}).Lead; got.Bead != "review" {
+		t.Fatalf("got %+v", got)
+	}
+}
