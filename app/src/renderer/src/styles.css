@@ -2166,6 +2166,12 @@ kbd {
   cursor: grabbing;
 }
 
+/* A pan drag must never start a native text selection. */
+.canvas.panning,
+.canvas.panning * {
+  user-select: none !important;
+}
+
 .canvas-world {
   position: absolute;
   top: 0;
@@ -4090,7 +4096,7 @@ kbd {
 body.nav-dragging,
 body.nav-dragging * {
   cursor: grabbing !important;
-  user-select: none;
+  user-select: none !important;
 }
 
 .is-lifted > .row {

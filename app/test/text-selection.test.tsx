@@ -67,6 +67,22 @@ describe('text selection', () => {
     expect(canvas).not.toHaveClass('panning')
   })
 
+  it('turns selection off for everything inside a panning canvas, and pans from padding in a flow block', () => {
+    const snapshot = JSON.parse(readFileSync(join(__dirname, 'fixtures/snapshot.json'), 'utf8')) as Snapshot
+    useStore.setState({ snapshot, selected: { kind: 'commander' } })
+    const { container } = render(<FlowGraph />)
+    const canvas = container.querySelector<HTMLElement>('.flow-canvas')!
+    canvas.setPointerCapture = vi.fn()
+    const block = container.querySelector<HTMLElement>('.flow-block')!
+    fireEvent.pointerDown(block)
+    expect(canvas).toHaveClass('panning')
+    expect(getComputedStyle(canvas).userSelect).toBe('none')
+    expect(getComputedStyle(container.querySelector('.flow-state')!).userSelect).toBe('none')
+    fireEvent.pointerUp(canvas)
+    fireEvent.pointerDown(container.querySelector('.flow-title, .flow-meta, .flow-state')!)
+    expect(canvas).not.toHaveClass('panning')
+  })
+
   it('selects sidebar text without lifting the row, and still drags from its rank', () => {
     const snapshot = JSON.parse(readFileSync(join(__dirname, 'fixtures/snapshot.json'), 'utf8')) as Snapshot
     vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 404 })))
