@@ -178,7 +178,8 @@ function PacedSentence({ s, done, start }: { s: Sentence; done: (s: Sentence) =>
 }
 
 function toneOf(kind?: LineKind): Tone {
-  if (kind === 'needs' || kind === 'stuck' || kind === 'stalled') return 'you'
+  if (kind === 'needs') return 'you'
+  if (kind === 'stuck' || kind === 'stalled') return 'stuck'
   if (kind === 'working') return 'agent'
   if (kind === 'waiting') return 'waiting'
   return 'quiet'
@@ -438,6 +439,7 @@ export function Overview({ ws, row, track, onTrack, part = 'status', embedded = 
           {degraded && <p role="status" className="ov-warning">Connection interrupted. This status may be out of date.</p>}
           {asks.map((ask) => (
             <div className="ov-ask" key={ask.bead_id}>
+              <div className="ov-ask-label">Needs your answer</div>
               <h3>{ask.decision?.question || ask.ask || ask.title}</h3>
               {ask.decision?.context && <p>{decisionPreview(ask.decision.context)}</p>}
               {ask.stale_why && <p className="ov-warning">This request needs a fresh check: {ask.stale_why}</p>}

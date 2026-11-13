@@ -88,6 +88,7 @@ func runInternalSetObjective(args []string, stdout, stderr *os.File) int {
 	cardCheckArg := fs.String("card-check", "", `"still-right": confirm the open card on the bead is still right as written (needs --reason); it stops reading out of date. Refused when nothing changed and only the age rule fired twice in a row`)
 	pushReason := fs.String("push-reason", "", "with --waiting until:... or --park --until: why the date moves LATER again (15+ chars, not a repeat). Without it the push past [needs] push_count / push_days is refused; with it below them it is a comment only")
 	pushReset := fs.Bool("push-reset", false, "clear the bead's push counter (Commander and the user only)")
+	checksNotGreen := fs.String("checks-not-green", "", "with --decision on a card that asks the user to review or merge a PR: send it although CI is not green on the PR head; the value says why, and the card shows it")
 	notSameAsk := fs.String("not-the-same-ask", "", "with --state needs-user on a gate: an ancestor already holds an open card about the same PR, but this card asks a different question; the value says what differs")
 	reason := fs.String("reason", "", "with --park: why it is on hold; with --card-check: what you checked; with --review none: why the label goes (15+ chars, required on a merge target or a merge gate's stage), recorded on the bead")
 	var waiting stringList
@@ -217,6 +218,15 @@ func runInternalSetObjective(args []string, stdout, stderr *os.File) int {
 			}
 			if strings.TrimSpace(*note) == "" {
 				*note = strings.TrimSpace(d.Question + "\n" + d.Context)
+			}
+		}
+		// A review or merge card waits for green CI on the PRs it names.
+		if decision != nil && (*state == beads.StateNeedsUser || *state == "") {
+			if why := strings.TrimSpace(*checksNotGreen); why != "" {
+				decision.Context = strings.TrimSpace(decision.Context + "\n\nCI is not green: " + why)
+				decisionJSON = decision.JSON()
+			} else if err := checkReviewAskGreen(ctx, bc, dir, *beadID, decision); err != nil {
+				return result, err
 			}
 		}
 		// --no-notify is the user's own mark key; from an agent it is no way around the card.

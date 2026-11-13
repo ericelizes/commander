@@ -329,6 +329,31 @@ func ciGreen(h Head) error {
 	return nil
 }
 
+// CIGreen is ciGreen for callers outside the package (the needs-user door).
+func CIGreen(h Head) error { return ciGreen(h) }
+
+// NotGreen names the latest checks on h that did not pass, as "name (state)".
+func NotGreen(h Head) []string {
+	var out []string
+	for _, c := range latestChecks(h.Checks) {
+		if c.State == "SUCCESS" || c.Status == "COMPLETED" && (c.Conclusion == "SUCCESS" || c.State == "" && (c.Conclusion == "SKIPPED" || c.Conclusion == "NEUTRAL")) {
+			continue
+		}
+		name, state := c.Name, strings.ToLower(c.Conclusion)
+		if name == "" {
+			name = c.Context
+		}
+		if state == "" {
+			state = strings.ToLower(c.State)
+		}
+		if state == "" {
+			state = strings.ToLower(c.Status)
+		}
+		out = append(out, name+" ("+state+")")
+	}
+	return out
+}
+
 // followUps are the minor findings a passing review leaves on the head, to be
 // filed once the head is confirmed unchanged.
 type followUps struct {
