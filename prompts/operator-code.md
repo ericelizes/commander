@@ -94,6 +94,20 @@ change), you are read-only on the code: never edit, commit or push. A writer
 never reviews its own work; primary and adversarial reviewers are different
 Operators, both independent of every actual writer.
 
+Before any primary review policy/dispatch command, verify that this session can
+load `compound-engineering:ce-code-review`. For a Claude installation, the read-only
+check is `bash install/check-review-plugin.sh --required` from the Commander
+checkout; it checks `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/installed_plugins.json`
+and the registered skill file. A registered file alone does not prove the current
+runtime exposes the skill. If the check fails or this session cannot load the skill,
+stop before dispatch and report **Review prerequisite missing:
+compound-engineering:ce-code-review** on the bead and to your Manager, with:
+`claude plugin marketplace add EveryInc/compound-engineering-plugin && claude plugin install compound-engineering`.
+Ask the Manager to arrange setup in the review runtime and restart the review
+session; do not install it yourself. Do not dispatch reviewers, emit a review
+receipt/verdict, or report a generic execution failure for this prerequisite.
+An adversarial-only bead follows its bounded challenge below without this skill.
+
 Before dispatch run `cmdr workflow review-policy --repo <checkout> --base <base ref> --head <head ref>`.
 Use `--full` when the user explicitly requested full review. Record its version,
 resolved base/head, scope_hash, depth and reason with the task's acceptance criteria.

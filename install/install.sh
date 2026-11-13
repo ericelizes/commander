@@ -94,6 +94,7 @@ check_cmd jq
 check_cmd fzf
 check_cmd uuidgen
 check_cmd git
+bash "$REPO_DIR/install/check-review-plugin.sh"
 
 # ── Agent Mail: agents message each other through it, so set it up here ─────
 

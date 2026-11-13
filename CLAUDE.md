@@ -44,6 +44,11 @@ not enough — this is an interactive cockpit; prove it works *in the cockpit*.
   `cargo install beads_rust`), `am` (agent-mail), `tmux`, `docker`, `jq`.
   SQLite is **embedded** (`modernc.org/sqlite`) — the `sqlite3` CLI is NOT
   required.
+- **Review prerequisite:** primary review sessions need the Compound Engineering
+  plugin's `compound-engineering:ce-code-review` skill (setup in README).
+  `install/check-review-plugin.sh` and `just doctor` warn without installing it;
+  `--required` fails early for review preflight. Registry presence is not proof
+  that a particular runtime has loaded the skill.
 - **Agent Mail:** `just setup-mail` installs `am`, starts its server on
   `127.0.0.1:8765` (launchd `com.agent-mail` / systemd `agent-mail.service`)
   and checks the token in `~/.config/mcp-agent-mail/config.env`. Without it,
