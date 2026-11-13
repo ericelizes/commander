@@ -178,6 +178,7 @@ type chatRole struct {
 	e    *Engine
 	role string
 
+	restartMu sync.Mutex // serializes mail restart admission/start with explicit Stop
 	mu        sync.Mutex
 	log       *eventLog
 	seq       uint64
@@ -1125,7 +1126,7 @@ func (e *Engine) onExit(c *chatRole, p *process, hx *hostExit) {
 	}
 	switch {
 	case p.spec.ExecutionRunID == 0 && noteStop && autoRestart:
-		go e.restartInterrupted(c)
+		go e.restartInterrupted(c, p)
 	case p.spec.ExecutionRunID == 0 && !ex.Expected && autoRestart:
 		go e.restartCrashed(c, midTurn)
 	}
@@ -1134,8 +1135,20 @@ func (e *Engine) onExit(c *chatRole, p *process, hx *hostExit) {
 // restartInterrupted starts c's role again after a mail interrupt's SIGINT
 // fallback ended its process. start sends the kept interrupt note first; no
 // crash is counted and no resume message follows.
-func (e *Engine) restartInterrupted(c *chatRole) {
+func (e *Engine) restartInterrupted(c *chatRole, p *process) {
 	time.Sleep(e.opts.CrashRestartDelay)
+	// Keep the check and start indivisible with respect to Stop. If Stop wins,
+	// the captured onExit flag cannot revive the role; if start wins, Stop
+	// waits for it and ends the replacement before returning successfully.
+	c.restartMu.Lock()
+	defer c.restartMu.Unlock()
+	c.mu.Lock()
+	restart := c.meta.Running && p.noteStop && c.proc == nil
+	c.mu.Unlock()
+	if !restart {
+		c.publish(Event{Kind: KindNotice, Source: SourceEngine, Subtype: "interrupt_restart", Text: "Skipped the interrupt restart: the session was stopped or replaced"})
+		return
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	_, spawned, _, err := e.start(ctx, c.role, StartOptions{})
@@ -1405,7 +1418,10 @@ func (e *Engine) InterruptForMail(ctx context.Context, role, by string) error {
 	}
 	fellBack, err := e.interrupt(ctx, role, func(c *chatRole, p *process) {
 		c.mu.Lock()
-		p.stopping, p.noteStop = true, true
+		// An explicit Stop wins even when this timeout was already waiting.
+		if c.proc == p && c.meta.Running {
+			p.stopping, p.noteStop = true, true
+		}
 		c.mu.Unlock()
 	})
 	if err != nil {
@@ -1652,12 +1668,22 @@ func sessionSuggestions(raw json.RawMessage) json.RawMessage {
 
 // Stop ends role's process and keeps it stopped (cmdrd will not resume it).
 func (e *Engine) Stop(ctx context.Context, role string) error {
-	c, p, err := e.live(role)
+	c, err := e.chat(role)
 	if err != nil {
 		return err
 	}
+	c.restartMu.Lock()
+	defer c.restartMu.Unlock()
 	c.mu.Lock()
+	p := c.proc
+	if p == nil {
+		c.mu.Unlock()
+		return ErrNotRunning
+	}
+	// A mail timeout may already have armed an expected-exit restart.
+	// Cancel it under the same lock used by the timeout to arm it.
 	c.meta.Running = false
+	p.noteStop = false
 	_ = writeMeta(e.logDir(), c.role, c.meta)
 	c.mu.Unlock()
 	return e.stopProcess(ctx, c, p)

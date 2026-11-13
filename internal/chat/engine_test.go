@@ -244,9 +244,18 @@ func TestStartSendStreamsEventsAndState(t *testing.T) {
 	if cwd, _ := filepath.EvalSymlinks(rec["cwd"].(string)); !strings.HasSuffix(cwd, filepath.Base(h.work)) {
 		t.Fatalf("cwd = %v", rec["cwd"])
 	}
-	rows := strings.Join(h.sink.all(), "\n")
-	if !strings.Contains(rows, "operator-a working") || !strings.HasSuffix(rows, "operator-a idle") {
-		t.Fatalf("agent_state rows = %s", rows)
+	// State events are published before the sink write, so wait for the sink
+	// itself rather than assuming receipt of KindState joins that write.
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		rows := strings.Join(h.sink.all(), "\n")
+		if strings.Contains(rows, "operator-a working") && strings.HasSuffix(rows, "operator-a idle") {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("agent_state rows = %s", rows)
+		}
+		time.Sleep(time.Millisecond)
 	}
 }
 

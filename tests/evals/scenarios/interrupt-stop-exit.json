@@ -1,0 +1,5 @@
+{
+  "description": "Independent review reproducer: real private fake-Claude host, pause onExit after noteStop snapshot, Stop clears Running, release exit, await successful Stop and restart decision, assert stopped. Executed by TestReviewerStopDuringMailExit in internal/chat.",
+  "role": "manager-review-stop",
+  "message": "deaf long"
+}

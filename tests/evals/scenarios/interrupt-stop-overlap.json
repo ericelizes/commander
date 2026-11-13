@@ -1,0 +1,7 @@
+{
+  "description": "Explicit Stop cancels a pending mail SIGINT restart, before or after the timeout arms it. Private chat transport synchronizes each order before reporting physical exit.",
+  "cases": [
+    {"name": "stop-before-timeout", "timeout_first": false},
+    {"name": "timeout-before-stop", "timeout_first": true}
+  ]
+}
