@@ -14,7 +14,9 @@ import { useApis } from '../api'
 import { confetti } from '../confetti'
 import { NeedsYouQueue, itemKey } from '../../../features/decisions'
 import { askKey, wsKey, type Selection } from '../viewmodel'
-import { applyMove, dropAt, flatRows, landed, placeArgv, without, withoutGone, type Drop, type NavNode } from './navDrag'
+import { applyMove, dropAt, flatRows, landed, placeArgv, previousPlace, undoArgv, without, withoutGone, type Drop, type NavNode } from './navDrag'
+
+import { ConfirmDialog } from './ConfirmDialog'
 
 // Sidebar view choices survive a reload; storage can be unavailable, so it is best effort.
 function usePref<T extends string>(key: string, initial: T): [T, (v: T) => void] {
@@ -49,6 +51,8 @@ const INDENT = 40
 const DRAG_START = 5
 // How long a dropped row holds its new place while the board catches up.
 const HOLD_MS = 60_000
+
+interface Move { node: NavNode; drop: Drop; previous: Drop; undo: string[] }
 
 interface Lift { node: NavNode; x: number; y: number; drop: Drop | null; lineY: number }
 
@@ -93,6 +97,8 @@ export function Navigator() {
   const [lift, setLift] = useState<Lift | null>(null)
   const [moveError, setMoveError] = useState('')
   const placing = useRef(false)
+  const [undoMove, setUndoMove] = useState<Move | null>(null)
+  const [pendingNest, setPendingNest] = useState<Move | null>(null)
 
   // Hold a dropped row until the board shows it there; if it never does, say so.
   useEffect(() => {
@@ -107,8 +113,10 @@ export function Navigator() {
     return () => window.clearTimeout(t)
   }, [moved])
 
-  const place = (dragged: NavNode, drop: Drop) => {
-    if (!apis) return
+  const place = (move: Move) => {
+    if (!apis || placing.current) return
+    const { node: dragged, drop } = move
+    setUndoMove(null)
     if (drop.parent?.depth === 0 && foldedSet.has(drop.parent.key)) toggleTracks(drop.parent.key)
     if (drop.parent && drop.parent.depth > 0 && !openSet.has(drop.parent.key)) toggleOpen(drop.parent.key)
     setMoved({ node: dragged, drop, at: Date.now() })
@@ -125,6 +133,7 @@ export function Navigator() {
         failed = `could not reach Commander: ${(e as Error).message ?? e}`
       }
       placing.current = false
+      if (!failed) setUndoMove(move)
       if (failed) {
         setMoved(null)
         setMoveError(/not allowed/i.test(failed) ? 'Moving rows needs the latest Commander install.' : `Could not move it: ${failed}`)
@@ -132,12 +141,58 @@ export function Navigator() {
     })()
   }
 
+  useEffect(() => {
+    if (!undoMove) return
+    const t = window.setTimeout(() => setUndoMove(null), 8000)
+    return () => window.clearTimeout(t)
+  }, [undoMove])
+  useEffect(() => {
+    if (!undoMove || !real) return
+    const exists = flatRows(real.workstreams, () => false, () => true).some((n) => n.project === undoMove.node.project && n.bead === undoMove.node.bead)
+    if (!exists || completed[undoMove.node.key]) setUndoMove(null)
+  }, [real, completed, undoMove])
+
+  const undo = async () => {
+    if (!undoMove || !apis || placing.current || pendingNest) return
+    const move = undoMove
+    placing.current = true
+    setMoveError('')
+    try {
+      const r = await apis.cmdr.runCmd(move.undo)
+      const failed = cmdError(r.stdout) || cmdError(r.stderr) || (r.ok ? '' : r.error || `exit ${r.exit}`)
+      if (failed) setMoveError(`Could not undo the move: ${failed}`)
+      else {
+        setUndoMove(null)
+        setMoved({ node: move.node, drop: move.previous, at: Date.now() })
+        const warnings = cmdWarnings(r.stdout)
+        if (warnings.length) setMoveError(warnings.join(' '))
+      }
+    } catch (e) {
+      setMoveError(`Could not undo the move: ${(e as Error).message ?? e}`)
+    } finally {
+      placing.current = false
+    }
+  }
+  useEffect(() => {
+    if (!undoMove) return
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target instanceof Element ? e.target : null
+      if (e.defaultPrevented || e.shiftKey || e.altKey || !(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 'z' ||
+        target?.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"]') || document.querySelector('[role="dialog"]')) return
+      if (placing.current) return
+      e.preventDefault()
+      void undo()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
+
   // A press on a row becomes a drag once the pointer has moved; a plain click still opens the row.
   const startPress = (e: React.PointerEvent<HTMLDivElement>) => {
     const scroller = listRef.current
     const target = e.target as HTMLElement
     const rowEl = target.closest<HTMLElement>('[data-nav-key]')
-    if (e.button !== 0 || !vm || !apis || !scroller || !rowEl || placing.current || target.closest('.ws-fold, .track-fold, .complete-btn')) return
+    if (e.button !== 0 || !vm || !apis || !scroller || !rowEl || placing.current || pendingNest || target.closest('.ws-fold, .track-fold, .complete-btn')) return
     const flat = flatRows(vm.workstreams, (k) => foldedSet.has(k), (k) => openSet.has(k), (bead) => realParent(snapshot, bead))
     const node = flat.find((n) => n.key === rowEl.dataset.navKey)
     if (!node) return
@@ -175,7 +230,11 @@ export function Navigator() {
       const swallow = (c: MouseEvent) => { c.stopPropagation(); c.preventDefault() }
       window.addEventListener('click', swallow, { capture: true, once: true })
       window.setTimeout(() => window.removeEventListener('click', swallow, { capture: true }), 50)
-      if (run && last?.drop) place(node, last.drop)
+      if (run && last?.drop) {
+        const move = { node, drop: last.drop, previous: previousPlace(flat, node), undo: undoArgv(flat, node) }
+        if (last.drop.parent && last.drop.parent.holds !== (node.parent?.holds ?? '')) setPendingNest(move)
+        else place(move)
+      }
     }
     const onUp = () => finish(true)
     const onKey = (k: KeyboardEvent) => {
@@ -232,6 +291,12 @@ export function Navigator() {
           All
         </button>
       </div>
+      {pendingNest && (
+        <ConfirmDialog title={`Nest ${pendingNest.node.title} under ${pendingNest.drop.parent!.title}?`} confirm="Nest" onCancel={() => setPendingNest(null)} onConfirm={() => { const move = pendingNest; setPendingNest(null); place(move) }}>
+          This changes who manages it.
+        </ConfirmDialog>
+      )}
+      {undoMove && <div className="nav-move-undo" role="status"><span>Moved “{undoMove.node.title}”</span><button type="button" onClick={() => void undo()}>Undo</button></div>}
       {moveError && (
         <button type="button" className="nav-move-error" title="Dismiss" onClick={() => setMoveError('')}>{moveError}</button>
       )}

@@ -7676,3 +7676,18 @@ button.xf-step.xf-open:hover {
 
 /* The workstream's number in the top bar, over its page. */
 .app-top-label { font: 600 12px/1 var(--font); letter-spacing: .05em; text-transform: uppercase; color: var(--text-3); }
+
+.nav-move-undo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 6px 8px 0;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: var(--raised);
+  color: var(--text);
+  font-size: 12px;
+}
+.nav-move-undo span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-move-undo button { flex: none; border: 0; background: transparent; color: var(--text); font: inherit; cursor: pointer; text-decoration: underline; }

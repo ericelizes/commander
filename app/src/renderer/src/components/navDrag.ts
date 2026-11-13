@@ -95,6 +95,17 @@ export function placeArgv(dragged: NavNode, drop: Drop): string[] {
   return drop.parent && after ? [...argv, '--after', after] : [...argv, '--to', String(drop.to)]
 }
 
+// Capture before the move; later board updates must not change the undo target.
+export function previousPlace(flat: NavNode[], dragged: NavNode): Drop {
+  const siblings = flat.filter((n) => n.parent?.key === dragged.parent?.key)
+  const index = siblings.findIndex((n) => n.key === dragged.key)
+  return { gap: flat.indexOf(dragged), depth: dragged.depth, parent: dragged.parent, after: siblings[index - 1] ?? null, to: index + 1 }
+}
+
+export function undoArgv(flat: NavNode[], dragged: NavNode): string[] {
+  return placeArgv(dragged, previousPlace(flat, dragged))
+}
+
 const toTrack = (r: BoardRow): BoardTrack => ({
   key: r.key, bead_id: r.bead_id, letter: '', title: r.title, kind: r.kind, text: r.text, since: r.since, progress: r.progress,
   milestones: r.milestones, working: r.working, why: r.why, age_as: r.age_as, children: r.tracks,

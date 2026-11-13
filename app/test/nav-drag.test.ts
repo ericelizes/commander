@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyMove, dropAt, flatRows, landed, placeArgv, without, withoutGone } from '../src/renderer/src/components/navDrag'
+import { applyMove, dropAt, flatRows, landed, placeArgv, undoArgv, without, withoutGone } from '../src/renderer/src/components/navDrag'
 import type { BoardRow, BoardTrack } from '../src/shared/snapshot'
 
 const t = (id: string, children?: BoardTrack[]) => ({ key: `p:${id}`, bead_id: id, title: id, letter: '', children }) as unknown as BoardTrack
@@ -123,5 +123,18 @@ describe('a completed row', () => {
 
   it('leaves the rows alone when none went', () => {
     expect(withoutGone(rows, () => false)).toBe(rows)
+  })
+})
+
+
+describe('undo argv captured before a drag', () => {
+  it('restores the top-level rank across projects', () => {
+    expect(undoArgv(flat, flat[5])).toEqual(['internal-place', '--project', 'q', '--bead', 'other', '--parent', '', '--to', '3'])
+  })
+  it('restores a nested row after its previous sibling, ignoring descendants', () => {
+    expect(undoArgv(flat, flat[3])).toEqual(['internal-place', '--project', 'p', '--bead', 'a2', '--parent', 'a', '--after', 'a1'])
+  })
+  it('restores the first nested sibling to rank one', () => {
+    expect(undoArgv(flat, flat[1])).toEqual(['internal-place', '--project', 'p', '--bead', 'a1', '--parent', 'a', '--to', '1'])
   })
 })
