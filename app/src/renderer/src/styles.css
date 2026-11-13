@@ -7675,3 +7675,20 @@ button.xf-step.xf-open:hover {
 
 /* The workstream's number in the top bar, over its page. */
 .app-top-label { font: 600 12px/1 var(--font); letter-spacing: .05em; text-transform: uppercase; color: var(--text-3); }
+
+/* The Workflows page: one card per workflow, its rules side by side. */
+.wf-intro { margin: 0 0 22px; color: var(--text-3); font-size: 14px; line-height: 1.5; }
+.wf-card { padding: 18px 20px; margin: 0 0 16px; border-radius: 12px; background: var(--raised-2); }
+.wf-card h2 { margin: 0; color: var(--text); font-size: 17px; font-weight: 650; }
+.wf-card h3 { margin: 16px 0 6px; color: var(--text-3); font-size: 11.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; }
+.wf-applies { margin: 2px 0 0; color: var(--text-3); font-size: 13px; }
+.wf-summary { margin: 10px 0 0; color: var(--text); font-size: 14.5px; line-height: 1.5; }
+.wf-rules { display: grid; grid-template-columns: 1fr 1fr; gap: 0 24px; }
+.wf-rules ul { margin: 0; padding-left: 18px; color: var(--text); font-size: 14px; line-height: 1.5; }
+.wf-rules li + li { margin-top: 4px; }
+.wf-steps { margin: 0; padding-left: 20px; color: var(--text); font-size: 14px; line-height: 1.5; }
+.wf-steps li { padding: 2px 0; }
+.wf-steps li > span:first-child { margin-right: 8px; }
+.wf-who { color: var(--text-3); font-size: 12px; white-space: nowrap; }
+.wf-note { margin: 12px 0 0; color: var(--text-3); font-size: 12.5px; }
+@media (max-width: 640px) { .wf-rules { grid-template-columns: 1fr; } }

@@ -9,6 +9,8 @@ import { TopBar } from './components/TopBar'
 import { Splitter } from './components/Splitter'
 import { InspectorColumn } from './components/InspectorColumn'
 import { ProgressView } from './components/ProgressView'
+import { WorkflowsView } from './components/WorkflowsView'
+import { isPage } from './viewmodel'
 import { ChatSlot, useChatTarget } from './components/ChatSlot'
 import { useAppCapture } from './appCapture'
 import { useShell } from './shell'
@@ -124,8 +126,8 @@ export function App() {
     return () => cancelAnimationFrame(id)
   }, [conn])
 
-  const page = useStore((s) => s.selected.kind === 'progress')
-  const focused = useStore((s) => s.selected.kind !== 'commander' && s.selected.kind !== 'progress')
+  const page = useStore((s) => (isPage(s.selected) ? s.selected.kind : null))
+  const focused = useStore((s) => s.selected.kind !== 'commander' && !isPage(s.selected))
   const narrow = useStore((s) => s.narrow)
   const chatTab = useStore((s) => s.chatTab)
   const nav = clamp(sizes.nav, NAV.min, Math.min(NAV.max, winW - RAIL - MIDDLE_MIN))
@@ -161,7 +163,8 @@ export function App() {
             focus, the chat alone. Only hidden under a page, so the chat keeps its
             draft and its scroll. */}
         <main className="col col-main">
-          {page && (stateUnavailable ? <><ActivityFreshness /><p role="status">Live state unavailable.</p></> : <ProgressView />)}
+          {page === 'workflows' && <WorkflowsView />}
+          {page === 'progress' && (stateUnavailable ? <><ActivityFreshness /><p role="status">Live state unavailable.</p></> : <ProgressView />)}
           <div
             className={`main-row${tabbed ? (chatTab ? ' tabbed show-chat' : ' tabbed') : ''}${page ? ' under-page' : ''}`}
             style={{ gridTemplateColumns: focused && !narrow ? `minmax(${PANEL_MIN}px, 1fr) 1px ${chat}px` : 'minmax(0, 1fr)' }}

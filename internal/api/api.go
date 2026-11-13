@@ -443,6 +443,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/linear/key", s.auth(http.HandlerFunc(s.serveLinearKey)))
 	mux.Handle("DELETE /api/linear/key", s.auth(http.HandlerFunc(s.serveLinearKey)))
 	mux.Handle("GET /api/linear", s.auth(http.HandlerFunc(s.serveLinear)))
+	mux.Handle("GET /api/workflows", s.auth(http.HandlerFunc(s.serveWorkflows)))
 	s.machineRoutes(mux)
 	s.updateRoutes(mux)
 	s.placeRoutes(mux)

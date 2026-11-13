@@ -228,7 +228,7 @@ describe('native chat attach', () => {
     await screen.findByRole('tab', { name: 'All' })
     expect(screen.getAllByRole('tab').map((t) => t.textContent?.replace(/\d+$/, ''))).toEqual(['Needs you', 'All'])
     expect(await screen.findByTitle('Test User')).toHaveTextContent('TU')
-    expect([...container.querySelectorAll('.rail button')].map((b) => b.getAttribute('aria-label'))).toEqual(['Home', 'Progress', 'Settings'])
+    expect([...container.querySelectorAll('.rail button')].map((b) => b.getAttribute('aria-label'))).toEqual(['Home', 'Progress', 'Workflows', 'Settings'])
     await user.click(screen.getByRole('button', { name: 'Settings' }))
     const dialog = screen.getByRole('dialog', { name: 'Settings' })
     expect(within(dialog).getAllByRole('button', { name: /Connections|Agents|Display/ }).map((b) => b.textContent)).toEqual(['Connections', 'Agents', 'Display'])

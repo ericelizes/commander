@@ -2,7 +2,7 @@
 // pages (Home, Progress), then how many agents are working, and at the bottom
 // the health and update alerts, the Settings gear, and who the app is for.
 
-import { Bot, ChartNoAxesColumn, House, Settings as Gear, User } from 'lucide-react'
+import { Bot, ChartNoAxesColumn, House, Settings as Gear, User, Workflow } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useIntegrations } from '../../../features/linear/settings'
@@ -57,6 +57,7 @@ export function Rail() {
   const working = useAgentRows().filter((r) => r.state === 'working').length
   const home = useStore((s) => homeActive(s.selected))
   const progress = useStore((s) => s.selected.kind === 'progress')
+  const workflows = useStore((s) => s.selected.kind === 'workflows')
   return (
     <div className="rail">
       <button type="button" className={`rail-btn${home ? ' on' : ''}`} onClick={() => useStore.getState().goHome()} title="Home" aria-label="Home">
@@ -64,6 +65,9 @@ export function Rail() {
       </button>
       <button type="button" className={`rail-btn${progress ? ' on' : ''}`} onClick={() => useStore.getState().select({ kind: 'progress' })} title="Progress" aria-label="Progress">
         {progress ? <ProgressFilled /> : <ChartNoAxesColumn size={18} />}
+      </button>
+      <button type="button" className={`rail-btn${workflows ? ' on' : ''}`} onClick={() => useStore.getState().select({ kind: 'workflows' })} title="Workflows" aria-label="Workflows">
+        <Workflow size={18} strokeWidth={workflows ? 2.4 : 2} />
       </button>
       <div className="rail-divider" />
       <span className={`rail-metric${!unknown && working > 0 ? ' is-live' : ''}`} title={unknown ? 'Live agent state unavailable' : `${working} agent${working === 1 ? '' : 's'} working now`}>

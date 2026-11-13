@@ -196,7 +196,7 @@ export function Navigator() {
 
   const working = useAgentRows().filter((r) => r.state === 'working').length
   if (!vm || !snapshot) return <><ActivityFreshness /><NavSkeleton /></>
-  const selKey = selected.kind === 'commander' || selected.kind === 'progress' ? 'commander' : selected.key
+  const selKey = selected.kind === 'commander' || selected.kind === 'progress' || selected.kind === 'workflows' ? 'commander' : selected.key
   // The row that is open is the one lit: a nested row when it can be seen, else the top-level row it sits in.
   // An open decision lights the row it sits in, the one its Overview is showing.
   const openAsk = selected.kind === 'ask' ? snapshot.needs_you.find((n) => askKey(n) === selected.key) : undefined
