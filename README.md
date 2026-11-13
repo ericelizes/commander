@@ -12,7 +12,7 @@ or on a Linux box/VM), and the Electron app that shows it.
 ## Set up
 
 1. **Install the prerequisites**: Go ≥1.22, Node ≥20 (for the app), `bd`
-   (`cargo install beads_rust`), `git`, `jq`, `tmux`, and the Claude Code CLI
+   (`brew install beads`), `git`, `jq`, `tmux`, and the Claude Code CLI
    (`npm i -g @anthropic-ai/claude-code`). `just doctor` lists what is missing.
 2. **Run the installer** from this checkout:
 
@@ -31,9 +31,22 @@ or on a Linux box/VM), and the Electron app that shows it.
    ```
 
    On a Linux box with no display, `cmdr app --web` prints a link instead.
-5. **Start working**: type to Commander in the chat, e.g. "set up a workstream
+5. **Move Commander to the app**: after the first cockpit (`cmdr`) start, open
+   the Commander chat in the app and click **Move to app** when Commander is
+   not mid-reply. Until then, messages from the app arrive by mail and wait
+   for Commander's turn to end.
+6. **Start working**: type to Commander in the chat, e.g. "set up a workstream
    to add CSV export to billing". Commander picks the project under `~/code`
    (or `COMMANDER_WORKSPACE_ROOT`).
+
+**Using a fork?** In `bd` 1.3.4, the default `routing.mode=auto` treats the
+checkout as a contributor's and routes every write to `~/.beads-planning`,
+outside the project database. Commander's reads keep that embedded store
+locked, so every `cmdr` write fails with `embeddeddolt: store is read-only`.
+Run `bd config set routing.mode maintainer` in the project, then remove the
+`repos.additional` key and its list item from `.beads/config.yaml` by hand.
+Avoid `bd config unset repos.additional`: it comments out the key but leaves
+the list item, producing invalid YAML.
 
 ### Optional: connect things
 
@@ -109,7 +122,7 @@ shapes. Headline pins:
 |------------|-------------|---------------------------------------------|
 | `go`       | 1.22        | Build toolchain.                            |
 | `opencode` | 1.14.0      | Agent runtime. Install via `npm i -g opencode-ai`. |
-| `bd`       | 1.0.0       | Beads task tracker. `cargo install beads_rust`. |
+| `bd`       | 1.0.0       | Beads task tracker. `brew install beads` (or `npm i -g @beads/bd`). |
 | `am`       | 0.2.40      | Agent Mail.                                 |
 | `docker`   | 20.10       | Code-type operator sandboxing.              |
 | `tmux`     | 3.3         | Knowledge-type operator panes.              |
