@@ -825,6 +825,10 @@ func (d *Diagram) drawn(id string) *DiagramStep {
 // <doing it>"; every other checkpoint says what will be true, in the past
 // tense. A question or an order is never a checkpoint.
 func gateTitleProblem(s SnapStep) string {
+	// The Confirm done step is Commander's own, titled by it: never a finding.
+	if s.ClosingGate {
+		return ""
+	}
 	t := strings.TrimSpace(plainTitle(s.Title))
 	lower := strings.ToLower(t)
 	green := strings.HasPrefix(lower, "greenlight")
