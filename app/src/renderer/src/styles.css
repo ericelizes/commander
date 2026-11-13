@@ -7633,7 +7633,7 @@ button.xf-step.xf-open:hover {
 .fx .xf-step.kind-stalled,
 .fx .xf-step.kind-stuck { box-shadow: inset 0 0 0 1.5px var(--peach); background: color-mix(in srgb, var(--peach) 6%, var(--bg-chat)); }
 
-.ws-recovery { color: var(--err); font-size: 11px; line-height: 1.4; margin: 4px 0 0; overflow-wrap: anywhere; }
+.ws-recovery { color: var(--peach); font-size: 11px; line-height: 1.4; margin: 4px 0 0; overflow-wrap: anywhere; }
 .ws-state.agent-stalled,
 .ws-state.agent-stuck,
 .xf-state.agent-stalled,
