@@ -114,7 +114,9 @@ func Send(ctx context.Context, st Store, m Mailer, amProjectKey, fromRole string
 	}
 	to := make([]string, 0, len(toRoles))
 	for _, r := range toRoles {
-		name, err := Resolve(ctx, st, m, amProjectKey, r, false)
+		// The default Commander is a fixed recipient, even before its inbox
+		// hook runs for the first time. Other recipients must already exist.
+		name, err := Resolve(ctx, st, m, amProjectKey, r, r == "commander")
 		if err != nil {
 			return fmt.Errorf("resolve recipient: %w", err)
 		}
