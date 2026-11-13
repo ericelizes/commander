@@ -1,0 +1,11 @@
+{
+  "fixture": "test/fixtures/snapshot.json",
+  "theme": "dark",
+  "checks": [
+    "Nesting asks before internal-place is sent",
+    "Cancel sends no command",
+    "Confirm sends the move and shows an Undo toast",
+    "Undo restores the original top-level parent and rank",
+    "A second successful drop shows the toast for the local capture"
+  ]
+}
