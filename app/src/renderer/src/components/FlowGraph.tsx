@@ -123,7 +123,7 @@ export function FlowGraph() {
   const drag = useRef<{ x: number; y: number } | null>(null)
   const [panning, setPanning] = useState(false)
   const onPointerDown = (e: React.PointerEvent) => {
-    if ((e.target as HTMLElement).closest('button, a, [role=button]')) return
+    if ((e.target as HTMLElement).closest('button, a, [role=button], .flow-title, .flow-meta, .flow-state, .flow-asks, .lane-title, .lane-empty')) return
     drag.current = { x: e.clientX, y: e.clientY }
     setPanning(true)
     ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)

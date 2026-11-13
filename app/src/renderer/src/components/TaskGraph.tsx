@@ -133,9 +133,11 @@ export function TaskGraph() {
   }, [])
 
   const drag = useRef<{ x: number; y: number } | null>(null)
+  const [panning, setPanning] = useState(false)
   const onPointerDown = (e: React.PointerEvent) => {
-    if ((e.target as HTMLElement).closest('button, a, [role=button]')) return
+    if ((e.target as HTMLElement).closest('button, a, [role=button], .canvas-box-head span, .canvas-box .track-tag')) return
     drag.current = { x: e.clientX, y: e.clientY }
+    setPanning(true)
     ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
   }
   const onPointerMove = (e: React.PointerEvent) => {
@@ -161,12 +163,12 @@ export function TaskGraph() {
   return (
     <div
       ref={host}
-      className={`canvas${drag.current ? ' panning' : ''}`}
+      className={`canvas${panning ? ' panning' : ''}`}
       style={{ backgroundSize: `${dot}px ${dot}px`, backgroundPosition: `${view.x}px ${view.y}px` }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
-      onPointerUp={() => (drag.current = null)}
-      onPointerCancel={() => (drag.current = null)}
+      onPointerUp={() => { drag.current = null; setPanning(false) }}
+      onPointerCancel={() => { drag.current = null; setPanning(false) }}
       onDoubleClick={(e) => !(e.target as HTMLElement).closest('button, a, [role=button]') && fit()}
     >
       <div className="canvas-world" style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.k})`, width: canvas.width, height: canvas.height }}>

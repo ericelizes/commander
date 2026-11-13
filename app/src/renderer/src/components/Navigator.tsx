@@ -132,12 +132,12 @@ export function Navigator() {
     })()
   }
 
-  // A press on a row becomes a drag once the pointer has moved; a plain click still opens the row.
+  // Drag rows from their rank or padding; dragging readable text selects it.
   const startPress = (e: React.PointerEvent<HTMLDivElement>) => {
     const scroller = listRef.current
     const target = e.target as HTMLElement
     const rowEl = target.closest<HTMLElement>('[data-nav-key]')
-    if (e.button !== 0 || !vm || !apis || !scroller || !rowEl || placing.current || target.closest('.ws-fold, .track-fold, .complete-btn')) return
+    if (e.button !== 0 || !vm || !apis || !scroller || !rowEl || placing.current || target.closest('.ws-fold, .track-fold, .complete-btn, .row-text, .row-title-wrap, .ws-state')) return
     const flat = flatRows(vm.workstreams, (k) => foldedSet.has(k), (k) => openSet.has(k), (bead) => realParent(snapshot, bead))
     const node = flat.find((n) => n.key === rowEl.dataset.navKey)
     if (!node) return
