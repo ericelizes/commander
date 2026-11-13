@@ -446,10 +446,7 @@ export function Overview({ ws, row, track, onTrack, part = 'status', embedded = 
           ))}
           {asks.length === 0 && (pendingDecision || stalled) && <p>{noAsk}</p>}
           {shown && (hasText(shown.goal) || hasText(shown.now) || hasText(shown.recent) || hasText(shown.next)) && <div className="ov-status-story ov-fade" key={result?.recap?.generated_at ?? 'draft'}>
-            {hasText(shown.goal) && <div className="ov-goal">
-              <span className="ov-label">Goal</span>
-              <p className="ov-field">{cite(shown.goal)}</p>
-            </div>}
+            {hasText(shown.goal) && <Row label="Goal"><p className="ov-field">{cite(shown.goal)}</p></Row>}
             {/* The table already says how far along the goal is; the sentence is only for a goal without one. */}
             {hasText(shown.progress) && !shown.targets?.length && <p className="ov-field"><b>Progress:</b> {cite(shown.progress)}</p>}
             {!!shown.targets?.length && <table className="ov-targets">
@@ -462,11 +459,11 @@ export function Overview({ ws, row, track, onTrack, part = 'status', embedded = 
                 </tr>
               ))}</tbody>
             </table>}
-            {(hasText(shown.now) || hasText(shown.recent) || hasText(shown.next)) && <dl className="ov-rows">
+            {(hasText(shown.now) || hasText(shown.recent) || hasText(shown.next)) && <div className="ov-blocks">
               {hasText(shown.now) && <Row label="Now"><p className="ov-field">{cite(shown.now)}</p></Row>}
               {hasText(shown.recent) && <Row label="Done">{list(shown.recent!)}</Row>}
               {hasText(shown.next) && <Row label="Next">{list(shown.next!)}</Row>}
-            </dl>}
+            </div>}
           </div>}
         </section>}
         {/* The pitch: what this is and why it matters, after the status. */}
@@ -480,7 +477,7 @@ export function Overview({ ws, row, track, onTrack, part = 'status', embedded = 
             </div>}
             {/* Each section appears once it has words, so a summary being written
                 builds top to bottom instead of showing empty headings early. */}
-            <dl className="ov-rows">
+            <div className="ov-blocks">
               {hasText(shown.problem) && <Row label="Problem">
                 {shown.problem_type && <span className="ov-tag">{typeNames[shown.problem_type] ?? shown.problem_type}</span>}
                 <p className="ov-field">{cite(shown.problem)}</p>
@@ -490,7 +487,7 @@ export function Overview({ ws, row, track, onTrack, part = 'status', embedded = 
               {hasText(shown.impact) && <Row label="Payoff"><p className="ov-field">{cite(shown.impact)}</p></Row>}
               {hasText(shown.scope_detail) && <Row label="Scope"><p className="ov-field">{shown.scope && <b>{scopeDot[shown.scope] ?? ''} {shown.scope}. </b>}{cite(shown.scope_detail)}</p></Row>}
               {hasText(shown.risk_detail) && <Row label="Risk"><p className="ov-field"><b>{riskDot(shown.risk ?? 0)} {shown.risk ?? 0}/10. </b>{cite(shown.risk_detail)}</p></Row>}
-            </dl>
+            </div>
           </div> : null}
         </section>}
         {part === 'status' && below.length > 0 && <section aria-label="Workstreams under this one"><h2>Across this workstream</h2><div className="ov-tracks">{below.map((t) => <button type="button" key={t.bead_id} onClick={() => onTrack(t.bead_id)}><strong>{plainTitle(t.title)}</strong><span data-tone={toneOf(t.kind)}>{t.text}</span></button>)}</div></section>}
@@ -512,9 +509,9 @@ export function Overview({ ws, row, track, onTrack, part = 'status', embedded = 
   )
 }
 
-// Row is one labelled line of the summary: a short label beside its text.
+// Row is one part of the summary: its heading, then its text, on the page's one left edge.
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
-  return <div className="ov-row"><dt>{label}</dt><dd>{children}</dd></div>
+  return <div className="ov-block"><h3 className="ov-h">{label}</h3>{children}</div>
 }
 
 function decisionPreview(text: string): string {

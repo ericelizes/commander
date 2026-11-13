@@ -294,32 +294,30 @@
 @media (prefers-color-scheme: dark) { .ov-skeleton { --skel: rgba(255,255,255,.07); --skel-hi: rgba(255,255,255,.13); } }
 .ov-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
-/* Structure: no part or section numbers. The goal and its scoreboard lead;
-   Now / Done / Next and the pitch read as labelled rows, label on the left,
-   so the eye scans the labels and stops where it needs to. */
+/* Hierarchy: three sizes, one left edge. A part title (Current status, Pitch)
+   is large, each heading inside it is clearly bigger and bolder than the text,
+   and every paragraph, bullet, table and heading starts at the same x; bullet
+   dots hang in the margin so bulleted text lines up with paragraphs. */
 .ov .ov-sec > .ov-section-title::before, .ov h3.ov-sub::before { content: none; }
-.ov .ov-sec > .ov-section-title { font: 650 13px/1.4 var(--font); letter-spacing: .05em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 14px; }
-.ov .ov-sec > .ov-section-title svg { display: inline; color: var(--ink-3); }
-.ov .ov-divider { margin: 32px 0 28px; }
+.ov .ov-sec > .ov-section-title { display: flex; align-items: center; gap: 10px; font: 700 26px/1.25 var(--serif); letter-spacing: -.012em; color: var(--ink); margin: 0 0 6px; }
+.ov .ov-sec > .ov-section-title svg { display: none; }
+.ov .ov-sec { margin-bottom: 0; }
+.ov .ov-divider { margin: 36px 0 32px; }
 
-.ov .ov-goal { margin: 0 0 14px; }
-.ov .ov-goal .ov-field { font: 500 18px/1.5 var(--serif); color: var(--ink); margin: 2px 0 0; }
-.ov-label { display: block; font: 600 11.5px/1.4 var(--font); letter-spacing: .05em; text-transform: uppercase; color: var(--ink-3); }
+.ov .ov-blocks { margin: 0; }
+.ov .ov-block { margin: 0; }
+.ov .ov-block + .ov-block, .ov .ov-targets + .ov-blocks .ov-block:first-child { margin-top: 26px; }
+.ov h3.ov-h { font: 650 19px/1.35 var(--serif); letter-spacing: -.004em; color: var(--ink); margin: 22px 0 6px; padding: 0; }
+.ov .ov-block:first-child > h3.ov-h { margin-top: 14px; }
+.ov .ov-block .ov-field { margin: 0; font-size: 16px; line-height: 1.65; }
+.ov .ov-block .ov-fields { margin: 0; padding: 0; list-style: none; }
+.ov .ov-block .ov-fields li { position: relative; padding: 0 0 6px; font-size: 16px; line-height: 1.65; }
+.ov .ov-block .ov-fields li:last-child { padding-bottom: 0; }
+.ov .ov-block .ov-fields li::before { content: ''; position: absolute; left: -15px; top: .72em; width: 5px; height: 5px; border-radius: 50%; background: var(--ink-4); }
 
-.ov .ov-targets { margin: 4px 0 22px; }
-.ov .ov-targets caption { caption-side: top; text-align: left; font: 600 13px/1.4 var(--font); color: var(--ink-2); padding: 0 0 6px; }
+.ov .ov-targets { margin: 16px 0 0; }
+.ov .ov-targets caption { caption-side: top; text-align: left; font: 650 15px/1.4 var(--font); color: var(--ink); padding: 0 0 8px; }
+.ov .ov-targets th, .ov .ov-targets td { padding-left: 0; }
 
-.ov .ov-rows { margin: 0; display: grid; }
-.ov .ov-row { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 0 16px; padding: 12px 0; border-top: 1px solid var(--hairline); }
-.ov .ov-row:first-child { border-top: 0; padding-top: 4px; }
-.ov .ov-row dt { font: 600 11.5px/1.4 var(--font); letter-spacing: .05em; text-transform: uppercase; color: var(--ink-3); padding-top: 4px; }
-.ov .ov-row dd { margin: 0; min-width: 0; }
-.ov .ov-row .ov-field { margin: 0; font-size: 15.5px; line-height: 1.6; }
-.ov .ov-row .ov-fields { margin: 0; padding-left: 18px; }
-.ov .ov-row .ov-fields li { font-size: 15.5px; line-height: 1.6; padding: 0 0 4px 2px; }
-.ov .ov-row .ov-fields li:last-child { padding-bottom: 0; }
-.ov .ov-tag { display: inline-block; margin: 0 0 4px; padding: 1px 8px; border-radius: 999px; background: var(--raised-2); font: 500 12px/1.5 var(--font); color: var(--ink-2); }
-@media (max-width: 650px) {
-  .ov .ov-row { grid-template-columns: 1fr; }
-  .ov .ov-row dt { padding: 0 0 2px; }
-}
+.ov .ov-tag { display: inline-block; margin: 0 0 6px; padding: 1px 9px; border-radius: 999px; background: var(--raised-2); font: 500 12.5px/1.6 var(--font); color: var(--ink-2); }
+.ov .ov-todo { padding: 12px 16px; }
