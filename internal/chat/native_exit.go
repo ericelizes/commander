@@ -191,7 +191,15 @@ func (e *Engine) flushNativeExits(ctx context.Context, role string) error {
 			u := receipt.Limit
 			e.opts.Usage.MarkOut(u.Runtime, u.Account, receipt.Role, u.ResetsAt, u.At)
 		}
+		reason := fmt.Sprintf("%s (exit code %d)", receipt.Status, receipt.Code)
+		if receipt.Signal != "" {
+			reason += ", signal " + receipt.Signal
+		}
 		if reports, ok := e.opts.States.(interface {
+			FinishNativeExecutionReceipt(context.Context, string, int64, string, string, string, int64, string) error
+		}); ok {
+			err = reports.FinishNativeExecutionReceipt(ctx, receipt.Role, receipt.RunID, receipt.SessionID, receipt.Status, receipt.Summary, receipt.ObservedAt, reason)
+		} else if reports, ok := e.opts.States.(interface {
 			FinishNativeExecutionReport(context.Context, string, int64, string, string, string) error
 		}); ok {
 			err = reports.FinishNativeExecutionReport(ctx, receipt.Role, receipt.RunID, receipt.SessionID, receipt.Status, receipt.Summary)

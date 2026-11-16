@@ -69,6 +69,7 @@ type Bead struct {
 	UnverifiedSince     int64
 	ExitedWithoutReport bool // its agent stopped and left no result
 	ExitedAt            int64
+	StopReason          string
 	LaunchFailed        bool
 	LaunchError         string
 	ReadyQueued         bool // marked ready, waiting for capacity
@@ -283,6 +284,8 @@ func own(b Bead, ctx Context) Result {
 		return commanderOwed(b, ctx, "answer_question", "answer an agent's question", 0)
 	case b.LaunchFailed:
 		return Result{Actor: Stuck, Reason: "launch_failed", Who: b.ExecRole, Text: "Stuck: the agent could not start" + suffix(b.LaunchError)}
+	case b.StopReason != "" && !b.Executing:
+		return Result{Actor: Stuck, Reason: "agent_stopped", Who: b.ExecRole, Since: b.ExitedAt, Text: b.StopReason}
 	case b.ExitedWithoutReport:
 		return Result{Actor: Stuck, Reason: "exited_without_report", Who: b.ExecRole, Since: b.ExitedAt, Text: "Stuck: the agent stopped without a report"}
 	case b.Executing && b.Cutover:

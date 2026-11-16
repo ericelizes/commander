@@ -24,16 +24,16 @@ func attachExecutionState(ctx context.Context, st *store.Store, rows []Objective
 		bead    string
 	}
 	type view struct {
-		revision, attempts          int64
-		reserved, capable, eligible bool
-		detail, mode                string
+		revision, attempts                 int64
+		reserved, capable, eligible, ready bool
+		detail, mode                       string
 	}
 	states := map[key]view{}
-	result, e := st.DB().QueryContext(ctx, `SELECT b.project_id,b.id,b.plan_revision,b.execution_attempts,b.execution_error,?::text,
+	result, e := st.DB().QueryContext(ctx, `SELECT b.project_id,b.id,b.plan_revision,b.execution_attempts,b.execution_error,b.execution_ready,?::text,
  EXISTS(SELECT 1 FROM execution_slots x WHERE x.project_id=b.project_id AND x.bead_id=b.id AND x.run_id IS NULL AND x.lease_until>EXTRACT(EPOCH FROM clock_timestamp())::bigint),
  EXISTS(SELECT 1 FROM execution_slots x JOIN projects p ON p.id=b.project_id WHERE x.enabled AND jsonb_exists(x.capabilities,p.type) AND b.execution_capabilities <@ x.capabilities),
  commander_execution_allowed(b.project_id,b.id) AND NOT EXISTS(SELECT 1 FROM bead_tasks child WHERE child.project_id=b.project_id AND child.parent_id=b.id AND child.status NOT IN('closed','deferred') AND child.deleted_at IS NULL)
- FROM bead_tasks b JOIN projects p ON p.id=b.project_id WHERE b.execution_ready AND b.deleted_at IS NULL AND p.status='active'`, control.Mode)
+ FROM bead_tasks b JOIN projects p ON p.id=b.project_id WHERE (b.execution_ready OR b.execution_error<>'') AND b.deleted_at IS NULL AND p.status='active'`, control.Mode)
 	if e != nil {
 		return "", e
 	}
@@ -41,7 +41,7 @@ func attachExecutionState(ctx context.Context, st *store.Store, rows []Objective
 	for result.Next() {
 		var k key
 		var v view
-		if e = result.Scan(&k.project, &k.bead, &v.revision, &v.attempts, &v.detail, &v.mode, &v.reserved, &v.capable, &v.eligible); e != nil {
+		if e = result.Scan(&k.project, &k.bead, &v.revision, &v.attempts, &v.detail, &v.ready, &v.mode, &v.reserved, &v.capable, &v.eligible); e != nil {
 			return "", e
 		}
 		states[k] = v
@@ -56,7 +56,7 @@ func attachExecutionState(ctx context.Context, st *store.Store, rows []Objective
 		r.ExecutionEligible = false
 		if v, ok := states[key{r.ProjectID, r.BeadID}]; ok && v.revision == r.PlanRevision {
 			r.ExecutionMode = v.mode
-			r.ExecutionReady = true
+			r.ExecutionReady = v.ready
 			r.ExecutionEligible = v.eligible
 			r.ExecutionReserved = v.reserved
 			r.ExecutionCapable = v.capable

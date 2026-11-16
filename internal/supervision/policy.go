@@ -125,6 +125,14 @@ func Decide(f store.SupervisionFact, now time.Time) Decision {
 		d.Description = "Waiting on a recorded dependency"
 		return d
 	}
+	if actor.Reason == "agent_stopped" {
+		d.Reason, d.Action, d.Target, d.Description = "agent_stopped", "wake", f.PlanningCommander, f.ExecutionError
+		if d.Target == "" {
+			d.Target = f.SupervisorID
+		}
+		d.CheckAfter = 15 * time.Second
+		return d
+	}
 	if f.ExecutionReady {
 		d.CheckAfter = 5 * time.Second
 		owner := f.PlanningCommander

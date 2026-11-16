@@ -93,6 +93,9 @@ func beadOf(f store.SupervisionFact) nextactor.Bead {
 	case f.ExecutorBound && f.PresenceKnown && !result:
 		b.ExitedWithoutReport, b.ExecRole = true, f.AgentID
 	}
+	if strings.HasPrefix(f.ExecutionError, store.AgentStopped) {
+		b.StopReason = f.ExecutionError
+	}
 	if f.ExecutionError != "" && f.ExecutionAttempts >= 5 {
 		b.LaunchFailed, b.LaunchError = true, f.ExecutionError
 	}

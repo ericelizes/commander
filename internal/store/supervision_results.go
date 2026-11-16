@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -36,7 +37,23 @@ func (s *Store) closeSupervisedRunIdentity(ctx context.Context, rid int64, statu
 	})
 }
 
+const AgentStopped = "Agent stopped: "
+
+// FinishNativeExecutionReceipt preserves the host's physical exit time and cause,
+// including when the daemon replays the receipt after an outage.
+func (s *Store) FinishNativeExecutionReceipt(ctx context.Context, role string, rid int64, session, status, report string, observedAt int64, reason string) error {
+	if !s.postgres || rid <= 0 || role == "" || session == "" || observedAt <= 0 || (status != "exited" && status != "native-error" && status != "usage-limited") {
+		return errors.New("invalid native execution exit receipt")
+	}
+	return s.WithTx(ctx, func(q Querier) error {
+		return closeSupervisedRunReceiptTx(ctx, q, rid, status, role, session, truncateSupervision(report, 6000), observedAt, truncateSupervision(reason, 1000))
+	})
+}
+
 func closeSupervisedRunTx(ctx context.Context, q Querier, rid int64, status, expectedRole, expectedSession, nativeReport string) error {
+	return closeSupervisedRunReceiptTx(ctx, q, rid, status, expectedRole, expectedSession, nativeReport, time.Now().Unix(), status)
+}
+func closeSupervisedRunReceiptTx(ctx context.Context, q Querier, rid int64, status, expectedRole, expectedSession, nativeReport string, observedAt int64, reason string) error {
 	usageLimited := status == "usage-limited"
 	if usageLimited {
 		status = "native-error"
@@ -98,7 +115,8 @@ func closeSupervisedRunTx(ctx context.Context, q Querier, rid int64, status, exp
 		if body == "" {
 			body = "No terminal report was returned. Inspect the chat and artifacts before deciding the next action."
 		}
-		if _, e = q.ExecContext(ctx, `INSERT INTO bead_comments(project_id,bead_id,id,author,text,created_at,run_id,fact_kind) VALUES(?,?,?,'cmdrd',?,?,?,?)`, pid, bead, "native-exit:"+fmt.Sprint(rid), history+"\n"+body, time.Now().UTC().Format(time.RFC3339Nano), rid, factKind); e != nil {
+		facts, _ := json.Marshal(map[string]any{"ended_at": observedAt, "reason": reason})
+		if _, e = q.ExecContext(ctx, `INSERT INTO bead_comments(project_id,bead_id,id,author,text,created_at,run_id,fact_kind,fact_value) VALUES(?,?,?,'cmdrd',?,?,?,?,?::jsonb)`, pid, bead, "native-exit:"+fmt.Sprint(rid), history+"\n"+body, time.Unix(observedAt, 0).UTC().Format(time.RFC3339Nano), rid, factKind, string(facts)); e != nil {
 			return e
 		}
 	}
@@ -159,15 +177,18 @@ func closeSupervisedRunTx(ctx context.Context, q Querier, rid int64, status, exp
 			return nil
 		}
 	}
+	// A terminal turn is not a completed task. Only an attributed Final report
+	// hands off a deliverable. Otherwise release custody and escalate with cause;
+	// automatic retries of arbitrary partial side effects are unsafe.
 	if expectedRole != "" && summary == "" {
-		summary = strings.TrimSpace(nativeReport)
-		if summary == "" {
-			summary = "Execution exited without a recorded final report. Inspect its chat and artifacts before deciding the next action."
+		detail := AgentStopped + reason + "; no attributed final report. Commander must inspect the retained work and re-dispatch or repair."
+		if strings.TrimSpace(nativeReport) != "" {
+			detail += " Last note: " + nativeReport
 		}
-		if status == "native-error" {
-			summary = "Execution ended with an error. " + summary
-		}
+		_, e = q.ExecContext(ctx, `UPDATE bead_tasks SET active_run_id=NULL,execution_ready=FALSE,resume_run_id=NULL,resume_plan_revision=0,execution_error=?,responsible_agent_id=commander_supervisor(project_id,id) WHERE project_id=? AND id=? AND active_run_id=?`, truncateSupervision(detail, 1000), pid, bead, rid)
+		return e
 	}
+
 	if summary != "" {
 		var accepted bool
 		return q.QueryRowContext(ctx, `SELECT commander_report_result(?,?,?,?,?)`, pid, bead, rid, session, summary).Scan(&accepted)

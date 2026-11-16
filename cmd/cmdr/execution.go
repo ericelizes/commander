@@ -70,11 +70,7 @@ func runExecution(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 	if args[0] == "status" {
-		var raw []byte
-		e = st.DB().QueryRowContext(ctx, `SELECT jsonb_build_object('project_id',project_id,'bead_id',id,'plan_revision',plan_revision,'planning_commander',commander_planning_owner(project_id,id),'jurisdiction_revision',COALESCE((SELECT revision FROM jurisdiction_projects WHERE project_id=b.project_id),1),'ready',execution_ready,'capabilities',execution_capabilities,'attempts',execution_attempts,'retry_at',execution_due_at,'error',execution_error,'active_run_id',active_run_id) FROM bead_tasks b WHERE project_id=? AND id=? AND deleted_at IS NULL`, *pid, *bead).Scan(&raw)
-		if e == nil {
-			e = json.Unmarshal(raw, &out)
-		}
+		out, e = st.ExecutionStatus(ctx, *pid, *bead)
 	} else {
 		actor := os.Getenv("COMMANDER_ROLE")
 		if actor == "" && os.Getenv("COMMANDER_MANAGER_ROLE") != "" {

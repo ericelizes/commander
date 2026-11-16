@@ -394,6 +394,7 @@ func TestClaimedExecutionUsesRealNativeHostAndRecoversCommittedStartup(t *testin
 					t.Fatal("resuming a code checkpoint reset its committed branch", err)
 				}
 			}
+   if _, e = st.DB().Exec(`INSERT INTO bead_comments(project_id,bead_id,id,author,text,created_at,run_id) VALUES(?,?,'final',?,'Final report: checkpoint work verified',?,?)`,pid,result.TaskBeadID,resumed.AgentName,time.Now().UTC().Format(time.RFC3339Nano),resumed.RunID); e != nil { t.Fatal(e) }
 			resumedStatus, _ := engine.Status(resumed.AgentName)
 			for _, request := range resumedStatus.Pending {
 				if e = engine.Approve(ctx, resumed.AgentName, request.ID, chat.Decision{Behavior: "allow"}); e != nil {

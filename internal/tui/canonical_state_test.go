@@ -113,6 +113,7 @@ func TestPostgresTerminalUsesCurrentFrameAndClearsItOnDatabaseFailure(t *testing
 	if e != nil {
 		t.Fatal(e)
 	}
+ if _, e = st.DB().Exec(`INSERT INTO bead_comments(project_id,bead_id,id,author,text,created_at,run_id) VALUES(?,'root','final','operator-result','Final report: Prepared result',?,?)`,pid,time.Now().UTC().Format(time.RFC3339Nano),rid); e != nil { t.Fatal(e) }
 	if e = st.FinishNativeExecutionReport(ctx, "operator-result", rid, "private-session", "exited", "Prepared result awaiting review"); e != nil {
 		t.Fatal(e)
 	}

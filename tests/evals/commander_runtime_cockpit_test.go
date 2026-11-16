@@ -65,6 +65,7 @@ func verifyRuntimeCockpit(t *testing.T, capacity bool) {
 		if e != nil {
 			t.Fatal(e)
 		}
+  if _, e = st.DB().Exec(`INSERT INTO bead_comments(project_id,bead_id,id,author,text,created_at,run_id) VALUES(?,'task','final','operator-cockpit-finished','Final report: Prepared isolated result',?,?)`,pid,time.Now().UTC().Format(time.RFC3339Nano),rid); e != nil { t.Fatal(e) }
 		if e = st.FinishNativeExecutionReport(ctx, "operator-cockpit-finished", rid, "private-cockpit-session", "exited", "Prepared isolated result; awaiting planning review"); e != nil {
 			t.Fatal(e)
 		}

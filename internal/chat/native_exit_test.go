@@ -21,6 +21,12 @@ type delayedNativeExitSink struct {
 	fail atomic.Bool
 }
 
+func (s *delayedNativeExitSink) FinishNativeExecutionReceipt(ctx context.Context, role string, rid int64, sid, status, summary string, at int64, reason string) error {
+	if s.fail.Load() {
+		return errors.New("simulated unavailable exit commit")
+	}
+	return s.Store.FinishNativeExecutionReceipt(ctx, role, rid, sid, status, summary, at, reason)
+}
 func (s *delayedNativeExitSink) FinishNativeExecution(ctx context.Context, role string, rid int64, sid, status string) error {
 	if s.fail.Load() {
 		return errors.New("simulated unavailable exit commit")
@@ -104,12 +110,11 @@ func TestNativeExecutionOneTurnReleasesCapacityWithoutCompletingWork(t *testing.
 	if e = st.DB().QueryRow(`SELECT status,responsible_agent_id,(SELECT count(*) FROM needs_you) FROM bead_tasks WHERE project_id=? AND id='assigned'`, pid).Scan(&status, &owner, &results); e != nil || status != "open" || owner != "commander" || results != 0 {
 		t.Fatal("turn completion falsely completed work or escalated to user", status, owner, results, e)
 	}
-	var resultRun int64
-	var summary string
-	var ready bool
-	if e = st.DB().QueryRow(`SELECT result_run_id,result_summary,execution_ready FROM bead_tasks WHERE project_id=? AND id='assigned'`, pid).Scan(&resultRun, &summary, &ready); e != nil || resultRun != rid || ready || !strings.Contains(summary, "without a recorded final report") {
-		t.Fatal("missing report lost its review obligation", resultRun, summary, ready, e)
+	statusView, e := st.ExecutionStatus(ctx, pid, "assigned")
+	if e != nil || statusView["active_run_id"] != nil || !strings.HasPrefix(statusView["error"].(string), store.AgentStopped) {
+		t.Fatal("missing report did not release custody for repair", statusView, e)
 	}
+
 	claim, e := st.ClaimNextExecution(ctx, "native-capacity", 1, time.Now())
 	if e != nil || claim == nil || claim.BeadID != "next" {
 		t.Fatal("finished native process held capacity", claim, e)
@@ -412,6 +417,9 @@ func TestNativeTerminalReportSurvivesFailedCommitAndFollowsJurisdiction(t *testi
 	if e != nil {
 		t.Fatal(e)
 	}
+	if _, e = st.DB().Exec(`INSERT INTO bead_comments(project_id,bead_id,id,author,text,created_at,run_id) VALUES(?,'assigned','explicit-final','operator-native-report','Final report: Prepared changes; tests passed. Commander review is required.',?,?)`, pid, time.Now().UTC().Format(time.RFC3339Nano), rid); e != nil {
+		t.Fatal(e)
+	}
 	if e = h.e.Send(ctx, "operator-native-report", "native-report"); e != nil {
 		t.Fatal(e)
 	}
@@ -448,7 +456,7 @@ func TestNativeTerminalReportSurvivesFailedCommitAndFollowsJurisdiction(t *testi
 	var summary, owner, status string
 	var ready bool
 	var human int
-	if e = st.DB().QueryRow(`SELECT result_run_id,result_summary,responsible_agent_id,status,execution_ready,(SELECT COUNT(*) FROM needs_you) FROM bead_tasks WHERE project_id=? AND id='assigned'`, pid).Scan(&resultRun, &summary, &owner, &status, &ready, &human); e != nil || resultRun != rid || summary != receipt.Summary || owner != "commander-urgent" || status != "open" || ready || human != 0 {
+	if e = st.DB().QueryRow(`SELECT result_run_id,result_summary,responsible_agent_id,status,execution_ready,(SELECT COUNT(*) FROM needs_you) FROM bead_tasks WHERE project_id=? AND id='assigned'`, pid).Scan(&resultRun, &summary, &owner, &status, &ready, &human); e != nil || resultRun != rid || summary != "Final report: "+receipt.Summary || owner != "commander-urgent" || status != "open" || ready || human != 0 {
 		t.Fatal("report lost custody or invented completion/permission", resultRun, summary, owner, status, ready, human, e)
 	}
 	var history, author string
@@ -463,7 +471,7 @@ func TestNativeTerminalReportSurvivesFailedCommitAndFollowsJurisdiction(t *testi
 	if e = st.FinishNativeExecutionReport(ctx, "operator-native-report", rid, sid, "native-error", "late conflicting outcome"); e != nil {
 		t.Fatal(e)
 	}
-	if e = st.DB().QueryRow(`SELECT result_summary FROM bead_tasks WHERE project_id=? AND id='assigned'`, pid).Scan(&summary); e != nil || summary != receipt.Summary {
+	if e = st.DB().QueryRow(`SELECT result_summary FROM bead_tasks WHERE project_id=? AND id='assigned'`, pid).Scan(&summary); e != nil || summary != "Final report: "+receipt.Summary {
 		t.Fatal("replayed exit replaced terminal report", summary, e)
 	}
 	j, e = st.Jurisdiction(ctx, pid, "assigned")

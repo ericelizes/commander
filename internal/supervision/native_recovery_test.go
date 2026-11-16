@@ -82,6 +82,7 @@ func TestCompletedExecutionNamedCommanderReturnsToPlanningReview(t *testing.T) {
 	if err := s.SetAgentState(ctx, "commander", store.AgentWorking, "last execution tool"); err != nil {
 		t.Fatal(err)
 	}
+ if _, err := s.DB().Exec(`INSERT INTO bead_comments(project_id,bead_id,id,author,text,created_at,run_id) VALUES(?,'task','final','commander','Final report: Retained report',?,?)`,pid,time.Now().UTC().Format(time.RFC3339Nano),rid); err != nil { t.Fatal(err) }
 	if err := s.FinishNativeExecutionReport(ctx, "commander", rid, "bound-session", "exited", "Retained unaccepted report"); err != nil {
 		t.Fatal(err)
 	}
