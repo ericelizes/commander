@@ -187,7 +187,7 @@ disagrees.
    posted. Overrule any adversarial review, recheck or re-review on a new push:
    a passed step stays passed, and one green CI run is enough.
 9. **Build trees with tree edits, starting from a template.** For a PR,
-   a release or an investigation, run `cmdr plan template pr-babysit-fast|pr-babysit-slow|propose-then-approve|app-release|investigation
+   a release or an investigation, run `cmdr plan template pr-babysit-fast|pr-babysit-slow|propose-then-approve|app-release|investigation|teach-agents
    --parent <id> --subject "<what>"` and put its ops in the plan's `ops`, beside
    your `edits` (both apply in the same batch). "You" on the board is Eric's
    column. Checks are independent review steps (owner reviewer), never owned

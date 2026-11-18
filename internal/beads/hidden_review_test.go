@@ -89,3 +89,27 @@ func TestPRTemplatesHaveNoConfirmDoneAndBothVariants(t *testing.T) {
 		t.Fatal("PR variants wrong")
 	}
 }
+
+func TestTeachAgentsTemplateShape(t *testing.T) {
+	steps := planTemplates["teach-agents"]("X", false)
+	want := []string{"ux", "bench", "guide", "run", "check", "live", "soak", "check2", "eric"}
+	if len(steps) != len(want) {
+		t.Fatalf("got %d steps", len(steps))
+	}
+	for i, s := range steps {
+		if s.ref != want[i] {
+			t.Errorf("step %d is %s, want %s", i, s.ref, want[i])
+		}
+	}
+	if !contains(steps[8].labels, "approver:user") || !contains(steps[4].labels, "review") || !contains(steps[7].labels, "review") {
+		t.Fatal("gate or review labels wrong")
+	}
+	for _, s := range steps[:8] {
+		if contains(s.labels, "approver:user") {
+			t.Errorf("%s is a human step; only eric is", s.ref)
+		}
+	}
+	if _, err := PlanTemplateOps("teach-agents", "P", "X", false); err != nil {
+		t.Fatal(err)
+	}
+}

@@ -32,6 +32,7 @@ var PlanTemplateTitles = map[string]string{
 	"propose-then-approve": "Propose, approve, then build",
 	"investigation":        "Investigate and decide a fix",
 	"app-release":          "Release an app to prod",
+	"teach-agents":         "Teach agents a topic with a Learn Forge guide",
 }
 
 var planTemplates = map[string]func(subject string, ownerGo bool) []planStep{
@@ -77,6 +78,20 @@ var planTemplates = map[string]func(subject string, ownerGo bool) []planStep{
 			{ref: "check2", title: "Review: the " + s + " PR (green, Devin-clean, matches the approved proposal)", labels: "kind:objective,lane:agents,review", after: []string{"green"}},
 			{ref: "merge", title: "Greenlight: merge the " + s + " PR", labels: "kind:objective,gate,approver:user", after: []string{"check2"}},
 			{ref: "live", title: s + " live: wait on the deploy (--waiting deploy:<merge sha>, not a clock) and confirm it works", labels: "kind:objective,lane:agents", after: []string{"merge"}},
+		}
+	},
+	"teach-agents": func(s string, _ bool) []planStep {
+		const l = "kind:objective,lane:agents"
+		return []planStep{
+			{ref: "ux", title: "Teach agents " + s + ": align on the experience (what a user asks, what the agent should do and say)", labels: l},
+			{ref: "bench", title: "Teach agents " + s + ": ForgeBench knowledge-only questions that can only be answered by using the Learn Forge guide", labels: l, after: []string{"ux"}},
+			{ref: "guide", title: "Teach agents " + s + ": write the Learn Forge guide (a non-technical part for humans, an agent part) and a general context-control nudge with nothing hardcoded", labels: l, after: []string{"bench"}},
+			{ref: "run", title: "Teach agents " + s + ": run the bench and iterate on the guide and nudge until the cases pass", labels: l, after: []string{"guide"}},
+			{ref: "check", title: "Review: the " + s + " guide, nudge and bench results (cases pass, guide is used, nothing hardcoded)", labels: l + ",review", after: []string{"run"}},
+			{ref: "live", title: "Teach agents " + s + ": make the guide and nudge live", labels: l, after: []string{"check"}},
+			{ref: "soak", title: "Teach agents " + s + ": 48 h soak, watching real experiences", labels: l, after: []string{"live"}},
+			{ref: "check2", title: "Review: the " + s + " soak (what real agents did, what to fix)", labels: l + ",review", after: []string{"soak"}},
+			{ref: "eric", title: "Eric: accept the " + s + " teaching (the only human step)", labels: "kind:objective,gate,approver:user", after: []string{"check2"}},
 		}
 	},
 	"investigation": func(s string, _ bool) []planStep {

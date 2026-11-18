@@ -244,7 +244,7 @@ func runPlanCheck(args []string, stdout, stderr io.Writer) int {
 }
 
 // runPlanTemplate prints a template's plan-apply operations under a parent:
-// the recurring shapes (pr-babysit, app-release, investigation) built so the
+// the recurring shapes (pr-babysit, app-release, investigation, teach-agents) built so the
 // shape guard accepts them. Merge the ops into a plan apply request.
 func runPlanTemplate(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
