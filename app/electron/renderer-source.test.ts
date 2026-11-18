@@ -46,11 +46,9 @@ describe('watchRendererSource', () => {
     await w.tick()
     expect(loads).toHaveLength(2) // still live: no reload
     up = false
-    for (let i = 0; i < 3; i++) await w.tick()
-    expect(w.source()).toBe('live') // a few missed probes (a restart) keep the live page
-    await w.tick()
-    expect(loads.at(-1)).toBe('file:/dist/index.html') // the fourth in a row: it is gone
-    expect(w.source()).toBe('bundled')
+    for (let i = 0; i < 10; i++) await w.tick()
+    expect(w.source()).toBe('live') // slow or missed probes never reload a live page
+    expect(loads).toHaveLength(2)
   })
 
   it('falls back to the bundle when the live page fails to load', async () => {
@@ -85,9 +83,6 @@ describe('watchRendererSource', () => {
     up = true
     await w.tick()
     expect(loads.at(-1)).toBe(DEV)
-    up = false
-    for (let i = 0; i < 4; i++) await w.tick()
-    expect(loads.at(-1)).toBe('data:text/html,wait')
     expect(loads).not.toContain('file:/b')
   })
 

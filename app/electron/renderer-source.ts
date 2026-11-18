@@ -23,7 +23,7 @@ export function devRendererURL(env: NodeJS.ProcessEnv = process.env): string | u
 }
 
 /** devServerUp: the URL answers 200 with a Vite page (it loads /@vite/client), not just any server on the port. */
-export async function devServerUp(url: string, fetchImpl: typeof fetch = fetch, timeoutMs = 2500): Promise<boolean> {
+export async function devServerUp(url: string, fetchImpl: typeof fetch = fetch, timeoutMs = 5000): Promise<boolean> {
   try {
     const res = await fetchImpl(url, { signal: AbortSignal.timeout(timeoutMs) })
     if (res.status !== 200) return false
@@ -61,7 +61,6 @@ export interface SourceWatch {
 
 const ERR_ABORTED = -3 // a load replaced by the next one: not a failure
 
-const MISSES_TO_FALL_BACK = 4
 
 export function watchRendererSource(win: SourceWindow, opts: SourceOptions): SourceWatch {
   const probe = opts.probe ?? ((u: string) => devServerUp(u))
@@ -90,17 +89,16 @@ export function watchRendererSource(win: SourceWindow, opts: SourceOptions): Sou
   }
   const fallback: RendererSource = opts.waiting ? 'connecting' : 'bundled'
 
-  // One missed probe is not the dev server gone (a restart, a busy moment):
-  // the live page stays until MISSES_TO_FALL_BACK in a row.
-  let misses = 0
+  // Once the live page is up, slow or missed probes never reload it (a slow
+  // tunnel answered in 1-5 s and the window flapped every ~30 s): only a real
+  // load failure of the live page (did-fail-load below) takes it down.
   const tick = async () => {
-    if (busy || stopped) return
+    if (busy || stopped || current === 'live') return
     busy = true
     try {
       const up = await probe(opts.devUrl)
-      misses = up ? 0 : misses + 1
       if (up) await show('live')
-      else if (current !== 'live' || misses >= MISSES_TO_FALL_BACK) await show(fallback)
+      else await show(fallback)
     } finally {
       busy = false
     }
