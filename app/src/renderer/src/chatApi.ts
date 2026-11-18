@@ -12,6 +12,7 @@ import { useStore } from './store'
 export interface ChatStatus {
   role: string
   running: boolean
+  session_id?: string // current resolved session, including before its first native start
   state: string
   detail?: string | null
   model?: string | null

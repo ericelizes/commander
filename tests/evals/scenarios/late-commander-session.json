@@ -1,0 +1,10 @@
+{
+  "role": "commander",
+  "missing_error": "no Claude commander session yet",
+  "message": "Please check the sample workspace",
+  "cases": [
+    { "owner": "", "start": true },
+    { "owner": "terminal", "start": false },
+    { "owner": "headless", "start": false }
+  ]
+}

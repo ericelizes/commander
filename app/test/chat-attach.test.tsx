@@ -160,6 +160,58 @@ describe('native chat attach', () => {
     expect(posts()).toEqual([])
   })
 
+  it('retries once when a late Commander session appears, then sends directly', async () => {
+    const scenario = JSON.parse(readFileSync(join(__dirname, '../../tests/evals/scenarios/late-commander-session.json'), 'utf8'))
+    sessions = [status(scenario.role, false)]
+    postReply = () => [500, { error: scenario.missing_error }]
+    render(<ChatSlot />)
+    expect(await screen.findByRole('alert')).toHaveTextContent(scenario.missing_error)
+    expect(posts()).toHaveLength(1)
+    await act(async () => { await refreshChats(); await refreshChats() })
+    expect(posts()).toHaveLength(1)
+
+    sessions = [status(scenario.role, false, { session_id: 'sample-session' })]
+    postReply = () => {
+      sessions = [status(scenario.role, true, { session_id: 'sample-session' })]
+      return [200, { ok: true }]
+    }
+    await act(async () => { await refreshChats() })
+    await screen.findByRole('textbox')
+    expect(posts().map((c) => c.url.split('/').pop())).toEqual(['start', 'start'])
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.queryByText(/terminal session/)).toBeNull()
+    const user = userEvent.setup()
+    await user.type(screen.getByRole('textbox'), scenario.message)
+    await user.keyboard('{Enter}')
+    await waitFor(() => expect(posts().some((c) => c.url.endsWith('/send'))).toBe(true))
+    expect(posts().filter((c) => c.url.endsWith('/start'))).toHaveLength(2)
+  })
+
+  it('keeps a failed late-session start bounded across repeated polls', async () => {
+    sessions = [status('commander', false)]
+    postReply = () => [500, { error: 'start unavailable' }]
+    render(<ChatSlot />)
+    await screen.findByRole('alert')
+    sessions = [status('commander', false, { session_id: 'sample-session' })]
+    await act(async () => { await refreshChats() })
+    await waitFor(() => expect(posts()).toHaveLength(2))
+    await screen.findByRole('alert')
+    await act(async () => { await refreshChats(); await refreshChats() })
+    expect(posts()).toHaveLength(2)
+  })
+
+  it.each(['terminal', 'headless'])('preserves %s ownership when a late session appears', async (owner) => {
+    sessions = [status('commander', false)]
+    postReply = () => [500, { error: 'no session yet' }]
+    render(<ChatSlot />)
+    await screen.findByRole('alert')
+    sessions = [status('commander', false, { session_id: 'held-session', owned_by: owner, owner_pid: 77 })]
+    await act(async () => { await refreshChats() })
+    expect(await screen.findByText(owner === 'terminal' ? /terminal session/ : /headless process/)).toBeInTheDocument()
+    expect(posts()).toHaveLength(1)
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
   it('a running chat has no pop-out to terminal in its menu', async () => {
     const user = userEvent.setup()
     openManager('example-app-t03')
