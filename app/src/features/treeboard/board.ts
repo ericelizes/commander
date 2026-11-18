@@ -60,10 +60,8 @@ const SHELL = `
 <div class="page">
   <header class="appbar">
     <div class="ab-side">
-      <span data-tb="ring"></span>
-      <div class="ab-id"><div class="ab-name">Workstreams</div><div class="ab-sub" data-tb="sub"></div></div>
-      <button type="button" class="needbtn" data-tb="need" aria-pressed="false" title="Show only what needs you"><i></i><span data-tb="needN"></span> need you</button>
       <div class="tb-linear" data-tb="linear"></div>
+      <button type="button" class="needbtn" data-tb="need" aria-pressed="false" title="Show only what needs you"><i></i><span><span data-tb="needN"></span> need you</span></button>
     </div>
     <div class="ab-main" role="search">
       <label class="search"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M11 11l3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><input data-tb="q" type="search" placeholder="Search workstreams and steps" autocomplete="off" spellcheck="false"><kbd>/</kbd></label>
@@ -267,15 +265,15 @@ export function mountBoard(root: HTMLElement, opts: BoardOptions): Board {
     view: 'graph' | 'flows' | 'rules' = 'graph',
     chatOpen = false
 
-  function header() {
-    $('ring').innerHTML = progHtml(tree.total ? (100 * tree.done) / tree.total : 0)
+  // The tree's title cell also says how many workstreams are done and how fresh the board is.
+  function treeHead() {
     const at = tree.asof ? new Date(tree.asof * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : ''
-    $('sub').textContent = `${tree.done} of ${tree.total} done` + (at ? ` · as of ${at}` : '')
-    $('needN').textContent = String(tree.needs_you)
+    const fresh = at ? `<span class="hd-at"> · as of ${esc(at)}</span>` : ''
+    return `<span class="hd-t">Workstreams</span><span class="hd-meta" data-tb="sub">${tree.done} of ${tree.total} done${fresh}</span>`
   }
 
   function render() {
-    header()
+    $('needN').textContent = String(tree.needs_you)
     const frag = document.createDocumentFragment()
     canvasEl.innerHTML = ''
     els = {}
@@ -317,7 +315,7 @@ export function mountBoard(root: HTMLElement, opts: BoardOptions): Board {
       return d
     }
     add('band', `1 / ${lastRow}`, nowCol)
-    add('tree hd', 1, 1, 'Workstreams')
+    add('tree hd', 1, 1, treeHead())
     for (let c = 0; c <= R; c++) add('hd' + (c ? '' : ' now'), 1, nowCol + c, c === 0 ? 'Now' : c === 1 ? 'Next' : c + ' steps out')
     rowsShown.forEach((row, i) => {
       const gr = i + 2,

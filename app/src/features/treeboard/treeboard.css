@@ -31,98 +31,102 @@
   --treew: 400px;
   --colw: 248px;
   --noww: 320px;
-  --gut: 22px;
-  --step: 28px;
-  --padx: 14px;
+  /* The board's scale. Spacing: 4 8 12 16 24. Type: 11 labels, 12 secondary, 13 body, 15 titles. One radius, one muted colour (--muted). */
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px;
+  --t-xs: 11px; --t-sm: 12px; --t-md: 13px; --t-lg: 15px;
+  --r: 8px; --r-sm: 4px;
+  --ctl: 32px;
+  --gut: var(--s5);
+  --step: var(--s5);
+  --padx: var(--s4);
 }
-@media (max-width: 640px) { .tb .th { flex-direction: column; gap: 1px }  .tb { --treew: 136px; --colw: 180px; --noww: 188px; --gut: 10px; --step: 14px; --padx: 10px } }
+@media (max-width: 640px) { .tb .th { flex-direction: column; gap: 1px }  .tb { --treew: 136px; --colw: 180px; --noww: 188px; --gut: 8px; --step: 12px; --padx: 8px } }
 
 .tb *, .tb *::before, .tb *::after { box-sizing: border-box }
-.tb { background: var(--bg); color: var(--ink); font: 14px/1.4 var(--body); padding-block: 0; margin: 0;
+.tb { background: var(--bg); color: var(--ink); font: var(--t-md)/1.4 var(--body); padding-block: 0; margin: 0;
   padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)) }
 @media (min-width: 1180px) { .tb.sheet-open { padding-right: 436px } }
 .tb .page { height: 100vh; height: 100dvh; display: flex; flex-direction: column; padding-block: 12px }
 /* One header bar, split at the tree column's width: the left block is the sidebar header, the right block is the main pane header. It never scrolls; the table scrolls under it. */
-.tb .appbar { flex: none; display: flex; align-items: stretch; background: var(--surface); border: 1px solid var(--line); border-radius: 10px 10px 0 0; position: relative; z-index: 15 }
-.tb .ab-side { flex: none; width: var(--treew); min-width: 0; display: flex; align-items: center; gap: 10px; padding: 10px 12px 10px 22px; border-right: 1px solid var(--line) }
-.tb .ab-side .pr .pct { display: none } .tb .ab-side .pr svg { width: 26px; height: 26px }
-.tb .ab-id { flex: 1; min-width: 0 } .tb .ab-name { font: 700 16px/1.2 var(--display) } .tb .ab-sub { font-size: 11.5px; line-height: 1.3; color: var(--muted); margin-top: 2px; font-variant-numeric: tabular-nums }
-.tb .ab-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 8px 12px 8px var(--padx) }
-.tb .samplechip { flex: none; font: 600 10.5px/1 var(--body); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); border: 1px dashed var(--muted); border-radius: 999px; padding: 5px 9px; white-space: nowrap; cursor: help }
+.tb .appbar { flex: none; display: flex; align-items: stretch; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r) var(--r) 0 0; position: relative; z-index: 15 }
+/* The sidebar header: the Linear sprint (bar and counts, one unit) with the need-you pill on its first line. Both sit on one grid, so the pill never crowds the sprint. */
+.tb .ab-side { flex: none; width: var(--treew); min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: 24px auto auto; align-content: center; align-items: center; gap: var(--s2) var(--s3); padding: 0 var(--s4) 0 var(--gut); border-right: 1px solid var(--line) }
+.tb .ab-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: var(--s3); padding: 0 var(--s4) 0 var(--padx) }
+.tb .samplechip { flex: none; font: 600 var(--t-xs)/1 var(--body); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); border: 1px dashed var(--muted); border-radius: 999px; padding: 4px 8px; white-space: nowrap; cursor: help }
 @media (max-width: 1100px) { .tb .samplechip { display: none } }
-@media (max-width: 640px) { .tb .appbar { flex-direction: column } .tb .ab-side { width: auto; border-right: 0; border-bottom: 1px solid var(--line); padding: 8px 10px }
-  .tb .ab-main { flex-wrap: wrap; padding: 8px 10px; gap: 8px } .tb .ab-main .search { flex: 1 1 150px; max-width: none } .tb .ab-main .search kbd { display: none }
-  .tb .ab-main .tabs { order: 3; width: 100%; margin: 0; align-self: auto; overflow-x: auto } .tb .ab-main .tabs a { padding: 6px 12px 8px 0 } .tb .ab-main .fcount:empty { display: none } }
+@media (max-width: 640px) { .tb .appbar { flex-direction: column } .tb .ab-side { width: auto; border-right: 0; border-bottom: 1px solid var(--line); padding: 8px }
+  .tb .ab-main { flex-wrap: wrap; padding: 8px; gap: 8px } .tb .ab-main .search { flex: 1 1 150px; max-width: none } .tb .ab-main .search kbd { display: none }
+  .tb .ab-main .tabs { order: 3; width: 100%; margin: 0; align-self: auto; overflow-x: auto } .tb .ab-main .tabs a { padding: 8px 12px 8px 0 } .tb .ab-main .fcount:empty { display: none } }
 .tb .page > * { min-width: 0; max-width: 100% }
 .tb .sheet[hidden] { display: none }
 .tb .view { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative }
-.tb .tabs { display: flex; gap: 2px; margin-left: auto; align-self: stretch; margin-block: -8px }
-.tb .tabs a { display: flex; align-items: center; padding: 0 12px; font: 600 14px/1 var(--display); color: var(--muted); text-decoration: none; border-bottom: 2.5px solid transparent; white-space: nowrap }
+.tb .tabs { display: flex; gap: var(--s1); margin-left: auto; align-self: stretch }
+.tb .tabs a { display: flex; align-items: center; padding: 0 12px; font: 600 var(--t-md)/1 var(--display); color: var(--muted); text-decoration: none; border-bottom: 2px solid transparent; white-space: nowrap }
 .tb .tabs a[aria-current="page"] { color: var(--ink); border-bottom-color: var(--ink) }
 /* Rules and the Commander map replace only the main pane: they sit over the table, to the right of the tree, which stays in place and usable */
-.tb .rules { position: absolute; z-index: 9; top: 0; bottom: 1px; right: 1px; left: calc(var(--treew) + 1px); overflow: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 22px; font-size: 14px; line-height: 1.55; padding: 22px; background: var(--surface); border-radius: 0 0 9px 0 }
-@media (max-width: 640px) { .tb .rules { padding: 16px 12px } .tb .rules table { font-size: 12px } }
+.tb .rules { position: absolute; z-index: 9; top: 0; bottom: 1px; right: 1px; left: calc(var(--treew) + 1px); overflow: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 24px; font-size: var(--t-md); line-height: 1.55; padding: var(--s5); background: var(--surface); border-radius: 0 0 var(--r) 0 }
+@media (max-width: 640px) { .tb .rules { padding: 16px 12px } .tb .rules table { font-size: var(--t-sm) } }
 .tb .rules > * { max-width: 780px; flex: none }
 .tb .rules p { margin: 0 } .tb .rules > div { display: flex; flex-direction: column; gap: 8px }
-.tb .rules table { border-collapse: collapse; width: 100%; font-size: 13px }
-.tb .rules th, .tb .rules td { text-align: left; vertical-align: top; padding: 7px 10px 7px 0; border-bottom: 1px solid var(--line) }
-.tb .rules th { font: 600 11px/1.2 var(--body); letter-spacing: .06em; text-transform: uppercase; color: var(--muted) }
-.tb .rules ol { margin: 0; padding-left: 28px; display: flex; flex-direction: column; gap: 4px; font-variant-numeric: tabular-nums }
-.tb .sw { width: 16px; height: 16px; border-radius: 4px; display: inline-block; vertical-align: -3px }
+.tb .rules table { border-collapse: collapse; width: 100%; font-size: var(--t-md) }
+.tb .rules th, .tb .rules td { text-align: left; vertical-align: top; padding: 8px 12px 8px 0; border-bottom: 1px solid var(--line) }
+.tb .rules th { font: 600 var(--t-xs)/1.2 var(--body); letter-spacing: .06em; text-transform: uppercase; color: var(--muted) }
+.tb .rules ol { margin: 0; padding-left: 24px; display: flex; flex-direction: column; gap: 4px; font-variant-numeric: tabular-nums }
+.tb .sw { width: 16px; height: 16px; border-radius: var(--r-sm); display: inline-block; vertical-align: -3px }
 .tb .sw.red { background: var(--you-bg); box-shadow: inset 0 0 0 2px var(--you) } .tb .sw.green { background: var(--agent-bg); box-shadow: inset 0 0 0 2px var(--agent) }
 .tb .sw.purple { background: var(--review-bg); box-shadow: inset 0 0 0 2px var(--review) } .tb .sw.yellow { background: var(--person-bg); box-shadow: inset 0 0 0 2px var(--person) }
 .tb button { font: inherit; color: inherit }
 .tb :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
 
-.tb .eyebrow { font: 600 11px/1 var(--body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted) }
-.tb h1 { font: 700 24px/1.2 var(--display); margin: 6px 0 0; text-wrap: balance }
-.tb h2 { font: 600 15px/1.2 var(--display); margin: 0 }
-.tb .asof { color: var(--muted); font-size: 12px; margin-top: 6px }
+.tb .eyebrow { font: 600 var(--t-xs)/1 var(--body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted) }
+.tb h1 { font: 700 var(--t-lg)/1.2 var(--display); margin: 0; text-wrap: balance }
+.tb h2 { font: 600 var(--t-lg)/1.2 var(--display); margin: 0 }
 
 .tb .own i, .tb .legend i { width: 8px; height: 8px; border-radius: 50%; flex: none; background: currentColor }
 
-.tb .queue { display: flex; flex-direction: column; gap: 10px }
+.tb .queue { display: flex; flex-direction: column; gap: 8px }
 .tb .queue h2 span { color: var(--you-ink) }
-.tb .queue ol { list-style: none; margin: 0; padding: 2px 0 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr)); gap: 10px }
+.tb .queue ol { list-style: none; margin: 0; padding: 2px 0 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr)); gap: 8px }
 .tb .queue li { display: flex; min-width: 0 }
 
-.tb .controls { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: center; color: var(--muted) }
-.tb .controls label { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer }
+.tb .controls { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; color: var(--muted) }
+.tb .controls label { display: inline-flex; align-items: center; gap: 8px; font-size: var(--t-sm); cursor: pointer }
 .tb .controls input { accent-color: var(--accent); width: 15px; height: 15px; margin: 0 }
 .tb .fwrap { position: relative }
-.tb .fbtn { display: inline-flex; align-items: center; gap: 7px; height: 38px; padding: 0 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); font: 500 13.5px/1 var(--body); cursor: pointer }
+.tb .fbtn { display: inline-flex; align-items: center; gap: 8px; height: var(--ctl); padding: 0 var(--s3); border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); color: var(--ink); font: 500 var(--t-md)/1 var(--body); cursor: pointer }
 .tb .fbtn:hover, .tb .fbtn[aria-expanded=true] { border-color: var(--muted) }
 .tb .fbtn.on { border-color: var(--accent); color: var(--accent) }
 .tb .fbtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
-.tb .fbadge { min-width: 18px; height: 18px; border-radius: 9px; background: var(--accent); color: #fff; font: 600 11px/18px var(--body); text-align: center; padding: 0 5px }
-.tb .fmenu { position: absolute; top: calc(100% + 6px); left: 0; z-index: 20; width: 260px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); padding: 8px; display: grid; gap: 4px }
-.tb .fsec { display: grid; gap: 2px; padding: 4px 0 }
+.tb .fbadge { min-width: 18px; height: 18px; border-radius: 999px; background: var(--accent); color: #fff; font: 600 var(--t-xs)/18px var(--body); text-align: center; padding: 0 4px }
+.tb .fmenu { position: absolute; top: calc(100% + 4px); left: 0; z-index: 20; width: 260px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow); padding: 8px; display: grid; gap: 4px }
+.tb .fsec { display: grid; gap: 4px; padding: 4px 0 }
 .tb .fsec + .fsec { border-top: 1px solid var(--line); padding-top: 8px }
-.tb .fh { font: 600 11px/1 var(--body); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 4px 8px 6px }
-.tb .fopt { display: flex; align-items: center; gap: 9px; padding: 7px 8px; border-radius: 7px; font: 400 13.5px/1.2 var(--body); color: var(--ink); cursor: pointer }
+.tb .fh { font: 600 var(--t-xs)/1 var(--body); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 4px 8px }
+.tb .fopt { display: flex; align-items: center; gap: 8px; padding: 8px; border-radius: var(--r); font: 400 var(--t-md)/1.2 var(--body); color: var(--ink); cursor: pointer }
 .tb .fopt:hover { background: color-mix(in srgb, var(--band) 70%, var(--surface)) }
 .tb .fopt input { accent-color: var(--accent); width: 15px; height: 15px; margin: 0 }
 .tb .fopt i { width: 8px; height: 8px; border-radius: 50%; flex: none }
 .tb .d-you { background: var(--you) } .tb .d-agent { background: var(--agent) } .tb .d-review { background: var(--review) } .tb .d-person { background: var(--person) }
-.tb .seg { display: flex; margin: 0 4px 2px; padding: 3px; border-radius: 9px; background: var(--band) }
-.tb .seg button { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 30px; border: 0; border-radius: 7px; background: none; color: var(--muted); font: 500 13px/1 var(--body); cursor: pointer }
+.tb .seg { display: flex; margin: 0 4px 4px; padding: 4px; border-radius: var(--r); background: var(--band) }
+.tb .seg button { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 28px; border: 0; border-radius: var(--r-sm); background: none; color: var(--muted); font: 500 var(--t-md)/1 var(--body); cursor: pointer }
 .tb .seg button[aria-checked=true] { background: var(--surface); color: var(--ink); font-weight: 600; box-shadow: 0 1px 2px rgba(22, 26, 34, .15) }
 .tb .seg i { width: 8px; height: 8px; border-radius: 50%; background: var(--you) }
 .tb .ffoot { display: flex; justify-content: flex-end }
 .tb .ffoot .fclear:not([hidden]) { display: inline-block }
-.tb .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 4px 0 0 }
-.tb .needbtn { flex: none; margin-left: auto; display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 12px; white-space: nowrap; border-radius: 10px; border: 1px solid var(--you); background: var(--you-bg); color: var(--you-ink); font: 600 13.5px/1 var(--body); cursor: pointer }
+.tb .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px }
+.tb .needbtn { grid-column: 2; grid-row: 1; z-index: 1; display: inline-flex; align-items: center; gap: var(--s2); height: 24px; padding: 0 var(--s3) 0 var(--s2); white-space: nowrap; border-radius: 999px; border: 1px solid color-mix(in srgb, var(--you) 45%, var(--you-bg)); background: var(--you-bg); color: var(--you-ink); font: 600 var(--t-sm)/1 var(--body); font-variant-numeric: tabular-nums; cursor: pointer; transition: border-color .15s, background .15s }
+.tb .needbtn:hover { border-color: var(--you) }
 .tb .needbtn i { width: 8px; height: 8px; border-radius: 50%; background: var(--you) }
 .tb .needbtn[aria-pressed=true] { background: var(--you); color: #fff; border-color: var(--you) } .tb .needbtn[aria-pressed=true] i { background: #fff }
-.tb .search { flex: 1 1 300px; max-width: 440px; display: flex; align-items: center; gap: 8px; padding: 0 10px; height: 38px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--muted); cursor: text; transition: border-color .15s, box-shadow .15s }
+.tb .search { flex: 1 1 300px; max-width: 440px; display: flex; align-items: center; gap: var(--s2); padding: 0 var(--s2); height: var(--ctl); border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); color: var(--muted); cursor: text; transition: border-color .15s, box-shadow .15s }
 .tb .search:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent) }
-.tb .search input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--ink); font: 400 14px/1 var(--body) }
+.tb .search input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--ink); font: 400 var(--t-md)/1 var(--body) }
 .tb .search input::placeholder { color: var(--muted) }
-.tb .search kbd { font: 500 11px/1 var(--body); color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 3px 6px }
+.tb .search kbd { font: 500 var(--t-xs)/1 var(--body); color: var(--muted); border: 1px solid var(--line); border-radius: var(--r-sm); padding: 2px 4px }
 .tb .search:focus-within kbd { display: none }
-.tb .fgroup { display: flex; flex-wrap: wrap; align-items: center; gap: 6px }
-.tb .flabel { font: 600 11px/1 var(--body); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-right: 2px }
-.tb .fchip { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: 500 12.5px/1 var(--body); cursor: pointer; transition: background .15s, border-color .15s }
+.tb .fgroup { display: flex; flex-wrap: wrap; align-items: center; gap: 8px }
+.tb .flabel { font: 600 var(--t-xs)/1 var(--body); letter-spacing: .06em; text-transform: uppercase; color: var(--muted) }
+.tb .fchip { display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: 500 var(--t-sm)/1 var(--body); cursor: pointer; transition: background .15s, border-color .15s }
 .tb .fchip:hover { border-color: var(--muted) }
 .tb .fchip:focus-visible, .tb .fclear:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
 .tb .fchip i { width: 8px; height: 8px; border-radius: 50% }
@@ -132,16 +136,16 @@
 .tb .f-review[aria-pressed=true] { background: var(--review-bg); border-color: var(--review); color: var(--review-ink) }
 .tb .f-person[aria-pressed=true] { background: var(--person-bg); border-color: var(--person); color: var(--person-ink) }
 .tb .f-done[aria-pressed=true] { background: var(--ink); border-color: var(--ink); color: var(--surface) }
-.tb .fclear { border: 0; background: none; color: var(--accent); font: 600 12.5px/1 var(--body); cursor: pointer; padding: 6px 4px }
-.tb .fcount { font: 500 12.5px/1 var(--body); color: var(--muted); font-variant-numeric: tabular-nums }
+.tb .fclear { border: 0; background: none; color: var(--accent); font: 600 var(--t-sm)/1 var(--body); cursor: pointer; padding: 4px }
+.tb .fcount { font: 500 var(--t-sm)/1 var(--body); color: var(--muted); font-variant-numeric: tabular-nums }
 .tb .canvas .card.fdim { opacity: .18 }
 .tb .card.hit { outline: 2px solid var(--accent); outline-offset: 2px }
-.tb .fempty { padding: 28px 20px; color: var(--muted); font-size: 13.5px }
-.tb .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); margin-right: auto }
-.tb .legend span { display: inline-flex; align-items: center; gap: 5px }
+.tb .fempty { padding: var(--s5) var(--s4); color: var(--muted); font-size: var(--t-md) }
+.tb .legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: var(--t-sm); color: var(--muted); margin-right: auto }
+.tb .legend span { display: inline-flex; align-items: center; gap: 4px }
 .tb .legend svg { flex: none }
 
-.tb .graph { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; background: var(--surface); border: 1px solid var(--line); border-top: 0; border-radius: 0 0 10px 10px }
+.tb .graph { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; background: var(--surface); border: 1px solid var(--line); border-top: 0; border-radius: 0 0 var(--r) var(--r) }
 .tb .canvas > .hd { position: sticky; top: 0; z-index: 5; background: var(--surface); border-bottom: 1px solid var(--line) }
 .tb .canvas > .tree.hd { z-index: 7 }
 .tb .canvas { position: relative; display: grid; width: max-content; min-width: 100% }
@@ -149,12 +153,12 @@
 .tb .band { background: color-mix(in srgb, var(--accent) 9%, transparent); border-left: 1.5px solid color-mix(in srgb, var(--accent) 35%, var(--surface)); border-right: 1.5px solid color-mix(in srgb, var(--accent) 35%, var(--surface)); z-index: 1; pointer-events: none }
 .tb .canvas > .cell { position: relative; z-index: 2 }
 .tb .canvas > .hd.now { color: var(--accent); background: color-mix(in srgb, var(--accent) 9%, var(--surface)); box-shadow: inset 1.5px 0 0 color-mix(in srgb, var(--accent) 35%, var(--surface)), inset -1.5px 0 0 color-mix(in srgb, var(--accent) 35%, var(--surface)) }
-.tb .hd { z-index: 2; padding: 13px var(--padx); font: 600 11px/1 var(--body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); white-space: nowrap }
+.tb .hd { z-index: 2; padding: 0 var(--padx); font: 600 var(--t-xs)/1 var(--body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); white-space: nowrap }
 .tb .hd.now { color: var(--ink) }
-.tb .cell { z-index: 2; padding: 16px var(--padx); display: flex; flex-direction: column; gap: 8px; justify-content: center; min-width: 0 }
-.tb .cell.dn { padding: 14px 8px }
+.tb .cell { z-index: 2; padding: var(--s4) var(--padx); display: flex; flex-direction: column; gap: 8px; justify-content: center; min-width: 0 }
+.tb .cell.dn { padding: var(--s4) var(--s2) }
 /* Now column, when no step is current: one text style. A card always means a step someone owns. */
-.tb .note { font: 400 13px/1.4 var(--body); color: var(--muted); margin: 0 }
+.tb .note { font: 400 var(--t-md)/1.4 var(--body); color: var(--muted); margin: 0 }
 .tb .note.sum { color: var(--ink); display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden }
 @media (max-width: 640px) { .tb .note.sum { -webkit-line-clamp: 9 } }
 .tb .note.you { color: var(--you-ink); font-weight: 600 }
@@ -174,14 +178,19 @@
 
 /* tree column */
 .tb .tree { position: sticky; left: 0; z-index: 4; background: var(--surface); border-right: 1px solid var(--line); display: flex; min-width: 0 }
-.tb .tree.hd { padding: 10px 12px 10px var(--gut) }
+.tb .tree.hd { padding: 0 var(--s4) 0 var(--gut); gap: var(--s3); justify-content: space-between }
+/* the tree's one title, and beside it how many workstreams are done and how fresh the board is: one line, cut short before it would wrap */
+.tb .tree.hd { container-type: inline-size }
+.tb .tree.hd .hd-t { flex: none }
+.tb .tree.hd .hd-meta { min-width: 0; overflow: hidden; text-overflow: ellipsis; font: 400 var(--t-sm)/1 var(--body); letter-spacing: 0; text-transform: none; font-variant-numeric: tabular-nums }
+@container (max-width: 330px) { .tb .tree.hd .hd-at { display: none } }
 /* Tree lines. One rule for position: a top-level number sits one gutter (--gut) from the column edge, and each depth indents by exactly one step (--step).
    The lines are placed from measurements after each render (drawTree): a parent's trunk starts just under its number, at the number's centre, and runs to its last child's elbow;
    each elbow meets the exact vertical centre of the child's number and stops 6px before it. */
 .tb .ln { position: absolute; pointer-events: none; border: 0 solid var(--muted); opacity: .4 }
 .tb .ln.v { border-left-width: 1.5px; width: 0 } .tb .ln.h { border-top-width: 1.5px; height: 0 }
 .tb .ln.el { border-left-width: 1.5px; border-bottom-width: 1.5px; border-bottom-left-radius: 8px }
-.tb .tbody { flex: 1; min-width: 0; padding: 16px 16px 16px 8px; display: flex; flex-direction: column; gap: 9px }
+.tb .tbody { flex: 1; min-width: 0; padding: var(--s4) var(--s4) var(--s4) var(--s2); display: flex; flex-direction: column; gap: var(--s2) }
 /* the connector's elbow and the workstream number share one anchor: the row's centre on desktop, a fixed offset from the row's top on a phone */
 .tb .th { display: flex; align-items: baseline; gap: 8px; min-width: 0 }
 .tb .tk { flex: none; display: flex; align-items: baseline; gap: 8px; position: relative }
@@ -191,35 +200,35 @@
 .tb .donerow { background: color-mix(in srgb, var(--done-bg) 70%, var(--surface)); z-index: 0 }
 .tb .tree.isdone { background: color-mix(in srgb, var(--done-bg) 70%, var(--surface)) }
 .tb .sum { display: flex; flex-direction: column; gap: 4px; width: calc(var(--noww) - 2 * var(--padx)) }
-.tb .sumlab { font: 600 10px/1 var(--body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted) }
-.tb .tl { flex: none; font: 600 13px/1.35 var(--body); color: var(--muted); font-variant-numeric: tabular-nums }
-.tb .tn { font: 500 13px/1.35 var(--body); overflow-wrap: anywhere; min-width: 0 }
+.tb .sumlab { font: 600 var(--t-xs)/1 var(--body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted) }
+.tb .tl { flex: none; font: 600 var(--t-md)/1.35 var(--body); color: var(--muted); font-variant-numeric: tabular-nums }
+.tb .tn { font: 500 var(--t-md)/1.35 var(--body); overflow-wrap: anywhere; min-width: 0 }
 .tb .tree.parent .tn { font-weight: 700 }
 /* Linear issue: a small mark and the id, after the title; opens the issue in a new tab */
 .tb .lin { margin-left: 8px; font: inherit; font-weight: 500; color: var(--muted); text-decoration: none; white-space: nowrap; font-variant-numeric: tabular-nums }
 .tb .lin svg { color: #5e6ad2; margin-right: 4px; vertical-align: -1px } .tb .lin:hover { color: var(--ink); text-decoration: underline }
 /* The collapse arrow sits after the title, so it never shifts a row's indent or crosses the tree lines. It shows when the workstream is collapsed; an open one shows it only on hover or keyboard focus. */
-.tb .chev { border: 0; background: none; color: var(--ink); font-size: 12px; line-height: 1; width: 16px; padding: 0; margin-left: 4px; cursor: pointer; transition: opacity .15s; vertical-align: baseline }
+.tb .chev { border: 0; background: none; color: var(--ink); font-size: var(--t-sm); line-height: 1; width: 16px; padding: 0; margin-left: 4px; cursor: pointer; transition: opacity .15s; vertical-align: baseline }
 .tb .chev.open { opacity: 0 } .tb .tree:hover .chev.open, .tb .chev.open:focus-visible { opacity: .6 }
 @media (hover: none) { .tb .chev.open { opacity: .35 } }
 
-.tb .tbody.ringed { flex-direction: row; align-items: center; gap: 10px } .tb .tbody.ringed .th { flex: 1 }
-.tb .pr { flex: none; display: inline-flex; align-items: center; gap: 6px; font-size: 11px; line-height: 1; color: var(--muted); font-variant-numeric: tabular-nums }
+.tb .tbody.ringed { flex-direction: row; align-items: center; gap: var(--s3) } .tb .tbody.ringed .th { flex: 1 }
+.tb .pr { flex: none; display: inline-flex; align-items: center; gap: var(--s1); font-size: var(--t-xs); line-height: 1; color: var(--muted); font-variant-numeric: tabular-nums }
 .tb .pr svg { flex: none; display: block } .tb .pr .trk { stroke: var(--line) } .tb .pr .pct { width: 34px; text-align: right }
-@media (max-width: 640px) { .tb .tbody.ringed { flex-direction: column; align-items: flex-start; gap: 6px } .tb .pr .pct { width: auto } }
+@media (max-width: 640px) { .tb .tbody.ringed { flex-direction: column; align-items: flex-start; gap: 8px } .tb .pr .pct { width: auto } }
 .tb .c-you { color: var(--you-ink) } .tb .c-agent { color: var(--agent-ink) } .tb .c-review { color: var(--review-ink) } .tb .c-person { color: var(--person-ink) } .tb .c-none { color: var(--muted) }
 .tb .c-you i { background: var(--you) } .tb .c-agent i { background: var(--agent) } .tb .c-review i { background: var(--review) } .tb .c-person i { background: var(--person) }
 .tb .c-bad { color: var(--ink); text-decoration: underline dashed; text-underline-offset: 3px }
 
 /* step cards */
-.tb .card { user-select: text; -webkit-user-select: text; text-align: left; width: 100%; display: flex; flex-direction: column; gap: 4px; padding: 11px 13px; border-radius: 10px; border: 1.5px solid transparent; cursor: pointer; position: relative; background: var(--done-bg) }
-.tb .own { display: flex; align-items: center; gap: 6px; font: 600 11px/1.2 var(--body) }
+.tb .card { user-select: text; -webkit-user-select: text; text-align: left; width: 100%; display: flex; flex-direction: column; gap: var(--s1); padding: 10.5px; border-radius: var(--r); border: 1.5px solid transparent; cursor: pointer; position: relative; background: var(--done-bg) }
+.tb .own { display: flex; align-items: center; gap: 8px; font: 600 var(--t-xs)/1.2 var(--body) }
 /* how long the current step has been going: changes rarely, and fades when it does */
 .tb .tm { margin-left: auto; padding-left: 8px; flex: none; font-variant-numeric: tabular-nums; transition: opacity .7s ease }
 .tb .tm.swap { opacity: 0 }
 @media (prefers-reduced-motion: reduce) { .tb .tm { transition: none } }
-.tb .card .tt { font-size: 13px; line-height: 1.35; font-weight: 500; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden }
-.tb .card .wt { font-size: 12px; line-height: 1.35; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden }
+.tb .card .tt { font-size: var(--t-md); line-height: 1.35; font-weight: 500; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden }
+.tb .card .wt { font-size: var(--t-sm); line-height: 1.35; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden }
 /* upcoming cards show their whole title too; only a very long one is cut */
 .tb .s-notstarted .wt { -webkit-line-clamp: 2 }
 @media (max-width: 640px) { .tb .card .tt { -webkit-line-clamp: 8 } }
@@ -228,10 +237,10 @@
 .tb .t-review { background: var(--review-bg) } .tb .t-review .own { color: var(--review-ink) } .tb .t-review .own i { background: var(--review) }
 .tb .t-person { background: var(--person-bg) } .tb .t-person .own { color: var(--person-ink) } .tb .t-person .own i { background: var(--person) }
 .tb .s-active { box-shadow: var(--shadow) } .tb .s-active .tt { font-weight: 600 }
-.tb .s-active { border-width: 2px; padding: 8.5px 10.5px; transform: translateY(-2px) } .tb .s-active .tt { font-size: 14px }
+.tb .s-active { border-width: 2px; padding: 10px; transform: translateY(-2px) }
 .tb .s-active.t-you { border-color: var(--you); background: var(--you-bg) } .tb .s-active.t-agent { border-color: var(--agent); background: var(--agent-bg) } .tb .s-active.t-review { border-color: var(--review); background: var(--review-bg) } .tb .s-active.t-person { border-color: var(--person); background: var(--person-bg) }
 /* an agent step that is asleep until an event: nobody is working it, so it sits flat with a dashed edge */
-.tb .s-active.asleep { box-shadow: none; transform: none; border-style: dashed; background: color-mix(in srgb, var(--agent-bg) 55%, var(--surface)) } .tb .s-active.asleep .tt { font-weight: 500; font-size: 13px }
+.tb .s-active.asleep { box-shadow: none; transform: none; border-style: dashed; background: color-mix(in srgb, var(--agent-bg) 55%, var(--surface)) } .tb .s-active.asleep .tt { font-weight: 500 }
 .tb .s-active .tt { color: var(--ink) } .tb .s-active .wt { color: var(--ink); opacity: .75 }
 .tb .card.s-notstarted { opacity: .6 }
 .tb .s-notstarted.t-you { background: color-mix(in srgb, var(--you-bg) 40%, var(--surface)) } .tb .s-notstarted.t-agent { background: color-mix(in srgb, var(--agent-bg) 40%, var(--surface)) } .tb .s-notstarted.t-review { background: color-mix(in srgb, var(--review-bg) 40%, var(--surface)) } .tb .s-notstarted.t-person { background: color-mix(in srgb, var(--person-bg) 40%, var(--surface)) }
@@ -240,9 +249,9 @@
 .tb .s-active.t-you .own i, .tb .s-active.t-person .own i, .tb .s-active.run .own i { animation: tb-pulse 1.6s ease-out infinite }
 @keyframes tb-pulse { 0% { box-shadow: 0 0 0 0 currentColor } 70%, 100% { box-shadow: 0 0 0 7px transparent } }
 @media (prefers-reduced-motion: reduce) { .tb .s-active .own i { animation: none !important } }
-.tb .s-done { background: var(--done-bg); padding: 6px 9px } .tb .s-done .own { color: var(--done-ink); font-weight: 500 } .tb .s-done .tt { color: var(--done-ink); font-size: 12px; font-weight: 400; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden }
+.tb .s-done { background: var(--done-bg); padding: 6.5px } .tb .s-done .own { color: var(--done-ink); font-weight: 500 } .tb .s-done .tt { color: var(--done-ink); font-size: var(--t-sm); font-weight: 400; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden }
 .tb .card.bad { border: 1.5px dashed var(--ink); background-image: repeating-linear-gradient(135deg, transparent 0 7px, color-mix(in srgb, var(--ink) 9%, transparent) 7px 14px) }
-.tb .card .iv { font: 600 12px/1.3 var(--body); color: var(--ink) }
+.tb .card .iv { font: 600 var(--t-sm)/1.3 var(--body); color: var(--ink) }
 /* focus (a clicked step or workstream): its path at full strength, everything else dimmed */
 .tb .card, .tb .tbody, .tb .note { transition: opacity .2s ease }
 .tb .canvas.selecting .card:not(.on), .tb .canvas.selecting .sq:not(.on) { opacity: .22; box-shadow: none; transform: none }
@@ -254,74 +263,74 @@
 .tb .card.sel, .tb .sq.sel { outline: 3px solid var(--accent); outline-offset: 2px }
 
 /* done trail: one square per finished step */
-.tb .trail { display: flex; flex-wrap: wrap; gap: 3px; max-width: 120px }
+.tb .trail { display: flex; flex-wrap: wrap; gap: 4px; max-width: 120px }
 .tb .sq { width: 11px; height: 11px; padding: 0; border: 0; border-radius: 2px; cursor: pointer; opacity: .5 }
 .tb .sq { background: var(--done-ink) }
-.tb .c-err { font-weight: 600; color: var(--surface); background: var(--ink); padding: 1px 7px; border-radius: 4px; cursor: help }
+.tb .c-err { font-weight: 600; color: var(--surface); background: var(--ink); padding: 0 8px; border-radius: var(--r-sm); cursor: help }
 .tb .tree.err { box-shadow: inset 4px 0 0 var(--ink) }
 .tb .sq:hover { opacity: 1 }
-.tb .trailbtn { align-self: flex-start; background: none; border: 0; padding: 0; font-size: 12px; color: var(--muted); cursor: pointer; text-decoration: underline; text-underline-offset: 2px }
+.tb .trailbtn { align-self: flex-start; background: none; border: 0; padding: 0; font-size: var(--t-sm); color: var(--muted); cursor: pointer; text-decoration: underline; text-underline-offset: 2px }
 
 /* detail panel: slides in from the right for a clicked workstream or step. Acceptance criteria come first, then whatever else is written. */
 .tb .sheet { position: absolute; top: 0; right: 0; bottom: 0; z-index: 20; width: min(420px, 100vw); display: flex; pointer-events: none; animation: tb-slidein .18s ease-out }
 @keyframes tb-slidein { from { transform: translateX(24px); opacity: 0 } }
 @media (prefers-reduced-motion: reduce) { .tb .sheet { animation: none } }
 .tb .sheet .in { pointer-events: auto; width: 100%; height: 100%; overflow-y: auto; overscroll-behavior: contain; background: var(--surface); border-left: 1px solid var(--line); box-shadow: var(--shadow);
-  padding: 18px 18px calc(28px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 14px }
-.tb .sheet .kick { font: 600 11px/1.3 var(--body); letter-spacing: .06em; text-transform: uppercase; color: var(--muted) }
-.tb .sheet .sec { display: flex; flex-direction: column; gap: 6px } .tb .sheet .sec > b { font: 600 11px/1 var(--body); letter-spacing: .06em; text-transform: uppercase; color: var(--muted) }
-.tb .sheet .sec p { margin: 0; font-size: 13px; line-height: 1.45 }
-.tb .ac { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 13px; line-height: 1.4 }
-.tb .ac li { display: flex; gap: 8px; align-items: flex-start } .tb .ac li::before { content: ''; flex: none; width: 13px; height: 13px; margin-top: 2px; border: 1.5px solid var(--muted); border-radius: 50% }
+  padding: var(--s4) var(--s4) calc(var(--s5) + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: var(--s4) }
+.tb .sheet .kick { font: 600 var(--t-xs)/1.3 var(--body); letter-spacing: .06em; text-transform: uppercase; color: var(--muted) }
+.tb .sheet .sec { display: flex; flex-direction: column; gap: 8px } .tb .sheet .sec > b { font: 600 var(--t-xs)/1 var(--body); letter-spacing: .06em; text-transform: uppercase; color: var(--muted) }
+.tb .sheet .sec p { margin: 0; font-size: var(--t-md); line-height: 1.45 }
+.tb .ac { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; font-size: var(--t-md); line-height: 1.4 }
+.tb .ac li { display: flex; gap: 8px; align-items: flex-start } .tb .ac li::before { content: ''; flex: none; width: 12px; height: 12px; margin-top: 3px; border: 1.5px solid var(--muted); border-radius: 50% }
 .tb .ac.met li::before { border-color: var(--agent); background: var(--agent) }
-.tb .ac li span { flex: 1; min-width: 0 } .tb .ac .rm { flex: none; border: 0; background: none; color: var(--muted); cursor: pointer; padding: 0 2px; font-size: 14px; line-height: 1.2 }
-.tb .acadd { display: flex; gap: 6px } .tb .acadd input { flex: 1; min-width: 0; height: 32px; padding: 0 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); font: 400 13px/1 var(--body) }
-.tb .acadd button { flex: none; height: 32px; padding: 0 11px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); cursor: pointer; font: 500 12.5px/1 var(--body) }
-.tb .rules .none { color: var(--muted); font-size: 13px }
-.tb .flows { display: flex; flex-direction: column; gap: 14px; max-width: none !important }
-.tb .flow { border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px }
-.tb .flow h3 { margin: 0; font: 600 14px/1.3 var(--display); display: flex; flex-wrap: wrap; align-items: center; gap: 8px } 
-.tb .flow p { font-size: 13px; color: var(--muted) }
+.tb .ac li span { flex: 1; min-width: 0 } .tb .ac .rm { flex: none; border: 0; background: none; color: var(--muted); cursor: pointer; padding: 0 4px; font-size: var(--t-md); line-height: 1.2 }
+.tb .acadd { display: flex; gap: 8px } .tb .acadd input { flex: 1; min-width: 0; height: var(--ctl); padding: 0 var(--s2); border: 1px solid var(--line); border-radius: var(--r); background: var(--bg); color: var(--ink); font: 400 var(--t-md)/1 var(--body) }
+.tb .acadd button { flex: none; height: var(--ctl); padding: 0 var(--s3); border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); cursor: pointer; font: 500 var(--t-sm)/1 var(--body) }
+.tb .rules .none { color: var(--muted); font-size: var(--t-md) }
+.tb .flows { display: flex; flex-direction: column; gap: 16px; max-width: none !important }
+.tb .flow { border: 1px solid var(--line); border-radius: var(--r); padding: var(--s4); display: flex; flex-direction: column; gap: 8px }
+.tb .flow h3 { margin: 0; font: 600 var(--t-md)/1.3 var(--display); display: flex; flex-wrap: wrap; align-items: center; gap: 8px } 
+.tb .flow p { font-size: var(--t-md); color: var(--muted) }
 .tb .chain { display: flex; flex-wrap: wrap; align-items: stretch; gap: 8px 0 }
-.tb .chip { display: flex; flex-direction: column; gap: 3px; width: 168px; padding: 8px 10px; border-radius: 9px; font-size: 12.5px; line-height: 1.3 } .tb .chip b { display: flex; align-items: center; gap: 5px; font: 600 10.5px/1.2 var(--body) } .tb .chip b i { width: 7px; height: 7px; border-radius: 50%; background: currentColor }
+.tb .chip { display: flex; flex-direction: column; gap: 4px; width: 168px; padding: var(--s2); border-radius: var(--r); font-size: var(--t-sm); line-height: 1.3 } .tb .chip b { display: flex; align-items: center; gap: 4px; font: 600 var(--t-xs)/1.2 var(--body) } .tb .chip b i { width: 7px; height: 7px; border-radius: 50%; background: currentColor }
 .tb .chip.t-you b { color: var(--you-ink) } .tb .chip.t-agent b { color: var(--agent-ink) } .tb .chip.t-review b { color: var(--review-ink) } .tb .chip.t-person b { color: var(--person-ink) }
-.tb .chip.opt { background: none; outline: 1.5px dashed var(--muted); outline-offset: -1.5px } .tb .chip em { font-style: normal; font-size: 11px; color: var(--muted) }
-.tb .chain .arr { flex: none; align-self: center; width: 22px; text-align: center; color: var(--muted) }
-@media (max-width: 640px) { .tb .chain { flex-direction: column } .tb .chip { width: auto } .tb .chain .arr { align-self: flex-start; margin-left: 10px; transform: rotate(90deg) } }
-.tb .sheet .none { color: var(--muted); font-size: 13px; margin: 0 } .tb .sheet .aside { margin: -6px 0 0; line-height: 1.45 }
-.tb .phead { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px } .tb .phead .lin { margin-left: 0; font-size: 12px }
-.tb .sheet .lead { margin: -6px 0 0; font-size: 13.5px; line-height: 1.45 } .tb .sheet .lead.done { color: var(--agent); font-weight: 700; opacity: .7 }
-.tb .sheet .ask { margin: -8px 0 0; font-size: 13px; line-height: 1.45; color: var(--muted) } .tb .sheet .sec .ask { margin: 0 }
+.tb .chip.opt { background: none; outline: 1.5px dashed var(--muted); outline-offset: -1.5px } .tb .chip em { font-style: normal; font-size: var(--t-xs); color: var(--muted) }
+.tb .chain .arr { flex: none; align-self: center; width: 24px; text-align: center; color: var(--muted) }
+@media (max-width: 640px) { .tb .chain { flex-direction: column } .tb .chip { width: auto } .tb .chain .arr { align-self: flex-start; margin-left: 8px; transform: rotate(90deg) } }
+.tb .sheet .none { color: var(--muted); font-size: var(--t-md); margin: 0 } .tb .sheet .aside { margin: calc(-1 * var(--s2)) 0 0; line-height: 1.45 }
+.tb .phead { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 8px } .tb .phead .lin { margin-left: 0; font-size: var(--t-sm) }
+.tb .sheet .lead { margin: calc(-1 * var(--s2)) 0 0; font-size: var(--t-md); line-height: 1.45 } .tb .sheet .lead.done { color: var(--agent); font-weight: 700; opacity: .7 }
+.tb .sheet .ask { margin: calc(-1 * var(--s2)) 0 0; font-size: var(--t-md); line-height: 1.45; color: var(--muted) } .tb .sheet .sec .ask { margin: 0 }
 .tb .sheet .card { cursor: pointer } .tb .sheet .card.s-active { transform: none } .tb .sheet .card[data-self] { cursor: default }
-.tb .pgroup { text-align: left; border: 0; background: none; padding: 4px 0 0; font: 600 12.5px/1.35 var(--body); color: var(--ink); cursor: pointer } .tb .pgroup:hover { text-decoration: underline }
+.tb .pgroup { text-align: left; border: 0; background: none; padding: 4px 0 0; font: 600 var(--t-sm)/1.35 var(--body); color: var(--ink); cursor: pointer } .tb .pgroup:hover { text-decoration: underline }
 .tb .pw { font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums }
 .tb .plist { display: flex; flex-direction: column }
-.tb .prow { display: flex; align-items: flex-start; gap: 8px; width: 100%; text-align: left; border: 0; border-top: 1px solid var(--line); background: none; padding: 7px 2px; font: 400 13px/1.35 var(--body); color: var(--ink); cursor: pointer }
+.tb .prow { display: flex; align-items: flex-start; gap: 8px; width: 100%; text-align: left; border: 0; border-top: 1px solid var(--line); background: none; padding: var(--s2) 0; font: 400 var(--t-md)/1.35 var(--body); color: var(--ink); cursor: pointer }
 .tb .plist .prow:first-child { border-top: 0 } .tb .prow:hover { background: color-mix(in srgb, var(--band) 60%, var(--surface)) }
-.tb .prow > i { flex: none; width: 8px; height: 8px; border-radius: 50%; margin-top: 5px } .tb .prow .pt { flex: 1; min-width: 0; overflow-wrap: anywhere } .tb .prow .ps { flex: none; max-width: 40%; text-align: right; font-size: 12px; color: var(--muted) } .tb .prow .ps.you { color: var(--you-ink); font-weight: 600 }
+.tb .prow > i { flex: none; width: 8px; height: 8px; border-radius: 50%; margin-top: 5px } .tb .prow .pt { flex: 1; min-width: 0; overflow-wrap: anywhere } .tb .prow .ps { flex: none; max-width: 40%; text-align: right; font-size: var(--t-sm); color: var(--muted) } .tb .prow .ps.you { color: var(--you-ink); font-weight: 600 }
 .tb .prow.ws .pr { margin-top: 1px } .tb .prow.ws .pr .pct { display: none }
-.tb .more > summary { cursor: pointer; font: 500 12.5px/1.3 var(--body); color: var(--muted); padding: 4px 0; list-style-position: inside } .tb .more[open] > summary { margin-bottom: 2px }
+.tb .more > summary { cursor: pointer; font: 500 var(--t-sm)/1.3 var(--body); color: var(--muted); padding: 4px 0; list-style-position: inside }
 .tb .more .prow { color: var(--done-ink) } .tb .more .prow > i { opacity: .5 }
-.tb .acnew > summary { cursor: pointer; list-style: none; font: 500 12.5px/1.3 var(--body); color: var(--accent); padding: 2px 0 } .tb .acnew > summary::-webkit-details-marker { display: none } .tb .acnew[open] > summary { margin-bottom: 6px }
-.tb .sheet .sec > b .cnt { font-weight: 500; letter-spacing: 0; text-transform: none; margin-left: 6px }
-.tb .fine { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--muted) } .tb .fine p { margin: 0 } .tb .fine b { display: block; font-weight: 600 }
-.tb .sheet .rel button { font-size: 13px; line-height: 1.4 }
-.tb .sheet .top { display: flex; gap: 12px; align-items: flex-start } .tb .sheet .top .kick { flex: 1 } .tb .sheet h2 { font-size: 17px; line-height: 1.3 }
+.tb .acnew > summary { cursor: pointer; list-style: none; font: 500 var(--t-sm)/1.3 var(--body); color: var(--accent); padding: 4px 0 } .tb .acnew > summary::-webkit-details-marker { display: none } .tb .acnew[open] > summary { margin-bottom: 4px }
+.tb .sheet .sec > b .cnt { font-weight: 500; letter-spacing: 0; text-transform: none; margin-left: 8px }
+.tb .fine { display: flex; flex-direction: column; gap: 8px; font-size: var(--t-sm); color: var(--muted) } .tb .fine p { margin: 0 } .tb .fine b { display: block; font-weight: 600 }
+.tb .sheet .rel button { font-size: var(--t-md); line-height: 1.4 }
+.tb .sheet .top { display: flex; gap: 12px; align-items: flex-start } .tb .sheet .top .kick { flex: 1 } .tb .sheet h2 { font-size: var(--t-lg); line-height: 1.3 }
 .tb .wslink { border: 0; background: none; padding: 0; font: inherit; letter-spacing: inherit; text-transform: none; color: var(--accent); cursor: pointer; text-align: left }
-.tb .sheet .x { flex: none; border: 1px solid var(--line); background: var(--bg); border-radius: 6px; padding: 3px 9px; cursor: pointer; font-size: 12px }
-.tb .sheet .meta { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12px; color: var(--muted) } .tb .sheet .meta b { color: var(--ink) }
-.tb .sheet .badlist { margin: 0; padding: 8px 10px 8px 26px; border: 1.5px dashed var(--ink); border-radius: 8px; font-size: 12px; font-weight: 500 }
-.tb .sheet .rel { font-size: 12px; display: flex; flex-direction: column; gap: 3px } .tb .sheet .rel > b { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted) }
-.tb .sheet .rel button { text-align: left; background: none; border: 0; padding: 1px 0; cursor: pointer; color: var(--accent) }
-.tb .sheet code { font-size: 11px; color: var(--muted); overflow-wrap: anywhere }
+.tb .sheet .x { flex: none; border: 1px solid var(--line); background: var(--bg); border-radius: var(--r); padding: 4px 8px; cursor: pointer; font-size: var(--t-sm) }
+.tb .sheet .meta { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: var(--t-sm); color: var(--muted) } .tb .sheet .meta b { color: var(--ink) }
+.tb .sheet .badlist { margin: 0; padding: 8px 12px 8px 24px; border: 1.5px dashed var(--ink); border-radius: var(--r); font-size: var(--t-sm); font-weight: 500 }
+.tb .sheet .rel { font-size: var(--t-sm); display: flex; flex-direction: column; gap: 4px } .tb .sheet .rel > b { font-size: var(--t-xs); letter-spacing: .06em; text-transform: uppercase; color: var(--muted) }
+.tb .sheet .rel button { text-align: left; background: none; border: 0; padding: 0; cursor: pointer; color: var(--accent) }
+.tb .sheet code { font-size: var(--t-xs); color: var(--muted); overflow-wrap: anywhere }
 
 /* In the app: the board fills the window; the right panel sits above the Commander's chat. */
 .tb-root { position: relative; height: 100vh; height: 100dvh; overflow: hidden }
 .tb { height: 100%; overflow: hidden; --chat-h: 46vh }
 .tb .page { height: 100% }
 .tb .sheet .in { padding: 0; gap: 0; overflow: hidden }
-.tb .tb-panel { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 18px 18px 14px; display: flex; flex-direction: column; gap: 14px }
-.tb .abtn { flex: none; height: 32px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: 500 13px/1 var(--body); cursor: pointer; white-space: nowrap }
+.tb .tb-panel { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: var(--s4); display: flex; flex-direction: column; gap: var(--s4) }
+.tb .abtn { flex: none; height: var(--ctl); padding: 0 var(--s3); border-radius: var(--r); border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: 500 var(--t-md)/1 var(--body); cursor: pointer; white-space: nowrap }
 .tb .abtn:hover { border-color: var(--muted) }
 /* The chat dock is outside .tb, so the board's styles never reach the chat. */
 /* The board fills the app's sidebar and middle pane; its popup is inside it, over the middle pane's right edge. */
@@ -333,18 +342,39 @@
 .tb .tb-inspector:empty { display: none }
 .tb .tb-inspector > * { flex: 1; min-height: 0 }
 .tb-root:not(.narrow) .tb .abtn[data-tb="chat"] { display: none }
-.tb-chathead { flex: none; display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-bottom: 1px solid var(--hairline, rgba(128, 128, 128, .3)); font: 500 12.5px/1.3 var(--font-ui, system-ui) }
-.tb-selchip { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; padding: 3px 4px 3px 10px; border-radius: 999px; background: color-mix(in srgb, #1d5fd3 12%, transparent); color: inherit }
+.tb-chathead { flex: none; display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-bottom: 1px solid var(--hairline, rgba(128, 128, 128, .3)); font: 500 var(--t-sm)/1.3 var(--font-ui, system-ui) }
+.tb-selchip { display: inline-flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; padding: 3px 4px 3px 10px; border-radius: 999px; background: color-mix(in srgb, #1d5fd3 12%, transparent); color: inherit }
 .tb-selchip-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
 .tb-selchip button, .tb-chatclose { flex: none; border: 0; background: none; color: inherit; cursor: pointer; font: inherit; padding: 0 6px; opacity: .7 }
 .tb-selchip button:hover, .tb-chatclose:hover { opacity: 1 }
-.tb-error { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 30; margin: 0; padding: 8px 14px; border-radius: 8px; background: #d5362b; color: #fff; font: 500 13px/1.3 system-ui }
+.tb-error { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 30; margin: 0; padding: 8px 14px; border-radius: var(--r); background: #d5362b; color: #fff; font: 500 var(--t-md)/1.3 system-ui }
 
-/* The Linear progress card (the classic sidebar's, unchanged) under the sidebar header, and in a workstream's panel */
-.tb .ab-side { flex-wrap: wrap }
-.tb .tb-linear { flex: 1 0 100%; min-width: 0 }
+/* The Linear sprint (the classic sidebar's card) in the sidebar header and in a workstream's panel, drawn on the board's scale:
+   one unit of a title line (Progress, days left), the bar, and its three counts. Clicking it opens the Progress page. */
+.tb .tb-linear { grid-column: 1 / -1; grid-row: 1 / -1; min-width: 0; display: grid; grid-template-columns: subgrid; grid-template-rows: subgrid }
 .tb .tb-linear:empty, .tb .tb-linear-ws:empty { display: none }
-.tb .tb-linear .my-progress, .tb .tb-linear-ws .my-progress { width: 100%; margin: 0 }
+.tb .my-progress { width: 100%; margin: 0; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; color: var(--ink) }
+.tb .my-progress:hover { background: none }
+.tb .tb-linear .my-progress { grid-column: 1 / -1; grid-row: 1 / -1; min-width: 0; display: grid; grid-template-columns: subgrid; grid-template-rows: subgrid; align-items: center }
+.tb .tb-linear .my-progress > * { grid-column: 1 / -1; margin: 0 }
+.tb .tb-linear .my-progress-head { grid-column: 1 }
+.tb .tb-linear-ws .my-progress { display: flex; flex-direction: column; gap: var(--s2) }
+.tb .my-progress-head { min-width: 0; gap: var(--s2); color: var(--ink); white-space: nowrap }
+.tb .my-progress-head svg { flex: none; color: var(--muted) }
+.tb .my-progress-name { flex: none; font: 600 var(--t-md)/1 var(--body) }
+.tb .sp-card:hover .my-progress-name { text-decoration: underline; text-underline-offset: 3px }
+.tb .my-progress-count { min-width: 0; overflow: hidden; text-overflow: ellipsis; font: 400 var(--t-sm)/1 var(--body); color: var(--muted) }
+.tb .my-progress-note { font-size: var(--t-sm); color: var(--muted) }
+.tb .sp-pacebar { height: 4px; background: var(--line) }
+.tb .sp-pacebar-now { top: -4px; bottom: -4px; background: var(--ink) }
+.tb .sp-stats { gap: var(--s2); white-space: nowrap; overflow: hidden }
+.tb .sp-stat { gap: var(--s1) }
+.tb .sp-stat-n { font: 600 var(--t-sm)/1 var(--body) }
+.tb .sp-stat-label { font: 400 var(--t-sm)/1 var(--body); color: var(--muted) }
+.tb .sp-ring.unstarted { color: var(--muted) }
+/* A narrow sidebar keeps the numbers and drops words: the days left stay beside the Progress icon, the counts keep Linear's status marks. */
+.tb .ab-side { container-type: inline-size }
+@container (max-width: 330px) { .tb .tb-linear .my-progress-name, .tb .tb-linear .sp-stat-label { display: none } }
 
 .tb-main-host { position: relative; height: 100%; min-width: 0; overflow: hidden }
 .tb-main-host > .tb { position: relative; height: 100%; min-width: 0; overflow: hidden; padding: 0 }
@@ -358,19 +388,9 @@
 .tb-treesplit { position: absolute; top: 0; bottom: 0; width: 1px; z-index: 18; display: flex }
 .tb-treesplit > .splitter { height: 100% }
 
-/* Compact header bar; the table's header row is one grid row, so WORKSTREAMS and NOW share it. */
-.tb { --abh: 92px; --hdh: 38px }
+/* The header bar and the table's header row. The tree's title and NOW are cells of one grid row, so one height (--hdh) serves both. */
+.tb { --abh: 88px; --hdh: 40px }
 .tb .appbar { height: var(--abh); min-height: var(--abh) !important; max-height: var(--abh); overflow: hidden }
-.tb .ab-side { flex-wrap: wrap; align-content: center; gap: 6px 10px; padding: 8px 12px 8px var(--gut) }
-.tb .ab-side .pr svg { width: 22px; height: 22px }
-.tb .ab-name { font-size: 14.5px } .tb .ab-sub { font-size: 11px; margin-top: 1px }
-.tb .ab-side .needbtn { height: 26px; padding: 0 10px; font-size: 12.5px; border-radius: 8px }
-.tb .tb-linear .my-progress { padding: 0; border: 0; background: none; box-shadow: none; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px 10px }
-.tb .tb-linear .my-progress-head { grid-column: 2; grid-row: 1; margin: 0 }
-.tb .tb-linear .my-progress-name { display: none }
-.tb .tb-linear .my-progress-count { font-size: 11px }
-.tb .tb-linear .sp-pacebar { grid-column: 1; grid-row: 1; margin: 0 }
-.tb .tb-linear .sp-stats { grid-column: 1 / -1; grid-row: 2; margin: 0; font-size: 11.5px }
 .tb .canvas > .hd, .tb .canvas > .tree.hd { height: var(--hdh); padding-block: 0; display: flex; align-items: center }
 
 /* The tree column is a real sidebar: sticky to the left edge of the board's scroller. The canvas must not
@@ -404,5 +424,5 @@
 
 /* Eric's answer choices, in the step popup under the details (the same choices as above the chat input). */
 .tb .tb-inspector:empty { display: none }
-.tb-panel-ask { padding: 4px 18px 18px; border-top: 1px solid var(--line) }
-.tb-panel-ask .pitch-choices ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px }
+.tb-panel-ask { padding: var(--s1) var(--s4) var(--s4); border-top: 1px solid var(--line) }
+.tb-panel-ask .pitch-choices ul { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s2) }
