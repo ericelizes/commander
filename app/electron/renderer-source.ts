@@ -2,14 +2,15 @@
 // (`npm run dev:renderer` on 127.0.0.1:5173/app/, kept up by the commander-ui
 // launchd/systemd unit) wins while it answers, so an edit under app/src shows
 // up through Vite HMR in the installed app with no rebuild or reinstall. When
-// it is not there (or dies) the window shows the bundled dist/ renderer, and
-// a poll every 3s switches back to live once it answers again.
+// it is not there (or dies) the window shows a plain "Connecting" page (never
+// the bundled renderer, which is as old as the app build), and a poll every 3s
+// switches to live once it answers.
 //
 // Only the page changes: the preload (window.commanderHost / commanderShell)
 // is bundled in the app and attaches to whatever the window loads.
 // $COMMANDER_APP_DEV_URL overrides the dev server origin ("off" = bundled only).
 
-export type RendererSource = 'live' | 'bundled'
+export type RendererSource = 'live' | 'bundled' | 'connecting'
 
 export const DEFAULT_DEV_ORIGIN = 'http://127.0.0.1:5173'
 export const POLL_MS = 3000
@@ -22,7 +23,7 @@ export function devRendererURL(env: NodeJS.ProcessEnv = process.env): string | u
 }
 
 /** devServerUp: the URL answers 200 with a Vite page (it loads /@vite/client), not just any server on the port. */
-export async function devServerUp(url: string, fetchImpl: typeof fetch = fetch, timeoutMs = 500): Promise<boolean> {
+export async function devServerUp(url: string, fetchImpl: typeof fetch = fetch, timeoutMs = 2500): Promise<boolean> {
   try {
     const res = await fetchImpl(url, { signal: AbortSignal.timeout(timeoutMs) })
     if (res.status !== 200) return false
@@ -44,6 +45,7 @@ export interface SourceWindow {
 export interface SourceOptions {
   devUrl: string
   bundle: string // dist/index.html
+  waiting?: string // a page URL shown while the dev server is not there; without it, the bundle
   probe?: (url: string) => Promise<boolean>
   onChange?: (s: RendererSource) => void
   intervalMs?: number
@@ -80,11 +82,13 @@ export function watchRendererSource(win: SourceWindow, opts: SourceOptions): Sou
       } catch {
         if (current !== 'live') return // a later switch already happened
         current = undefined
-        return show('bundled')
+        return show(fallback)
       }
     }
-    await win.loadFile(opts.bundle).catch(() => undefined)
+    if (s === 'connecting' && opts.waiting) await win.loadURL(opts.waiting).catch(() => undefined)
+    else await win.loadFile(opts.bundle).catch(() => undefined)
   }
+  const fallback: RendererSource = opts.waiting ? 'connecting' : 'bundled'
 
   // One missed probe is not the dev server gone (a restart, a busy moment):
   // the live page stays until MISSES_TO_FALL_BACK in a row.
@@ -96,7 +100,7 @@ export function watchRendererSource(win: SourceWindow, opts: SourceOptions): Sou
       const up = await probe(opts.devUrl)
       misses = up ? 0 : misses + 1
       if (up) await show('live')
-      else if (current !== 'live' || misses >= MISSES_TO_FALL_BACK) await show('bundled')
+      else if (current !== 'live' || misses >= MISSES_TO_FALL_BACK) await show(fallback)
     } finally {
       busy = false
     }
@@ -105,7 +109,7 @@ export function watchRendererSource(win: SourceWindow, opts: SourceOptions): Sou
   // The dev server died under the live page (or refused it): the bundle.
   win.webContents.on('did-fail-load', (_e, code, _desc, url, isMainFrame) => {
     if (!isMainFrame || code === ERR_ABORTED || current !== 'live' || !url.startsWith(opts.devUrl.replace(/\/app\/$/, ''))) return
-    void show('bundled')
+    void show(fallback)
   })
 
   void tick()
@@ -121,5 +125,19 @@ export function watchRendererSource(win: SourceWindow, opts: SourceOptions): Sou
 }
 
 export function sourceLabel(s: RendererSource | undefined): string {
-  return s === 'live' ? 'Live (dev server)' : 'Bundled'
+  return s === 'live' ? 'Live (dev server)' : s === 'connecting' ? 'Connecting' : 'Bundled'
+}
+
+/** connectingPage: the plain page shown while the live renderer is not reachable, in the app's own colours. */
+export function connectingPage(): string {
+  const html = `<!doctype html><meta charset="utf-8"><title>Commander</title><style>
+:root{color-scheme:light dark;--bg:#ecedf0;--fg:#5b6270}
+@media (prefers-color-scheme:dark){:root{--bg:#131418;--fg:#9aa1ad}}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font:500 14px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;-webkit-app-region:drag}
+body{display:grid;place-items:center}
+.d{display:flex;gap:10px;align-items:center}
+.s{width:14px;height:14px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:r .9s linear infinite}
+@keyframes r{to{transform:rotate(360deg)}}
+</style><div class="d"><span class="s"></span>Connecting to Commander…</div>`
+  return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`
 }

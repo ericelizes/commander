@@ -75,6 +75,22 @@ describe('watchRendererSource', () => {
     expect(w.source()).toBe('bundled')
   })
 
+  it('with a waiting page, shows it (never the bundle) until the dev server answers', async () => {
+    const { win, loads } = fakeWin()
+    let up = false
+    const w = watchRendererSource(win, { devUrl: DEV, bundle: '/b', waiting: 'data:text/html,wait', probe: async () => up, setInterval: () => 0, clearInterval: () => {} })
+    await flush()
+    expect(loads).toEqual(['data:text/html,wait'])
+    expect(w.source()).toBe('connecting')
+    up = true
+    await w.tick()
+    expect(loads.at(-1)).toBe(DEV)
+    up = false
+    for (let i = 0; i < 4; i++) await w.tick()
+    expect(loads.at(-1)).toBe('data:text/html,wait')
+    expect(loads).not.toContain('file:/b')
+  })
+
   it('polls every 3s and stops', async () => {
     const { win } = fakeWin()
     const every = vi.fn(() => 7)

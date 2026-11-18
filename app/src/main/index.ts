@@ -15,7 +15,7 @@ import { dirname, join, resolve } from 'node:path'
 import { apiConfig, apiRequestOrigin, commanderHome } from './config'
 import type { HostConfig, Snapshot } from '../shared/snapshot'
 import { startAppShell, type AppShell } from '../../electron/app-shell'
-import { devRendererURL, sourceLabel, watchRendererSource, type RendererSource } from '../../electron/renderer-source'
+import { connectingPage, devRendererURL, sourceLabel, watchRendererSource, type RendererSource } from '../../electron/renderer-source'
 import { appLogPath, createAppLog, logProcess, logWindow } from '../../electron/app-log'
 import type { WindowState } from '../../electron/window-state'
 import { registerInspectorIpc } from '../../electron/inspector'
@@ -96,7 +96,7 @@ function createWindow(state?: WindowState): BrowserWindow {
       log('info', `renderer: ${sourceLabel(s)}`)
       appShell?.setRendererSource(s)
     }
-    const watch = watchRendererSource(win, { devUrl, bundle, onChange })
+    const watch = watchRendererSource(win, { devUrl, bundle, waiting: connectingPage(), onChange })
     win.on('closed', () => watch.stop())
   }
   return win
