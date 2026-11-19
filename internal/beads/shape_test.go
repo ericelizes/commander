@@ -203,7 +203,11 @@ func templateNodes(t *testing.T, ops [][]string, parent string) []ShapeNode {
 			id := parent + "." + string(rune('a'+i))
 			ids["$"+f.one("--ref")] = id
 			idx[id] = len(nodes)
-			nodes = append(nodes, ShapeNode{ID: id, Parent: parent, Title: pos[0], Status: "open", Labels: strings.Split(f.one("--labels"), ","), Responsible: "commander",
+			under := f.one("--parent")
+			if p, ok := ids[under]; ok {
+				under = p
+			}
+			nodes = append(nodes, ShapeNode{ID: id, Parent: under, Title: pos[0], Status: "open", Labels: strings.Split(f.one("--labels"), ","), Responsible: "commander",
 				HasBrief: f.one("--description") != "" && f.one("--acceptance") != ""})
 		case "dep":
 			from, to := ids[op[2]], ids[op[3]]
@@ -225,6 +229,11 @@ func TestPlanTemplatesPassShapeCheck(t *testing.T) {
 			}
 			if vs := ShapeCheck(templateNodes(t, ops, "W.1")); len(vs) != 0 {
 				t.Fatalf("%s (owner go %v) fails its own check: %+v", name, ownerGo, vs)
+			}
+			if name == "context-teaching" {
+				if vs := TreeRules(templateNodes(t, ops, "W.1")); len(vs) != 0 {
+					t.Fatalf("%s breaks a numbered rule: %+v", name, vs)
+				}
 			}
 		}
 	}
@@ -265,5 +274,44 @@ func TestPostgresShapeGuardRefusesBatch(t *testing.T) {
 	resp = postgresApplyOps(ctx, dir, [][]string{{"create", "Implement the spec", "--parent", trk, "--labels", "kind:objective,lane:agents", "--description", "Implement it.", "--acceptance", "It is implemented.", "--assignee", "operator-x", "--silent"}})
 	if resp.Exit != 0 {
 		t.Fatalf("valid single step refused: %+v", resp)
+	}
+}
+
+// The teaching template stamps out the workstream and the shape of 596t.15:
+// implementer steps, independent reviews, no PR, and Eric's one final review.
+func TestContextTeachingTemplate(t *testing.T) {
+	ops, e := PlanTemplateOps("context-teaching", "W.1", "Temporal schedules", false)
+	if e != nil {
+		t.Fatal(e)
+	}
+	nodes := templateNodes(t, ops, "W.1")
+	var ws *ShapeNode
+	byOwner := map[string]int{}
+	for i := range nodes[2:] {
+		n := &nodes[2+i]
+		switch {
+		case n.has("kind:workstream"):
+			ws = n
+		case n.gate():
+			byOwner["you"]++
+		case n.has("review"):
+			byOwner["reviewer"]++
+		default:
+			byOwner["implementer"]++
+		}
+		if strings.Contains(strings.ToLower(n.Title), " pr ") && !strings.Contains(n.Title, "no PR") {
+			t.Errorf("a teaching step makes a PR: %q", n.Title)
+		}
+	}
+	if ws == nil || ws.Title != "Temporal schedules" || ws.Parent != "W.1" {
+		t.Fatalf("workstream: %+v", ws)
+	}
+	if byOwner["you"] != 1 || byOwner["reviewer"] != 2 || byOwner["implementer"] != 5 {
+		t.Fatalf("owners: %v", byOwner)
+	}
+	for _, n := range nodes[2:] {
+		if n.ID != ws.ID && n.Parent != ws.ID {
+			t.Errorf("%q is not under the new workstream", n.Title)
+		}
 	}
 }

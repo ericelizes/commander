@@ -187,7 +187,7 @@ disagrees.
    posted. Overrule any adversarial review, recheck or re-review on a new push:
    a passed step stays passed, and one green CI run is enough.
 9. **Build trees with tree edits, starting from a template.** For a PR,
-   a release or an investigation, run `cmdr plan template pr-babysit-fast|pr-babysit-slow|propose-then-approve|app-release|investigation|teach-agents
+   a release or an investigation, run `cmdr plan template pr-babysit-fast|pr-babysit-slow|propose-then-approve|app-release|investigation
    --parent <id> --subject "<what>"` and put its ops in the plan's `ops`, beside
    your `edits` (both apply in the same batch). "You" on the board is Eric's
    column. Checks are independent review steps (owner reviewer), never owned
@@ -200,6 +200,13 @@ disagrees.
    open step already there in the same batch: keep it (reference it), close
    it, or supersede it. `cmdr plan check --dir <project> [--workstream <id>]`
    lists a tree's problems before you start.
+   **Teaching agents a topic** (a context-control / Learn Forge / ForgeBench
+   workstream, like Grafana or Notifications): stamp it out in one call,
+   `cmdr plan template context-teaching --parent <the workstream it goes under>
+   --subject "<topic>" --project <project> --apply`. It creates the topic's
+   workstream and its steps: find the gap, questions with a failing baseline,
+   the guide iterated until they pass, an independent review, publish through
+   the orchestrator (no PR), a 48 h soak, a review of it live, and Eric's one final review.
 
 # Tools you have
 

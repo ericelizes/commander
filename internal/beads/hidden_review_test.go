@@ -90,9 +90,10 @@ func TestPRTemplatesHaveNoConfirmDoneAndBothVariants(t *testing.T) {
 	}
 }
 
+// teach-agents is context-teaching's other name: one teaching template.
 func TestTeachAgentsTemplateShape(t *testing.T) {
-	steps := planTemplates["teach-agents"]("X", false)
-	want := []string{"ux", "bench", "guide", "run", "check", "live", "soak", "check2", "eric"}
+	steps := planTemplates[planTemplateAliases["teach-agents"]]("X", false)
+	want := []string{"ws", "gap", "questions", "guide", "check", "publish", "soak", "live", "final"}
 	if len(steps) != len(want) {
 		t.Fatalf("got %d steps", len(steps))
 	}
@@ -101,7 +102,7 @@ func TestTeachAgentsTemplateShape(t *testing.T) {
 			t.Errorf("step %d is %s, want %s", i, s.ref, want[i])
 		}
 	}
-	if !contains(steps[8].labels, "approver:user") || !contains(steps[4].labels, "review") || !contains(steps[7].labels, "review") {
+	if !contains(steps[8].labels, "approver:user") || !contains(steps[4].labels, "review") || !contains(steps[7].labels, "review") || steps[8].acceptance == "" {
 		t.Fatal("gate or review labels wrong")
 	}
 	for _, s := range steps[:8] {

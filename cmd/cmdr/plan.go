@@ -28,7 +28,7 @@ func runPlan(args []string, stdout, stderr io.Writer) int {
 		return runPlanTemplate(args[1:], stdout, stderr)
 	}
 	if len(args) == 0 || (args[0] != "apply" && args[0] != "propose") {
-		fmt.Fprintln(stderr, "usage: cmdr plan apply|propose --file PATH (or - for stdin): {\"project\": NAME, \"edits\": [{\"op\": create|retitle|set_owner|set_criteria|move|link|unlink|supersede|close, ...}]} (or dir and raw ops); cmdr plan get --id ID; cmdr plan check [--dir PROJECT_DIR] [--workstream ID]... [--json]; cmdr plan template NAME --parent ID --subject TEXT [--owner-go]")
+		fmt.Fprintln(stderr, "usage: cmdr plan apply|propose --file PATH (or - for stdin): {\"project\": NAME, \"edits\": [{\"op\": create|retitle|set_owner|set_criteria|move|link|unlink|supersede|close, ...}]} (or dir and raw ops); cmdr plan get --id ID; cmdr plan check [--dir PROJECT_DIR] [--workstream ID]... [--json]; cmdr plan template NAME --parent ID --subject TEXT [--owner-go] [--project P --apply]")
 		return 2
 	}
 	fs := flag.NewFlagSet("plan apply", flag.ContinueOnError)
@@ -244,11 +244,11 @@ func runPlanCheck(args []string, stdout, stderr io.Writer) int {
 }
 
 // runPlanTemplate prints a template's plan-apply operations under a parent:
-// the recurring shapes (pr-babysit, app-release, investigation, teach-agents) built so the
+// the recurring shapes (pr-babysit, app-release, investigation, context-teaching) built so the
 // shape guard accepts them. Merge the ops into a plan apply request.
 func runPlanTemplate(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
-		fmt.Fprintln(stderr, "usage: cmdr plan template <name> --parent ID --subject TEXT [--owner-go]")
+		fmt.Fprintln(stderr, "usage: cmdr plan template <name> --parent ID --subject TEXT [--owner-go] [--project P --apply]")
 		for _, n := range beads.PlanTemplateNames() {
 			fmt.Fprintf(stderr, "  %-22s %s\n", n, beads.PlanTemplateTitles[n])
 		}
@@ -260,6 +260,8 @@ func runPlanTemplate(args []string, stdout, stderr io.Writer) int {
 	parent := fs.String("parent", "", "the track or step the steps go under")
 	subject := fs.String("subject", "", "what the steps are about, e.g. \"notifications redesign\" (no article)")
 	ownerGo := fs.Bool("owner-go", false, "app-release: add the owner's written go before the deploy (off by default)")
+	project := fs.String("project", "", "with --apply: the project the steps go into")
+	apply := fs.Bool("apply", false, "apply the template now, as one plan batch (the same validated write as plan apply)")
 	if fs.Parse(args[1:]) != nil || fs.NArg() != 0 {
 		return 2
 	}
@@ -267,6 +269,29 @@ func runPlanTemplate(args []string, stdout, stderr io.Writer) int {
 	if e != nil {
 		fmt.Fprintln(stderr, e)
 		return 2
+	}
+	if *apply {
+		if *project == "" {
+			fmt.Fprintln(stderr, "--apply needs --project")
+			return 2
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+		defer cancel()
+		dir, e := beads.ProjectDir(ctx, *project)
+		if e == nil {
+			var basis beads.PlanBasis
+			if basis, e = beads.CurrentPlanBasis(ctx, dir, ops); e == nil {
+				var result beads.DoorResponse
+				if result, e = beads.ApplyPlan(ctx, dir, ops, basis, nil); e == nil {
+					if e = json.NewEncoder(stdout).Encode(result); e != nil {
+						return 1
+					}
+					return result.Exit
+				}
+			}
+		}
+		fmt.Fprintln(stderr, e)
+		return 1
 	}
 	if e = json.NewEncoder(stdout).Encode(map[string]any{"template": name, "title": beads.PlanTemplateTitles[name], "ops": ops}); e != nil {
 		return 1
