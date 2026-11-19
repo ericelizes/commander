@@ -91,6 +91,8 @@ type TreeStep struct {
 	Criteria string `json:"ac,omitempty"`
 	// sentBack: what a review said when it sent its work back (its result is ready and not a pass).
 	sentBack string
+	// asksCommander: its agent waits on the Commander's answer to its question
+	asksCommander bool
 }
 
 var (
@@ -356,8 +358,10 @@ func (b *treeBuild) step(s SnapStep, row string) *TreeStep {
 	if s.ResultReadyAt > 0 && sentBackReport.MatchString(s.ResultLine) {
 		st.sentBack = sentBackWhy(s.ResultLine)
 	}
-	// A step whose agent asked Eric something is his card until he answers.
-	asksYou := s.Status != "closed" && (s.State == "needs-user" || s.QuestionWaiting || s.NeedsUser)
+	// A step whose agent asked Eric something (its card) is his until he answers;
+	// a question to the Commander keeps it the agent's card, waiting on that answer.
+	asksYou := s.Status != "closed" && (s.State == "needs-user" || s.NeedsUser)
+	st.asksCommander = s.QuestionWaiting && !asksYou
 	switch {
 	case s.Automatic:
 		// Automatic: no person or agent; it waits for one event and closes itself.
@@ -813,6 +817,8 @@ func (b *treeBuild) cardLines(s *TreeStep, openBlockers []string) {
 			s.Wait = s.Ask // the question, on the card
 		case s.Asleep:
 			s.Wait = "Asleep until " + treeWaitText.ReplaceAllString(s.Text, "")
+		case agentish && s.asksCommander:
+			s.Wait = "Waiting on the Commander's answer"
 		case strings.HasPrefix(s.Text, "Waiting"), strings.HasPrefix(s.Text, "Stuck"), s.Text == "State missing", strings.HasPrefix(s.Text, "Invalid"):
 			s.Wait = s.Text
 		case agentish && s.sentBack != "":
@@ -927,10 +933,10 @@ func (b *treeBuild) status(id string) []TreeLine {
 	case b.paused[id]:
 		return []TreeLine{{"none", "Paused"}}
 	}
-	// A parent whose open work all sits in paused workstreams is paused too, not stalled.
+	// A workstream whose open work is all on hold (deferred steps, paused workstreams) is paused, not stalled.
 	allPaused := true
 	for _, s := range openSteps {
-		if !b.paused[b.steps[s].Row] {
+		if !b.paused[b.steps[s].Row] && !pausedText(b.steps[s].Text) {
 			allPaused = false
 			break
 		}

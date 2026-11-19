@@ -350,3 +350,29 @@ func TestPostgresQuestionFailedLaunchRestoresOnlyUnchangedCheckpoint(t *testing.
 		})
 	}
 }
+
+// A question asked --to user carries a card; once the question is superseded
+// the card is stale and comes off the user's list.
+func TestPostgresSupersededQuestionCardIsStale(t *testing.T) {
+	s, pid, ctx, _, r := questionFixture(t)
+	id, e := s.AskQuestion(ctx, r)
+	if e != nil {
+		t.Fatal(e)
+	}
+	q, e := s.QuestionForCard(ctx, id)
+	if e != nil || q.Bead != "leaf" || q.Question != r.Question || q.Project == "" {
+		t.Fatalf("card question %+v %v", q, e)
+	}
+	if e = s.UpsertNeedsYou(ctx, NeedsYou{ProjectID: pid, BeadID: "leaf", Ask: QuestionCardAsk, Decision: `{"question":"Which integration?","input":true}`}); e != nil {
+		t.Fatal(e)
+	}
+	if stale, e := s.StaleQuestionCards(ctx); e != nil || len(stale) != 0 {
+		t.Fatalf("a waiting question's card is stale: %+v %v", stale, e)
+	}
+	if _, e = s.DB().ExecContext(ctx, `UPDATE bead_tasks SET description='Different goal' WHERE project_id=? AND id='leaf'`, pid); e != nil {
+		t.Fatal(e)
+	}
+	if stale, e := s.StaleQuestionCards(ctx); e != nil || len(stale) != 1 || stale[0].Bead != "leaf" {
+		t.Fatalf("superseded question's card not stale: %+v %v", stale, e)
+	}
+}

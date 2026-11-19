@@ -292,6 +292,9 @@ func run(args []string, stdout, stderr *os.File) int {
 		return runInternalMoveObjective(args[1:], stdout, stderr)
 	case "internal-move-card":
 		return runInternalMoveCard(args[1:], stdout, stderr)
+	case "internal-withdraw-card":
+		// cmdrd: an agent question's card goes once its question is answered or superseded.
+		return runInternalWithdrawCard(args[1:], stdout, stderr)
 	case "internal-resolve-needs":
 		return runInternalResolveNeeds(args[1:], stdout, stderr)
 	case "internal-needs-you":

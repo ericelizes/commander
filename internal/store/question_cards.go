@@ -6,20 +6,36 @@ import (
 	"errors"
 )
 
-// OpenQuestion is an agent's blocking question that has no card for the user yet.
+// QuestionCardAsk is the ask on the card an agent's question to the user
+// raises (cmdr question ask --to user).
+const QuestionCardAsk = "Answer the agent's question"
+
+// OpenQuestion is an agent's question to the user, as its card shows it.
 type OpenQuestion struct {
 	ID, Project, Bead, Title, Question, Recommendation string
 }
 
-// QuestionsWithoutCards lists pending blocking agent questions on steps with
-// no card on the user's list: the user answers them, through a card.
-func (s *Store) QuestionsWithoutCards(ctx context.Context) ([]OpenQuestion, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT q.id,p.name,q.bead_id,b.title,q.question,q.recommendation
+// QuestionForCard is a question with what its card shows: the step's project
+// and title beside the question and the agent's recommendation.
+func (s *Store) QuestionForCard(ctx context.Context, id string) (OpenQuestion, error) {
+	var o OpenQuestion
+	err := s.db.QueryRowContext(ctx, `SELECT q.id,p.name,q.bead_id,b.title,q.question,q.recommendation
 FROM bead_questions q JOIN projects p ON p.id=q.project_id
-JOIN bead_tasks b ON b.project_id=q.project_id AND b.id=q.bead_id AND b.deleted_at IS NULL AND b.status<>'closed'
-WHERE q.state='pending' AND q.blocking AND q.kind='execution' AND q.bead_id<>''
- AND NOT EXISTS(SELECT 1 FROM needs_you n WHERE n.project_id=q.project_id AND n.bead_id=q.bead_id)
-ORDER BY q.created_at`)
+JOIN bead_tasks b ON b.project_id=q.project_id AND b.id=q.bead_id
+WHERE q.id=?`, id).Scan(&o.ID, &o.Project, &o.Bead, &o.Title, &o.Question, &o.Recommendation)
+	return o, err
+}
+
+// StaleQuestionCards lists the steps whose agent-question card no longer has a
+// pending question behind it (answered or superseded), so the card comes off
+// the user's list. A card whose answer the user already gave is left to that
+// answer's own path.
+func (s *Store) StaleQuestionCards(ctx context.Context) ([]OpenQuestion, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT p.name,n.bead_id FROM needs_you n JOIN projects p ON p.id=n.project_id
+WHERE n.ask=?
+ AND NOT EXISTS(SELECT 1 FROM bead_questions q WHERE q.project_id=n.project_id AND q.bead_id=n.bead_id AND q.state='pending' AND q.blocking)
+ AND NOT commander_pending_human_answer(n.project_id,n.bead_id)
+ORDER BY n.since`, QuestionCardAsk)
 	if err != nil {
 		return nil, err
 	}
@@ -27,7 +43,7 @@ ORDER BY q.created_at`)
 	var out []OpenQuestion
 	for rows.Next() {
 		var o OpenQuestion
-		if err := rows.Scan(&o.ID, &o.Project, &o.Bead, &o.Title, &o.Question, &o.Recommendation); err != nil {
+		if err := rows.Scan(&o.Project, &o.Bead); err != nil {
 			return nil, err
 		}
 		out = append(out, o)

@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -78,7 +79,7 @@ func (d *Daemon) runAutoAccept(ctx context.Context) {
 		if d.attempted == nil {
 			d.attempted = &answerTries{}
 		}
-		raiseQuestionCards(ctx, d.store.QuestionsWithoutCards, cmdrCommand)
+		withdrawQuestionCards(ctx, d.store.StaleQuestionCards, d.tryOnce)
 		applyAnswers(ctx, d.store.PendingAnswers, d.attempted, d.answerQuestion)
 		closed := closeAnsweredGates(ctx, d.store.AnsweredGates, d.tryClose, d.finishRejectedGate)
 		closed += reviseSentBackReviews(ctx, d.store.ReviewsSentBack, applySystemPlan, d.store.RerunAfterRevision)
@@ -142,6 +143,25 @@ func applyAnswers(ctx context.Context, list func(context.Context) ([]store.Pendi
 		}
 		log.Printf("apply-answer: %s %s applied the user's recorded answer", a.Project, a.Bead)
 	}
+}
+
+// tryOnce runs a cmdr command at most every ten minutes per command line, so
+// a refused one is not retried every pass.
+func (d *Daemon) tryOnce(ctx context.Context, args ...string) error {
+	key := strings.Join(args, " ")
+	d.attempted.mu.Lock()
+	if d.attempted.last == nil {
+		d.attempted.last = map[string]time.Time{}
+	}
+	recent := time.Since(d.attempted.last[key]) < 10*time.Minute
+	if !recent {
+		d.attempted.last[key] = time.Now()
+	}
+	d.attempted.mu.Unlock()
+	if recent {
+		return fmt.Errorf("retried at most every ten minutes")
+	}
+	return cmdrCommand(ctx, args...)
 }
 
 // tryClose closes a step at most every ten minutes per step, so a step whose

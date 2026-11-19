@@ -32,7 +32,9 @@ use `--db <project-root>/.beads/beads.db` (the exact command is in your first me
   your own work into operational beads when it helps (exit 3 = the bead exists but a `--deps` wait is missing: do not create it again, run the `finish` command in its JSON); `cmdr internal-dep --project <project> add|rm <bead> <waits-on>`; `cmdr internal-update --project <project> --bead <id> --notes|--description|--priority ...` and `cmdr internal-label --project <project> --bead <id> add|rm <label>` for the rest; `internal-create-objective --operational --deps blocked-by:<id>` sets waits at creation.
 - There is no agent mail. A question you cannot answer within your brief:
   `cmdr question ask --project-id <id> --bead <task-id> --plan-revision <fresh> --request <stable key> --text "<the decision needed>" --recommendation "<yours>" --checkpoint "<branch, commits, next safe step>"`.
-  It becomes Eric's card and his answer resumes you. Your result is your final report on the bead.
+  It goes to the Commander, whose answer resumes you. Add `--to user` only for what only Eric can decide:
+  spending money, a production greenlight, credentials, or a merge that needs him; that one becomes Eric's card
+  and his answer resumes you. Your result is your final report on the bead.
 
 ## Workflow
 
@@ -56,7 +58,8 @@ use `--db <project-root>/.beads/beads.db` (the exact command is in your first me
    after yours checks it.
 
 Blocked on a decision or something external: ask it with `cmdr question ask`
-(blocking) and stop; Eric's answer resumes you.
+(blocking) and stop; the answer resumes you (`--to user` only for what only Eric
+can decide, as above).
 
 ## You never
 

@@ -406,3 +406,29 @@ func TestTreeSentBackReview(t *testing.T) {
 		t.Fatalf("card: %+v", s)
 	}
 }
+
+// An agent waiting on the Commander's answer to its question is still the
+// agent's card, saying so; only a question asked --to user is Eric's.
+func TestTreeQuestionToCommanderStaysAgentCard(t *testing.T) {
+	snap := Snapshot{Workstreams: []SnapWorkstream{{N: 1, Project: "app", BeadID: "a", Title: "Jobs on Temporal", Status: "open", Steps: []SnapStep{
+		{BeadID: "a.1", Title: "Turn on the safe jobs in dev", Status: "in_progress", Lane: "agents", State: "in-progress", QuestionWaiting: true},
+	}}}}
+	tr := BuildTree(snap, 0)
+	s := tr.Steps[0]
+	if s.Type != "agent" || s.Wait != "Waiting on the Commander's answer" || tr.NeedsYou != 0 {
+		t.Fatalf("card: %+v (needs you %d)", s, tr.NeedsYou)
+	}
+}
+
+// y5s on Nov 19: its only open step was on hold (deferred) and read Paused, yet
+// the workstream read "Stalled: nothing active". Open work all on hold is Paused.
+func TestTreeWorkstreamWithOnlyHeldStepsIsPaused(t *testing.T) {
+	snap := Snapshot{Workstreams: []SnapWorkstream{{N: 1, Project: "rcm", BeadID: "y5s", Title: "Claims stuck after payer answered", Status: "open", Steps: []SnapStep{
+		{BeadID: "y5s.1", Title: "Find the stuck claims", Status: "closed", Lane: "agents", State: "done"},
+		{BeadID: "y5s.2", Title: "Re-submit the stuck claims", Status: "deferred", Lane: "agents"},
+	}}}}
+	tr := BuildTree(snap, 0)
+	if got := tr.Rows[0].Status; len(got) != 1 || got[0].Text != "Paused" {
+		t.Fatalf("lines %+v", got)
+	}
+}

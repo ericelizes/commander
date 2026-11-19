@@ -49,8 +49,11 @@ Questions are blocking by default. After saving a blocking checkpoint, stop
 without a `Final report:`: the service resumes the recorded execution when the
 required answer is complete. Do not poll, wait in a loop, clear the blocker or
 start other work. For a question that does not block your current authorized
-work, pass `--blocking=false` and continue that work. A blocking question
-becomes Eric's card; his answer comes back to you and your run resumes.
+work, pass `--blocking=false` and continue that work. Questions go to the
+Commander, whose answer comes back to you and resumes your run. Add `--to user`
+only for what only Eric can decide: spending money, a production greenlight,
+credentials, or a merge that needs him. That question becomes Eric's card and
+his answer resumes you.
 
 You are finished only when the work is done or has definitely stopped. If you
 started something that is still running (a release, a deploy, a test suite, CI,

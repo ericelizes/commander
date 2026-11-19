@@ -19,7 +19,7 @@ import (
 
 func runQuestion(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: cmdr question ask|inbox|get|history|answer [--project-id ID --bead ID --plan-revision N --request KEY --text TEXT --checkpoint TEXT --related JSON]")
+		fmt.Fprintln(stderr, "usage: cmdr question ask|inbox|get|history|answer [--project-id ID --bead ID --plan-revision N --request KEY --text TEXT --checkpoint TEXT --related JSON --to commander|user]")
 		return 2
 	}
 	fs := flag.NewFlagSet("question", flag.ContinueOnError)
@@ -32,6 +32,7 @@ func runQuestion(args []string, stdout, stderr io.Writer) int {
 	recommend := fs.String("recommendation", "", "")
 	checkpoint := fs.String("checkpoint", "", "")
 	blocking := fs.Bool("blocking", true, "")
+	to := fs.String("to", "commander", "who answers: commander (default) or user, for what only the user can decide")
 	related := fs.String("related", "[]", "")
 	id := fs.String("id", "", "")
 	approve := fs.Bool("approve", true, "")
@@ -63,6 +64,14 @@ func runQuestion(args []string, stdout, stderr io.Writer) int {
 	if args[0] == "answer" && beads.HasExecutionAttribution(os.Environ()) {
 		fmt.Fprintln(stderr, "execution sessions cannot answer planning questions")
 		return 1
+	}
+	if args[0] == "ask" && *to != "commander" && *to != "user" {
+		fmt.Fprintln(stderr, "--to must be commander or user")
+		return 2
+	}
+	if args[0] == "ask" && *to == "user" && !*blocking {
+		fmt.Fprintln(stderr, "a question to the user blocks: drop --blocking=false")
+		return 2
 	}
 	path, e := stateDBPath()
 	if e != nil {
@@ -97,6 +106,12 @@ func runQuestion(args []string, stdout, stderr io.Writer) int {
 		}
 		var question string
 		question, e = st.AskQuestion(ctx, store.QuestionRequest{ProjectID: *pid, BeadID: *bead, PlanRevision: *revision, Actor: actor, ClientKey: *key, RunID: rid, Session: os.Getenv("COMMANDER_RUN_SESSION"), Question: *text, Recommendation: *recommend, Checkpoint: *checkpoint, CheckpointRuntime: runtime, CheckpointThread: thread, Blocking: *blocking, Related: scopes})
+		if e == nil && *to == "user" {
+			var q store.OpenQuestion
+			if q, e = st.QuestionForCard(ctx, question); e == nil {
+				e = raiseQuestionCard(q)
+			}
+		}
 		result = map[string]string{"question_id": question}
 	case "get":
 		result, e = st.Question(ctx, *id)
