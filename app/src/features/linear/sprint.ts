@@ -59,10 +59,10 @@ export function statusTone(issue: LinearIssue): string {
   return issue.status_type === 'completed' ? 'ok' : issue.status_type === 'started' ? 'run' : 'muted'
 }
 
-/** working on the workstream counts its Manager and Operators; on a track, that track's live Operators. */
-export interface ProgressWorkstream { key: string; title: string; tickets?: string[]; working?: number; tracks?: { title: string; tickets?: string[]; working?: number }[] }
-/** workstreams lists every workstream carrying the ticket (in sidebar order); workstream is the first. worked: an agent is on whichever carries it. */
-export interface ProgressRow { issue: LinearIssue; workstream?: { key: string; title: string }; workstreams: { key: string; title: string }[]; worked: boolean }
+/** working: how many open steps the workstream (or track) has underway. finished: tickets of its closed tracks. */
+export interface ProgressWorkstream { key: string; title: string; tickets?: string[]; working?: number; tracks?: { title: string; tickets?: string[]; working?: number }[]; finished?: string[] }
+/** workstreams lists every workstream carrying the ticket (in sidebar order); workstream is the first. worked: work is underway on whichever carries it. finished: only closed tracks carry it. */
+export interface ProgressRow { issue: LinearIssue; workstream?: { key: string; title: string }; workstreams: { key: string; title: string }[]; worked: boolean; finished?: boolean }
 const done = (i: LinearIssue) => i.status_type === 'completed'
 /**
  * touched: the ticket left the backlog. In Progress, In Review, Approval, Blocked and Done
@@ -103,16 +103,27 @@ export function cycleLastDay(value: string | undefined, timeZone?: string, lastD
   return day === null ? '' : new Date(day).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
 }
 
-/** cycleDaysLeft counts calendar days from today to the cycle's last day: 0 on the last day, negative once it ended. */
+/**
+ * cycleDaysLeft counts the workdays (Monday to Friday) after today up to the cycle's last day:
+ * 0 on the last day, negative (in calendar days) once it ended.
+ */
 export function cycleDaysLeft(end: string | undefined, timeZone: string | undefined, now: number): number | null {
   const last = cycleDay(end, timeZone, true)
-  return last === null ? null : Math.round((last - zoneDay(now, timeZone)) / DAY)
+  if (last === null) return null
+  const today = zoneDay(now, timeZone)
+  if (last < today) return Math.round((last - today) / DAY)
+  let workdays = 0
+  for (let day = today + DAY; day <= last; day += DAY) {
+    const weekday = new Date(day).getUTCDay()
+    if (weekday !== 0 && weekday !== 6) workdays++
+  }
+  return workdays
 }
 
 export function daysLeftText(n: number): string {
   if (n < 0) return 'ended'
   if (n === 0) return 'ends today'
-  return `${n} day${n === 1 ? '' : 's'} left`
+  return `${n} workday${n === 1 ? '' : 's'} left`
 }
 
 /**
@@ -135,7 +146,15 @@ export function progressRows(issues: LinearIssue[], workstreams: ProgressWorkstr
     claim(w, [...ticketsOf(w.title), ...(w.tickets ?? [])], w.working)
     for (const x of w.tracks ?? []) claim(w, [...ticketsOf(x.title), ...(x.tickets ?? [])], x.working)
   }
-  const rows = issues.map((issue) => { const id = issue.id.toUpperCase(); const ws = owners.get(id) ?? []; return { issue, workstream: ws[0], workstreams: ws, worked: worked.has(id) } })
+  // A ticket only a closed track carries is finished here; it keeps that workstream.
+  const finishedBy = new Map<string, { key: string; title: string }>()
+  for (const w of workstreams) for (const t of w.finished ?? []) if (!owners.has(t) && !finishedBy.has(t)) finishedBy.set(t, { key: w.key, title: w.title })
+  const rows = issues.map((issue) => {
+    const id = issue.id.toUpperCase()
+    const by = finishedBy.get(id)
+    const ws = owners.get(id) ?? (by ? [by] : [])
+    return { issue, workstream: ws[0], workstreams: ws, worked: worked.has(id), finished: !!by }
+  })
   const rank = (r: ProgressRow) => (!r.workstream && !done(r.issue) ? 0 : 1)
   return rows.map((r, i) => ({ r, i })).sort((a, b) => rank(a.r) - rank(b.r) || a.i - b.i).map((x) => x.r)
 }

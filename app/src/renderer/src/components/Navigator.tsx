@@ -2,7 +2,8 @@ import { ActivityFreshness } from './ActivityFreshness'
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { LinearMark, splitTickets } from '../../../features/linear/Ticket'
-import { MyProgress, progressWorkstreams } from '../../../features/linear/MyProgress'
+import { MyProgress, treeWorkstreams } from '../../../features/linear/MyProgress'
+import { useLiveTree } from '../../../features/treeboard/liveTree'
 import { AllClear } from './AllClear'
 import { useAgentRows } from './SettingsModal'
 import { useStore } from '../store'
@@ -71,7 +72,8 @@ export function Navigator() {
     const placed = moved ? applyMove(real.workstreams, moved.node, moved.drop) : real.workstreams
     return { ...real, workstreams: withoutGone(placed, (k) => !!completed[k] && nowSec - completed[k] / 1000 < goneFor) }
   }, [real, moved, completed, nowSec])
-  const progress = useMemo(() => progressWorkstreams(snapshot?.workstreams ?? [], vm?.workstreams ?? []), [snapshot?.workstreams, vm])
+  const liveTree = useLiveTree((s) => s.tree)
+  const progress = useMemo(() => treeWorkstreams(liveTree), [liveTree])
   const listRef = useRef<HTMLDivElement>(null)
   const apis = useApis()
   const [tab, setTab] = usePref<'needs' | 'all'>('nav.tab', 'all')

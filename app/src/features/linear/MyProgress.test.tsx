@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { SnapStep, SnapWorkstream } from '../../shared/snapshot'
-import { MyProgress, ProgressPage, progressWorkstreams, sprintStats } from './MyProgress'
+import type { Tree, TreeRow, TreeStep } from '../treeboard/types'
+import { MyProgress, ProgressPage, sprintStats, treeWorkstreams } from './MyProgress'
 import { progressRows, touched, cycleLastDay, cycleDaysLeft, daysLeftText, useSprint, type LinearIssue } from './sprint'
 import { splitTickets, ticketIds } from './Ticket'
 import { useIntegrations } from './settings'
@@ -139,7 +139,14 @@ describe('days left', () => {
     expect(at('2026-11-10T17:00:00Z')).toBe(0) // Nov 10, noon
     expect(at('2026-11-11T01:00:00Z')).toBe(0) // Nov 10, 8pm
     expect(at('2026-11-11T17:00:00Z')).toBe(-1) // Nov 11
-    expect([daysLeftText(2), daysLeftText(1), daysLeftText(0), daysLeftText(-3)]).toEqual(['2 days left', '1 day left', 'ends today', 'ended'])
+    expect([daysLeftText(2), daysLeftText(1), daysLeftText(0), daysLeftText(-3)]).toEqual(['2 workdays left', '1 workday left', 'ends today', 'ended'])
+  })
+  it('skips the weekend', () => {
+    const left = (iso: string) => cycleDaysLeft('2026-11-25', 'UTC', Date.parse(iso)) // last day Tue Nov 24
+    expect(left('2026-11-19T12:00:00Z')).toBe(3) // Thu: Fri, Mon, Tue
+    expect(left('2026-11-20T12:00:00Z')).toBe(2) // Fri: Mon, Tue
+    expect(left('2026-11-22T12:00:00Z')).toBe(2) // Sun: Mon, Tue
+    expect(left('2026-11-24T12:00:00Z')).toBe(0)
   })
   it('moves on the clock with no new data, in the card and the page', async () => {
     vi.useFakeTimers({ now: Date.parse('2026-11-11T04:30:00Z') }) // Nov 10, 11:30pm in New York
@@ -188,27 +195,35 @@ it('flags only In Progress with no agent, and an agent on a ticket not started',
   const busy = opened([{ key: 'a', title: 'x', working: 1, tickets: ['A-5'] }], list)
   expect(busy.wrong.map((r) => r.issue.id)).toEqual(['A-4', 'A-5'])
 })
-describe('progressWorkstreams', () => {
-  const step = (id: string, over: Partial<SnapStep>) => ({ bead_id: id, title: id, status: 'open', ...over }) as SnapStep
-  const snap = { project: 'p', bead_id: 'w', title: 'W', tickets: ['TEAM-9'], steps: [
-    step('w.1', { title: 'Busy (TEAM-1)', track: true, children: [step('w.1.1', { owner: 'operator-x', owner_state: 'working' })] }),
-    step('w.2', { title: 'Idle', tickets: ['TEAM-2'], track: true, children: [step('w.2.1', { owner: 'operator-y', owner_state: 'died' })] }),
-    step('w.3', { title: 'Closed (TEAM-3)', track: true, status: 'closed' }),
-    step('w.4', { title: 'Parked (TEAM-4)', track: true, status: 'deferred' }),
-    step('w.5', { title: 'Dropped (TEAM-5)', track: true, superseded: true }),
-    step('w.6', { title: 'A plain step (TEAM-6)' }),
-  ] } as unknown as SnapWorkstream
-  it('keeps open tracks only, each with its own live Operators', () => {
-    const [w] = progressWorkstreams([snap], [{ key: 'p:w', working: 2 }])
-    expect(w).toMatchObject({ key: 'p:w', title: 'W', tickets: ['TEAM-9'], working: 2 })
-    expect(w.tracks).toEqual([{ title: 'Busy (TEAM-1)', tickets: undefined, working: 1 }, { title: 'Idle', tickets: ['TEAM-2'], working: 0 }])
+describe('treeWorkstreams', () => {
+  const row = (id: string, over: Partial<TreeRow> = {}) => ({ id, key: `p:${id}`, project: 'p', label: '', depth: 0, title: id, done: false, pct: 0, of: '', needs_you: 0, state: '', status: [], line: { tone: 'none', text: '' }, ...over }) as TreeRow
+  const step = (id: string, r: string, state: TreeStep['state']) => ({ id, row: r, title: id, type: 'agent', owner: '', state, col: 0, own: '' }) as TreeStep
+  const tree = { version: 1, asof: 0, done: 0, total: 1, needs_you: 0, edges: [], rows: [
+    row('w', { tix: ['TEAM-9'] }),
+    row('w.1', { parent: 'w', title: 'Agent waiting on CI (TEAM-1)' }),
+    row('w.2', { parent: 'w', tix: ['TEAM-2'] }),
+    row('w.3', { parent: 'w', tix: ['TEAM-3'], done: true }),
+    row('w.4', { parent: 'w', tix: ['TEAM-4'], note: 'Paused' }),
+    row('w.4.1', { parent: 'w.4', tix: ['TEAM-5'] }),
+  ], steps: [
+    step('s1', 'w.1', 'active'), step('s2a', 'w.2', 'done'), step('s2b', 'w.2', 'notstarted'),
+    step('s3', 'w.3', 'done'), step('s5', 'w.4.1', 'active'),
+  ] } as Tree
+  it('puts work underway in progress, paused work in to do, and done work in done and wrong', () => {
+    const list = [1, 2, 3, 4, 5, 9].map((n) => mk(`TEAM-${n}`, 'started', 'In Progress'))
+    const s = opened(treeWorkstreams(tree), list)
+    expect(s.started.map((r) => r.issue.id)).toEqual(['TEAM-1', 'TEAM-2', 'TEAM-9'])
+    expect(s.todo.map((r) => r.issue.id)).toEqual(['TEAM-4', 'TEAM-5'])
+    expect(s.todo.every((r) => r.workstream?.key === 'p:w')).toBe(true)
+    expect(s.done.map((r) => r.issue.id)).toEqual(['TEAM-3'])
+    expect(s.wrong.map((r) => r.issue.id)).toEqual(['TEAM-4', 'TEAM-5', 'TEAM-3'])
   })
-  it('lets a closed, parked or dropped track claim nothing', () => {
-    const list = [mk('TEAM-1', 'unstarted', 'Todo'), mk('TEAM-2', 'unstarted', 'Todo'), mk('TEAM-3', 'unstarted', 'Todo'), mk('TEAM-4', 'unstarted', 'Todo'), mk('TEAM-5', 'unstarted', 'Todo'), mk('TEAM-9', 'unstarted', 'Todo')]
-    const s = opened(progressWorkstreams([snap], [{ key: 'p:w', working: 2 }]), list)
-    expect(s.unassigned.map((r) => r.issue.id)).toEqual(['TEAM-3', 'TEAM-4', 'TEAM-5'])
-    expect(s.started.map((r) => r.issue.id)).toEqual(['TEAM-1', 'TEAM-9'])
-    expect(s.wrong.map((r) => r.issue.id)).toEqual(['TEAM-1', 'TEAM-9'])
+  it('has nothing to join before the tree arrives', () => {
+    expect(treeWorkstreams(null)).toEqual([])
+  })
+  it('closes Duplicate like Canceled', () => {
+    const s = opened([], [mk('TEAM-1', 'duplicate', 'Duplicate')])
+    expect([s.todo.length, s.canceled.length]).toEqual([0, 1])
   })
 })
 

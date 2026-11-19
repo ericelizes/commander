@@ -9,8 +9,9 @@ import { trackTitle } from '../../renderer/src/viewmodel'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { MyProgress, progressWorkstreams } from '../linear/MyProgress'
-import { askKey, board as boardVM, wsKey } from '../../renderer/src/viewmodel'
+import { MyProgress, treeWorkstreams } from '../linear/MyProgress'
+import { useLiveTree } from './liveTree'
+import { askKey, wsKey } from '../../renderer/src/viewmodel'
 import { host } from '../../renderer/src/host'
 import { Splitter } from '../../renderer/src/components/Splitter'
 import { useStore } from '../../renderer/src/store'
@@ -75,10 +76,10 @@ export function TreeBoard({ treeWidth, onDragTree, onDragDone }: { treeWidth: nu
   const [ready, setReady] = useState(0)
   const cfg = useStore((s) => s.config)
   const version = useStore((s) => s.snapshot?.version ?? 0)
-  const snapshot = useStore((s) => s.snapshot)
   // The Linear progress card, as the classic sidebar showed it, without the cycle list:
   // the whole cycle in the sidebar header, a top-level workstream's own tickets in its panel.
-  const progress = useMemo(() => progressWorkstreams(snapshot?.workstreams ?? [], snapshot?.display ? boardVM(snapshot).workstreams : []), [snapshot])
+  const liveTree = useLiveTree((s) => s.tree)
+  const progress = useMemo(() => treeWorkstreams(liveTree), [liveTree])
   const [slots, setSlots] = useState<{ linear: HTMLElement; inspector: HTMLElement } | null>(null)
   const [wsSlot, setWsSlot] = useState<{ el: HTMLElement; row: TreeRow } | null>(null)
   const openProgress = () => useStore.getState().select({ kind: 'progress' })
@@ -123,6 +124,7 @@ export function TreeBoard({ treeWidth, onDragTree, onDragDone }: { treeWidth: nu
         if (!live) return
         setError('')
         tree.current = t
+        useLiveTree.setState({ tree: t })
         useTreeSelection.setState({ running: t.steps.filter((s) => !!s.run).length })
         board.current?.update(t)
       },

@@ -3,8 +3,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { SettingsModal } from '../../renderer/src/components/SettingsModal'
 import { openInPanel } from '../inspector/connections'
-import { fmtAge, openNested, wsKey } from '../../renderer/src/viewmodel'
-import type { SnapStep, SnapWorkstream } from '../../shared/snapshot'
+import { fmtAge } from '../../renderer/src/viewmodel'
+import type { Tree, TreeRow } from '../treeboard/types'
 import { useSprint, progressRows, cycleLastDay, cycleDaysLeft, daysLeftText, type Cycle, type LinearIssue, type ProgressRow, type ProgressWorkstream, type Sprint, type TeamSprint } from './sprint'
 import { useIntegrations } from './settings'
 import { splitTickets, ticketIds } from './Ticket'
@@ -12,41 +12,42 @@ import { splitTickets, ticketIds } from './Ticket'
 const DAY = 86_400_000
 
 const isDone = (i: LinearIssue) => i.status_type === 'completed'
-const isCanceled = (i: LinearIssue) => i.status_type === 'canceled'
+// Linear files Duplicate under its own type; it is closed like Canceled.
+const isCanceled = (i: LinearIssue) => i.status_type === 'canceled' || i.status_type === 'duplicate'
 const isStarted = (i: LinearIssue) => i.status_type === 'started'
 // In Review, Approval and Blocked are 'started' too, but rightly sit with no agent on them.
 const claimsActive = (i: LinearIssue) => /^in progress$/i.test(i.status_name.trim())
 
-const closed = (s: SnapStep) => s.status === 'closed' || s.state === 'done'
-const parked = (s: SnapStep) => s.status === 'deferred'
-
-/** liveOperators counts the live Operators on steps and under them (livedata.workingOperators). */
-function liveOperators(steps: SnapStep[]): number {
-  const ops = new Set<string>()
-  const walk = (list: SnapStep[]) => {
-    for (const x of list) {
-      if (parked(x)) continue
-      if (!closed(x) && x.owner?.startsWith('operator-') && (!x.owner_state || x.owner_state === 'working')) ops.add(x.owner)
-      walk(x.children ?? [])
-    }
-  }
-  walk(steps)
-  return ops.size
-}
 
 /**
- * progressWorkstreams is what My Progress joins tickets to, from the snapshot (livedata.WorkstreamTickets):
- * open tracks only, each with its own Operators, single tracks too (the board's rows list only several).
+ * treeWorkstreams is what Progress joins tickets to: cmdrd's tree, the one the board draws
+ * and the Commander reads. A workstream or track is underway while it is open, not paused,
+ * and has a step left: the system starts an agent on every unblocked agent step, so what is
+ * left is an agent on it (working or in a watched wait) or a wait on a person or an earlier
+ * step. A paused one is underway nowhere; a done one's tickets are finished here.
  */
-export function progressWorkstreams(workstreams: SnapWorkstream[], rows: { key: string; working: number }[]): ProgressWorkstream[] {
-  const working = new Map(rows.map((r) => [r.key, r.working]))
-  return workstreams.map((w) => ({
-    key: wsKey(w),
-    title: w.title,
-    tickets: w.tickets,
-    working: working.get(wsKey(w)),
-    tracks: openNested(w, false).map((x) => ({ title: x.title, tickets: x.tickets, working: liveOperators([x]) })),
-  }))
+export function treeWorkstreams(tree: Tree | null | undefined): ProgressWorkstream[] {
+  if (!tree) return []
+  const kids = new Map<string, TreeRow[]>()
+  for (const r of tree.rows) if (r.parent) kids.set(r.parent, [...(kids.get(r.parent) ?? []), r])
+  const openSteps = new Set(tree.steps.filter((s) => s.state !== 'done').map((s) => s.row))
+  const paused = (r: TreeRow) => r.note === 'Paused'
+  const underway = (r: TreeRow): boolean => !r.done && !paused(r) && (openSteps.has(r.id) || (kids.get(r.id) ?? []).some(underway))
+  const below = (r: TreeRow): TreeRow[] => (kids.get(r.id) ?? []).flatMap((k) => [k, ...below(k)])
+  // A paused row's rows are paused too.
+  const inPaused = (r: TreeRow, rows: TreeRow[]) => paused(r) || rows.some((p) => paused(p) && below(p).includes(r))
+  return tree.rows.filter((r) => !r.parent).map((top) => {
+    const nested = below(top)
+    const tix = (r: TreeRow) => [...ticketIds(r.title), ...(r.tix ?? [])]
+    return {
+      key: top.key,
+      title: top.title,
+      tickets: top.done ? [] : top.tix,
+      working: underway(top) ? 1 : 0,
+      tracks: nested.filter((r) => !r.done).map((r) => ({ title: r.title, tickets: r.tix, working: !inPaused(r, nested) && underway(r) ? 1 : 0 })),
+      finished: [...(top.done ? tix(top) : []), ...nested.filter((r) => r.done).flatMap(tix)],
+    }
+  })
 }
 
 /** unreachableNote says the card's numbers are old, and since when. */
@@ -86,19 +87,21 @@ export function sprintStats(issues: LinearIssue[], workstreams: ProgressWorkstre
   const rows = progressRows(issues, workstreams, ticketIds).filter((r) => !only || r.workstreams.some((w) => w.key === only))
   const on = (r: ProgressRow) => r.worked
   const live = rows.filter((r) => !isCanceled(r.issue))
-  const open = live.filter((r) => !isDone(r.issue))
+  // Done here counts as done, and as wrong while Linear still has it open.
+  const finished = (r: ProgressRow) => isDone(r.issue) || r.finished
+  const open = live.filter((r) => !finished(r))
   const start = cycle?.start ? Date.parse(cycle.start) : NaN
   const end = cycle?.end ? Date.parse(cycle.end) : NaN
   const span = end - start
   const timeGone = span > 0 ? Math.min(1, Math.max(0, (now - start) / span)) : NaN
-  const doneShare = live.length ? live.filter((r) => isDone(r.issue)).length / live.length : 0
+  const doneShare = live.length ? live.filter(finished).length / live.length : 0
   return {
-    done: live.filter((r) => isDone(r.issue)),
-    // What is really happening decides: an agent on it is in progress, none is to do.
+    done: live.filter(finished),
+    // What is really happening decides: work underway is in progress, none is to do.
     started: open.filter(on),
     todo: open.filter((r) => !on(r)),
     // Linear says otherwise: an agent works a ticket still in To do, or none works one marked In Progress.
-    wrong: open.filter((r) => (on(r) ? !isStarted(r.issue) : claimsActive(r.issue))),
+    wrong: [...open.filter((r) => (on(r) ? !isStarted(r.issue) : claimsActive(r.issue))), ...live.filter((r) => r.finished && !isDone(r.issue))],
     canceled: rows.filter((r) => isCanceled(r.issue)),
     withAgents: open.filter(on),
     idle: open.filter((r) => r.workstream && !on(r)),
@@ -263,8 +266,8 @@ function SprintBreakdown({ data, cycle, s, onOpen }: { data: Sprint; cycle?: Cyc
   const name = cycle?.name ?? 'Sprint'
   const pct = (x: number) => `${Math.round(x * 100)}%`
   const tabs = [
-    { id: 'started', label: 'In progress', rows: s.started, hint: 'An agent is working on these right now.' },
-    { id: 'todo', label: 'To do', rows: s.todo, hint: 'No agent is working on these: no workstream covers them, or theirs is idle. Give them to Commander.' },
+    { id: 'started', label: 'In progress', rows: s.started, hint: 'Underway: an agent is on these, or they wait on a person or an earlier step.' },
+    { id: 'todo', label: 'To do', rows: s.todo, hint: 'Nothing is underway: no workstream covers them, or theirs is paused. Give them to Commander.' },
     ...(s.wrong.length ? [{ id: 'wrong', label: 'Wrong status', rows: s.wrong, hint: 'Linear disagrees with what is happening. Update these in Linear.' }] : []),
     { id: 'added', label: 'Added', rows: s.added, hint: 'Joined the sprint after its first day.' },
     { id: 'done', label: 'Finished', rows: s.done, hint: '' },
@@ -283,7 +286,7 @@ function SprintBreakdown({ data, cycle, s, onOpen }: { data: Sprint; cycle?: Cyc
             </button>
             <span className="sp-item-meta">
               {issue.id}
-              {s.wrong.includes(row) && <span className="sp-item-wrong">Linear says {issue.status_name}</span>}
+              {s.wrong.includes(row) && <span className="sp-item-wrong">{row.finished && !isDone(issue) ? 'Done here, ' : ''}Linear says {issue.status_name}</span>}
               {row.workstreams.map((w) => (
                 <button key={w.key} type="button" className="sp-item-ws" title={w.title} onClick={() => onOpen(w.key)}>
                   {splitTickets(w.title).text}
