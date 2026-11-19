@@ -170,6 +170,9 @@ func sharesLogin(a claudeacct.Account, spent []claudeacct.Account) bool {
 	return false
 }
 
+// SetAuthFailureHook sets Options.OnAuthFailure after construction.
+func (e *Engine) SetAuthFailureHook(f func(role, account, movedTo string)) { e.opts.OnAuthFailure = f }
+
 // SetUsageMoveHook sets Options.OnUsageMove after construction.
 func (e *Engine) SetUsageMoveHook(f func(role, text string)) { e.opts.OnUsageMove = f }
 

@@ -417,6 +417,16 @@ func New() (*Daemon, error) {
 		managers := &wsmgr.Manager{Store: st, Beads: cached, Reg: amServer, AmKey: commanderRepo, Dir: dir, Numbered: liveWorkstreams(live)}
 		deliverer := chatDeliverer{chat: chatEngine, tmux: &wake.TmuxDeliverer{Projects: st, Director: dir, Managers: managers}}
 		if chatEngine != nil {
+			signedOut := &signedOutAccounts{home: home}
+			chatEngine.SetAuthFailureHook(func(role, account, movedTo string) {
+				signedOut.failed(role, account, movedTo)
+				signedOut.refresh(health)
+			})
+			go func() {
+				for range time.Tick(30 * time.Second) {
+					signedOut.refresh(health)
+				}
+			}()
 			chatEngine.SetUsageMoveHook(func(role, text string) {
 				ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 				defer cancel()

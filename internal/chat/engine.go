@@ -49,6 +49,10 @@ type Options struct {
 	Costs        CostSink // optional: per-turn cost of each role
 	// OnUsageMove, when set, is told of every move a usage limit made (role, text).
 	OnUsageMove func(role, text string)
+	// OnAuthFailure, when set, is told when a Commander or Manager turn failed
+	// because its Claude account is signed out: the account, and the account it
+	// moved to ("" when no other is logged in).
+	OnAuthFailure func(role, account, movedTo string)
 	// CodexHooksReady gates a Manager's move onto Codex; default CodexHooksReady.
 	CodexHooksReady func() bool
 	// Usage keeps the latest plan usage per account; default OpenUsage(Home).
@@ -104,7 +108,9 @@ type Options struct {
 
 // Engine owns the headless Claude processes, one per role.
 type Engine struct {
-	opts Options
+	// signedOut: Claude accounts a turn found signed out (settleAuth).
+	signedOut authOut
+	opts      Options
 
 	mu         sync.Mutex
 	chats      map[string]*chatRole
@@ -189,8 +195,10 @@ func (e *Engine) lockDir() string { return filepath.Join(e.opts.Home, "chat-lock
 
 // chatRole is one role's history, subscribers and (maybe) live process.
 type chatRole struct {
-	e    *Engine
-	role string
+	// turnAuth: the current turn said its account is signed out (observeAuth).
+	turnAuth bool
+	e        *Engine
+	role     string
 
 	restartMu sync.Mutex // serializes mail restart admission/start with explicit Stop
 	mu        sync.Mutex
@@ -1072,9 +1080,12 @@ func (e *Engine) handleLine(c *chatRole, p *process, line []byte, silent bool, a
 			e.opts.Usage.Record(p.runtime(), p.spec.Account, c.role, ev.RateLimit, e.opts.Now())
 		}
 		c.observeLimit(ev)
+		c.observeAuth(ev)
 		if ev.Kind == KindResult {
 			e.afterResult(c, p)
-			e.settleLimit(c, p, ev)
+			if !e.settleAuth(c, p, ev) {
+				e.settleLimit(c, p, ev)
+			}
 			e.noteContext(c, p, ev)
 		}
 	}
