@@ -66,6 +66,14 @@ echo started`, cmdr, ""},
 		{"deploy plan only", "just deploy-prod --plan-only", Context{}, "prod-deploy"},
 		{"deploy approved", "just deploy-prod --confirm-production", Context{Worktree: op.Worktree, DeployAllowed: true}, ""},
 		{"deploy over ssh", "ssh dev-6 'cd w && just deploy-prod --confirm-production'", op, "prod-deploy"},
+		// Nov 19: an agent fast-forwarded QA Hub master by hand, outside the release process.
+		{"push master", "git push origin master", op, "mainline-push"},
+		{"push head to master", "git push origin HEAD:master", op, "mainline-push"},
+		{"push refs main", "git push origin fix:refs/heads/main", op, "mainline-push"},
+		{"push master over ssh", `ssh prod-forge-qa-hub-dev-6.exe.xyz 'sudo -u llm-agent bash -c "cd /home/llm-agent/app/dev/worktrees/w; git push origin HEAD:master"'`, op, "mainline-push"},
+		{"push master with -c", "git -c http.extraHeader=x push origin master", op, "mainline-push"},
+		{"push feature named mainline-ish", "git push origin fix/master-cleanup", op, ""},
+		{"push master in land step", "git push origin HEAD:master", Context{Worktree: op.Worktree, MainlineAllowed: true}, ""},
 	}
 	for _, c := range cases {
 		v := Check(c.cmd, c.ctx)

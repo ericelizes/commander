@@ -38,26 +38,37 @@ func runInternalHardDeny(args []string, stdin io.Reader, stdout io.Writer) int {
 
 // hardDenyVerdict checks command for role. An Operator's own worktree (its
 // cwd) is where it may delete freely; the deploy rule lifts only inside an
-// approved release-deploy step.
+// approved release-deploy step, and the mainline-push rule only inside a
+// release's land-on-mainline step.
 func hardDenyVerdict(role, command, cwd string) harddeny.Verdict {
-	ctx := harddeny.Context{DeployAllowed: true}
+	ctx := harddeny.Context{DeployAllowed: true, MainlineAllowed: true}
 	if operatorguard.IsOperatorRole(role) {
 		ctx.Worktree = cwd
 	}
 	if v := harddeny.Check(command, ctx); v.Denied() {
 		return v
 	}
-	ctx.DeployAllowed = false
+	ctx.DeployAllowed, ctx.MainlineAllowed = false, false
 	v := harddeny.Check(command, ctx)
-	if !v.Denied() || releaseDeployStep(role) {
-		return harddeny.Verdict{}
+	// Each step-scoped rule lifts once, when the step carries its label; one
+	// command may hit both, so check again after each lift.
+	for v.Denied() {
+		switch {
+		case v.Rule == "prod-deploy" && !ctx.DeployAllowed && stepHasLabel(role, harddeny.ReleaseDeployLabel):
+			ctx.DeployAllowed = true
+		case v.Rule == "mainline-push" && !ctx.MainlineAllowed && stepHasLabel(role, harddeny.ReleaseLandLabel):
+			ctx.MainlineAllowed = true
+		default:
+			return v
+		}
+		v = harddeny.Check(command, ctx)
 	}
 	return v
 }
 
-// releaseDeployStep reports whether role is an Operator whose current step
-// (or a step above it) carries the release-deploy label. Any error is no.
-func releaseDeployStep(role string) bool {
+// stepHasLabel reports whether role is an Operator whose current step (or a
+// step above it) carries label. Any error is no.
+func stepHasLabel(role, label string) bool {
 	if !operatorguard.IsOperatorRole(role) {
 		return false
 	}
@@ -77,7 +88,7 @@ func releaseDeployStep(role string) bool {
 		return false
 	}
 	for id := run.TaskBeadID; id != ""; {
-		if ok, err := st.BeadHasLabel(ctx, run.ProjectID, id, harddeny.ReleaseDeployLabel); err == nil && ok {
+		if ok, err := st.BeadHasLabel(ctx, run.ProjectID, id, label); err == nil && ok {
 			return true
 		}
 		i := strings.LastIndexByte(id, '.')

@@ -99,7 +99,7 @@ var planTemplates = map[string]func(subject string, ownerGo bool) []planStep{
 		return append(steps,
 			planStep{ref: "deploy", title: "Release " + s + ": deploy to prod reusing the receipt (zero downtime, memory gate)", labels: "kind:objective,lane:agents,cmdr:release-deploy", after: []string{deployAfter}},
 			planStep{ref: "watch", title: "Release " + s + ": 15-minute prod watch, then post DEPLOYED", labels: "kind:objective,lane:agents", after: []string{"deploy"}},
-			planStep{ref: "mainline", title: "Release " + s + ": land the release on the app's mainline", labels: "kind:objective,lane:agents", after: []string{"watch"}},
+			planStep{ref: "mainline", title: "Release " + s + ": land the release on the app's mainline", labels: "kind:objective,lane:agents,cmdr:release-land", after: []string{"watch"}},
 		)
 	},
 	"propose-then-approve": func(s string, _ bool) []planStep {

@@ -24,6 +24,43 @@ func step(id, parent, title string, labels ...string) ShapeNode {
 	return ShapeNode{ID: id, Parent: parent, Title: title, Status: "open", Labels: append([]string{"kind:objective"}, labels...), Responsible: "commander", HasReason: true}
 }
 
+// Nov 19: safe retries landed its QA Hub half by a hand-written step that
+// pushed to QA Hub master, outside the app release process.
+func TestShapeMainlineOutsideRelease(t *testing.T) {
+	nodes := []ShapeNode{ws("W"), track("W.1", "W", "Safe retries"),
+		step("W.1.1", "W.1", "Land the flaky-test fix on QA Hub mainline", "lane:agents"),
+		step("W.1.2", "W.1", "Push the QA Hub test commit to master on the git server", "lane:agents"),
+		step("W.1.3", "W.1", "Release QA Hub safe-retries tests: land the release on the app's mainline", "lane:agents", "cmdr:release-land"),
+		step("W.1.4", "W.1", "Resolve vibe-apps#3909's merge conflicts with main and get it green", "lane:agents"),
+		step("W.1.5", "W.1", "Review: the fix landed on QA Hub master", "lane:agents", "review"),
+	}
+	var got []string
+	for _, v := range ShapeCheck(nodes) {
+		if v.Rule == "mainline-outside-release" {
+			got = append(got, v.Beads[0])
+		}
+	}
+	if strings.Join(got, ",") != "W.1.1,W.1.2" {
+		t.Fatalf("mainline-outside-release on %v, want W.1.1,W.1.2", got)
+	}
+}
+
+func TestAppReleaseTemplateMarksItsMainlineStep(t *testing.T) {
+	ops, err := PlanTemplateOps("app-release", "W", "QA Hub safe retries", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, op := range ops {
+		if len(op) > 1 && op[0] == "create" && strings.Contains(op[1], "mainline") {
+			found = strings.Contains(strings.Join(op, " "), "cmdr:release-land")
+		}
+	}
+	if !found {
+		t.Fatal("the app-release land-on-mainline step must carry cmdr:release-land")
+	}
+}
+
 // 3.1 on Nov 17: the cutover step was created twice.
 func TestShapeDuplicateStep(t *testing.T) {
 	nodes := []ShapeNode{ws("W"), track("W.1", "W", "Cutover Phase 1: First notifications"),

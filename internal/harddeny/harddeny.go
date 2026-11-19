@@ -20,6 +20,9 @@ type Context struct {
 	// DeployAllowed: the run is an approved release-deploy step, so the
 	// production deploy command may run.
 	DeployAllowed bool
+	// MainlineAllowed: the run is a release's land-on-mainline step, so it may
+	// push to main or master.
+	MainlineAllowed bool
 }
 
 // Verdict names the rule a command breaks; Rule is empty when it may run.
@@ -118,14 +121,14 @@ func checkWords(words []string, ctx Context, depth int) Verdict {
 				}
 			}
 			// The far side is another machine: its paths are not this worktree.
-			return check(rest, Context{DeployAllowed: ctx.DeployAllowed}, depth+1)
+			return check(rest, Context{DeployAllowed: ctx.DeployAllowed, MainlineAllowed: ctx.MainlineAllowed}, depth+1)
 		}
 	case "forge-ssh-proxy":
 		if len(args) > 1 {
-			return check(strings.Join(args[1:], " "), Context{DeployAllowed: ctx.DeployAllowed}, depth+1)
+			return check(strings.Join(args[1:], " "), Context{DeployAllowed: ctx.DeployAllowed, MainlineAllowed: ctx.MainlineAllowed}, depth+1)
 		}
 	case "git":
-		return checkGit(args)
+		return checkGit(args, ctx)
 	case "rm":
 		return checkRm(args, ctx)
 	case "systemctl":
@@ -185,8 +188,21 @@ func hasSuffixArg(args []string, suffix string) bool {
 	return false
 }
 
-// git push --force / -f / +refspec, push --delete / :ref, branch -D.
-func checkGit(args []string) Verdict {
+// mainlineBranches are the branches only a release's land-on-mainline step pushes to.
+var mainlineBranches = map[string]bool{"main": true, "master": true}
+
+// pushTarget is the branch a push refspec writes: the part after the colon, or
+// the whole refspec when there is none.
+func pushTarget(refspec string) string {
+	if i := strings.LastIndexByte(refspec, ':'); i >= 0 {
+		refspec = refspec[i+1:]
+	}
+	return strings.TrimPrefix(refspec, "refs/heads/")
+}
+
+// git push --force / -f / +refspec, push --delete / :ref, push to main or
+// master outside a release's land-on-mainline step, branch -D.
+func checkGit(args []string, ctx Context) Verdict {
 	for len(args) > 0 && strings.HasPrefix(args[0], "-") {
 		if (args[0] == "-C" || args[0] == "-c") && len(args) > 1 {
 			args = args[1:]
@@ -217,6 +233,9 @@ func checkGit(args []string) Verdict {
 				}
 				if positional > 1 && strings.HasPrefix(a, ":") {
 					return Verdict{Rule: "branch-delete", Why: "deletes a remote branch (" + a + ")"}
+				}
+				if positional > 1 && mainlineBranches[pushTarget(a)] && !ctx.MainlineAllowed {
+					return Verdict{Rule: "mainline-push", Why: "pushes to " + pushTarget(a) + " outside a release's land-on-mainline step (an app's mainline changes only through its release process)"}
 				}
 			}
 		}
@@ -476,3 +495,7 @@ func HookOutput(v Verdict) []byte {
 // ReleaseDeployLabel marks an approved release-deploy step: its Operator may
 // run the production deploy command.
 const ReleaseDeployLabel = "cmdr:release-deploy"
+
+// ReleaseLandLabel marks a release's land-on-mainline step: its Operator may
+// push the release to the app's main or master branch.
+const ReleaseLandLabel = "cmdr:release-land"

@@ -175,6 +175,14 @@ func shapeStage(n *ShapeNode) int {
 
 var commanderOwnTitle = regexp.MustCompile(`(?i)^\s*(commander\b|my check\b)`)
 
+// landsOnMainline: a step title that lands work on an app's mainline (its
+// master branch or its git server), by merge, push or fast-forward.
+var landsOnMainline = regexp.MustCompile(`\b(land|lands|landing|merge|merges|merging|push|pushes|pushing|fast forward|fast forwards|ff)\b.*\b(mainline|master|git server)\b`)
+
+// releaseLandLabel is the app-release template's land-on-mainline step
+// (harddeny.ReleaseLandLabel; beads cannot import harddeny).
+const releaseLandLabel = "cmdr:release-land"
+
 func (t shapeTree) isTrack(n *ShapeNode) bool {
 	if n.has("kind:track") {
 		return true
@@ -376,6 +384,13 @@ func ShapeCheck(nodes []ShapeNode) []ShapeViolation {
 			add(ShapeViolation{Rule: "no-owner", Beads: []string{n.ID},
 				Why: fmt.Sprintf("%q has no owner and no wait", n.Title),
 				Fix: fmt.Sprintf("assign %s (owner or responsible agent) or record what it waits on", n.ID)})
+		}
+		// p. an app's mainline changes only through its release: a step that lands
+		// work there is the app-release template's land-on-mainline step.
+		if !n.container() && len(t.children[n.ID]) == 0 && !n.reviewStep() && !n.has(releaseLandLabel) && landsOnMainline.MatchString(normTitle(n.Title)) {
+			add(ShapeViolation{Rule: "mainline-outside-release", Beads: []string{n.ID},
+				Why: fmt.Sprintf("%q lands work on an app's mainline outside its release process", n.Title),
+				Fix: fmt.Sprintf("supersede %s and stamp the release instead: cmdr plan template app-release --parent <its workstream> --subject \"<what ships>\"; only the release's land-on-mainline step (label %s) pushes to the mainline", n.ID, releaseLandLabel)})
 		}
 		// h. a live track has real steps, not only Confirm done
 		if t.isTrack(n) && !n.parked() {

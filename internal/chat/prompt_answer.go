@@ -57,7 +57,7 @@ func (e *Engine) answerAuto(c *chatRole, p *process, cr *ControlRequest) {
 	resp := map[string]any{"behavior": "allow", "updatedInput": input}
 	decision, msg := "allow", "answered by cmdrd: permission prompts are off for this role"
 	if cmd := bashCommand(cr); cmd != "" {
-		ctx := harddeny.Context{DeployAllowed: true}
+		ctx := harddeny.Context{DeployAllowed: true, MainlineAllowed: true}
 		if strings.HasPrefix(c.role, "operator-") {
 			ctx.Worktree = p.spec.Cwd
 		}
