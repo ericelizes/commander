@@ -31,7 +31,8 @@ export function treeWorkstreams(tree: Tree | null | undefined): ProgressWorkstre
   const kids = new Map<string, TreeRow[]>()
   for (const r of tree.rows) if (r.parent) kids.set(r.parent, [...(kids.get(r.parent) ?? []), r])
   const openSteps = new Set(tree.steps.filter((s) => s.state !== 'done').map((s) => s.row))
-  const paused = (r: TreeRow) => r.note === 'Paused'
+  // Paused by its own hold (note), or all its open work is held (its one status line says so).
+  const paused = (r: TreeRow) => r.note === 'Paused' || (r.status.length === 1 && r.status[0].text === 'Paused')
   const underway = (r: TreeRow): boolean => !r.done && !paused(r) && (openSteps.has(r.id) || (kids.get(r.id) ?? []).some(underway))
   const below = (r: TreeRow): TreeRow[] => (kids.get(r.id) ?? []).flatMap((k) => [k, ...below(k)])
   // A paused row's rows are paused too.

@@ -205,18 +205,19 @@ describe('treeWorkstreams', () => {
     row('w.3', { parent: 'w', tix: ['TEAM-3'], done: true }),
     row('w.4', { parent: 'w', tix: ['TEAM-4'], note: 'Paused' }),
     row('w.4.1', { parent: 'w.4', tix: ['TEAM-5'] }),
+    row('w.6', { parent: 'w', tix: ['TEAM-6'], status: [{ tone: 'none', text: 'Paused' }] }),
   ], steps: [
     step('s1', 'w.1', 'active'), step('s2a', 'w.2', 'done'), step('s2b', 'w.2', 'notstarted'),
-    step('s3', 'w.3', 'done'), step('s5', 'w.4.1', 'active'),
+    step('s3', 'w.3', 'done'), step('s5', 'w.4.1', 'active'), step('s6', 'w.6', 'notstarted'),
   ] } as Tree
   it('puts work underway in progress, paused work in to do, and done work in done and wrong', () => {
-    const list = [1, 2, 3, 4, 5, 9].map((n) => mk(`TEAM-${n}`, 'started', 'In Progress'))
+    const list = [1, 2, 3, 4, 5, 6, 9].map((n) => mk(`TEAM-${n}`, 'started', 'In Progress'))
     const s = opened(treeWorkstreams(tree), list)
     expect(s.started.map((r) => r.issue.id)).toEqual(['TEAM-1', 'TEAM-2', 'TEAM-9'])
-    expect(s.todo.map((r) => r.issue.id)).toEqual(['TEAM-4', 'TEAM-5'])
+    expect(s.todo.map((r) => r.issue.id)).toEqual(['TEAM-4', 'TEAM-5', 'TEAM-6'])
     expect(s.todo.every((r) => r.workstream?.key === 'p:w')).toBe(true)
     expect(s.done.map((r) => r.issue.id)).toEqual(['TEAM-3'])
-    expect(s.wrong.map((r) => r.issue.id)).toEqual(['TEAM-4', 'TEAM-5', 'TEAM-3'])
+    expect(s.wrong.map((r) => r.issue.id)).toEqual(['TEAM-4', 'TEAM-5', 'TEAM-6', 'TEAM-3'])
   })
   it('has nothing to join before the tree arrives', () => {
     expect(treeWorkstreams(null)).toEqual([])
