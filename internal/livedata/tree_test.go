@@ -426,6 +426,7 @@ func TestTreeWorkstreamWithOnlyHeldStepsIsPaused(t *testing.T) {
 	snap := Snapshot{Workstreams: []SnapWorkstream{{N: 1, Project: "rcm", BeadID: "y5s", Title: "Claims stuck after payer answered", Status: "open", Steps: []SnapStep{
 		{BeadID: "y5s.1", Title: "Find the stuck claims", Status: "closed", Lane: "agents", State: "done"},
 		{BeadID: "y5s.2", Title: "Re-submit the stuck claims", Status: "deferred", Lane: "agents"},
+		{BeadID: "y5s.3", Title: "Re-check the claims", Status: "open", Lane: "agents", BlockedBy: []string{"y5s.2"}},
 	}}}}
 	tr := BuildTree(snap, 0)
 	if got := tr.Rows[0].Status; len(got) != 1 || got[0].Text != "Paused" {

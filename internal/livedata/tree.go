@@ -933,10 +933,17 @@ func (b *treeBuild) status(id string) []TreeLine {
 	case b.paused[id]:
 		return []TreeLine{{"none", "Paused"}}
 	}
-	// A workstream whose open work is all on hold (deferred steps, paused workstreams) is paused, not stalled.
+	// A workstream whose open work is all on hold (deferred steps, paused workstreams), or waits
+	// only behind held work, is paused, not stalled: every open step is held or waits on an open step.
+	waits := map[string]bool{}
+	for _, e := range b.t.Edges {
+		if b.steps[e[0]].State != "done" {
+			waits[e[1]] = true
+		}
+	}
 	allPaused := true
 	for _, s := range openSteps {
-		if !b.paused[b.steps[s].Row] && !pausedText(b.steps[s].Text) {
+		if !b.paused[b.steps[s].Row] && !pausedText(b.steps[s].Text) && !waits[s] {
 			allPaused = false
 			break
 		}
