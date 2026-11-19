@@ -381,7 +381,8 @@ func TestGateLinkRefusals(t *testing.T) {
 
 // Failures after the create reach the result, not only stderr.
 func TestStartAndMailFailuresAreInWarnings(t *testing.T) {
-	t.Run("Manager could not start", func(t *testing.T) {
+	// There are no Managers: creating a workstream starts none, so nothing can fail to start.
+	t.Run("no Manager is started", func(t *testing.T) {
 		orig := newWorkstreamOpener
 		newWorkstreamOpener = func() (workstreamOpener, func(), error) { return nil, nil, errors.New("no cmdrd") }
 		t.Cleanup(func() { newWorkstreamOpener = orig })
@@ -391,7 +392,7 @@ func TestStartAndMailFailuresAreInWarnings(t *testing.T) {
 		out, errOut := read()
 		var res internalCreateObjectiveResult
 		_ = json.Unmarshal([]byte(strings.TrimSpace(out)), &res)
-		if code != 0 || !res.Complete || len(res.Warnings) != 1 || !strings.Contains(res.Warnings[0], "its Manager could not start: no cmdrd") {
+		if code != 0 || !res.Complete || len(res.Warnings) != 0 {
 			t.Fatalf("exit=%d out=%s err=%s", code, out, errOut)
 		}
 	})
