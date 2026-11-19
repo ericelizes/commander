@@ -379,6 +379,10 @@ func (b *treeBuild) step(s SnapStep, row string) *TreeStep {
 	default:
 		st.State = "active"
 	}
+	// A step on hold (deferred) is paused: no agent is meant to run on it, so it never reads as stalled work.
+	if s.Status == "deferred" && st.State != "done" {
+		st.State, st.Text = "notstarted", "Paused"
+	}
 	if st.State != "done" {
 		st.Run = d.Runtime
 		if st.Run == "" {
