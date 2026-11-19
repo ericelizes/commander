@@ -14,6 +14,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/example-user/commander/internal/claudeacct"
 )
 
 // Renderer kinds, as returned by Detect and stored in a tab's renderer column.
@@ -126,7 +128,7 @@ type Exec func(ctx context.Context, name string, args ...string) ([]byte, error)
 
 // RunExec is the real Exec.
 func RunExec(ctx context.Context, name string, args ...string) ([]byte, error) {
-	return exec.CommandContext(ctx, name, args...).CombinedOutput()
+	return claudeacct.Graceful(exec.CommandContext(ctx, name, args...)).CombinedOutput()
 }
 
 // Fetcher produces cards.

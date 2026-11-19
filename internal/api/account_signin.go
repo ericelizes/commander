@@ -88,8 +88,7 @@ func accountCommand(ctx context.Context, home, name string, args ...string) *exe
 		}
 	}
 	cmd.Env = append(cmd.Env, env...)
-	cmd.WaitDelay = 2 * time.Second
-	return cmd
+	return claudeacct.Graceful(cmd)
 }
 
 func startSignin(home, name string) (*signin, error) {

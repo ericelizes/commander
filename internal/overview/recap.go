@@ -14,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/example-user/commander/internal/claudeacct"
 )
 
 type Evidence struct {
@@ -340,7 +342,7 @@ func ClaudeWith(prompt string, accountEnv []string) Generate {
 			return Recap{}, err
 		}
 		defer os.RemoveAll(dir)
-		cmd.WaitDelay = 2 * time.Second
+		claudeacct.Graceful(cmd)
 		cmd.Dir = dir
 		cmd.Stdin = bytes.NewReader(payload)
 		cmd.Env = cleanEnv(os.Environ(), accountEnv)

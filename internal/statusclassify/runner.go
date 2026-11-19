@@ -108,7 +108,7 @@ func (r CLIRunner) Ask(ctx context.Context, a chat.AccountView, instruction stri
 	} else {
 		return usage, errors.New("unsupported classifier provider")
 	}
-	cmd := exec.CommandContext(ctx, command, args...)
+	cmd := claudeacct.Graceful(exec.CommandContext(ctx, command, args...))
 	cmd.Dir = dir
 	cmd.Stdin = strings.NewReader(prompt)
 	cmd.Env = subscriptionEnv(r.Home, a)

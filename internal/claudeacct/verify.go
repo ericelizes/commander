@@ -22,7 +22,7 @@ func Verify(ctx context.Context, home, name string) (Verification, error) {
 	if !Exists(home, name) {
 		return Verification{}, errors.New("no such Claude account")
 	}
-	cmd := exec.CommandContext(ctx, "claude", "auth", "status", "--json")
+	cmd := Graceful(exec.CommandContext(ctx, "claude", "auth", "status", "--json"))
 	for _, kv := range os.Environ() {
 		if !strings.HasPrefix(kv, "CLAUDE_CONFIG_DIR=") && !strings.HasPrefix(kv, "ANTHROPIC_API_KEY=") {
 			cmd.Env = append(cmd.Env, kv)
