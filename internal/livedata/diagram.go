@@ -536,7 +536,7 @@ func (f flow) leafHand(s SnapStep) hand {
 		return 0
 	})
 	if len(waits) > 0 {
-		return waitHand(waits[0])
+		return waitHand(s, waits[0])
 	}
 	if onUserCard(s) {
 		return hand{ActorYou, ""}
@@ -634,14 +634,18 @@ func isCommanderName(a string) bool {
 	return a == "commander" || strings.HasPrefix(a, "commander-")
 }
 
-// waitHand is the hand of one recorded wait (the step's text already names
-// it): automatic ones say what runs and what starts it, or that the Manager confirms.
-func waitHand(w string) hand {
+// waitHand is the hand of one recorded wait w on s (the step's text already
+// names it): automatic ones say what runs and what starts it, PR waits whose
+// approval or merge it is. Only a time wait (until:) is a timer.
+func waitHand(s SnapStep, w string) hand {
 	switch {
 	case strings.HasPrefix(w, "operator-"):
 		return hand{ActorOperators, ""}
-	case strings.HasPrefix(w, "manager-"), w == beads.ManagerCloseWait, w == beads.ManagerStartWait, w == beads.ManagerDispatchWait:
+	case strings.HasPrefix(w, "manager-"), w == beads.ManagerCloseWait, w == beads.ManagerStartWait, w == beads.ManagerDispatchWait,
+		w == beads.ManagerPlanWait, w == beads.ManagerRecoverWait:
 		return hand{ActorOperators, ""}
+	case isTimeWait(s, w):
+		return hand{ActorAutomatic, "a timer"}
 	case strings.HasPrefix(w, "review ("):
 		return hand{ActorReviewers, strings.TrimSuffix(strings.TrimPrefix(w, "review ("), ")")}
 	case strings.HasPrefix(w, "main CI"):
@@ -651,8 +655,43 @@ func waitHand(w string) hand {
 	case strings.HasPrefix(w, "prod tag"):
 		return hand{ActorAutomatic, "the release tags prod"}
 	}
-	return hand{ActorAutomatic, "a timer"}
+	if m := prWaitText.FindStringSubmatch(w); m != nil {
+		pr := m[1] + "#" + m[2]
+		switch m[3] {
+		case beads.PRApproved:
+			return hand{ActorReviewers, "PR approval (" + pr + ")"}
+		case beads.PRGreen:
+			return hand{ActorAutomatic, "CI on the PR (" + pr + ")"}
+		}
+		return hand{ActorReviewers, "PR merge (" + pr + ")"}
+	}
+	if m := deployWaitText.FindStringSubmatch(w); m != nil {
+		return hand{ActorAutomatic, "a prod deploy with " + m[1]}
+	}
+	if m := eventWaitText.FindStringSubmatch(w); m != nil {
+		if m[1] == beads.EventSlack {
+			return hand{ActorReviewers, "a Slack message in " + m[2]}
+		}
+		return hand{ActorAutomatic, "a " + m[2] + " notification"}
+	}
+	// What is left is an operator wait on a role named another way (beads.Wait.Text is the role).
+	return hand{ActorOperators, ""}
 }
+
+// isTimeWait: w is one of s's time waits (until:), as the snapshot records them.
+func isTimeWait(s SnapStep, w string) bool {
+	_, ok := s.WaitUntils[w]
+	return ok || (s.WaitUntilAs != "" && s.WaitUntilAs == w)
+}
+
+// The texts beads.Wait.Text gives a pr, deploy and event wait: "PR owner/repo#12 approved"
+// (m[1] is the repo's name, "" for the project's repo), "prod deploy with abc1234",
+// `slack event in C123 matching "x"`.
+var (
+	prWaitText     = regexp.MustCompile(`^PR (?:[\w.-]+/([\w.-]+))?#(\d+) (\w+)$`)
+	deployWaitText = regexp.MustCompile(`^prod deploy with (\S+)$`)
+	eventWaitText  = regexp.MustCompile(`^(slack|notify) event in (\S+) matching `)
+)
 
 // commanderOwn: the step is the Commander's own (its owner, its lane, or a
 // gate only the Commander approves).

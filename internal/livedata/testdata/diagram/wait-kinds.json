@@ -1,0 +1,68 @@
+{
+  "now": 1793000000,
+  "snapshot": {
+    "version": 1,
+    "generated_at": "2026-10-26T12:00:00Z",
+    "projects": [
+      {
+        "id": 1,
+        "name": "lab",
+        "type": "repo",
+        "path": "/tmp/lab",
+        "status": "active"
+      }
+    ],
+    "fleet": {
+      "cost_usd_24h": 0,
+      "cost_usd_7d": 0,
+      "cost_series_24h": [],
+      "agents": 0,
+      "active": 0,
+      "blocked": 0,
+      "idle_ratio": 0,
+      "projects": 1,
+      "chat_cost_usd_24h": 0,
+      "roles_cost": []
+    },
+    "agents": {
+      "manager-lab-wk": {
+        "state": "idle",
+        "since": 1792990000
+      }
+    },
+    "unread": {},
+    "needs_you": [],
+    "workstreams": [
+      {
+        "n": 1,
+        "project": "lab",
+        "project_id": 1,
+        "bead_id": "lab-wk",
+        "title": "Every wait kind",
+        "state": "in-progress",
+        "status": "in_progress",
+        "manager_role": "manager-lab-wk",
+        "done": 0,
+        "total": 16,
+        "steps": [
+        {"bead_id": "lab-wk.1", "title": "CI green on the API PR", "state": "blocked", "status": "in_progress", "owner": "manager-lab-wk", "waiting": "CI #4101", "waiting_since": 1792990000, "viz": 3},
+        {"bead_id": "lab-wk.2", "title": "CI green on the other repo's PR", "state": "blocked", "status": "in_progress", "owner": "manager-lab-wk", "waiting": "CI acme/api#77", "waiting_since": 1792990000, "viz": 3},
+        {"bead_id": "lab-wk.3", "title": "Main CI green on the merge", "state": "blocked", "status": "in_progress", "owner": "manager-lab-wk", "waiting": "main CI 349a7f4", "waiting_since": 1792990000, "viz": 3},
+        {"bead_id": "lab-wk.4", "title": "Release tagged for prod", "state": "blocked", "status": "in_progress", "owner": "manager-lab-wk", "waiting": "prod tag 349a7f4", "waiting_since": 1792990000, "viz": 3},
+        {"bead_id": "lab-wk.5", "title": "Reviewer looked at the PR", "state": "blocked", "status": "in_progress", "owner": "manager-lab-wk", "waiting": "review (reviewer-a)", "waiting_since": 1792990000, "viz": 3},
+        {"bead_id": "lab-wk.6", "title": "Helper Operator finished", "state": "blocked", "status": "in_progress", "owner": "manager-lab-wk", "waiting": "operator-lab-wk-6", "waiting_since": 1792990000, "viz": 3},
+        {"bead_id": "lab-wk.7", "title": "Helper finished under an older role name", "state": "blocked", "status": "in_progress", "owner": "manager-lab-wk", "waiting": "op-investigate-g", "waiting_since": 1792990000, "viz": 3},
+        {"bead_id": "lab-wk.8", "title": "Soak period over", "state": "blocked", "status": "in_progress", "owner": "manager-lab-wk", "waiting": "soak period", "waiting_since": 1792990000, "waiting_until": 1793050000, "waiting_until_as": "soak period", "waiting_untils": {"soak period": 1793050000}, "viz": 3},
+        {"bead_id": "lab-wk.9", "title": "Re-check time reached", "state": "blocked", "status": "in_progress", "owner": "manager-lab-wk", "waiting": "time", "waiting_since": 1792990000, "waiting_until": 1793050000, "waiting_until_as": "time", "waiting_untils": {"time": 1793050000}, "viz": 3},
+        {"bead_id": "lab-wk.10", "title": "Manager recovers the step", "state": "blocked", "status": "in_progress", "owner": "manager-lab-wk", "waiting": "Manager to recover", "waiting_since": 1792990000, "waiting_until": 1793050000, "waiting_until_as": "Manager to recover", "waiting_untils": {"Manager to recover": 1793050000}, "viz": 3},
+        {"bead_id": "lab-wk.11", "title": "Fix deployed to production", "state": "blocked", "status": "in_progress", "owner": "manager-lab-wk", "waiting": "prod deploy with 2ac6897", "waiting_since": 1792990000, "viz": 3},
+        {"bead_id": "lab-wk.12", "title": "Infra team approved the monitor PR", "state": "blocked", "status": "in_progress", "owner": "manager-lab-wk", "waiting": "PR acme/infrastructure#2163 approved", "waiting_since": 1792990000, "viz": 3},
+        {"bead_id": "lab-wk.13", "title": "Vendor PR merged", "state": "blocked", "status": "in_progress", "owner": "manager-lab-wk", "waiting": "PR #3960 merged", "waiting_since": 1792990000, "viz": 3},
+        {"bead_id": "lab-wk.14", "title": "Checks finished on the PR", "state": "blocked", "status": "in_progress", "owner": "manager-lab-wk", "waiting": "PR #3996 green", "waiting_since": 1792990000, "viz": 3},
+        {"bead_id": "lab-wk.15", "title": "Ops posted that the deploy is done", "state": "blocked", "status": "in_progress", "owner": "manager-lab-wk", "waiting": "slack event in C0123 matching \"deployed\"", "waiting_since": 1792990000, "viz": 3},
+        {"bead_id": "lab-wk.16", "title": "Deploy notification arrived", "state": "blocked", "status": "in_progress", "owner": "manager-lab-wk", "waiting": "notify event in deploy matching \"done\"", "waiting_since": 1792990000, "viz": 3}
+       ]
+      }
+    ]
+  }
+}

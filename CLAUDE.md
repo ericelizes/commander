@@ -945,7 +945,10 @@ list and as a pitch's Execution workflow (`PitchView` drops drawn graphs; a cmdr
 ExecutionFlow). Goldens: `testdata/diagram/*.json` (`TestDiagramFixtures`, `UPDATE_BOARD=1`); `checkDiagrams` holds every
 board fixture's diagrams to its workflows. Each step also has an `actor` (you | manager | operators | reviewers | automatic,
 the ExecutionFlow lifelines); a gate waiting on someone other than its approvers is two steps (`<id>#wait` on the waiter's
-line, then the gate on the approvers'); done steps come first; every track (parked and done too) has its diagram. The app
+line, then the gate on the approvers'); a step's recorded wait sets its actor and `who` (`waitHand`, from the wait's text:
+CI, main CI, prod tag, review names, `PR approval|PR merge (<repo>#N)` on reviewers, `CI on the PR (...)`, `a prod deploy
+with <sha>`, a Slack message or notification; "a timer" only for a time wait in `waiting_untils`/`waiting_until_as`; golden
+`testdata/diagram/wait-kinds.json`, `TestDiagram_EveryWaitKindHasAnHonestWho`, eval `TestWaitWhoScenario`); done steps come first; every track (parked and done too) has its diagram. The app
 draws every header click and pitch with `SequenceDiagram` (ExecutionFlow), never the old list: the latest 4 done steps
 always show, at least two lifelines, `fromWorkflow` when cmdrd sends no `diagram`, "Nothing planned yet" with no steps.
 
