@@ -556,3 +556,20 @@ func TestLast24HoursMayCiteWorkFinishedEarlierToday(t *testing.T) {
 		t.Fatal(backs["yesterday"])
 	}
 }
+
+// Nov 20: Forge Notify's per-app alerting build fell outside the newest 40 and
+// never reached the writer, while later checks did.
+func TestOutcomeStepsAreKeptAheadOfOtherSteps(t *testing.T) {
+	for title, want := range map[string]bool{
+		"Build per-app alerting: app-org alerting on":            true,
+		"Turn phase 2 on in prod and confirm real notifications": true,
+		"Show full message and link to app owners":               true,
+		"Merge the CI notifications PR":                          true,
+		"Investigate: how the PR behaves with staging Notify":    false,
+		"Confirm done": false,
+	} {
+		if got := outcomeTitle.MatchString(title); got != want {
+			t.Errorf("%q: outcome %v, want %v", title, got, want)
+		}
+	}
+}

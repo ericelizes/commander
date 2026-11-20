@@ -291,11 +291,16 @@ func Assemble(w Windows, src Sources) Input {
 	sort.Slice(keys, func(i, j int) bool { return keys[i].ws+keys[i].when < keys[j].ws+keys[j].when })
 	for _, g := range keys {
 		list := closed[g]
-		// Finished workstreams first, then the newest.
+		// Finished workstreams first, then outcomes (built, shipped, switched
+		// on), then the newest.
 		sort.SliceStable(list, func(i, j int) bool {
 			wi, wj := hasLabel(list[i].Labels, "kind:workstream"), hasLabel(list[j].Labels, "kind:workstream")
 			if wi != wj {
 				return wi
+			}
+			oi, oj := outcomeTitle.MatchString(list[i].Title), outcomeTitle.MatchString(list[j].Title)
+			if oi != oj {
+				return oi
 			}
 			return list[i].UpdatedAt.After(list[j].UpdatedAt)
 		})
@@ -495,5 +500,8 @@ func processStep(b store.BriefBead) bool {
 	}
 	return processTitle.MatchString(b.Title)
 }
+
+// outcomeTitle is a step that changed something: built, shipped, switched on.
+var outcomeTitle = regexp.MustCompile(`(?i)^(build|built|ship|release|deploy|turn .* on|switch|cut ?over|merge|fix|show|move|roll ?out|enable|add|put|make)\b`)
 
 var processTitle = regexp.MustCompile(`(?i)^(review\b|revise\b|wait\b|daily recheck|re-?check\b|get .*\b(green|passing)\b|keep .*\bgreen\b|resolve .*\b(threads|conflicts)\b|bring .* up to date)`)
