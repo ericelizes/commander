@@ -258,14 +258,23 @@ func mergeTickets(lists ...[]string) []string {
 // workstreams become rows, the rest become its steps.
 func (b *treeBuild) level(ws SnapWorkstream, steps []SnapStep, row *TreeRow, order []string) []string {
 	k := 0
-	// Sibling workstreams keep the order they were created in (Phase 1, 2, 3, 4), not "soonest to run",
-	// so structured phases read in order. Steps keep their own order.
+	// Sibling workstreams read in their stored rank (`cmdr internal-move-objective`), the same rule
+	// as the sidebar; unranked ones follow in the order they were created (Phase 1, 2, 3, 4), not
+	// "soonest to run". Steps keep their own order. Nov 20: Eric asked twice to reorder 1.2's
+	// workstreams and the board could not show it, because it read creation order only.
 	steps = slices.Clone(steps)
 	sort.SliceStable(steps, func(i, j int) bool {
-		if !steps[i].Track || !steps[j].Track {
+		a, c := steps[i], steps[j]
+		if !a.Track || !c.Track {
 			return false
 		}
-		return naturalIDLess(steps[i].BeadID, steps[j].BeadID)
+		if (a.Rank > 0) != (c.Rank > 0) {
+			return a.Rank > 0
+		}
+		if a.Rank != c.Rank {
+			return a.Rank < c.Rank
+		}
+		return naturalIDLess(a.BeadID, c.BeadID)
 	})
 	for _, s := range steps {
 		if s.Superseded || s.Withdrawn || s.Task {

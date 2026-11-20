@@ -433,3 +433,25 @@ func TestTreeWorkstreamWithOnlyHeldStepsIsPaused(t *testing.T) {
 		t.Fatalf("lines %+v", got)
 	}
 }
+
+// Nov 20: Eric reordered 1.2's workstreams and the board kept creation order.
+func TestNestedWorkstreamsFollowTheirStoredRank(t *testing.T) {
+	ws := SnapWorkstream{Project: "p", BeadID: "p-ws", Title: "Alerts", Steps: []SnapStep{
+		{BeadID: "p-ws.1", Title: "Platform alerts", Track: true, Status: "open", Rank: 1},
+		{BeadID: "p-ws.2", Title: "Datadog switch-off", Track: true, Status: "open", Rank: 4},
+		{BeadID: "p-ws.3", Title: "App alerts", Track: true, Status: "open", Rank: 2},
+		{BeadID: "p-ws.4", Title: "Alert data", Track: true, Status: "open", Rank: 3},
+		{BeadID: "p-ws.5", Title: "Unranked", Track: true, Status: "open"},
+	}}
+	tree := BuildTree(Snapshot{Workstreams: []SnapWorkstream{ws}}, 0)
+	var got []string
+	for _, r := range tree.Rows {
+		if r.Parent == "p-ws" {
+			got = append(got, r.Title)
+		}
+	}
+	want := []string{"Platform alerts", "App alerts", "Alert data", "Datadog switch-off", "Unranked"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("children %v, want %v", got, want)
+	}
+}

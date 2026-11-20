@@ -255,6 +255,10 @@ type SnapCutover struct {
 }
 
 type SnapStep struct {
+	// Rank is the bead's stored place among its siblings (bead_ranks, set by
+	// `cmdr internal-move-objective`); 0 = unranked. The board orders nested
+	// workstreams by it.
+	Rank                 int                     `json:"rank,omitempty"`
 	Runtime              string                  `json:"runtime,omitempty"` // the runtime its agents launch on (its own or an ancestor's runtime: label)
 	Cutover              *SnapCutover            `json:"cutover,omitempty"`
 	Hold                 bool                    `json:"hold,omitempty"`        // the hold label on this bead
@@ -431,7 +435,9 @@ func BuildSnapshot(data Data, unread map[string]int) Snapshot {
 		return EffectiveState(a, data.LoadedAt)
 	}
 	for i, ws := range Workstreams(data) {
-		s.Workstreams = append(s.Workstreams, snapWorkstream(i+1, ws, live))
+		sw := snapWorkstream(i+1, ws, live)
+		rankSteps(sw.Steps, ws.Project.ID, data.BeadRanks)
+		s.Workstreams = append(s.Workstreams, sw)
 	}
 	for role, a := range data.Agents {
 		state := EffectiveState(a, data.LoadedAt)
@@ -511,6 +517,14 @@ func foldWaits(s *Snapshot, workstreams []Workstream) {
 			a.State, a.Detail, a.Since = store.AgentWaiting, w.Text, w.Since.Unix()
 		}
 		s.Agents[role] = a
+	}
+}
+
+// rankSteps copies each step's stored sibling rank onto it.
+func rankSteps(steps []SnapStep, projectID int64, ranks map[store.WorkstreamKey]int) {
+	for i := range steps {
+		steps[i].Rank = ranks[store.WorkstreamKey{ProjectID: projectID, BeadID: steps[i].BeadID}]
+		rankSteps(steps[i].Children, projectID, ranks)
 	}
 }
 
