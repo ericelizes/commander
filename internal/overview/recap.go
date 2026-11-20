@@ -333,40 +333,12 @@ func Claude(accountEnv []string) Generate { return ClaudeWith(Prompt, accountEnv
 // ClaudeWith is Claude with another system prompt (for comparing prompts read-only).
 func ClaudeWith(prompt string, accountEnv []string) Generate {
 	return func(ctx context.Context, in Input) (Recap, error) {
-		prompt := PromptFor(prompt, in.Part)
 		payload, _ := json.Marshal(in)
-		schema, _ := json.Marshal(readerSchema(in))
-		cmd := exec.CommandContext(ctx, "claude", "-p", "--safe-mode", "--tools", "", "--strict-mcp-config", "--mcp-config", `{"mcpServers":{}}`, "--setting-sources", "", "--no-session-persistence", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--json-schema", string(schema), "--model", "haiku", "--system-prompt", prompt)
-		dir, err := os.MkdirTemp("", "commander-recap-")
+		body, err := Run(ctx, "haiku", PromptFor(prompt, in.Part), payload, readerSchema(in), accountEnv)
 		if err != nil {
 			return Recap{}, err
 		}
-		defer os.RemoveAll(dir)
-		claudeacct.Graceful(cmd)
-		cmd.Dir = dir
-		cmd.Stdin = bytes.NewReader(payload)
-		cmd.Env = cleanEnv(os.Environ(), accountEnv)
-		sw := &streamReader{progress: progressFrom(ctx)}
-		cmd.Stdout = sw
-		cmd.Stderr = &limitedBuffer{}
-		if err := cmd.Run(); err != nil {
-			return Recap{}, err
-		}
-		if len(sw.line) > 0 && !sw.bad {
-			sw.handle(sw.line) // a last line with no newline
-		}
-		envelope := sw.final
-		if !sw.done {
-			return Recap{}, errors.New("reader gave no result")
-		}
-		if envelope.IsError {
-			return Recap{}, errors.New("reader failed")
-		}
 		var r Recap
-		body := []byte(envelope.Result)
-		if len(envelope.StructuredOutput) > 0 && string(envelope.StructuredOutput) != "null" {
-			body = envelope.StructuredOutput
-		}
 		dec := json.NewDecoder(bytes.NewReader(body))
 		dec.DisallowUnknownFields()
 		if err := dec.Decode(&r); err != nil {
@@ -374,6 +346,44 @@ func ClaudeWith(prompt string, accountEnv []string) Generate {
 		}
 		return r, nil
 	}
+}
+
+// Run is one read-only reader run: claude with no tools, MCP, session
+// persistence or customizations, answering payload under the system prompt in
+// the JSON schema. It returns the answer's JSON. Other readers (the Brief) share it.
+func Run(ctx context.Context, model, system string, payload []byte, schema map[string]any, accountEnv []string) ([]byte, error) {
+	schemaJSON, _ := json.Marshal(schema)
+	cmd := exec.CommandContext(ctx, "claude", "-p", "--safe-mode", "--tools", "", "--strict-mcp-config", "--mcp-config", `{"mcpServers":{}}`, "--setting-sources", "", "--no-session-persistence", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--json-schema", string(schemaJSON), "--model", model, "--system-prompt", system)
+	dir, err := os.MkdirTemp("", "commander-recap-")
+	if err != nil {
+		return nil, err
+	}
+	defer os.RemoveAll(dir)
+	claudeacct.Graceful(cmd)
+	cmd.Dir = dir
+	cmd.Stdin = bytes.NewReader(payload)
+	cmd.Env = cleanEnv(os.Environ(), accountEnv)
+	sw := &streamReader{progress: progressFrom(ctx)}
+	cmd.Stdout = sw
+	cmd.Stderr = &limitedBuffer{}
+	if err := cmd.Run(); err != nil {
+		return nil, err
+	}
+	if len(sw.line) > 0 && !sw.bad {
+		sw.handle(sw.line) // a last line with no newline
+	}
+	envelope := sw.final
+	if !sw.done {
+		return nil, errors.New("reader gave no result")
+	}
+	if envelope.IsError {
+		return nil, errors.New("reader failed")
+	}
+	body := []byte(envelope.Result)
+	if len(envelope.StructuredOutput) > 0 && string(envelope.StructuredOutput) != "null" {
+		body = envelope.StructuredOutput
+	}
+	return body, nil
 }
 func cleanEnv(env, account []string) []string {
 	out := []string{}
