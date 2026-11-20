@@ -80,8 +80,8 @@ type Sources struct {
 }
 
 const (
-	maxClosedPerGroup  = 12 // finished beads per workstream per day
-	maxReportsPerGroup = 4  // final reports per workstream per day
+	maxClosedPerGroup  = 40 // finished beads per workstream per window (process steps left out)
+	maxReportsPerGroup = 8  // final reports per workstream per window
 	maxStepsPerGroup   = 10 // open Now/Next steps per workstream
 	maxWeekTitles      = 10
 )
@@ -280,7 +280,7 @@ func Assemble(w Windows, src Sources) Input {
 				a.steps = append(a.steps, b.Title)
 			}
 		}
-		if when == "today" || when == "yesterday" {
+		if (when == "today" || when == "yesterday") && !processStep(b) {
 			closed[group{key, when}] = append(closed[group{key, when}], b)
 		}
 	}
@@ -484,3 +484,16 @@ func citeOf(ref string) string {
 	}
 	return ref
 }
+
+// processStep is a finished step that is only process (a review, a revision, a
+// wait, keeping a PR green), not an outcome. Nov 20: Forge Notify closed 60+
+// steps in a day, and the reviews and waits crowded its real work (phase 2 on,
+// per-app alerting built, CI notifications deployed) out of the Brief.
+func processStep(b store.BriefBead) bool {
+	if hasLabel(b.Labels, "review") || hasLabel(b.Labels, "kind:workstream") {
+		return hasLabel(b.Labels, "review")
+	}
+	return processTitle.MatchString(b.Title)
+}
+
+var processTitle = regexp.MustCompile(`(?i)^(review\b|revise\b|wait\b|daily recheck|re-?check\b|get .*\b(green|passing)\b|keep .*\bgreen\b|resolve .*\b(threads|conflicts)\b|bring .* up to date)`)

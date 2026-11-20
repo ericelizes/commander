@@ -31,7 +31,7 @@ const ready: BriefStatus = {
         paragraph: [{ text: "Today I'm rolling out the retry fix.", sources: ['bead:p-ws.2.1'] }, { text: 'It ships in the deploy window.', sources: ['bead:p-ws.2.1'] }],
         bullets: [{ text: "**Billing:** I'm rolling out retries that charge once.", sources: ['bead:p-ws.2.1', 'pr:acme/app#12'] }, { text: '**Needs me:** approve the rollout.', sources: ['bead:p-ws.3'] }],
       },
-      { title: 'Done yesterday', paragraph: [{ text: 'Yesterday I built the retry key.', sources: ['bead:p-ws.1'] }], bullets: [] },
+      { title: 'Last 24 hours', paragraph: [{ text: 'In the last 24 hours I built the retry key.', sources: ['bead:p-ws.1'] }], bullets: [] },
       { title: 'This week', paragraph: [], bullets: [] },
     ],
   },
@@ -77,9 +77,9 @@ describe('the Brief tab', () => {
 
   it('reads as one document: headings, a paragraph and bullets, no cards and no citation marks', async () => {
     const { container } = render(<BriefView />)
-    await screen.findByText('Yesterday I built the retry key.')
+    await screen.findByText('In the last 24 hours I built the retry key.')
     const headings = screen.getAllByRole('heading', { level: 2 }).map((h) => h.firstChild?.textContent)
-    expect(headings).toEqual(['Moving today', 'Done yesterday', 'This week'])
+    expect(headings).toEqual(['Moving today', 'Last 24 hours', 'This week'])
     expect(screen.getByText(/^Written /)).toBeInTheDocument()
     const today = screen.getByRole('region', { name: 'Moving today' })
     expect(within(today).getByText('Friday, Nov 20')).toBeInTheDocument()
@@ -96,12 +96,12 @@ describe('the Brief tab', () => {
 
   it('Regenerate asks cmdrd for a new one and shows it is writing', async () => {
     render(<BriefView />)
-    await screen.findByText('Yesterday I built the retry key.')
+    await screen.findByText('In the last 24 hours I built the retry key.')
     next = { ...ready, generating: true }
     fireEvent.click(screen.getByRole('button', { name: 'Regenerate' }))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Writing…' })).toBeDisabled())
     expect(calls.some((c) => c.method === 'POST' && c.url.endsWith('/api/brief'))).toBe(true)
-    expect(screen.getByText('Yesterday I built the retry key.')).toBeInTheDocument() // the last Brief stays while it writes
+    expect(screen.getByText('In the last 24 hours I built the retry key.')).toBeInTheDocument() // the last Brief stays while it writes
   })
 
   it('before the first Brief, says when it will be written', async () => {

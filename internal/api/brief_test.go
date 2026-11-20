@@ -41,7 +41,7 @@ func TestBriefEndpointServesTheLatestAndRegeneratesOnPost(t *testing.T) {
 		return brief.Sources{Beads: []store.BriefBead{{Project: "p", ID: "p-ws.1", Title: "Build the retry key", Status: "closed", UpdatedAt: w.Yesterday.Start.Add(10 * time.Hour), Workstream: "p-ws", WorkstreamTitle: "Billing"}}}, nil
 	}
 	generate := func(_ context.Context, in brief.Input) (string, error) {
-		return "## Done yesterday\n\nYesterday I built the retry key. [^" + in.Evidence[0].ID + "]\n", nil
+		return "## Last 24 hours\n\nYesterday I built the retry key. [^" + in.Evidence[0].ID + "]\n", nil
 	}
 	svc := brief.NewService(home, gather, generate)
 	srv := httptest.NewServer(New(Options{Token: "tok", Brief: svc}).Handler())

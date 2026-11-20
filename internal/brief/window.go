@@ -44,7 +44,7 @@ type Window struct {
 type Windows struct {
 	Now       time.Time `json:"now"`
 	Today     Window    `json:"today"`
-	Yesterday Window    `json:"yesterday"` // the previous workday: Monday reads Friday
+	Yesterday Window    `json:"yesterday"` // the last 24 hours, through now
 	Week      Window    `json:"week"`      // Monday 00:00 through now
 }
 
@@ -52,19 +52,12 @@ type Windows struct {
 func WindowsAt(now time.Time, loc *time.Location) Windows {
 	n := now.In(loc)
 	today := time.Date(n.Year(), n.Month(), n.Day(), 0, 0, 0, 0, loc)
-	back := 1
-	switch n.Weekday() {
-	case time.Monday:
-		back = 3
-	case time.Sunday:
-		back = 2
-	}
-	yesterday := time.Date(n.Year(), n.Month(), n.Day()-back, 0, 0, 0, 0, loc)
+	day := n.Add(-24 * time.Hour)
 	monday := time.Date(n.Year(), n.Month(), n.Day()-(int(n.Weekday())+6)%7, 0, 0, 0, 0, loc)
 	return Windows{
 		Now:       n,
 		Today:     Window{Start: today, End: n, Label: today.Format("Monday, Jan 2")},
-		Yesterday: Window{Start: yesterday, End: time.Date(yesterday.Year(), yesterday.Month(), yesterday.Day()+1, 0, 0, 0, 0, loc), Label: yesterday.Format("Monday, Jan 2")},
+		Yesterday: Window{Start: day, End: n, Label: "since " + day.Format("Mon 3:04 PM")},
 		Week:      Window{Start: monday, End: n, Label: monday.Format("Mon Jan 2") + " to now"},
 	}
 }
@@ -84,7 +77,7 @@ func (w Windows) When(t time.Time) string {
 		return ""
 	case !t.Before(w.Today.Start):
 		return "today"
-	case !t.Before(w.Yesterday.Start) && t.Before(w.Yesterday.End):
+	case !t.Before(w.Yesterday.Start):
 		return "yesterday"
 	case !t.Before(w.Week.Start):
 		return "week"

@@ -161,9 +161,9 @@ func ToolCalls(dir string) int {
 const AgentPrompt = `You are the writer of a person's Brief. You get a briefing (JSON on stdin): the time windows, the workstreams with their goals and progress, and evidence records gathered for you: the board's open steps and their owners, beads (work items) finished or changed in the windows, agents' final reports, and Linear tickets. That briefing is where you start, not all there is.
 INVESTIGATE FIRST, then write. Do not write from the briefing alone: it is a summary and can be stale or wrong. You MUST:
 1. Run cmdr workstream-statuses to read the live board: who owns each open step now (an owner "You" is the person) and what each waits on.
-2. Before you say anything was shipped, deployed, rolled out or merged, check it: the step's final report or close reason (sql on bead_comments / bead_tasks), and for a pull request, gh pr view (merged or not) and the deploy run (gh run list / gh run view). If you cannot confirm a deploy, say merged, built or reviewed instead.
+2. Before you say anything was shipped, deployed, rolled out or merged, check it: the step's final report or close reason (sql on bead_comments / bead_tasks), and for a pull request, gh pr view (merged or not) and the deploy run (gh run list / gh run view). If you cannot confirm a deploy, say built, not shipped.
 3. For each candidate for Needs me or Waiting on, confirm who it waits on with cmdr workstream-statuses --step <bead-id> or gh pr view (whose review is requested).
-4. Read the final reports of the biggest items of yesterday to tell what was built from what was only reviewed.
+4. Read the final reports of the biggest items of the last 24 hours to tell what actually changed in production (shipped, rolled out, fixed) from what is only built.
 Use between 10 and 30 commands; your answer is refused before 10. Stop when the picture is clear.
 Your only tool is Bash, and only these read-only commands run; anything else is refused. One plain command per call: no pipes, ;, &&, redirects, $ or subshells.
 - cmdr workstream-statuses   (the board as text: every workstream, its open steps by column, owners, waits, bead ids); add --step <bead-id> for one step's full detail.

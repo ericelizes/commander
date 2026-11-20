@@ -47,36 +47,34 @@ func TestNextSlotIsSevenAMThenEverySixHours(t *testing.T) {
 	}
 }
 
-func TestYesterdayIsThePreviousWorkdayAndTheWeekStartsMonday(t *testing.T) {
+// Eric: "by yesterday I mean the last 24 hours".
+func TestLastDayIsTheLast24HoursAndTheWeekStartsMonday(t *testing.T) {
 	for _, c := range []struct {
-		name            string
-		now             time.Time
-		yesterday, week time.Time
-		label           string
+		name      string
+		now, week time.Time
+		label     string
 	}{
-		{"Monday reads Friday", et(2026, 11, 23, 9, 0), et(2026, 11, 20, 0, 0), et(2026, 11, 23, 0, 0), "Friday, Nov 20"},
-		{"Tuesday reads Monday", et(2026, 11, 24, 9, 0), et(2026, 11, 23, 0, 0), et(2026, 11, 23, 0, 0), "Monday, Nov 23"},
-		{"Friday reads Thursday", et(2026, 11, 20, 8, 0), et(2026, 11, 19, 0, 0), et(2026, 11, 16, 0, 0), "Thursday, Nov 19"},
-		{"Saturday reads Friday", et(2026, 11, 21, 9, 0), et(2026, 11, 20, 0, 0), et(2026, 11, 16, 0, 0), "Friday, Nov 20"},
-		{"Sunday reads Friday", et(2026, 11, 22, 9, 0), et(2026, 11, 20, 0, 0), et(2026, 11, 16, 0, 0), "Friday, Nov 20"},
+		{"Monday morning", et(2026, 11, 23, 9, 0), et(2026, 11, 23, 0, 0), "since Sun 9:00 AM"},
+		{"Friday morning", et(2026, 11, 20, 8, 0), et(2026, 11, 16, 0, 0), "since Thu 8:00 AM"},
+		{"Saturday", et(2026, 11, 21, 9, 30), et(2026, 11, 16, 0, 0), "since Fri 9:30 AM"},
 	} {
 		w := WindowsAt(c.now, Zone)
-		if !w.Yesterday.Start.Equal(c.yesterday) || !w.Yesterday.End.Equal(c.yesterday.AddDate(0, 0, 1)) || w.Yesterday.Label != c.label {
-			t.Errorf("%s: yesterday %s-%s %q", c.name, w.Yesterday.Start, w.Yesterday.End, w.Yesterday.Label)
+		if !w.Yesterday.Start.Equal(c.now.Add(-24*time.Hour)) || !w.Yesterday.End.Equal(c.now) || w.Yesterday.Label != c.label {
+			t.Errorf("%s: last day %s-%s %q", c.name, w.Yesterday.Start, w.Yesterday.End, w.Yesterday.Label)
 		}
 		if !w.Week.Start.Equal(c.week) || !w.Week.End.Equal(c.now) {
 			t.Errorf("%s: week %s-%s", c.name, w.Week.Start, w.Week.End)
 		}
 	}
 	mon := WindowsAt(et(2026, 11, 23, 9, 0), Zone)
-	if !mon.Since().Equal(et(2026, 11, 20, 0, 0)) {
-		t.Fatal("Monday reaches back to Friday", mon.Since())
+	if !mon.Since().Equal(et(2026, 11, 22, 9, 0)) {
+		t.Fatal("Monday reaches back 24 hours", mon.Since())
 	}
 	for at, want := range map[time.Time]string{
 		et(2026, 11, 23, 8, 0):  "today",
-		et(2026, 11, 20, 15, 0): "yesterday",
-		et(2026, 11, 21, 10, 0): "", // the weekend is neither yesterday nor this week
-		et(2026, 11, 19, 10, 0): "",
+		et(2026, 11, 22, 10, 0): "yesterday",
+		et(2026, 11, 22, 8, 0):  "", // over 24 hours ago, before this week
+		et(2026, 11, 20, 15, 0): "",
 		et(2026, 11, 23, 10, 0): "", // after now
 	} {
 		if got := mon.When(at); got != want {
@@ -84,8 +82,8 @@ func TestYesterdayIsThePreviousWorkdayAndTheWeekStartsMonday(t *testing.T) {
 		}
 	}
 	fri := WindowsAt(et(2026, 11, 20, 8, 0), Zone)
-	if fri.When(et(2026, 11, 17, 12, 0)) != "week" || fri.When(et(2026, 11, 19, 23, 59)) != "yesterday" {
-		t.Fatal("Friday's week and yesterday")
+	if fri.When(et(2026, 11, 17, 12, 0)) != "week" || fri.When(et(2026, 11, 19, 9, 0)) != "yesterday" || fri.When(et(2026, 11, 19, 7, 0)) != "week" {
+		t.Fatal("Friday's week and last 24 hours")
 	}
 }
 
@@ -164,7 +162,6 @@ func TestAssembleTagsEachRecordWithItsWorkstreamAndWindow(t *testing.T) {
 		"step:p-ws.2.2":   {"Billing", "later"}, // Monday's soak is not today
 		"step:p-ws.3":     {"Billing", "board"},
 		"bead:p:p-ws.1":   {"Billing", "yesterday"},
-		"bead:p:p-ws.1.9": {"Billing", "today"},
 		"bead:p:p-ws.1.6": {"Billing", "yesterday"}, // the user's own approval
 		"bead:q:q-loose":  {"Other", "yesterday"},
 		"report:p:p-ws.1": {"Billing", "yesterday"},
@@ -212,7 +209,12 @@ func TestAssembleTagsEachRecordWithItsWorkstreamAndWindow(t *testing.T) {
 	if *in.Workstreams[0].Progress != 60 || in.Workstreams[1].Progress != nil || !in.Workstreams[1].Done {
 		t.Fatalf("%+v", in.Workstreams)
 	}
-	if in.Today != "Friday, Nov 20" || in.Yesterday != "Thursday, Nov 19" || in.Week != "Mon Nov 16 to now" {
+	for _, e := range in.Evidence {
+		if e.ID == "bead:p:p-ws.1.9" {
+			t.Fatal("a finished review is process, not an outcome; it must not reach the writer")
+		}
+	}
+	if in.Today != "Friday, Nov 20" || in.Yesterday != "since Thu 9:00 AM" || in.Week != "Mon Nov 16 to now" {
 		t.Fatal(in.Today, in.Yesterday, in.Week)
 	}
 }
@@ -238,7 +240,7 @@ Today I'm rolling out the retry fix in the deploy window. [^{step:p-ws.2.1}] I'm
 - **Needs me:** approve the rollout. [^{step:p-ws.3}]
 - **Waiting on:** the Monday soak. [^{step:p-ws.2.2}]
 
-## Done yesterday
+## Last 24 hours
 
 Yesterday I built the retry key [^{bead:p:p-ws.1}, ^{report:p:p-ws.1}]. I finished the rollout. [^{goal:p:p-ws}]
 
@@ -266,7 +268,7 @@ The week was about retries. [^{goal:p:p-ws}][^{week:p:p-ws}]
 	if dropped != 7 {
 		t.Fatalf("dropped %d: %+v", dropped, got)
 	}
-	if len(got) != 3 || got[0].Title != "Moving today" || got[1].Title != "Done yesterday" || got[2].Title != "This week" {
+	if len(got) != 3 || got[0].Title != "Moving today" || got[1].Title != "Last 24 hours" || got[2].Title != "This week" {
 		t.Fatalf("%+v", got)
 	}
 	today := got[0]
@@ -284,7 +286,7 @@ The week was about retries. [^{goal:p:p-ws}][^{week:p:p-ws}]
 		t.Fatalf("%+v", got[2])
 	}
 	want := "## Moving today\n\nToday I'm rolling out the retry fix in the deploy window.\n\n- **Billing:** I'm rolling out retries that charge once.\n- **Needs me:** approve the rollout.\n"
-	if out := Markdown(got); !strings.HasPrefix(out, want) || strings.Contains(out, "[^") || !strings.Contains(out, "\n## Done yesterday\n") {
+	if out := Markdown(got); !strings.HasPrefix(out, want) || strings.Contains(out, "[^") || !strings.Contains(out, "\n## Last 24 hours\n") {
 		t.Fatalf("%q", out)
 	}
 	if empty, n := Check("", in); n != 0 || len(empty) != 3 || len(empty[0].Bullets) != 0 {
@@ -423,7 +425,7 @@ func TestReadIssueReadsOneTicket(t *testing.T) {
 }
 
 func TestPromptAsksForOneInvestigatedDocument(t *testing.T) {
-	for _, want := range []string{"INVESTIGATE FIRST", "Do not write from the briefing alone", "If you cannot confirm a deploy", "cmdr internal-brief-read sql", "gh run view", "only these read-only commands run", `write it as "I"`, "## Moving today", "## Done yesterday", "## This week", "I'm shipping", "rolled out", "**Needs me:**", "**Waiting on:**", "the board's owner decides", "No bead ids", "[^bead:", "a deploy still waiting is not shipped", "Never write \"you\""} {
+	for _, want := range []string{"INVESTIGATE FIRST", "Do not write from the briefing alone", "If you cannot confirm a deploy", "cmdr internal-brief-read sql", "gh run view", "only these read-only commands run", `write it as "I"`, "## Moving today", "## Last 24 hours", "## This week", "I'm shipping", "rolled out", "**Needs me:**", "**Waiting on:**", "the board's owner decides", "No bead ids", "[^bead:", "a deploy still waiting is not shipped", "Never write \"you\""} {
 		if !strings.Contains(AgentPrompt, want) {
 			t.Errorf("prompt lacks %q", want)
 		}
@@ -467,7 +469,7 @@ func fakeService(t *testing.T, home string, now *time.Time, fail bool) (*Service
 		if fail {
 			return "", errors.New("reader down")
 		}
-		return doc(in, "## Done yesterday\n\n- **Billing:** I built the retry key. [^{bead:p:p-ws.1}]\n"), nil
+		return doc(in, "## Last 24 hours\n\n- **Billing:** I built the retry key. [^{bead:p:p-ws.1}]\n"), nil
 	}
 	svc := NewService(home, gather, generate)
 	svc.now = func() time.Time { return *now }
