@@ -425,7 +425,7 @@ func TestReadIssueReadsOneTicket(t *testing.T) {
 }
 
 func TestPromptAsksForOneInvestigatedDocument(t *testing.T) {
-	for _, want := range []string{"INVESTIGATE FIRST", "Do not write from the briefing alone", "If you cannot confirm a deploy", "cmdr internal-brief-read sql", "gh run view", "only these read-only commands run", `write it as "I"`, "## Moving today", "## Last 24 hours", "## This week", "I'm shipping", "rolled out", "**Needs me:**", "**Waiting on:**", "the board's owner decides", "No bead ids", "[^bead:", "a deploy still waiting is not shipped", "Never write \"you\""} {
+	for _, want := range []string{"INVESTIGATE FIRST", "Do not write from the briefing alone", "If you cannot confirm a deploy", "cmdr internal-brief-read sql", "gh run view", "only these read-only commands run", `write it as "I"`, "## Moving today", "## Last 24 hours", "## This week", "I'm shipping", "rolled out", "**Needs me:**", "**Waiting on:**", "one bullet per front that moved", "the board's owner decides", "No bead ids", "[^bead:", "a deploy still waiting is not shipped", "Never write \"you\""} {
 		if !strings.Contains(AgentPrompt, want) {
 			t.Errorf("prompt lacks %q", want)
 		}
