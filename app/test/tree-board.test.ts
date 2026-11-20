@@ -8,7 +8,11 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { mountBoard, type Board } from '../src/features/treeboard/board'
 import type { Selection, Tree } from '../src/features/treeboard/types'
 
-const sources: [string, string][] = [['fixture', join(__dirname, 'fixtures', 'tree-board.json')]]
+const futureCard = join(__dirname, 'fixtures', 'tree-future-card.json')
+const sources: [string, string][] = [
+  ['fixture', join(__dirname, 'fixtures', 'tree-board.json')],
+  ['future card', futureCard],
+]
 if (process.env.TREE_LIVE) sources.push(['live', process.env.TREE_LIVE])
 
 let board: Board | null = null
@@ -99,6 +103,25 @@ for (const [name, file] of sources) {
     })
   })
 }
+
+// Nov 20: a merge card of Eric's, written ahead and three steps out, was drawn
+// live (red border, dot, "2h") and counted as needing him. Only the current step is.
+describe('a card of yours behind open work', () => {
+  it('draws only the working step as current; your future cards are faded, with no timer, and not counted', () => {
+    const tree = JSON.parse(readFileSync(futureCard, 'utf8')) as Tree
+    const root = mount(tree)
+    const card = (id: string) => root.querySelector(`.canvas .card[data-id="${id}"]`) as HTMLElement
+    const active = [...root.querySelectorAll<HTMLElement>('.canvas .card.s-active')].map((c) => c.dataset.id)
+    expect(active).toEqual(['c.2'])
+    expect((card('c.2').parentElement as HTMLElement).style.gridColumn).toBe('2') // the Now column
+    for (const id of ['c.3', 'c.4', 'c.5', 'c.6']) expect(card(id).classList.contains('s-notstarted'), id).toBe(true)
+    const merge = card('c.5')
+    expect(merge.classList.contains('t-you')).toBe(true)
+    expect(merge.querySelector('.tm')).toBeNull()
+    expect((merge.parentElement as HTMLElement).style.gridColumn).toBe('5') // three steps out
+    expect(text(root.querySelector('[data-tb="needN"]'))).toBe('0')
+  })
+})
 
 describe('one grid', () => {
   it('puts the tree header and the Now header in one grid row, and each workstream in one row across the tree and the board', () => {

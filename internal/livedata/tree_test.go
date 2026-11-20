@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/example-user/commander/internal/store"
 )
 
 var updateTree = flag.Bool("update-tree", false, "rewrite the app's tree fixture (app/test/fixtures/tree-board.json)")
@@ -453,5 +455,126 @@ func TestNestedWorkstreamsFollowTheirStoredRank(t *testing.T) {
 	want := []string{"Platform alerts", "App alerts", "Alert data", "Datadog switch-off", "Unranked"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("children %v, want %v", got, want)
+	}
+}
+
+// futureCardSnapshot is the lane Eric saw on Nov 20: the implementer working,
+// then its review, then an automatic wait for an outside approval, then a merge
+// card of his written ahead (needs-user label and a decision), then his confirm
+// step. Only the implementer is current; the merge card is three steps out.
+func futureCardSnapshot() Snapshot {
+	at := time.Unix(1_800_000_000, 0)
+	now := at.Unix()
+	steps := []SnapStep{
+		{BeadID: "c.1", Title: "Fix the CI environment boot", Status: "closed", Lane: "agents", State: "done"},
+		{BeadID: "c.2", Title: "Revise the fix for the review: CI-only skip, clean timeout kill", Status: "in_progress", Lane: "agents", State: "in-progress", Owner: "operator-c-2", BlockedBy: []string{"c.1"}},
+		{BeadID: "c.3", Title: "Review: the revision (CI-only scope, timeout cleanup)", Status: "open", Lane: "agents", State: "review", BlockedBy: []string{"c.2"}},
+		{BeadID: "c.4", Title: "Wait for the approving review on the PR", Status: "open", Automatic: true, Lane: "automatic", BlockedBy: []string{"c.3"}},
+		{BeadID: "c.5", Title: "Merge the CI environment boot fix", Status: "open", Gate: true, Approvers: []string{"user"}, State: "needs-user", NeedsUser: true,
+			Ask: "Merge the CI 'Environment up' fix?", Decision: &store.Decision{Question: "Merge the CI 'Environment up' fix?"}, ProgressAt: now - 2*3600, BlockedBy: []string{"c.1", "c.4"}},
+		{BeadID: "c.6", Title: "Confirm CI 'Environment up' is green again", Status: "open", Gate: true, Approvers: []string{"user"}, State: "not-started", BlockedBy: []string{"c.5"}},
+	}
+	working := DiagramStep{ID: "c.2", Title: steps[1].Title, Actor: "operators", Lane: "agents", Kind: "working", Text: "Agent working", Runtime: "claude", Since: now - 60, After: []string{"c.1"}}
+	d := &Diagram{ID: "c", Steps: []DiagramStep{
+		{ID: "c.1", Title: steps[0].Title, Actor: "operators", Lane: "agents", Kind: "done", Text: "Done"},
+		working,
+		{ID: "c.3", Title: steps[2].Title, Actor: "operators", Lane: "agents", Kind: "idle", Text: "Not started", After: []string{"c.2"}},
+		{ID: "c.4", Title: steps[3].Title, Actor: "automatic", Lane: "elsewhere", Kind: "waiting", Text: "Waiting for PR", Since: now - 60, After: []string{"c.3"}},
+		{ID: "c.5", Title: steps[4].Title, Actor: "you", Lane: "you", Kind: "idle", Text: "Not reached", Gate: true, After: []string{"c.1", "c.4"}},
+		{ID: "c.6", Title: steps[5].Title, Actor: "you", Lane: "you", Kind: "idle", Text: "Not reached", Gate: true, After: []string{"c.5"}},
+	}}
+	return Snapshot{Version: 7, GeneratedAt: at,
+		Workstreams: []SnapWorkstream{{N: 1, Project: "app", BeadID: "c", Title: "CI 'Environment up' times out on main", Status: "open", Steps: steps}},
+		Display:     &Display{Workstreams: []BoardRow{{Key: "app:c", N: 1, Diagram: d}}},
+	}
+}
+
+// Nov 20: the merge card above read as live (red border, dot, "2h") three steps
+// out, and counted as "needs you". A card of Eric's is highlighted only when it
+// is current: nothing open blocks it. Until then it is a future You step.
+func TestTreeYourCardBehindOpenWorkIsAFutureStep(t *testing.T) {
+	snap := futureCardSnapshot()
+	tr := BuildTree(snap, snap.GeneratedAt.Unix())
+	steps := map[string]TreeStep{}
+	var active []string
+	for _, s := range tr.Steps {
+		steps[s.ID] = s
+		if s.State == "active" && s.Type != "automatic" {
+			active = append(active, s.ID)
+		}
+	}
+	if strings.Join(active, ",") != "c.2" {
+		t.Fatalf("active steps %v, want only the implementer c.2", active)
+	}
+	want := map[string][2]string{"c.2": {"agent", "active"}, "c.3": {"review", "notstarted"}, "c.4": {"automatic", "notstarted"}, "c.5": {"you", "notstarted"}, "c.6": {"you", "notstarted"}}
+	for id, w := range want {
+		if s := steps[id]; s.Type != w[0] || s.State != w[1] {
+			t.Errorf("%s: %s %s, want %s %s", id, s.Type, s.State, w[0], w[1])
+		}
+	}
+	if s := steps["c.2"]; s.Col != 0 {
+		t.Errorf("implementer col %d, want Now", s.Col)
+	}
+	merge := steps["c.5"]
+	if merge.Col != 3 || merge.Ask != "" || merge.Wait != "" || merge.Text != "Not reached" || merge.Own != "You" {
+		t.Errorf("merge card: %+v; want a future You step 3 out with no ask", merge)
+	}
+	if tr.NeedsYou != 0 || tr.Rows[0].NeedsYou != 0 || tr.Rows[0].State == "Needs you" {
+		t.Errorf("needs you: tree %d, row %d %q; want 0", tr.NeedsYou, tr.Rows[0].NeedsYou, tr.Rows[0].State)
+	}
+	for _, l := range tr.Rows[0].Status {
+		if l.Tone == "you" {
+			t.Errorf("row status %+v names you", tr.Rows[0].Status)
+		}
+	}
+	text := tr.Text(snap.GeneratedAt.Unix())
+	if line := lineWith(text, "Merge the CI environment boot fix"); !strings.HasPrefix(strings.TrimSpace(line), "3 steps out: [You]") || strings.Contains(line, "asks:") || strings.Contains(line, " · 2h") {
+		t.Errorf("Commander's read of the merge card: %q", line)
+	}
+
+	// Once the work before it is done, the same card is his: current, with its ask, counted.
+	for i := range snap.Workstreams[0].Steps {
+		if s := &snap.Workstreams[0].Steps[i]; s.BeadID == "c.2" || s.BeadID == "c.3" || s.BeadID == "c.4" {
+			s.Status, s.State, s.Owner = "closed", "done", ""
+		}
+	}
+	for i := range snap.Display.Workstreams[0].Diagram.Steps {
+		if d := &snap.Display.Workstreams[0].Diagram.Steps[i]; d.ID == "c.2" || d.ID == "c.3" || d.ID == "c.4" {
+			d.Kind, d.Text, d.Runtime = "done", "Done", ""
+		}
+	}
+	tr = BuildTree(snap, snap.GeneratedAt.Unix())
+	for _, s := range tr.Steps {
+		if s.ID == "c.5" && (s.State != "active" || s.Col != 0 || s.Ask != "Merge the CI 'Environment up' fix?" || tr.NeedsYou != 1) {
+			t.Errorf("reached merge card: %+v (needs you %d)", s, tr.NeedsYou)
+		}
+	}
+}
+
+func lineWith(text, sub string) string {
+	for _, l := range strings.Split(text, "\n") {
+		if strings.Contains(l, sub) {
+			return l
+		}
+	}
+	return ""
+}
+
+// The app's tree view test also renders this lane (app/test/fixtures/tree-future-card.json);
+// go test -run TestTreeFutureCardFixture -update-tree rewrites it.
+func TestTreeFutureCardFixture(t *testing.T) {
+	snap := futureCardSnapshot()
+	tr := BuildTree(snap, snap.GeneratedAt.Unix())
+	want, _ := json.MarshalIndent(tr, "", "  ")
+	want = append(want, '\n')
+	path := filepath.Join("..", "..", "app", "test", "fixtures", "tree-future-card.json")
+	if *updateTree {
+		if e := os.WriteFile(path, want, 0o644); e != nil {
+			t.Fatal(e)
+		}
+	}
+	got, e := os.ReadFile(path)
+	if e != nil || string(got) != string(want) {
+		t.Fatalf("%s is not what BuildTree makes; rerun with -update-tree (%v)", path, e)
 	}
 }

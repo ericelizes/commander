@@ -511,11 +511,16 @@ func (b *treeBuild) finish(order []string, now int64) {
 		}
 		return out
 	}
-	// A step under way never waits on an unfinished one (rule 21): it is upcoming. Your open card stays yours.
+	// A step under way never waits on an unfinished one (rule 21): it is upcoming.
+	// Your card too: a card written ahead (needs-user label, decision) is put to you
+	// only once nothing open holds it; until then it is a future step with no ask or timer.
 	for _, id := range sortedKeys(b.steps) {
 		s := b.steps[id]
-		if s.State == "active" && len(openBlockers(id)) > 0 && !(s.Type == "you" && strings.HasPrefix(s.Text, "Needs you")) && s.Run == "" {
+		if s.State == "active" && len(openBlockers(id)) > 0 && s.Run == "" {
 			s.State = "notstarted"
+			if s.Type == "you" {
+				s.Text, s.Ask = "Not reached", ""
+			}
 		}
 	}
 	// An unblocked agent step never sits unstarted (rule 21): the watcher starts an agent on it.
