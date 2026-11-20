@@ -29,7 +29,14 @@ type deployRun struct {
 	HeadSha string `json:"head_sha"`
 	Branch  string `json:"head_branch"`
 	Updated string `json:"updated_at"`
+	Event   string `json:"event"`
 }
+
+// deployJob is a deploy run's job that ships the code ("deploy").
+var deployJob = regexp.MustCompile(`(?i)^deploy\b`)
+
+// deployedLine is the resolve job's log line naming what it deployed.
+var deployedLine = regexp.MustCompile(`Deploying (prod-\S+) \(([0-9a-f]{7,40})\)`)
 
 // defaultDeployWorkflow matches a prod deploy workflow's name ("Deploy orchestrator to prod").
 var defaultDeployWorkflow = regexp.MustCompile(`(?i)\bdeploy\b.*\bprod`)
@@ -69,10 +76,14 @@ func (w *waitWatcher) deployFor(ctx context.Context, repo, sha string) (deployRu
 		if i >= deployRunsChecked {
 			break
 		}
-		key := repo + "|" + sha + "|" + r.HeadSha
+		shipped := w.deployedSha(ctx, repo, r)
+		if shipped == "" {
+			continue
+		}
+		key := repo + "|" + sha + "|" + shipped
 		status, seen := w.compared[key]
 		if !seen {
-			out, err := w.gh(ctx, "api", "repos/"+repo+"/compare/"+sha+"..."+r.HeadSha, "--method", "GET", "--jq", ".status")
+			out, err := w.gh(ctx, "api", "repos/"+repo+"/compare/"+sha+"..."+shipped, "--method", "GET", "--jq", ".status")
 			if err != nil {
 				continue
 			}
@@ -87,6 +98,61 @@ func (w *waitWatcher) deployFor(ctx context.Context, repo, sha string) (deployRu
 		}
 	}
 	return deployRun{}, false
+}
+
+// deployedSha is the commit a successful deploy run actually shipped, or ""
+// when it shipped nothing (or that is not known yet). A run succeeds even when
+// it stands down outside the deploy window with its deploy job skipped, and a
+// scheduled run's head is main, not the tag it deploys. Nov 20: three
+// tag-only runs cleared deploy waits for code that was not on prod.
+func (w *waitWatcher) deployedSha(ctx context.Context, repo string, r deployRun) string {
+	if s, ok := w.deployedShas[r.ID]; ok {
+		return s
+	}
+	s, known := w.readDeployedSha(ctx, repo, r)
+	if known {
+		if w.deployedShas == nil {
+			w.deployedShas = map[int64]string{}
+		}
+		w.deployedShas[r.ID] = s
+	}
+	return s
+}
+
+func (w *waitWatcher) readDeployedSha(ctx context.Context, repo string, r deployRun) (sha string, known bool) {
+	out, err := w.gh(ctx, "api", fmt.Sprintf("repos/%s/actions/runs/%d/jobs", repo, r.ID), "--method", "GET", "--jq", `.jobs[]|[.id,.name,.conclusion]|@tsv`)
+	if err != nil {
+		return "", false
+	}
+	var resolveJob string
+	hasDeployJob, deployed := false, false
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		f := strings.Split(line, "\t")
+		if len(f) != 3 {
+			continue
+		}
+		switch {
+		case deployJob.MatchString(f[1]):
+			hasDeployJob = true
+			deployed = deployed || f[2] == "success"
+		case strings.EqualFold(f[1], "resolve"):
+			resolveJob = f[0]
+		}
+	}
+	if hasDeployJob && !deployed {
+		return "", true
+	}
+	if resolveJob != "" {
+		if log, err := w.gh(ctx, "api", "repos/"+repo+"/actions/jobs/"+resolveJob+"/logs", "--method", "GET"); err == nil {
+			if m := deployedLine.FindSubmatch(log); m != nil {
+				return string(m[2]), true
+			}
+		}
+	}
+	if r.Event == "schedule" {
+		return "", false // its head is main; what it deployed is still unknown
+	}
+	return r.HeadSha, true
 }
 
 // prOutcome reports whether a pr wait's condition has settled: merged (or

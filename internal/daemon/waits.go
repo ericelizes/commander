@@ -105,7 +105,8 @@ type waitWatcher struct {
 	// deployRuns is each repo's successful deploy runs for the poll in progress.
 	deployRuns map[string][]deployRun
 	// compared remembers GitHub compare results (sha|head -> status); they never change.
-	compared map[string]string
+	compared     map[string]string
+	deployedShas map[int64]string // run id -> the commit it shipped ("" = none)
 	// slack reads a channel's history for event:slack waits; nil = not configured.
 	slack slackHistoryFunc
 }

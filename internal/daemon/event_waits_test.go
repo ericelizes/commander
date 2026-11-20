@@ -33,7 +33,11 @@ func deployGH(t *testing.T, succeeded bool) ghRunner {
 				runs = `[{"id":44143676207,"name":"Deploy orchestrator to prod","head_sha":"` + deployHead + `","head_branch":"prod-20261117-180317","updated_at":"2026-11-17T18:03:50Z"},` + runs[1:]
 			}
 			return []byte(runs), nil
-		case strings.HasPrefix(cmd, "api repos/acme/web/compare/b91127b070..."+deployHead):
+		case cmd == "api repos/acme/web/actions/runs/44143676207/jobs --method GET --jq .jobs[]|[.id,.name,.conclusion]|@tsv":
+			return []byte("7001\tresolve\tsuccess\n7002\tdeploy\tsuccess\n7003\tnotify\tsuccess\n"), nil
+		case cmd == "api repos/acme/web/actions/jobs/7001/logs --method GET":
+			return []byte("2026-11-17T18:00:01Z Deploying prod-20261117-180317 (" + deployHead[:12] + ")\n"), nil
+		case strings.HasPrefix(cmd, "api repos/acme/web/compare/b91127b070..."+deployHead[:12]):
 			return []byte("ahead\n"), nil
 		case strings.HasPrefix(cmd, "api repos/acme/web/compare/b91127b070..."):
 			return []byte("behind\n"), nil
@@ -68,6 +72,55 @@ func dispatchReceipts(labels []string) int {
 		}
 	}
 	return n
+}
+
+// A deploy run that succeeded with its deploy job skipped (outside the window)
+// shipped nothing, and a scheduled run deploys the newest tag, not its head
+// (main): only the commit its resolve job logged counts.
+func TestDeployWaitNeedsTheDeployJob(t *testing.T) {
+	const tagSha = "0228f004b8aa"
+	for _, c := range []struct {
+		name, event, jobs, log, compare string
+		fired                           bool
+	}{
+		{"deploy job skipped", "workflow_dispatch", "1\tresolve\tsuccess\n2\tdeploy\tskipped\n", "", "", false},
+		{"schedule ships an older tag", "schedule", "1\tresolve\tsuccess\n2\tdeploy\tsuccess\n", "Deploying prod-20261119-231521 (" + tagSha + ")", "behind", false},
+		{"schedule ships the tag holding it", "schedule", "1\tresolve\tsuccess\n2\tdeploy\tsuccess\n", "Deploying prod-20261119-231521 (" + tagSha + ")", "ahead", true},
+		{"schedule log unreadable", "schedule", "1\tresolve\tsuccess\n2\tdeploy\tsuccess\n", "", "", false},
+	} {
+		wt := beads.Wait{Kind: beads.WaitDeploy, Sha: "b91127b070", Since: cutoverOn}
+		w, m, sent := memWatcher([]string{wt.Label()}, reconcileAt)
+		w.managerLive = func(string) bool { return false }
+		var compared []string
+		w.gh = func(_ context.Context, args ...string) ([]byte, error) {
+			cmd := strings.Join(args, " ")
+			switch {
+			case strings.HasPrefix(cmd, "api repos/acme/web/actions/runs?status=success"):
+				return []byte(`[{"id":9,"name":"Deploy orchestrator to prod","head_sha":"` + deployHead + `","head_branch":"main","event":"` + c.event + `","updated_at":"2026-11-20T14:20:00Z"}]`), nil
+			case strings.HasPrefix(cmd, "api repos/acme/web/actions/runs/9/jobs"):
+				return []byte(c.jobs), nil
+			case strings.HasPrefix(cmd, "api repos/acme/web/actions/jobs/1/logs"):
+				if c.log == "" {
+					return nil, fmt.Errorf("no log")
+				}
+				return []byte(c.log), nil
+			case strings.HasPrefix(cmd, "api repos/acme/web/compare/"):
+				compared = append(compared, cmd)
+				if !strings.Contains(cmd, "..."+tagSha) {
+					t.Errorf("%s: compared against %q, not the shipped tag", c.name, cmd)
+				}
+				return []byte(c.compare), nil
+			}
+			return nil, fmt.Errorf("gh %v", args)
+		}
+		w.poll(context.Background())
+		if fired := !slices.Contains(labelsOf(t, m), wt.Label()); fired != c.fired {
+			t.Errorf("%s: fired=%v, want %v (mail %+v)", c.name, fired, c.fired, *sent)
+		}
+		if c.compare == "" && len(compared) > 0 {
+			t.Errorf("%s: compared %v though nothing shipped", c.name, compared)
+		}
+	}
 }
 
 // The deploy the steps waited on succeeded at 18:03: within one poll the wait
