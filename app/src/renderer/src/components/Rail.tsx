@@ -1,9 +1,9 @@
 import { useTreeSelection } from '../../../features/treeboard/selection'
 // Rail is the thin column down the left of the window, on the background: the
-// pages (Home, Progress), then how many agents are working, and at the bottom
+// pages (Home, Progress, Brief), then how many agents are working, and at the bottom
 // the health and update alerts, the Settings gear, and who the app is for.
 
-import { Bot, ChartNoAxesColumn, House, Settings as Gear, User, Workflow } from 'lucide-react'
+import { Bot, ChartNoAxesColumn, House, Newspaper, Settings as Gear, User, Workflow } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useIntegrations } from '../../../features/linear/settings'
@@ -29,6 +29,14 @@ function ProgressFilled() {
       <rect x="2.750" y="13.500" width="4.500" height="8" rx="1.500" />
       <rect x="9.750" y="2.500" width="4.500" height="19" rx="1.500" />
       <rect x="16.750" y="8" width="4.500" height="13.500" rx="1.500" />
+    </svg>
+  )
+}
+
+function BriefFilled() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path fillRule="evenodd" d="M8.500 2h11A2.500 2.500 0 0 1 22 4.500v15a2.500 2.500 0 0 1-2.500 2.500h-15A2.500 2.500 0 0 1 2 19.500v-8A2.500 2.500 0 0 1 4.500 9H6V4.500A2.500 2.500 0 0 1 8.500 2ZM10 5.500v4.500h8V5.500ZM10 13v1.750h8V13ZM10 17v1.750h5V17Z" />
     </svg>
   )
 }
@@ -61,6 +69,7 @@ export function Rail() {
   const working = treeRunning ?? agentRowsWorking
   const home = useStore((s) => homeActive(s.selected))
   const progress = useStore((s) => s.selected.kind === 'progress')
+  const briefOn = useStore((s) => s.selected.kind === 'brief')
   const workflows = useStore((s) => s.selected.kind === 'workflows')
   return (
     <div className="rail">
@@ -69,6 +78,9 @@ export function Rail() {
       </button>
       <button type="button" className={`rail-btn${progress ? ' on' : ''}`} onClick={() => useStore.getState().select({ kind: 'progress' })} title="Progress" aria-label="Progress">
         {progress ? <ProgressFilled /> : <ChartNoAxesColumn size={18} />}
+      </button>
+      <button type="button" className={`rail-btn${briefOn ? ' on' : ''}`} onClick={() => useStore.getState().select({ kind: 'brief' })} title="Brief" aria-label="Brief">
+        {briefOn ? <BriefFilled /> : <Newspaper size={18} />}
       </button>
       <button type="button" className={`rail-btn${workflows ? ' on' : ''}`} onClick={() => useStore.getState().select({ kind: 'workflows' })} title="Workflows" aria-label="Workflows">
         <Workflow size={18} strokeWidth={workflows ? 2.4 : 2} />

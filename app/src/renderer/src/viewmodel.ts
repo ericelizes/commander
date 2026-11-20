@@ -580,7 +580,7 @@ export function navOrder(vm: Display): string[] {
 }
 
 // agent: an Operator's chat (key = its role), under workstream ws.
-export type Selection = { kind: 'commander' } | { kind: 'progress' } | { kind: 'workflows' } | { kind: 'ws'; key: string } | { kind: 'ask'; key: string } | { kind: 'agent'; key: string; ws: string }
+export type Selection = { kind: 'commander' } | { kind: 'progress' } | { kind: 'brief' } | { kind: 'workflows' } | { kind: 'ws'; key: string } | { kind: 'ask'; key: string } | { kind: 'agent'; key: string; ws: string }
 
 /** homeActive: the Home page is on whenever Commander is the conversation, which is every selection but Progress and an agent's own chat. */
 export function homeActive(sel: Selection): boolean {
@@ -608,9 +608,9 @@ export function selectionKey(sel: Selection): string {
   return sel.kind === 'commander' || isPage(sel) ? 'commander' : sel.kind === 'agent' ? sel.ws : sel.key
 }
 
-/** isPage: a whole-window page (Progress, Workflows) rather than a chat and its panes. */
-export function isPage(sel: Selection): sel is { kind: 'progress' } | { kind: 'workflows' } {
-  return sel.kind === 'progress' || sel.kind === 'workflows'
+/** isPage: a whole-window page (Progress, Brief, Workflows) rather than a chat and its panes. */
+export function isPage(sel: Selection): sel is { kind: 'progress' } | { kind: 'brief' } | { kind: 'workflows' } {
+  return sel.kind === 'progress' || sel.kind === 'brief' || sel.kind === 'workflows'
 }
 
 /**

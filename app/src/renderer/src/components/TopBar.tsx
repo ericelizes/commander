@@ -29,7 +29,7 @@ export function TopBar({ left, chat }: { left: number; chat: number }) {
       </div>
       {page && (
         <div className="app-top-pane">
-          <span className="app-top-title">{page === 'workflows' ? 'Workflows' : 'Progress'}</span>
+          <span className="app-top-title">{page === 'workflows' ? 'Workflows' : page === 'brief' ? 'Brief' : 'Progress'}</span>
         </div>
       )}
       {showFocus && <div className="app-top-pane">{focus?.n != null && <span className="app-top-label">Workstream {focus.n}{focus.letter ?? ''}</span>}</div>}

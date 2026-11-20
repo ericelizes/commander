@@ -9,6 +9,7 @@ import { TopBar } from './components/TopBar'
 import { Splitter } from './components/Splitter'
 import { ProgressView } from './components/ProgressView'
 import { WorkflowsView } from './components/WorkflowsView'
+import { BriefView } from '../../features/brief/BriefView'
 import { isPage } from './viewmodel'
 import { ChatSlot, useChatTarget } from './components/ChatSlot'
 import { useAppCapture } from './appCapture'
@@ -162,6 +163,7 @@ export function App() {
             draft and its scroll. */}
         <main className="col col-main">
           {page === 'workflows' && <WorkflowsView />}
+          {page === 'brief' && <BriefView />}
           {page === 'progress' && (stateUnavailable ? <><ActivityFreshness /><p role="status">Live state unavailable.</p></> : <ProgressView />)}
           <div
             className={`main-row${tabbed ? (chatTab ? ' tabbed show-chat' : ' tabbed') : ''}${page ? ' under-page' : ''}`}

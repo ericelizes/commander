@@ -7401,6 +7401,18 @@ button.xf-step.xf-open:hover {
 .progress-col { max-width: 760px; margin: 0 auto; padding: 32px 32px 48px; }
 .progress-title { margin: 0 0 2px; color: var(--text); font-size: 24px; font-weight: 650; letter-spacing: -0.01em; }
 .main-row.under-page { display: none; }
+.brief-meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 18px; }
+.brief-meta .sp-dates { margin: 0; }
+.brief-section { margin: 0 0 22px; }
+.brief-section > h2 { display: flex; align-items: baseline; gap: 8px; margin: 0 0 8px; color: var(--text); font-size: 15px; font-weight: 650; }
+.brief-sub { color: var(--text-3); font-size: 12.5px; font-weight: 500; }
+.brief-group { padding: 12px 14px; margin: 0 0 8px; border-radius: 12px; background: var(--raised-2); }
+.brief-ws { display: flex; align-items: center; gap: 10px; margin: 0 0 4px; color: var(--text); font-size: 12.5px; font-weight: 650; }
+.brief-ws-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.brief-pct { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; color: var(--text-3); font-size: 11.5px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.brief-pct .sp-bar { width: 72px; }
+.brief-pct-n { min-width: 4ch; text-align: right; }
+.brief-line { margin: 2px 0 0; color: var(--text); font-size: 13.5px; line-height: 1.5; }
 .sp-dates { margin: 0 0 12px; color: var(--text-3); font-size: 12.5px; }
 .sp-pacebox { display: flex; align-items: center; gap: 18px; padding: 12px 14px; margin-bottom: 14px; border-radius: 12px; background: var(--raised-2); }
 .sp-pace.big { padding: 4px 12px; font-size: 14px; }

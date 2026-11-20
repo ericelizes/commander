@@ -268,7 +268,7 @@ describe('native chat attach', () => {
     await waitFor(() => expect(posts()[0]).toMatchObject({ url: 'http://127.0.0.1:9/api/chat/manager-example-app-t03/account', body: { account: 'second', continue: true } }))
   })
 
-  it('the sidebar is the work; the rail is Home, the Settings gear and the user', async () => {
+  it('the sidebar is the work; the rail is Home, the pages, the Settings gear and the user', async () => {
     const user = userEvent.setup()
     useStore.setState({
       chatEngine: 'on',
@@ -280,7 +280,7 @@ describe('native chat attach', () => {
     await screen.findByRole('tab', { name: 'All' })
     expect(screen.getAllByRole('tab').map((t) => t.textContent?.replace(/\d+$/, ''))).toEqual(['Needs you', 'All'])
     expect(await screen.findByTitle('Test User')).toHaveTextContent('TU')
-    expect([...container.querySelectorAll('.rail button')].map((b) => b.getAttribute('aria-label'))).toEqual(['Home', 'Progress', 'Workflows', 'Settings'])
+    expect([...container.querySelectorAll('.rail button')].map((b) => b.getAttribute('aria-label'))).toEqual(['Home', 'Progress', 'Brief', 'Workflows', 'Settings'])
     await user.click(screen.getByRole('button', { name: 'Settings' }))
     const dialog = screen.getByRole('dialog', { name: 'Settings' })
     expect(within(dialog).getAllByRole('button', { name: /Connections|Agents|Display/ }).map((b) => b.textContent)).toEqual(['Connections', 'Agents', 'Display'])
