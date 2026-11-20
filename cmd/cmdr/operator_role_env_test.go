@@ -30,10 +30,16 @@ func TestOperatorRole_Refusals(t *testing.T) {
 		{"decisions retire", func(o, e *os.File) int { return runDecisions([]string{"retire", "d1", "--reason", "changed"}, o, e) }, "Commander"},
 		{"park", func(o, e *os.File) int {
 			return runInternalSetObjective([]string{"--project", "manifest", "--bead", "w.2", "--park"}, o, e)
-		}, "cannot park"},
+		}, "never paused"},
 		{"hold", func(o, e *os.File) int {
 			return runInternalSetObjective([]string{"--project", "manifest", "--bead", "w.2", "--hold", "stop"}, o, e)
-		}, "cannot set or clear a hold"},
+		}, "never paused"},
+		{"unpark", func(o, e *os.File) int {
+			return runInternalSetObjective([]string{"--project", "manifest", "--bead", "w.2", "--unpark"}, o, e)
+		}, "cannot unpark"},
+		{"no-hold", func(o, e *os.File) int {
+			return runInternalSetObjective([]string{"--project", "manifest", "--bead", "w.2", "--no-hold"}, o, e)
+		}, "cannot clear a hold"},
 		{"card check", func(o, e *os.File) int {
 			return runInternalSetObjective([]string{"--project", "manifest", "--bead", "w.2", "--card-check", "still-right", "--reason", "looked at the spec again"}, o, e)
 		}, "cannot confirm a card"},

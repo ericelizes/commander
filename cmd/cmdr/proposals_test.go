@@ -162,18 +162,14 @@ func TestProposal_LongWaitAndParkAreProposedShortOnesAreNot(t *testing.T) {
 		t.Fatalf("the mail does not say the Manager holds the step:\n%s", body)
 	}
 
+	// A park is no longer a proposal: it is refused outright (a step is never paused).
 	t.Setenv("COMMANDER_ROLE", "manager-ms-1")
-	runOK(t, runInternalSetObjective, "--project", "manifest", "--bead", "ms-1.92", "--park", "--reason", "come back later")
-	if p, ok := proposalOf(t, m, "ms-1.92"); !ok || p.Kind != beads.ProposedPark {
-		t.Fatalf("a park with no time is a proposal: %+v", p)
+	stdout, stderr, _ := withTempOutputFiles(t)
+	if code := runInternalSetObjective([]string{"--project", "manifest", "--bead", "ms-1.92", "--park", "--reason", "come back later"}, stdout, stderr); code == 0 {
+		t.Fatal("a park was allowed")
 	}
-	t.Setenv("COMMANDER_ROLE", "commander")
-	runOK(t, runProposals, "overrule", "--project", "manifest", "--bead", "ms-1.92", "--reason", "no park")
 	if b, _ := m.Show(context.Background(), "", "ms-1.92"); b.Status == beads.StatusDeferred {
-		t.Fatal("the overruled park is still parked")
-	}
-	if b, _ := m.Show(context.Background(), "", "ms-1.92"); len(beads.WaitsOf(b.Labels)) != 1 {
-		t.Fatalf("the unparked step has no holder: %v", b.Labels)
+		t.Fatal("the refused park parked the step")
 	}
 }
 
@@ -596,10 +592,15 @@ func TestProposal_OverruleNeverHoldsAGateBead(t *testing.T) {
 func TestProposal_OverruledParkOnAGateGivesNoReceipt(t *testing.T) {
 	m, _ := proposalFixture(t, true)
 	m.Seed(beads.Bead{ID: "ms-1.96", Title: "Merge check", Status: "in_progress", Labels: []string{"kind:gate", "gate", "approver:user"}})
-	t.Setenv("COMMANDER_ROLE", "manager-ms-1")
-	runOK(t, runInternalSetObjective, "--project", "manifest", "--bead", "ms-1.96", "--park", "--until", "72h", "--reason", "waiting a long while for it")
+	// A park proposed before --park went (it is refused now) is still overruled.
+	if err := beads.Park(context.Background(), m, "", "ms-1.96", "manager-ms-1", "waiting a long while for it", time.Now().Add(72*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.SetLabel(context.Background(), "", "ms-1.96", beads.ProposedLabel(beads.ProposedPark, time.Now().Unix(), ""), true); err != nil {
+		t.Fatal(err)
+	}
 	if _, ok := proposalOf(t, m, "ms-1.96"); !ok {
-		t.Skip("park was not proposed in this fixture")
+		t.Fatal("the old park proposal was not seeded")
 	}
 	overruleOut(t, "ms-1.96")
 	if hasDispatchReceipt(t, m, "ms-1.96") {

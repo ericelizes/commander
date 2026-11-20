@@ -48,9 +48,10 @@ func TestActiveBoardPreservesWaitsHoldsAndRealDecisionPriority(t *testing.T) {
 	if row := Board(s, 86400).Workstreams[0]; row.Kind != "waiting" || !strings.Contains(row.Text, "Waiting on CI #41") {
 		t.Fatal("external wait erased", row)
 	}
+	// A hold is never a quiet pause: it reads as an invalid state, red.
 	ws.Hold, ws.HoldReason = true, "until the batch lands"
-	if row := Board(s, 86400).Workstreams[0]; row.Kind != "quiet" || row.Text != "Paused: until the batch lands" {
-		t.Fatal("hold became new work", row)
+	if row := Board(s, 86400).Workstreams[0]; row.Kind != "stuck" || !strings.HasPrefix(row.Text, "Invalid state:") {
+		t.Fatal("a hold read as a quiet pause", row)
 	}
 	ws.Hold = false
 	ws.Steps[0].TypedWaits = nil
@@ -102,8 +103,8 @@ func TestActiveBoardExhaustedLaunchShowsRepairWithoutInventingActivity(t *testin
 		t.Fatal("repair lost exact execution identity", s.ExecutionChecks, s.Fleet)
 	}
 	s.Workstreams[0].Hold = true
-	if row := Board(s, 1).Workstreams[0]; !strings.HasPrefix(row.Text, "Paused") {
-		t.Fatal("repair overrode hold", row)
+	if row := Board(s, 1).Workstreams[0]; row.Kind != "stuck" || !strings.HasPrefix(row.Text, "Invalid state:") {
+		t.Fatal("a hold read as a quiet pause", row)
 	}
 }
 

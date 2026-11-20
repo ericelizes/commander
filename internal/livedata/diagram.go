@@ -490,6 +490,11 @@ func (f flow) leafHand(s SnapStep) hand {
 		if s.ParkedUntil != 0 {
 			return hand{ActorAutomatic, "parked until " + clock(s.ParkedUntil, f.b.now, f.b.loc) + ", then the Manager picks it up"}
 		}
+		if f.leafBaseLine(s).text == ParkedStepText {
+			// An invalid state, not the user's move: the step stays on its
+			// owner's line, red, until the Commander restructures it.
+			return restingHand(s)
+		}
 		return hand{ActorYou, "on hold until you bring it back"}
 	}
 	if _, ok := f.b.noPitch[f.ws.Project+"\x00"+s.BeadID]; ok {

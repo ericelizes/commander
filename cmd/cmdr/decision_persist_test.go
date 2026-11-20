@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/example-user/commander/internal/beads"
 	"github.com/example-user/commander/internal/store"
@@ -153,10 +154,12 @@ func TestDecisionPersist_ParkThenUnparkKeepsTheCard(t *testing.T) {
 		_, e := read()
 		t.Fatalf("flag: %s", e)
 	}
-	for _, f := range []string{"--park", "--unpark"} {
-		if code := runInternalSetObjective([]string{"--project", "manifest", "--bead", "obj-1", f}, stdout, stderr); code != 0 {
-			t.Fatalf("%s failed", f)
-		}
+	// A park made before --park went (it is refused now), then --unpark.
+	if err := beads.Park(context.Background(), m, "", "obj-1", "manager-ws", "", time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	if code := runInternalSetObjective([]string{"--project", "manifest", "--bead", "obj-1", "--unpark"}, stdout, stderr); code != 0 {
+		t.Fatal("--unpark failed")
 	}
 	_ = m
 	got, _, _, cleanup := decisionPersistCard(t, "manifest", "obj-1")

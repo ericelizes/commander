@@ -515,7 +515,7 @@ func needsResolutionMail(r store.NeedsResolution) (subject, body string) {
 	}
 	if r.Action == "defer" {
 		subject = "the user deferred: " + r.Ask
-		body = fmt.Sprintf("the user deferred %q (step %s) from his sidebar. It is back to not-started: park it, and do not re-flag it unless something changes.", r.Ask, r.BeadID)
+		body = fmt.Sprintf("the user deferred %q (step %s) from his sidebar. It is back to not-started and you hold it. A step is never paused: if it must wait, give it what it waits for (a wait, or its own bead it is blocked by); if it is not wanted now, supersede it. Do not re-flag it unless something changes.", r.Ask, r.BeadID)
 	}
 	if r.GateChoice != "" {
 		subject, body = workflowGateMail(r.BeadID, r.Ask, r.GateChoice, r.Text)

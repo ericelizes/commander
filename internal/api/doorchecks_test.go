@@ -97,6 +97,15 @@ func TestDoorChecks(t *testing.T) {
 		{"plain create allowed", []string{agent}, []string{"create", "Task", "--labels", "kind:task"}, nil, nil, nil, ""},
 		{"label add checked", []string{agent}, []string{"label", "add", "b-1", "waiting:soon"}, open, nil, nil, "not a typed wait"},
 		{"close not checked", []string{agent}, []string{"close", "b-1"}, open, nil, nil, ""},
+		// Nov 20 (4.1): a step is never paused; what must happen first is a bead it is blocked by.
+		{"hold label refused", []string{"COMMANDER_ROLE=commander"}, []string{"update", "b-1", "--add-label", beads.HoldLabel}, open, nil, nil, "never paused"},
+		{"hold via label add refused", []string{"COMMANDER_ROLE=manager-w"}, []string{"label", "add", "b-1", beads.HoldLabel}, open, nil, nil, "never paused"},
+		{"parked label refused", []string{"COMMANDER_ROLE=manager-w"}, []string{"update", "b-1", "--add-label", beads.ParkedLabel}, open, nil, nil, "never paused"},
+		{"parking a step refused", []string{"COMMANDER_ROLE=manager-w"}, []string{"update", "b-1", "--status", beads.StatusDeferred}, open, nil, nil, "never paused"},
+		{"bd defer of a step refused", []string{"COMMANDER_ROLE=manager-w"}, []string{"defer", "b-1"}, open, nil, nil, "never paused"},
+		{"withdrawing a gate allowed", []string{"COMMANDER_ROLE=manager-w"}, []string{"update", "b-1", "--status", beads.StatusDeferred}, &beads.Bead{ID: "b-1", Labels: []string{beads.GateLabel}}, nil, nil, ""},
+		{"clearing a hold allowed", []string{"COMMANDER_ROLE=commander"}, []string{"update", "b-1", "--remove-label", beads.HoldLabel}, &beads.Bead{ID: "b-1", Labels: []string{beads.HoldLabel}}, nil, nil, ""},
+		{"user parking exempt", nil, []string{"update", "b-1", "--status", beads.StatusDeferred}, open, nil, nil, ""},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

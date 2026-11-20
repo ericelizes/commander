@@ -288,7 +288,7 @@ func (b *treeBuild) level(ws SnapWorkstream, steps []SnapStep, row *TreeRow, ord
 				Depth: row.Depth + 1, Title: title, Tickets: mergeTickets(s.Tickets, tix), Criteria: criteriaList(s.Criteria)}
 			// A parked (deferred) workstream, or one inside a paused parent, is paused: the watcher holds its
 			// steps, so the board says "Paused" rather than "Stalled".
-			if d, ok := b.diagram[s.BeadID]; (ok && strings.HasPrefix(d.Text, "Paused")) || s.Hold || s.Status == "deferred" || b.paused[row.ID] {
+			if d, ok := b.diagram[s.BeadID]; (ok && strings.HasPrefix(d.Text, "Paused")) || s.Status == "deferred" || b.paused[row.ID] {
 				b.paused[child.ID] = true
 			}
 			b.closed[child.ID] = s.Status == "closed"
@@ -392,9 +392,14 @@ func (b *treeBuild) step(s SnapStep, row string) *TreeStep {
 	default:
 		st.State = "active"
 	}
-	// A step on hold (deferred) is paused: no agent is meant to run on it, so it never reads as stalled work.
+	// A parked step runs nothing. Under a parked workstream it is paused with
+	// it; on its own it keeps the board's text, an invalid state, so its row
+	// reads "Stalled: nothing active" in red, never a quiet pause.
 	if s.Status == "deferred" && st.State != "done" {
-		st.State, st.Text = "notstarted", "Paused"
+		st.State = "notstarted"
+		if b.paused[row] || text != ParkedStepText {
+			st.Text = "Paused"
+		}
 	}
 	if st.State != "done" {
 		st.Run = d.Runtime
@@ -525,8 +530,13 @@ func (b *treeBuild) finish(order []string, now int64) {
 	}
 	// An unblocked agent step never sits unstarted (rule 21): the watcher starts an agent on it.
 	// An unblocked step owned by a named person or team is theirs now: it is current, not upcoming.
+	// A parked or held step is the exception the watcher skips: an invalid state, never shown as work.
 	for _, id := range sortedKeys(b.steps) {
 		s := b.steps[id]
+		if s.Text == ParkedStepText || s.Text == HeldStepText {
+			s.State = "notstarted"
+			continue
+		}
 		if s.State == "notstarted" && (s.Type == "agent" || s.Type == "review" || s.Type == "automatic" || s.Type == "person") && !b.paused[s.Row] && !pausedText(s.Text) && len(openBlockers(id)) == 0 {
 			s.State = "active"
 			if s.Type == "person" && (s.Text == "" || s.Text == "Not started" || s.Text == "Not reached") {

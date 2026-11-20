@@ -79,19 +79,16 @@ func TestShipHoldUnreadableBrRefusesAfterRetries(t *testing.T) {
 	}
 }
 
-func TestShipHoldSetAndClear(t *testing.T) {
+func TestClearHoldRemovesTheLabel(t *testing.T) {
 	t.Setenv("COMMANDER_ROLE", "manager-ws")
 	h := &holdBeads{}
-	if err := applyHold(context.Background(), h, "d", "ws.1", "wait", false); err != nil {
+	if err := clearHold(context.Background(), h, "d", "ws.1"); err != nil {
 		t.Fatal(err)
 	}
-	if err := applyHold(context.Background(), h, "d", "ws.1", "", true); err != nil {
-		t.Fatal(err)
-	}
-	if strings.Join(h.set, ",") != "ws.1:hold:on,ws.1:hold:off" {
+	if strings.Join(h.set, ",") != "ws.1:hold:off" {
 		t.Errorf("labels = %v", h.set)
 	}
-	if h.added[0] != "hold by manager-ws: wait" || h.added[1] != "hold cleared by manager-ws" {
+	if h.added[0] != "hold cleared by manager-ws" {
 		t.Errorf("comments = %v", h.added)
 	}
 }

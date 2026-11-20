@@ -282,8 +282,8 @@ a separate follow-up call before relying on it.
   run `cmdr internal-ship <your-branch> --project commander` (ff-only into main;
   it refuses a non-descendant, a dirty main checkout, or one not on main).
   Report the result on the bead.
-- A `hold` label on your task bead (or an ancestor) is your Manager's order to
-  stop shipping: `internal-ship` refuses while it is set. Do not ship, work around
+- An old `hold` label on your task bead (or an ancestor; nobody can set a new one)
+  stops shipping: `internal-ship` refuses while it is set. Do not ship, work around
   it, or clear it (`--no-hold` is the Manager's); report and wait.
 - Never install (`just install`, `install/install.sh`) or restart cmdrd: that
   needs the user's OK given to Commander, not to you. `internal-ship` never installs.

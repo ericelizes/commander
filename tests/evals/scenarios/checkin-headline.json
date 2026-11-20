@@ -228,7 +228,7 @@
       "stalled_lines": ["- w.a.1 | Build track (w) | Sign off | a reviewer approved #4; next step starting"]
     },
     {
-      "name": "a parked stalled step is out of play",
+      "name": "a parked step is a sanity-audit suspect (a step is never paused)",
       "snapshot": {
         "workstreams": [{"n": 1, "project": "p", "bead_id": "w", "title": "Alpha", "manager_role": "manager-w", "steps": [
           {"bead_id": "w.1", "title": "Sign off", "status": "deferred", "waiting": "review of #4", "waiting_since": 1, "review_fact": {"acted": true, "text": "a reviewer approved #4"}},
@@ -237,8 +237,9 @@
         "needs_you": [{"project": "p", "bead_id": "w.2", "workstream": "Alpha", "title": "Plan approved"}],
         "agents": {"manager-w": {"state": "idle", "since": 1}}
       },
-      "head": "all on track; 1 waiting on the user",
-      "instruction": "Nothing is required: end your turn."
+      "head": "action needed: 0 workflow errors, 0 blockers, 0 advisories, 1 sanity-audit suspects, 0 stopped or stalled, 1 needs you, 0 screen mismatches",
+      "instruction": "Act on the sanity-audit suspects below.",
+      "suspect_line": true
     },
     {"name": "overdue Manager review beside a waiting track", "snapshot": {"workstreams": [{"n": 1, "project": "p", "bead_id": "w", "title": "Alpha", "manager_role": "manager-w", "steps": [{"bead_id": "w.1", "title": "Build result", "status": "open", "state": "review", "owner": "manager-w", "waiting": "Manager to close", "waiting_since": 1, "waiting_until": 500, "waiting_until_as": "Manager to close"}, {"bead_id": "w.b", "title": "Cutover track", "status": "open", "state": "in-progress", "track": true, "children": [{"bead_id": "w.b.1", "title": "Soak", "status": "open", "state": "in-progress", "waiting": "soak-period", "waiting_since": 1, "waiting_until": 90000, "waiting_until_as": "soak-period"}]}]}], "agents": {"manager-w": {"state": "idle", "since": 1}}}, "head": "action needed: 0 workflow errors, 0 blockers, 0 advisories, 0 sanity-audit suspects, 1 stopped or stalled, 0 needs you, 0 screen mismatches", "instruction": "Act on the stopped or stalled rows below.", "stalled_lines": ["- w.1 | Alpha (w) | Build result | Finished but not closed"]},
     {"name": "overdue Manager review beside an open card", "snapshot": {"workstreams": [{"n": 1, "project": "p", "bead_id": "w", "title": "Alpha", "manager_role": "manager-w", "steps": [{"bead_id": "w.1", "title": "Build result", "status": "open", "state": "review", "owner": "manager-w", "waiting": "Manager to close", "waiting_since": 1, "waiting_until": 500, "waiting_until_as": "Manager to close"}, {"bead_id": "w.2", "title": "Plan approved", "status": "open", "gate": true, "approvers": ["user"], "criteria": "The plan reads right"}]}], "agents": {"manager-w": {"state": "idle", "since": 1}}, "needs_you": [{"project": "p", "bead_id": "w.2", "workstream": "Alpha", "title": "Plan approved"}]}, "head": "action needed: 0 workflow errors, 0 blockers, 0 advisories, 0 sanity-audit suspects, 1 stopped or stalled, 1 needs you, 0 screen mismatches", "instruction": "Act on the stopped or stalled rows below.", "stalled_lines": ["- w.1 | Alpha (w) | Build result | Finished but not closed"]},

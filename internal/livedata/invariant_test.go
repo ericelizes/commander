@@ -122,13 +122,15 @@ func TestOpenBeadInvariantDeferred(t *testing.T) {
 		{BeadID: "p-1.1", ParentBeadID: "p-1", Title: "parked", Status: "deferred", ProjectName: "p"},
 		{BeadID: "p-1.2", ParentBeadID: "p-1", Title: "waits on parked", Status: "open", ProjectName: "p", BlockedBy: []string{"p-1.1"}},
 	}
+	// The parked step is a pause (nothing will start it) and its dependant is
+	// ready behind a parked blocker, so it needs an owner: both are listed.
 	got := OpenBeadInvariant(rows, nil)
-	if len(got) != 1 || got[0].BeadID != "p-1.2" {
-		t.Fatalf("violations = %v, want the dependant of a parked blocker (it is ready, so it needs an owner)", ids(got))
+	if len(got) != 2 || got[0].BeadID != "p-1.1" || got[0].Why != ParkedStepWhy || got[1].BeadID != "p-1.2" {
+		t.Fatalf("violations = %v, want the parked step and the dependant of a parked blocker", ids(got))
 	}
 	rows[2].BlockedBy = nil
-	if got := OpenBeadInvariant(rows, nil); len(got) != 1 || got[0].BeadID != "p-1.2" {
-		t.Fatalf("violations = %v, want only the unblocked open child", ids(got))
+	if got := OpenBeadInvariant(rows, nil); len(got) != 2 || got[1].BeadID != "p-1.2" {
+		t.Fatalf("violations = %v, want the parked step and the unblocked open child", ids(got))
 	}
 	rows[2].BlockedBy = []string{"p-1.1"}
 	rows[0].Status = "deferred"
@@ -138,14 +140,23 @@ func TestOpenBeadInvariantDeferred(t *testing.T) {
 	}
 }
 
-func TestSnapshotViolationsDeferred(t *testing.T) {
+// Nov 20 (4.1): a ready step was put on hold and no agent ran. A parked step
+// is the same pause: the invariant lists it, while a parked track (and what
+// sits under it) and a parked gate are left alone.
+func TestSnapshotViolationsFlagAParkedStep(t *testing.T) {
 	ws := SnapWorkstream{BeadID: "w", Status: "open", Steps: []SnapStep{
 		{BeadID: "w.1", Status: "deferred", State: "not-started"},
+		{BeadID: "w.2", Status: "deferred", Track: true, Children: []SnapStep{{BeadID: "w.2.1", Status: "deferred"}}},
+		{BeadID: "w.3", Status: "deferred", Gate: true},
 	}}
+	var got []Violation
 	for _, v := range SnapshotViolations(snapOf(ws, idle)) {
-		if v.BeadID == "w.1" {
-			t.Fatalf("deferred bead flagged: %v", v)
+		if v.BeadID != "w" {
+			got = append(got, v)
 		}
+	}
+	if len(got) != 1 || got[0].BeadID != "w.1" || got[0].Why != ParkedStepWhy {
+		t.Fatalf("violations = %+v, want only the parked step w.1", got)
 	}
 }
 
@@ -244,12 +255,12 @@ func TestInvariantDeferredBlockerAuditAndSnapshotAgree(t *testing.T) {
 	ws := SnapWorkstream{BeadID: "p-1", Project: "p", Status: "open", Steps: steps}
 	audit := openWithoutOwner(ws)
 	snap := SnapshotViolations(Snapshot{Workstreams: []SnapWorkstream{ws}})
-	if len(audit) != 2 || audit[0].BeadID != "p-1.3" || audit[1].BeadID != "p-1.4" {
-		t.Fatalf("openWithoutOwner = %v, want p-1.3 and p-1.4", audit)
+	if len(audit) != 3 || audit[0].BeadID != "p-1.1" || audit[1].BeadID != "p-1.3" || audit[2].BeadID != "p-1.4" {
+		t.Fatalf("openWithoutOwner = %v, want p-1.1 (parked), p-1.3 and p-1.4", audit)
 	}
 	got := ids(snap)
-	if len(got) != 2 || got[0] != "p-1.3" || got[1] != "p-1.4" {
-		t.Fatalf("SnapshotViolations = %v, want p-1.3 and p-1.4", got)
+	if len(got) != 3 || got[0] != "p-1.1" || got[1] != "p-1.3" || got[2] != "p-1.4" {
+		t.Fatalf("SnapshotViolations = %v, want p-1.1 (parked), p-1.3 and p-1.4", got)
 	}
 }
 

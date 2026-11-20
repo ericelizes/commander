@@ -161,8 +161,9 @@
    {
     "id": "lab-t06.10",
     "title": "Revisit the old fixtures",
-    "kind": "idle",
-    "text": "Parked"
+    "kind": "stalled",
+    "text": "Invalid state: parked, so nothing will start it",
+    "why": "Automation failure: Invalid state: parked, so nothing will start it. Owner: manager-lab-t06. Next: inspect current evidence and record the next guarded recovery action on lab-t06.10."
    }
   ]
  }

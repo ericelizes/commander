@@ -246,7 +246,7 @@ func (w *waitWatcher) unparkDue(ctx context.Context, p store.Project) {
 			}
 			lines = append(lines, fmt.Sprintf("- %s (%s)", b.ID, b.Title))
 		}
-		body := fmt.Sprintf("Parked time passed, so cmdrd un-parked these asks; each is back with the status it had (and its card, if it had one):\n%s\nRe-park one with: cmdr internal-set-objective --project %s --bead <id> --park --until <time>.", strings.Join(lines, "\n"), p.Name)
+		body := fmt.Sprintf("Parked time passed, so cmdrd un-parked these asks; each is back with the status it had (and its card, if it had one):\n%s\nEach needs a holder now (a card, a wait, or a bead it is blocked by): a step is never paused, so there is no re-park.", strings.Join(lines, "\n"))
 		if err := w.mail(ctx, manager, subject, body); err != nil {
 			log.Printf("daemon: waits: mail %s: %v", manager, err)
 			continue
