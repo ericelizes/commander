@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -50,23 +51,37 @@ const deployRunsChecked = 15
 func (w *waitWatcher) deployFor(ctx context.Context, repo, sha string) (deployRun, bool) {
 	runs, ok := w.deployRuns[repo]
 	if !ok {
-		out, err := w.gh(ctx, "api", "repos/"+repo+"/actions/runs?status=success&per_page=50", "--method", "GET", "--jq", ".workflow_runs")
+		// Each deploy workflow's own successful runs. The repo-wide list of
+		// recent successful runs is mostly CI in a busy repo: Nov 20 the prod
+		// deploy fell out of its newest 50 and a deploy that shipped was missed.
+		out, err := w.gh(ctx, "api", "repos/"+repo+"/actions/workflows?per_page=100", "--method", "GET", "--jq", `.workflows[]|[.id,.name]|@tsv`)
 		if err != nil {
-			return deployRun{}, false
-		}
-		var all []deployRun
-		if json.Unmarshal(out, &all) != nil {
 			return deployRun{}, false
 		}
 		re := w.deployWorkflow
 		if re == nil {
 			re = defaultDeployWorkflow
 		}
-		for _, r := range all {
-			if re.MatchString(r.Name) && r.HeadSha != "" {
-				runs = append(runs, r)
+		for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+			id, name, found := strings.Cut(line, "\t")
+			if !found || !re.MatchString(name) {
+				continue
+			}
+			out, err := w.gh(ctx, "api", "repos/"+repo+"/actions/workflows/"+id+"/runs?status=success&per_page=20", "--method", "GET", "--jq", ".workflow_runs")
+			if err != nil {
+				return deployRun{}, false
+			}
+			var all []deployRun
+			if json.Unmarshal(out, &all) != nil {
+				return deployRun{}, false
+			}
+			for _, r := range all {
+				if r.HeadSha != "" {
+					runs = append(runs, r)
+				}
 			}
 		}
+		sort.Slice(runs, func(i, j int) bool { return runs[i].ID > runs[j].ID }) // newest first
 		if w.deployRuns == nil {
 			w.deployRuns = map[string][]deployRun{}
 		}

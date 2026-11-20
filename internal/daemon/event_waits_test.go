@@ -26,9 +26,12 @@ func deployGH(t *testing.T, succeeded bool) ghRunner {
 	return func(_ context.Context, args ...string) ([]byte, error) {
 		cmd := strings.Join(args, " ")
 		switch {
-		case strings.HasPrefix(cmd, "api repos/acme/web/actions/runs?status=success"):
-			runs := `[{"id":44120184444,"name":"Deploy orchestrator to prod","head_sha":"1111111111111111111111111111111111111111","head_branch":"prod-20261117-155709","updated_at":"2026-11-17T16:21:00Z"},
-			          {"id":44143000000,"name":"Deploy orchestrator to staging","head_sha":"` + deployHead + `","head_branch":"main","updated_at":"2026-11-17T18:22:00Z"}]`
+		case strings.HasPrefix(cmd, "api repos/acme/web/actions/workflows?per_page=100"):
+			return []byte("11\tDeploy orchestrator to prod\n12\tDeploy orchestrator to staging\n13\tCI\n"), nil
+		case strings.HasPrefix(cmd, "api repos/acme/web/actions/workflows/12/runs?status=success"):
+			return []byte(`[{"id":44143000000,"name":"Deploy orchestrator to staging","head_sha":"` + deployHead + `","head_branch":"main","updated_at":"2026-11-17T18:22:00Z"}]`), nil
+		case strings.HasPrefix(cmd, "api repos/acme/web/actions/workflows/11/runs?status=success"):
+			runs := `[{"id":44120184444,"name":"Deploy orchestrator to prod","head_sha":"1111111111111111111111111111111111111111","head_branch":"prod-20261117-155709","updated_at":"2026-11-17T16:21:00Z"}]`
 			if succeeded {
 				runs = `[{"id":44143676207,"name":"Deploy orchestrator to prod","head_sha":"` + deployHead + `","head_branch":"prod-20261117-180317","updated_at":"2026-11-17T18:03:50Z"},` + runs[1:]
 			}
@@ -95,7 +98,9 @@ func TestDeployWaitNeedsTheDeployJob(t *testing.T) {
 		w.gh = func(_ context.Context, args ...string) ([]byte, error) {
 			cmd := strings.Join(args, " ")
 			switch {
-			case strings.HasPrefix(cmd, "api repos/acme/web/actions/runs?status=success"):
+			case strings.HasPrefix(cmd, "api repos/acme/web/actions/workflows?per_page=100"):
+				return []byte("11\tDeploy orchestrator to prod\n"), nil
+			case strings.HasPrefix(cmd, "api repos/acme/web/actions/workflows/11/runs?status=success"):
 				return []byte(`[{"id":9,"name":"Deploy orchestrator to prod","head_sha":"` + deployHead + `","head_branch":"main","event":"` + c.event + `","updated_at":"2026-11-20T14:20:00Z"}]`), nil
 			case strings.HasPrefix(cmd, "api repos/acme/web/actions/runs/9/jobs"):
 				return []byte(c.jobs), nil
