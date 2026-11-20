@@ -49,6 +49,31 @@ func doorServer(t *testing.T, cb *checkBeads) (string, *atomic.Int32, string) {
 	return ts.URL, &ran, home
 }
 
+// prBead is a step whose PR is in the infrastructure repo, so a bare team slug resolves in its org.
+var prBead = &beads.Bead{ID: "b-1", Status: "open", Labels: []string{"in-review", "pr:august-innovations/infrastructure#2163"}}
+
+// fakeReviewerGH answers the door's reviewer check like GitHub did on Nov 20 (gh api GET, error bodies on stdout).
+func fakeReviewerGH(_ context.Context, args ...string) ([]byte, error) {
+	if len(args) < 2 || args[0] != "api" {
+		return nil, errors.New("unexpected gh call")
+	}
+	switch args[1] {
+	case "repos/august-innovations/infrastructure/collaborators/GoodmanBen":
+		return nil, nil // 204
+	case "users/bob", "users/GoodmanBen", "users/infra-team":
+		return []byte("User\n"), nil
+	case "users/devin-ai-integration[bot]":
+		return []byte("Bot\n"), nil
+	case "users/august-innovations":
+		return []byte("Organization\n"), nil
+	case "orgs/august-innovations/teams/infrastructure":
+		return []byte("team\n"), nil
+	case "users/gh-down", "repos/august-innovations/infrastructure/collaborators/gh-down":
+		return nil, errors.New("gh: could not resolve host api.github.com")
+	}
+	return []byte(`{"message":"Not Found","status":"404"}`), nil
+}
+
 const (
 	agent = "COMMANDER_ROLE=operator-x"
 	until = "waiting:1700000000:until:1800000000:"
@@ -106,6 +131,17 @@ func TestDoorChecks(t *testing.T) {
 		{"withdrawing a gate allowed", []string{"COMMANDER_ROLE=manager-w"}, []string{"update", "b-1", "--status", beads.StatusDeferred}, &beads.Bead{ID: "b-1", Labels: []string{beads.GateLabel}}, nil, nil, ""},
 		{"clearing a hold allowed", []string{"COMMANDER_ROLE=commander"}, []string{"update", "b-1", "--remove-label", beads.HoldLabel}, &beads.Bead{ID: "b-1", Labels: []string{beads.HoldLabel}}, nil, nil, ""},
 		{"user parking exempt", nil, []string{"update", "b-1", "--status", beads.StatusDeferred}, open, nil, nil, ""},
+		// A review wait whose ref no review can ever match never clears: refused at the door, naming the right forms.
+		{"review wait on a team allowed", []string{agent}, []string{"update", "b-1", "--add-label", "waiting:1700000000:review:august-innovations:infrastructure"}, prBead, nil, nil, ""},
+		{"review wait on a bare team slug of the PR's org allowed", []string{agent}, []string{"update", "b-1", "--add-label", "waiting:1700000000:review:infrastructure"}, prBead, nil, nil, ""},
+		{"review wait on any allowed", []string{agent}, []string{"update", "b-1", "--add-label", "waiting:1700000000:review:any"}, prBead, nil, nil, ""},
+		{"review wait on a bot allowed", []string{agent}, []string{"update", "b-1", "--add-label", "waiting:1700000000:review:devin-ai-integration"}, prBead, nil, nil, ""},
+		{"review wait on a collaborator allowed", []string{agent}, []string{"update", "b-1", "--add-label", "waiting:1700000000:review:GoodmanBen"}, prBead, nil, nil, ""},
+		{"review wait on a GitHub user who is nobody on the repo refused", []string{agent}, []string{"update", "b-1", "--add-label", "waiting:1700000000:review:infra-team"}, prBead, nil, nil, "review:<org>/<team>"},
+		{"review wait on a team that does not exist refused", []string{agent}, []string{"update", "b-1", "--add-label", "waiting:1700000000:review:august-innovations:infra"}, prBead, nil, nil, "GitHub has no team infra"},
+		{"review wait on an organization refused", []string{agent}, []string{"update", "b-1", "--add-label", "waiting:1700000000:review:august-innovations"}, prBead, nil, nil, "is not a collaborator on august-innovations/infrastructure"},
+		{"review wait allowed when gh cannot answer (fail open)", []string{agent}, []string{"update", "b-1", "--add-label", "waiting:1700000000:review:gh-down"}, prBead, nil, nil, ""},
+		{"review wait in a create checked", []string{agent}, []string{"create", "Wait", "--labels", "pr:august-innovations/infrastructure#2163,in-review,waiting:1700000000:review:infra-team"}, nil, nil, nil, "is not a collaborator"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

@@ -173,7 +173,8 @@ func (w *waitWatcher) readDeployedSha(ctx context.Context, repo string, r deploy
 // prOutcome reports whether a pr wait's condition has settled: merged (or
 // closed), green (checks settled, any result), approved (approved or changes
 // requested). result says how it settled.
-func (w *waitWatcher) prOutcome(ctx context.Context, repo string, pr int, cond string) (result string, settled bool) {
+func (w *waitWatcher) prOutcome(ctx context.Context, repo string, wt beads.Wait) (result string, settled bool) {
+	pr, cond := wt.PR, wt.Cond
 	switch cond {
 	case beads.PRGreen:
 		failing, done := w.ciResult(ctx, repo, pr)
@@ -185,11 +186,18 @@ func (w *waitWatcher) prOutcome(ctx context.Context, repo string, pr int, cond s
 		}
 		return "checks all green", true
 	case beads.PRMerged, beads.PRApproved:
-		out, err := w.gh(ctx, "pr", "view", strconv.Itoa(pr), "--repo", repo, "--json", "state,reviewDecision")
+		fields := "state,reviewDecision"
+		if cond == beads.PRApproved {
+			fields += ",reviews,author"
+		}
+		out, err := w.gh(ctx, "pr", "view", strconv.Itoa(pr), "--repo", repo, "--json", fields)
 		if err != nil {
 			return "", false
 		}
-		var v struct{ State, ReviewDecision string }
+		var v struct {
+			prView
+			ReviewDecision string
+		}
 		if json.Unmarshal(out, &v) != nil {
 			return "", false
 		}
@@ -202,6 +210,17 @@ func (w *waitWatcher) prOutcome(ctx context.Context, repo string, pr int, cond s
 			return "approved", true
 		case cond == beads.PRApproved && v.ReviewDecision == "CHANGES_REQUESTED":
 			return "changes requested", true
+		case cond == beads.PRApproved && v.ReviewDecision == "":
+			// No required-review rule on the branch: GitHub leaves reviewDecision empty whatever the
+			// reviews say (infrastructure#2163, Nov 20: approved, and the wait never cleared), so the
+			// reviews since the wait began decide. A rule's REVIEW_REQUIRED still waits for the rule.
+			notAuthor := func(login string) bool { return !strings.EqualFold(login, v.Author.Login) }
+			switch verdict, by := settledVerdict(v.Reviews, wt.Since, notAuthor, false); verdict {
+			case "approved":
+				return "approved by " + by, true
+			case "requested changes on":
+				return "changes requested by " + by, true
+			}
 		}
 	}
 	return "", false
@@ -326,7 +345,7 @@ func (w *waitWatcher) eventWaitFired(ctx context.Context, projectRepo string, b 
 		if repo == "" {
 			return
 		}
-		result, ok := w.prOutcome(ctx, repo, wt.PR, wt.Cond)
+		result, ok := w.prOutcome(ctx, repo, wt)
 		if !ok {
 			return
 		}

@@ -18,7 +18,9 @@ import (
 //	waiting:<unix since>:main-ci:owner:repo:<sha>
 //	waiting:<unix since>:prod-tag:<sha>        a prod tag on a commit containing <sha>
 //	waiting:<unix since>:prod-tag:owner:repo:<sha>
-//	waiting:<unix since>:review:<login>        a requested reviewer
+//	waiting:<unix since>:review:<login>        a requested reviewer (a bare team slug of the PR's org also matches its members)
+//	waiting:<unix since>:review:<org>:<team>   any member of a GitHub team (--waiting review:<org>/<team>)
+//	waiting:<unix since>:review:any            any reviewer's approval or change request
 //	waiting:<unix since>:until:<unix target>:<label>   a time; <label> is EscapeLabel'd (may be empty)
 //	waiting:<unix since>:deploy:<sha>          a successful prod deploy whose commit contains <sha>
 //	waiting:<unix since>:deploy:owner:repo:<sha>
@@ -137,7 +139,7 @@ type Wait struct {
 	Repo string // ci, main-ci, prod-tag: owner/name, "" = the project's repo
 	PR   int    // ci only
 	Sha  string // main-ci, prod-tag: the commit (hex, 7-40 chars)
-	Ref  string // review: login; operator: role; until: the label (may be empty)
+	Ref  string // review: login, <org>/<team> or any; operator: role; until: the label (may be empty)
 	// Until is the target time of an until wait.
 	Until time.Time
 	Since time.Time
@@ -296,7 +298,13 @@ func ParseWait(arg string) (Wait, error) {
 			return w, err
 		}
 		w.Repo, w.Sha = repo, sha
-	case WaitReview, WaitOperator:
+	case WaitReview:
+		org, team, isTeam := strings.Cut(ref, "/")
+		if ref == "" || waitRefUnsafe.MatchString(org) || (isTeam && (org == "" || team == "" || waitRefUnsafe.MatchString(team))) {
+			return w, fmt.Errorf("--waiting %q: want review:<GitHub login>, review:<org>/<team> (any member of that GitHub team) or review:any (letters, digits, - and _)", arg)
+		}
+		w.Ref = ref
+	case WaitOperator:
 		if ref == "" || waitRefUnsafe.MatchString(ref) {
 			return w, fmt.Errorf("--waiting %q: want %s:<name> (letters, digits, - and _)", arg, kind)
 		}
@@ -390,7 +398,9 @@ func (w Wait) longBody() string {
 			body += ":" + strings.Replace(w.Repo, "/", ":", 1)
 		}
 		body += ":" + w.Sha
-	case WaitReview, WaitOperator:
+	case WaitReview:
+		body += ":" + strings.Replace(w.Ref, "/", ":", 1)
+	case WaitOperator:
 		body += ":" + w.Ref
 	case WaitUntil:
 		body += ":" + strconv.FormatInt(w.Until.Unix(), 10)
@@ -558,7 +568,12 @@ func ParseWaitLabel(label string) (Wait, bool) {
 		if len(parts) == 4 {
 			w.Repo = parts[1] + "/" + parts[2]
 		}
-	case WaitReview, WaitOperator:
+	case WaitReview:
+		if len(parts) != 2 && len(parts) != 3 {
+			return Wait{}, false
+		}
+		w.Ref = strings.Join(parts[1:], "/")
+	case WaitOperator:
 		if len(parts) != 2 {
 			return Wait{}, false
 		}

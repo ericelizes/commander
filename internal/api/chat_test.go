@@ -27,6 +27,7 @@ func TestMain(m *testing.M) {
 	chat.MaybeRunHost()
 	chattest.MaybeRunFake()
 	cleanup := testguard.Isolate()
+	reviewerGH = fakeReviewerGH // never ask the real GitHub from a test
 	code := m.Run()
 	cleanup()
 	os.Exit(code)
