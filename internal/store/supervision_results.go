@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/example-user/commander/internal/authpause"
 	"strings"
 	"time"
 )
@@ -169,6 +170,13 @@ func closeSupervisedRunTx(ctx context.Context, q Querier, rid int64, status, exp
 	// A crash is not a deliverable: its last message is whatever the agent was
 	// saying mid-work ("the tests are still running"). It never becomes the
 	// step's result.
+	// A failed Claude login is infrastructure, not a result and not a crash:
+	// the step goes back to ready and waits for a sign-in (the pause itself is
+	// recorded by the host's exit receipt).
+	if expectedRole != "" && status == "native-error" && !usageLimited && summary == "" && authpause.IsFailure(nativeReport) {
+		_, e = q.ExecContext(ctx, `UPDATE bead_tasks b SET status='open',execution_ready=TRUE,resume_run_id=NULL,resume_plan_revision=0,execution_attempts=0,execution_due_at=0,execution_error=? WHERE b.project_id=? AND b.id=? AND b.active_run_id=? AND b.status IN('open','in_progress') AND b.result_run_id IS NULL`, truncateSupervision(authpause.WaitingPrefix+"the run failed to authenticate; sign in again", 1000), pid, bead, rid)
+		return e
+	}
 	if expectedRole != "" && status == "native-error" && !usageLimited && summary == "" {
 		return releaseCrashedRun(ctx, q, pid, bead, rid, cause, nativeReport)
 	}

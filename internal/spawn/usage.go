@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/example-user/commander/internal/agentrt"
+	"github.com/example-user/commander/internal/authpause"
 	"github.com/example-user/commander/internal/chat"
 	"github.com/example-user/commander/internal/claudeacct"
 )
@@ -48,6 +49,9 @@ type providerPick struct {
 func (s *Spawner) resolveProvider(ctx context.Context, req SpawnRequest, agentName string) (SpawnRequest, error) {
 	if (!req.Resume || req.UsageRecovery) && len(req.AgentAccounts) > 0 && req.Runtime == "" && req.Account == "" {
 		if _, ok := firstAgentAccount(req); !ok {
+			if req.RuntimeOnly != "" && authPausedFor(req.RuntimeOnly) {
+				return req, fmt.Errorf("spawn: %w: dispatch to Claude is paused until the account is signed in again", authpause.ErrPaused)
+			}
 			return req, fmt.Errorf("spawn: %w among connected accounts for this execution", chat.ErrNoUsage)
 		}
 	}
@@ -76,8 +80,15 @@ func (s *Spawner) resolveProvider(ctx context.Context, req SpawnRequest, agentNa
 	req.Account = acct
 	req.pick = pick
 	home := agentrt.CommanderHome()
-	mv, err := steerByUsage(home, readUsage(home), usageNow(), req.Runtime, req.Account, usageRuntimeIntent(selection, agentName, pick.reason), asked.Account)
+	askedRuntime := usageRuntimeIntent(selection, agentName, pick.reason)
+	if req.RuntimeOnly != "" {
+		askedRuntime = req.RuntimeOnly // never a fallback to the other runtime
+	}
+	mv, err := steerByUsage(home, readUsage(home), usageNow(), req.Runtime, req.Account, askedRuntime, asked.Account)
 	if err != nil {
+		if req.RuntimeOnly == chat.RuntimeClaude && authPausedFor(chat.RuntimeClaude) {
+			return req, fmt.Errorf("spawn: %s: %w: %w", agentName, authpause.ErrPaused, err)
+		}
 		return req, fmt.Errorf("spawn: %s: %w: %w", agentName, chat.ErrNoUsage, err)
 	}
 	if mv.note == "" {
@@ -159,7 +170,7 @@ func CheckUsage(req SpawnRequest, agentName, managerRole string) error {
 	usage, now := readUsage(home), usageNow()
 	rt, reason, _ := pickOperatorRuntime(req, agentName)
 	runtimes := []string{rt}
-	if rt == chat.RuntimeClaude && req.Runtime == "" && req.Account == "" && !req.Resume && slices.Contains(agentOrder(req), chat.RuntimeCodex) && codexHooksReady() {
+	if rt == chat.RuntimeClaude && req.Runtime == "" && req.Account == "" && !req.Resume && slices.Contains(agentOrder(req), chat.RuntimeCodex) && codexRunnable() {
 		runtimes = append(runtimes, chat.RuntimeCodex)
 	}
 	var err error
@@ -211,7 +222,7 @@ func steerByUsage(home string, usage map[string]chat.Usage, now time.Time, rt, a
 		why = append(why, "Codex is out of usage"+outUntil(codex, now))
 	}
 	usable := func(name string) bool {
-		return (name == claudeacct.Default || claudeacct.Get(home, name).LoggedIn) &&
+		return (name == claudeacct.Default || claudeacct.Get(home, name).LoggedIn) && !authpause.Paused(home, name) &&
 			!usage[chat.UsageKey(chat.RuntimeClaude, name)].Out(now)
 	}
 	if usable(acct) {
@@ -230,7 +241,7 @@ func steerByUsage(home string, usage map[string]chat.Usage, now time.Time, rt, a
 	}
 	next := nextWithUsage(home, usage, now, acct)
 	if next == "" {
-		if askedRuntime == "" && !codex.Out(now) && codexHooksReady() {
+		if askedRuntime == "" && !codex.Out(now) && codexRunnable() {
 			mv.runtime = chat.RuntimeCodex
 			mv.note = fmt.Sprintf("was headed for Claude account %s; no logged-in Claude account has usage left, so it runs on Codex instead.", acct)
 			return mv, nil
@@ -288,7 +299,7 @@ func claudeWayOut(home string, usage map[string]chat.Usage, now time.Time, acct,
 // codexWayOut offers Codex when it has usage, its guard hooks are ready and
 // the request named neither runtime (naming Codex again would loop).
 func codexWayOut(codex chat.Usage, now time.Time, askedRuntime string) string {
-	if askedRuntime != "" || codex.Out(now) || !codexHooksReady() {
+	if askedRuntime != "" || codex.Out(now) || !codexRunnable() {
 		return ""
 	}
 	return "; Codex has usage: spawn again with --runtime codex"

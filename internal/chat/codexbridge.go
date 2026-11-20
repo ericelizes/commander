@@ -956,3 +956,55 @@ func (s Spec) codexThreadFile(home string) string {
 	}
 	return NativeCodexThreadFile(home, s.Role, s.SessionID)
 }
+
+var (
+	codexPreflightMu   sync.Mutex
+	codexPreflightAt   time.Time
+	codexPreflightOK   bool
+	codexPreflightRun  = runCodexToolPreflight
+	codexPreflightGood = 10 * time.Minute
+	codexPreflightBad  = 2 * time.Minute
+)
+
+// CodexToolsReady reports whether Codex can run a tool call right now: a
+// one-shot read-only `codex exec` asked to run `echo`, whose output must come
+// back. A broken tool runner (an IPC frame it cannot decode) fails it, so
+// Codex is never chosen as a fallback while its tools do not work. The answer
+// is cached (10 min when good, 2 min when not).
+func CodexToolsReady() bool {
+	codexPreflightMu.Lock()
+	defer codexPreflightMu.Unlock()
+	ttl := codexPreflightBad
+	if codexPreflightOK {
+		ttl = codexPreflightGood
+	}
+	if !codexPreflightAt.IsZero() && time.Since(codexPreflightAt) < ttl {
+		return codexPreflightOK
+	}
+	codexPreflightOK = codexPreflightRun() == nil
+	codexPreflightAt = time.Now()
+	return codexPreflightOK
+}
+
+const codexPreflightMarker = "cmdr-tool-preflight-ok"
+
+func runCodexToolPreflight() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+	dir, err := os.MkdirTemp("", "cmdr-codex-preflight-")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(dir)
+	cmd := exec.CommandContext(ctx, codexBinary(), "exec", "--skip-git-repo-check", "--sandbox", "read-only", "--json", "-C", dir,
+		"Run the shell command `echo "+codexPreflightMarker+"` and then stop.")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("codex tool preflight: %w", err)
+	}
+	text := string(out)
+	if strings.Contains(text, "failed to decode") || !strings.Contains(text, "aggregated_output") && !strings.Contains(text, "command_execution") || !strings.Contains(text, codexPreflightMarker) {
+		return errors.New("codex tool preflight: the tool call did not complete")
+	}
+	return nil
+}

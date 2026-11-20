@@ -36,6 +36,7 @@ func (d *Daemon) runExecution(ctx context.Context) {
 		perWorkstream = d.cfg.Concurrency.MaxOperatorsPerWorkstream
 	}
 	worker := &execution.Worker{Store: d.store, Spawner: d.spawner, Slots: slots, Capacity: capacity, WorkstreamCapacity: perWorkstream, Changes: d.store.WatchState(ctx), CheckCapacity: cfg.CheckCapacity}
+	auth := &execution.AuthWatcher{Store: d.store}
 	recoveryDone := make(chan struct{})
 	defer func() { <-recoveryDone }()
 	go func() {
@@ -45,6 +46,9 @@ func (d *Daemon) runExecution(ctx context.Context) {
 		for {
 			d.passPlaceExecutions(ctx, capacity, perWorkstream, cfg.CheckCapacity)
 			d.recoverNativeExecutions(ctx)
+			if e := auth.Pass(ctx); e != nil && ctx.Err() == nil {
+				log.Printf("execution: sign-in watch: %v", e)
+			}
 			select {
 			case <-ctx.Done():
 				return

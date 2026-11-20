@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/example-user/commander/internal/authpause"
 	"log"
 	"os"
 	"strings"
@@ -94,7 +95,7 @@ func pickOperatorRuntime(req SpawnRequest, agentName string) (rt, reason string,
 	if rt == "" && pinned {
 		rt = chat.ReadRuntimePin(home, agentName)
 	}
-	if rt == chat.RuntimeCodex && !codexHooksReady() {
+	if rt == chat.RuntimeCodex && !codexRunnable() {
 		rt, reason = chat.RuntimeClaude, ReasonClaudeHooksUnavailable
 	}
 	if rt == "" && !req.Resume && needsBackgroundService(req.TaskText) {
@@ -131,10 +132,13 @@ func firstAgentAccount(req SpawnRequest) (chat.Provider, bool) {
 	home, now := agentrt.CommanderHome(), usageNow()
 	accounts := chat.Accounts(home, readUsage(home), now)
 	for _, p := range chat.OrderAccounts(agentOrder(req), accounts) {
+		if req.RuntimeOnly != "" && p.Runtime != req.RuntimeOnly {
+			continue // a step that asked for one runtime never runs on the other
+		}
 		if p.Runtime == chat.RuntimeCodex && needsBackgroundService(req.TaskText) {
 			continue
 		}
-		if chat.AccountAvailable(p, accounts, now, codexHooksReady) {
+		if chat.AccountAvailable(p, accounts, now, codexRunnable) {
 			return p, true
 		}
 	}
@@ -169,6 +173,28 @@ func wasOnCodex(req SpawnRequest, agentName string) bool {
 // codexHooksReady gates the split: a Codex Operator is only safe with its
 // guard hooks (build slots, root-wide searches). Tests replace it.
 var codexHooksReady = chat.CodexHooksReady
+
+// codexToolsReady is a preflight tool call: Codex can actually run a tool.
+// A runtime whose tool runner is broken is never picked. Tests replace it.
+var codexToolsReady = chat.CodexToolsReady
+
+// codexRunnable is every check a Codex run needs before it is chosen.
+func codexRunnable() bool { return codexHooksReady() && codexToolsReady() }
+
+// authPausedFor reports whether every Claude account is paused for sign-in
+// (so no Claude run can start) when runtime is Claude.
+func authPausedFor(runtime string) bool {
+	if runtime != chat.RuntimeClaude {
+		return false
+	}
+	home := agentrt.CommanderHome()
+	for _, a := range chat.Accounts(home, nil, usageNow()) {
+		if a.Runtime == chat.RuntimeClaude && a.LoggedIn && !a.AuthPaused {
+			return false
+		}
+	}
+	return len(authpause.Active(home)) > 0
+}
 
 // recordRuntime notes which CLI a run is on, for `cmdr runtime report`
 // (a cost event at the run's spawn time; agent_runs has no runtime column).

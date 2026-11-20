@@ -19,6 +19,7 @@ func TestMain(m *testing.M) {
 	chattest.MaybeRunFake()
 	os.Setenv(agentrt.EnvVar, string(agentrt.Opencode))
 	defaultAgentOrder = func() []string { return []string{chat.RuntimeClaude} } // no agent goes to Codex unless a test asks
+	codexToolsReady = func() bool { return true }
 	cleanup := testguard.Isolate()
 	code := m.Run()
 	cleanup()

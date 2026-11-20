@@ -85,6 +85,7 @@ type Spawner struct {
 
 // SpawnRequest is the user-supplied intent.
 type SpawnRequest struct {
+	RuntimeOnly                 string   // the step asked for this runtime: never fall back to another
 	AgentAccounts               []string // saved order for a fresh execution; bound resumes use their recorded provider
 	ExecutionClaimToken         string   // generic scheduler's durable startup reservation
 	UsageRecovery               bool     // new provider session after a physically exited usage-limited run

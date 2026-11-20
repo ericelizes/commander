@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/example-user/commander/internal/authpause"
 	"github.com/example-user/commander/internal/claudeacct"
 )
 
@@ -21,7 +22,8 @@ type AccountView struct {
 	AccountUUID string `json:"account_uuid,omitempty"`
 	DuplicateOf string `json:"duplicate_of,omitempty"`
 	Dir         string `json:"dir,omitempty"`
-	Usage       *Usage `json:"usage,omitempty"` // latest report, as of now; nil = none yet
+	Usage       *Usage `json:"usage,omitempty"`       // latest report, as of now; nil = none yet
+	AuthPaused  bool   `json:"auth_paused,omitempty"` // its login failed; waiting for a sign-in
 }
 
 // Accounts lists the Claude accounts (default first) and Codex with their
@@ -30,6 +32,7 @@ func Accounts(home string, usage map[string]Usage, now time.Time) []AccountView 
 	var out []AccountView
 	for _, a := range claudeacct.List(home) {
 		v := AccountView{Name: a.Name, Runtime: RuntimeClaude, LoggedIn: a.LoggedIn, Email: a.Email, Dir: a.Dir, AccountUUID: a.AccountUUID, DuplicateOf: a.DuplicateOf}
+		v.AuthPaused = authpause.Paused(home, a.Name)
 		if u, ok := usage[UsageKey(RuntimeClaude, a.Name)]; ok {
 			u = u.Current(now)
 			v.Usage = &u

@@ -43,7 +43,7 @@ func AccountAvailable(p Provider, accounts []AccountView, now time.Time, hooksRe
 		if a.Runtime != p.Runtime || (p.Runtime == RuntimeClaude && a.Name != p.Account) {
 			continue
 		}
-		if !a.LoggedIn || a.DuplicateOf != "" || (a.Usage != nil && a.Usage.Out(now)) {
+		if !a.LoggedIn || a.AuthPaused || a.DuplicateOf != "" || (a.Usage != nil && a.Usage.Out(now)) {
 			return false
 		}
 		if p.Runtime == RuntimeCodex {

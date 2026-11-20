@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"github.com/example-user/commander/internal/authpause"
 	"strings"
 	"time"
 )
@@ -209,6 +210,47 @@ const UsageCapacityError = "Account usage unavailable: "
 
 func (s *Store) WaitExecutionUsage(ctx context.Context, c ExecutionClaim, detail string, now time.Time) error {
 	return s.releaseExecutionClaim(ctx, c, UsageCapacityError+detail, now, false)
+}
+
+// WaitExecutionAuth releases a claim whose launch was held for a Claude
+// sign-in: the step stays ready, no attempt is spent, and it reads as waiting
+// for the sign-in instead of failed.
+func (s *Store) WaitExecutionAuth(ctx context.Context, c ExecutionClaim, detail string, now time.Time) error {
+	return s.releaseExecutionClaim(ctx, c, authpause.WaitingPrefix+detail, now, false)
+}
+
+// AuthWaiter is a step waiting for a Claude sign-in.
+type AuthWaiter struct {
+	ProjectID int64
+	BeadID    string
+}
+
+// AuthWaiters lists the ready steps waiting for a sign-in, oldest first.
+func (s *Store) AuthWaiters(ctx context.Context) ([]AuthWaiter, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT project_id,id FROM bead_tasks WHERE status='open' AND execution_ready AND execution_error LIKE ? ORDER BY progress_at,id`, authpause.WaitingPrefix+"%")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []AuthWaiter
+	for rows.Next() {
+		var w AuthWaiter
+		if err := rows.Scan(&w.ProjectID, &w.BeadID); err != nil {
+			return nil, err
+		}
+		out = append(out, w)
+	}
+	return out, rows.Err()
+}
+
+// ReleaseAuthWaiters makes every step waiting for a sign-in claimable at once
+// (after a successful sign-in); it reports how many.
+func (s *Store) ReleaseAuthWaiters(ctx context.Context) (int64, error) {
+	res, err := s.db.ExecContext(ctx, `UPDATE bead_tasks SET execution_due_at=0,execution_error='' WHERE status='open' AND execution_ready AND execution_error LIKE ?`, authpause.WaitingPrefix+"%")
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
 }
 
 func (s *Store) FailExecutionClaim(ctx context.Context, c ExecutionClaim, detail string, now time.Time) error {

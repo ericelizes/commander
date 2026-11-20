@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/example-user/commander/internal/authpause"
 	"github.com/example-user/commander/internal/chat"
 	"log"
 	"strings"
@@ -209,6 +210,8 @@ func (w *Worker) PassSlot(ctx context.Context, slot string) error {
 			request.AgentAccounts = orders[store.AgentKindAgent]
 			if rt := RuntimePreference(launchCtx, beads.New(), claim.Project.Path, claim.BeadID); rt != "" {
 				request.AgentAccounts = preferRuntime(request.AgentAccounts, rt)
+				// A step that asks for a runtime never runs on another one.
+				request.RuntimeOnly = rt
 			}
 			if e == nil {
 				e = w.resumeQuestionCheckpoint(launchCtx, *claim, &request)
@@ -245,6 +248,10 @@ func (w *Worker) PassSlot(ctx context.Context, slot string) error {
 		releaseClaim := w.Store.FailExecutionClaim
 		if errors.Is(e, chat.ErrNoUsage) {
 			releaseClaim = w.Store.WaitExecutionUsage
+		}
+		// A login failure holds the step for a sign-in; it spends no attempt.
+		if errors.Is(e, authpause.ErrPaused) {
+			releaseClaim = w.Store.WaitExecutionAuth
 		}
 		if release := releaseClaim(cleanupCtx, *claim, strings.TrimSpace(e.Error()), w.now()); release != nil {
 			return fmt.Errorf("launch: %v; retained claim: %w", e, release)

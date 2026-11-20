@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/example-user/commander/internal/authpause"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,6 +19,8 @@ type nativeExitReceipt struct {
 	Role       string      `json:"role"`
 	RunID      int64       `json:"run_id"`
 	SessionID  string      `json:"session_id"`
+	Runtime    string      `json:"runtime,omitempty"`
+	Account    string      `json:"account,omitempty"`
 	Status     string      `json:"status"`
 	Code       int         `json:"code"`
 	Signal     string      `json:"signal,omitempty"`
@@ -206,7 +209,7 @@ func (h *host) persistNativeExit(exit *hostExit) {
 	} else {
 		h.nativeLimit = nil
 	}
-	receipt := nativeExitReceipt{Limit: h.nativeLimit, Summary: h.nativeResultSummary, Role: h.cfg.Info.Role, RunID: h.cfg.Info.ExecutionRunID, SessionID: h.cfg.Info.SessionID, Status: status, Code: exit.Code, Signal: exit.Signal, ObservedAt: time.Now().Unix()}
+	receipt := nativeExitReceipt{Limit: h.nativeLimit, Summary: h.nativeResultSummary, Runtime: h.cfg.Info.Runtime, Account: h.cfg.Info.Account, Role: h.cfg.Info.Role, RunID: h.cfg.Info.ExecutionRunID, SessionID: h.cfg.Info.SessionID, Status: status, Code: exit.Code, Signal: exit.Signal, ObservedAt: time.Now().Unix()}
 	raw, e := json.Marshal(receipt)
 	if e == nil {
 		tmp := h.cfg.ExitReceiptPath + ".tmp"
@@ -309,6 +312,13 @@ func (e *Engine) flushNativeExits(ctx context.Context, role string) error {
 		if receipt.Status == "usage-limited" && receipt.Limit != nil {
 			u := receipt.Limit
 			e.opts.Usage.MarkOut(u.Runtime, u.Account, receipt.Role, u.ResetsAt, u.At)
+		}
+		// A failed Claude login pauses that account's dispatch before the exit
+		// makes the step claimable again.
+		if receipt.Status == "native-error" && receipt.Runtime != RuntimeCodex && authpause.IsFailure(receipt.Summary) {
+			if _, err := authpause.Mark(e.opts.Home, receipt.Account, receipt.Summary, time.Now()); err != nil {
+				e.opts.Logf("chat: pause dispatch after a login failure: %v", err)
+			}
 		}
 		if exits, ok := e.opts.States.(interface {
 			FinishNativeExecutionExit(context.Context, string, int64, string, string, string, string) error
