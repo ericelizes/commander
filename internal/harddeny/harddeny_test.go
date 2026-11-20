@@ -74,6 +74,12 @@ echo started`, cmdr, ""},
 		{"push master with -c", "git -c http.extraHeader=x push origin master", op, "mainline-push"},
 		{"push feature named mainline-ish", "git push origin fix/master-cleanup", op, ""},
 		{"push master in land step", "git push origin HEAD:master", Context{Worktree: op.Worktree, MainlineAllowed: true}, ""},
+		{"forge API merge", `curl -u "$auth" -X POST https://forge-git.int.exe.xyz/git/api/v1/repos/forge-admin/qa/pulls/1/merge -d '{"Do":"merge"}'`, op, "mainline-push"},
+		{"forge API merge in a script run elsewhere", "cat > /tmp/m.sh <<'EOF'\nB=https://forge-git.int.exe.xyz/git/api/v1/repos/forge-admin/qa\ncurl -X POST \"$B/pulls/1/merge\" -d '{}'\nEOF\nscp -q /tmp/m.sh dev-2:/tmp/m.sh; ssh dev-2 'bash /tmp/m.sh'", op, "mainline-push"},
+		{"tea merge", "tea pr merge 1", op, "mainline-push"},
+		{"forge API merge in land step", `curl -X POST https://forge-git.int.exe.xyz/git/api/v1/repos/forge-admin/qa/pulls/1/merge`, Context{Worktree: op.Worktree, MainlineAllowed: true}, ""},
+		{"forge API PR read", `curl -u "$auth" https://forge-git.int.exe.xyz/git/api/v1/repos/forge-admin/qa/pulls/1`, op, ""},
+		{"GitHub PR merge", "gh pr merge 3954 --squash", op, ""},
 	}
 	for _, c := range cases {
 		v := Check(c.cmd, c.ctx)

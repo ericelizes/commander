@@ -45,7 +45,24 @@ func Check(command string, ctx Context) Verdict {
 	if v := checkSQL(command); v.Denied() {
 		return v
 	}
+	if !ctx.MainlineAllowed && forgeMerge(command) {
+		return Verdict{Rule: "mainline-push", Why: "merges a pull request on the internal git forge outside a release's land-on-mainline step (an app's mainline changes only through its release process)"}
+	}
 	return check(command, ctx, 0)
+}
+
+// The internal forge's merge endpoint (Gitea: POST .../pulls/N/merge) and the
+// tea CLI. Matched on the raw text, so a merge written into a script that is
+// copied and run elsewhere is caught too. Nov 20: an agent merged QA Hub PR #1
+// to master this way, and only git push was refused.
+var (
+	pullMergePath = regexp.MustCompile(`/pulls/[^\s'"/]+/merge\b`)
+	internalForge = regexp.MustCompile(`forge-git|/api/v1/repos/`)
+	teaMerge      = regexp.MustCompile(`\btea\s+(pr|pulls)\s+merge\b`)
+)
+
+func forgeMerge(command string) bool {
+	return teaMerge.MatchString(command) || (pullMergePath.MatchString(command) && internalForge.MatchString(command))
 }
 
 func check(command string, ctx Context, depth int) Verdict {
