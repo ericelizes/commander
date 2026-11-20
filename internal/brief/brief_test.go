@@ -573,3 +573,16 @@ func TestOutcomeStepsAreKeptAheadOfOtherSteps(t *testing.T) {
 		}
 	}
 }
+
+// Nov 20: "we don't say merged". The answer is refused until the prose says
+// outcomes; Needs me may still ask for an approval.
+func TestProcessWordsAreRefusedOutsideNeedsMe(t *testing.T) {
+	md := "## Last 24 hours\n\n- **Bot:** I built and merged the route. [^bead:x]\n- **QA Hub:** a review passed and the PR is up.\n- **Needs me:** review PR 3960 and approve the merge.\n"
+	got := ProcessWords(md)
+	if strings.Join(got, " ") != `"merged" "review passed" "PR"` {
+		t.Fatal(got)
+	}
+	if ProcessWords("## Last 24 hours\n\n- **QA Hub:** I shipped the polling fix; calls fell from 284 an hour to 6. [^bead:x]\n- **Needs me:** approve the merge.\n") != nil {
+		t.Fatal("outcome prose refused")
+	}
+}

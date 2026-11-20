@@ -66,7 +66,8 @@ func runInternalBriefGuard(stdin io.Reader, stdout io.Writer) int {
 	case "Bash":
 		why = brief.Guard(in.shellCommand(), os.Getenv(brief.RunDirEnv))
 	case "StructuredOutput":
-		why = brief.GuardAnswer(os.Getenv(brief.RunDirEnv))
+		md, _ := in.ToolInput["markdown"].(string)
+		why = brief.GuardAnswer(os.Getenv(brief.RunDirEnv), md)
 	}
 	if why != "" {
 		b, _ := json.Marshal(map[string]any{"hookSpecificOutput": map[string]any{

@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/example-user/commander/internal/claudeacct"
@@ -140,12 +141,40 @@ func Guard(command, dir string) string {
 }
 
 // GuardAnswer is the PreToolUse decision for the final answer (StructuredOutput):
-// "" takes it, else why it is refused (too few checks so far).
-func GuardAnswer(dir string) string {
+// "" takes it, else why it is refused (too few checks so far, or process words
+// in the prose).
+func GuardAnswer(dir, markdown string) string {
 	if n := ToolCalls(dir); n < MinToolCalls {
 		return fmt.Sprintf("Not yet: investigate first. You have run %d of at least %d checks: read the live board, verify every shipped, deployed or merged claim, and confirm who each Needs me and Waiting on item waits on. Then return the Brief.", n, MinToolCalls)
 	}
+	if words := ProcessWords(markdown); len(words) > 0 {
+		return "Rewrite in outcome words and return the Brief again: the prose says " + strings.Join(words, ", ") + ". A report to a manager says what changed (shipped, rolled out, fixed, built and not live yet), never merged, reviewed, PR or approved."
+	}
 	return ""
+}
+
+// processWord is process vocabulary Eric does not want in the Brief (Nov 20:
+// "we don't say merged"). Needs me may still ask him to approve or review.
+var processWord = regexp.MustCompile(`(?i)\b(merged|merging|re-?reviewed|review passed|passed review|pull requests?|PRs?)\b`)
+
+// ProcessWords lists the process words in the Brief's prose outside its Needs
+// me and Waiting on lines, citation markers removed.
+func ProcessWords(markdown string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, line := range strings.Split(markdown, "\n") {
+		if strings.Contains(line, "**Needs me:**") || strings.Contains(line, "**Waiting on:**") {
+			continue
+		}
+		line = anyMarker.ReplaceAllString(line, "")
+		for _, w := range processWord.FindAllString(line, -1) {
+			if k := strings.ToLower(w); !seen[k] {
+				seen[k] = true
+				out = append(out, `"`+w+`"`)
+			}
+		}
+	}
+	return out
 }
 
 // ToolCalls is how many commands a run tried.
@@ -161,7 +190,7 @@ func ToolCalls(dir string) int {
 const AgentPrompt = `You are the writer of a person's Brief. You get a briefing (JSON on stdin): the time windows, the workstreams with their goals and progress, and evidence records gathered for you: the board's open steps and their owners, beads (work items) finished or changed in the windows, agents' final reports, and Linear tickets. That briefing is where you start, not all there is.
 INVESTIGATE FIRST, then write. Do not write from the briefing alone: it is a summary and can be stale or wrong. You MUST:
 1. Run cmdr workstream-statuses to read the live board: who owns each open step now (an owner "You" is the person) and what each waits on.
-2. Before you say anything was shipped, deployed, rolled out or merged, check it: the step's final report or close reason (sql on bead_comments / bead_tasks), and for a pull request, gh pr view (merged or not) and the deploy run (gh run list / gh run view). If you cannot confirm a deploy, say built, not shipped.
+2. Before you say anything was shipped, deployed, rolled out or merged, check it: the step's final report or close reason (sql on bead_comments / bead_tasks), and for a pull request, gh pr view (merged or not) and the deploy run (gh run list / gh run view). If you cannot confirm a deploy, say built, not shipped. A scheduled "Deploy ... to prod" run's head commit is main, NOT what it deployed: it deploys the newest prod-* tag, and a run whose deploy job was skipped deployed nothing. What a run shipped is the "Deploying prod-... (<sha>)" line of its resolve job (gh api --method GET repos/<owner/repo>/actions/jobs/<job-id>/logs); a change is on prod only if that sha contains it (gh api --method GET repos/<owner/repo>/compare/<change>...<sha> says ahead or identical). The board's deploy-wait steps and their close reasons are checked this way; trust them over a run list.
 3. For each candidate for Needs me or Waiting on, confirm who it waits on with cmdr workstream-statuses --step <bead-id> or gh pr view (whose review is requested).
 4. Read the final reports of the biggest items of the last 24 hours to tell what actually changed in production (shipped, rolled out, fixed) from what is only built.
 Use between 10 and 30 commands; your answer is refused before 10. Stop when the picture is clear.
