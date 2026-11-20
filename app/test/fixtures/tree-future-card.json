@@ -1,0 +1,134 @@
+{
+  "version": 7,
+  "asof": 1800000000,
+  "done": 0,
+  "total": 1,
+  "needs_you": 0,
+  "rows": [
+    {
+      "id": "c",
+      "key": "app:c",
+      "project": "app",
+      "label": "1",
+      "depth": 0,
+      "title": "CI 'Environment up' times out on main",
+      "done": false,
+      "pct": 16,
+      "of": "1 of 6 steps",
+      "needs_you": 0,
+      "state": "Implementer working",
+      "status": [
+        {
+          "tone": "agent",
+          "text": "Implementer working"
+        }
+      ],
+      "line": {
+        "tone": "agent",
+        "text": "Implementer agent: revise the fix for the review: CI-only skip, clean timeout kill"
+      },
+      "now": "Implementer working"
+    }
+  ],
+  "steps": [
+    {
+      "id": "c.1",
+      "row": "c",
+      "title": "Fix the CI environment boot",
+      "type": "agent",
+      "owner": "Implementer agent",
+      "state": "done",
+      "col": -1,
+      "own": "✓ Implementer agent",
+      "text": "Done"
+    },
+    {
+      "id": "c.2",
+      "row": "c",
+      "title": "Revise the fix for the review: CI-only skip, clean timeout kill",
+      "type": "agent",
+      "owner": "Implementer agent",
+      "state": "active",
+      "col": 0,
+      "run": "claude",
+      "model": "Claude",
+      "own": "Implementer agent · Claude",
+      "text": "Agent working",
+      "since": 1799999940
+    },
+    {
+      "id": "c.3",
+      "row": "c",
+      "title": "Review: the revision (CI-only scope, timeout cleanup)",
+      "type": "review",
+      "owner": "Review agent",
+      "state": "notstarted",
+      "col": 1,
+      "own": "Review agent",
+      "text": "Not started"
+    },
+    {
+      "id": "c.4",
+      "row": "c",
+      "title": "Wait for the approving review on the PR",
+      "type": "automatic",
+      "owner": "Automatic",
+      "state": "notstarted",
+      "col": 2,
+      "own": "Automatic",
+      "text": "Waiting for PR",
+      "since": 1799999940
+    },
+    {
+      "id": "c.5",
+      "row": "c",
+      "title": "Merge the CI environment boot fix",
+      "type": "you",
+      "owner": "You",
+      "state": "notstarted",
+      "col": 3,
+      "own": "You",
+      "text": "Not reached",
+      "since": 1799992800,
+      "gate": true
+    },
+    {
+      "id": "c.6",
+      "row": "c",
+      "title": "Confirm CI 'Environment up' is green again",
+      "type": "you",
+      "owner": "You",
+      "state": "notstarted",
+      "col": 4,
+      "own": "You",
+      "text": "Not reached",
+      "gate": true
+    }
+  ],
+  "edges": [
+    [
+      "c.1",
+      "c.2"
+    ],
+    [
+      "c.1",
+      "c.5"
+    ],
+    [
+      "c.2",
+      "c.3"
+    ],
+    [
+      "c.3",
+      "c.4"
+    ],
+    [
+      "c.4",
+      "c.5"
+    ],
+    [
+      "c.5",
+      "c.6"
+    ]
+  ]
+}
