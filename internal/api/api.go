@@ -23,6 +23,7 @@ import (
 	"github.com/coder/websocket/wsjson"
 	"github.com/example-user/commander/internal/agentmail"
 	"github.com/example-user/commander/internal/beads"
+	"github.com/example-user/commander/internal/brief"
 	"github.com/example-user/commander/internal/chat"
 	"github.com/example-user/commander/internal/gates"
 	"github.com/example-user/commander/internal/linearsync"
@@ -48,6 +49,7 @@ type Options struct {
 	StateStore *store.Store    // canonical Postgres state and replay endpoint
 
 	OverviewGenerate overview.Generate  // optional read-only recap reader; nil uses the Commander Claude account
+	Brief            *brief.Service     // the Brief page (/api/brief); nil = built from ConfigPath's home, none without it
 	Linear           *linearsync.Client // optional injected sprint reader
 	Token            string
 	Source           func(ctx context.Context) livedata.Snapshot // Version is set by the server
@@ -99,6 +101,7 @@ type Options struct {
 type Server struct {
 	automaticGateChecks automaticGateFlights
 	overviews           *overview.Cache
+	brief               *brief.Service
 	overviewKick        atomic.Bool // a background first load for Overview is under way
 	signins             signins
 	opts                Options
@@ -133,7 +136,11 @@ func New(opts Options) *Server {
 		opts.Linear = linearsync.New(linearsync.Options{Home: filepath.Dir(opts.ConfigPath)})
 	}
 	machineHistory.start()
-	return &Server{opts: opts, subs: map[chan struct{}]struct{}{}, overviews: overview.New(overviewGenerator(opts)), slowLoad: defaultSlowLoad, refreshBudget: defaultRefreshBudget}
+	s := &Server{opts: opts, subs: map[chan struct{}]struct{}{}, overviews: overview.New(overviewGenerator(opts)), slowLoad: defaultSlowLoad, refreshBudget: defaultRefreshBudget, brief: opts.Brief}
+	if s.brief == nil && opts.ConfigPath != "" {
+		s.brief = brief.NewService(filepath.Dir(opts.ConfigPath), s.gatherBrief, briefGenerator(opts))
+	}
+	return s
 }
 
 // Refresh loads a snapshot and, when its content differs from the last one,
@@ -452,6 +459,8 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/linear/key", s.auth(http.HandlerFunc(s.serveLinearKey)))
 	mux.Handle("DELETE /api/linear/key", s.auth(http.HandlerFunc(s.serveLinearKey)))
 	mux.Handle("GET /api/linear", s.auth(http.HandlerFunc(s.serveLinear)))
+	mux.Handle("GET /api/brief", s.auth(http.HandlerFunc(s.serveBrief)))
+	mux.Handle("POST /api/brief", s.auth(http.HandlerFunc(s.serveBrief)))
 	mux.Handle("GET /api/workflows", s.auth(http.HandlerFunc(s.serveWorkflows)))
 	// Report files for workstream tabs. The app's tab browser cannot send the
 	// token; a report's name is its content hash, unguessable, on loopback.
