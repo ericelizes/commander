@@ -6,14 +6,14 @@ import { useEffect } from 'react'
 import { create } from 'zustand'
 import { useStore } from '../../renderer/src/store'
 
+// A paragraph sentence or a bullet, with what it cites (bead:<id>, linear:<ID>, pr:<repo>#<n>, run:<repo>#<id>).
 export interface BriefSentence { text: string; sources: string[] }
-export interface BriefGroup { workstream: string; name?: string; progress?: number; sentences: BriefSentence[] }
-export interface BriefEvidence { id: string; workstream: string; when: string; label: string; text: string; at?: string }
+export interface BriefSection { title: string; paragraph: BriefSentence[]; bullets: BriefSentence[] }
+export interface BriefEvidence { id: string; ref?: string; workstream: string; when: string; label: string; text: string; at?: string }
 export interface BriefWindow { start: string; end: string; label: string }
 export interface Brief {
-  today: BriefGroup[] | null
-  yesterday: BriefGroup[] | null
-  week: BriefGroup[] | null
+  sections: BriefSection[]
+  markdown: string
   generated_at: string
   windows: { now: string; today: BriefWindow; yesterday: BriefWindow; week: BriefWindow }
   linear_note?: string

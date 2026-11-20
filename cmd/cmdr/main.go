@@ -255,6 +255,12 @@ func run(args []string, stdout, stderr *os.File) int {
 	case "workstream-statuses":
 		// What the user's sidebar shows right now, as JSON (the block attached to his messages).
 		return runWorkstreamStatuses(args[1:], stdout, stderr)
+	case "internal-brief-read":
+		// The Brief writer's read-only window: one SELECT, or one Linear ticket.
+		return runInternalBriefRead(args[1:], stdout, stderr)
+	case "internal-brief-guard":
+		// Claude Code PreToolUse hook for the Brief writer: read-only commands only, counted.
+		return runInternalBriefGuard(os.Stdin, stdout)
 	case "internal-hard-deny":
 		// Claude Code PreToolUse hook on Bash for the Commander: the hard deny-list, refused outright.
 		return runInternalHardDenyMain(args[1:], stdout)

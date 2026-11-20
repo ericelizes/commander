@@ -13,21 +13,27 @@ const ready: BriefStatus = {
   generating: false,
   next_at: '2026-11-20T18:00:00Z',
   evidence: [
-    { id: 'step:p-ws.2.1', workstream: 'p:p-ws', when: 'board', label: 'Now on the board: Deploy window', text: '{}' },
-    { id: 'bead:p:p-ws.1', workstream: 'p:p-ws', when: 'yesterday', label: 'Step finished: Build the retry key', text: '{}' },
-    { id: 'goal:p:p-ws', workstream: 'p:p-ws', when: 'board', label: 'The board\'s record of this workstream', text: '{}' },
+    { id: 'bead:p-ws.2.1', workstream: 'Billing', when: 'board', label: 'Now on the board: Deploy window', text: '{}' },
+    { id: 'bead:p-ws.1', workstream: 'Billing', when: 'yesterday', label: 'Step finished: Build the retry key', text: '{}' },
   ],
   brief: {
     generated_at: '2026-11-20T12:00:00Z',
+    markdown: '## Moving today\n\n...',
     windows: {
       now: '2026-11-20T07:00:00-05:00',
       today: { start: '', end: '', label: 'Friday, Nov 20' },
       yesterday: { start: '', end: '', label: 'Thursday, Nov 19' },
       week: { start: '', end: '', label: 'Mon Nov 16 to now' },
     },
-    today: [{ workstream: 'p:p-ws', name: 'Billing', sentences: [{ text: "I'm rolling out the retry fix in today's deploy window.", sources: ['step:p-ws.2.1'] }] }],
-    yesterday: [{ workstream: 'p:p-ws', name: 'Billing', sentences: [{ text: 'I built the retry key.', sources: ['bead:p:p-ws.1'] }] }],
-    week: [{ workstream: 'p:p-ws', name: 'Billing', progress: 60, sentences: [{ text: 'Retries that charge once are about 60% there.', sources: ['goal:p:p-ws'] }] }],
+    sections: [
+      {
+        title: 'Moving today',
+        paragraph: [{ text: "Today I'm rolling out the retry fix.", sources: ['bead:p-ws.2.1'] }, { text: 'It ships in the deploy window.', sources: ['bead:p-ws.2.1'] }],
+        bullets: [{ text: "**Billing:** I'm rolling out retries that charge once.", sources: ['bead:p-ws.2.1', 'pr:acme/app#12'] }, { text: '**Needs me:** approve the rollout.', sources: ['bead:p-ws.3'] }],
+      },
+      { title: 'Done yesterday', paragraph: [{ text: 'Yesterday I built the retry key.', sources: ['bead:p-ws.1'] }], bullets: [] },
+      { title: 'This week', paragraph: [], bullets: [] },
+    ],
   },
 }
 
@@ -69,27 +75,33 @@ describe('the Brief tab', () => {
     expect(useStore.getState().selected).toEqual({ kind: 'commander' })
   })
 
-  it('shows the three sections in order with when it was written', async () => {
-    render(<BriefView />)
-    await screen.findByText('I built the retry key.')
+  it('reads as one document: headings, a paragraph and bullets, no cards and no citation marks', async () => {
+    const { container } = render(<BriefView />)
+    await screen.findByText('Yesterday I built the retry key.')
     const headings = screen.getAllByRole('heading', { level: 2 }).map((h) => h.firstChild?.textContent)
     expect(headings).toEqual(['Moving today', 'Done yesterday', 'This week'])
     expect(screen.getByText(/^Written /)).toBeInTheDocument()
-    expect(within(screen.getByRole('region', { name: 'Done yesterday' })).getByText('Thursday, Nov 19')).toBeInTheDocument()
-    expect(screen.getByText("I'm rolling out the retry fix in today's deploy window.")).toHaveAttribute('title', 'Now on the board: Deploy window')
-    const week = screen.getByRole('region', { name: 'This week' })
-    expect(within(week).getByText('60%')).toBeInTheDocument()
+    const today = screen.getByRole('region', { name: 'Moving today' })
+    expect(within(today).getByText('Friday, Nov 20')).toBeInTheDocument()
+    expect(today.querySelector('p')).toHaveTextContent("Today I'm rolling out the retry fix. It ships in the deploy window.")
+    const items = within(today).getAllByRole('listitem')
+    expect(items.map((li) => li.textContent)).toEqual(["Billing: I'm rolling out retries that charge once.", 'Needs me: approve the rollout.'])
+    expect(within(items[0]).getByText('Billing:').tagName).toBe('STRONG')
+    expect(items[0]).toHaveAttribute('title', 'Now on the board: Deploy window\npr:acme/app#12')
+    expect(within(screen.getByRole('region', { name: 'This week' })).getByText('Nothing to report.')).toBeInTheDocument()
+    expect(container.textContent).not.toContain('[^')
+    expect(container.querySelector('.brief-group, .brief-ws')).toBeNull()
     expect(calls[0]).toEqual({ url: 'http://localhost:8787/api/brief', method: 'GET' })
   })
 
   it('Regenerate asks cmdrd for a new one and shows it is writing', async () => {
     render(<BriefView />)
-    await screen.findByText('I built the retry key.')
+    await screen.findByText('Yesterday I built the retry key.')
     next = { ...ready, generating: true }
     fireEvent.click(screen.getByRole('button', { name: 'Regenerate' }))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Writing…' })).toBeDisabled())
     expect(calls.some((c) => c.method === 'POST' && c.url.endsWith('/api/brief'))).toBe(true)
-    expect(screen.getByText('I built the retry key.')).toBeInTheDocument() // the last Brief stays while it writes
+    expect(screen.getByText('Yesterday I built the retry key.')).toBeInTheDocument() // the last Brief stays while it writes
   })
 
   it('before the first Brief, says when it will be written', async () => {

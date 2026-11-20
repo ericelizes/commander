@@ -385,6 +385,11 @@ func Run(ctx context.Context, model, system string, payload []byte, schema map[s
 	}
 	return body, nil
 }
+
+// ReaderEnv is env without the parent's Claude session or Commander role, plus
+// the account's settings: what any read-only reader run starts with.
+func ReaderEnv(env, account []string) []string { return cleanEnv(env, account) }
+
 func cleanEnv(env, account []string) []string {
 	out := []string{}
 	for _, e := range env {

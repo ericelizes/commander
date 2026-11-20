@@ -1,10 +1,11 @@
-// BriefView is the Brief page: what I'm moving today, what I finished on the
-// previous workday and how this week's workstreams moved, every sentence
-// written from cited records. Each sentence's sources show on hover.
+// BriefView is the Brief page: one document in three parts (Moving today, Done
+// yesterday, This week), each a short paragraph and bullets, written by an
+// agent that read the records. What a sentence cites shows on hover only.
 
+import { Fragment } from 'react'
 import { useStore } from '../../renderer/src/store'
 import { useIntegrations } from '../linear/settings'
-import { regenerateBrief, useBrief, useBriefStatus, type BriefEvidence, type BriefGroup } from './brief'
+import { regenerateBrief, useBrief, useBriefStatus, type BriefEvidence, type BriefSentence } from './brief'
 
 function when(iso: string | undefined, zone: string) {
   if (!iso) return ''
@@ -17,35 +18,17 @@ function when(iso: string | undefined, zone: string) {
   }
 }
 
-function Section({ title, sub, groups, evidence, empty }: { title: string; sub?: string; groups: BriefGroup[] | null; evidence: Map<string, BriefEvidence>; empty: string }) {
-  return (
-    <section className="brief-section" aria-label={title}>
-      <h2>
-        {title}
-        {sub && <span className="brief-sub">{sub}</span>}
-      </h2>
-      {!groups?.length && <p className="sp-hint">{empty}</p>}
-      {groups?.map((g) => (
-        <div key={g.workstream} className="brief-group">
-          <div className="brief-ws">
-            <span className="brief-ws-name">{g.name || 'Other'}</span>
-            {g.progress != null && (
-              <span className="brief-pct" title={`${g.progress}% done on the board`}>
-                <span className="sp-bar"><span style={{ width: `${g.progress}%` }} /></span>
-                <span className="brief-pct-n">{g.progress}%</span>
-              </span>
-            )}
-          </div>
-          {g.sentences.map((s, i) => (
-            <p key={i} className="brief-line" title={s.sources.map((id) => evidence.get(id)?.label ?? id).join('\n')}>
-              {s.text}
-            </p>
-          ))}
-        </div>
-      ))}
-    </section>
-  )
+// inline shows **bold** as bold; everything else is plain text.
+function inline(text: string) {
+  return text.split(/(\*\*[^*]+\*\*)/).map((part, i) => (part.startsWith('**') && part.endsWith('**') && part.length > 4 ? <strong key={i}>{part.slice(2, -2)}</strong> : <Fragment key={i}>{part}</Fragment>))
 }
+
+// cites is a sentence's hover: what each source is.
+function cites(s: BriefSentence, evidence: Map<string, BriefEvidence>) {
+  return s.sources.map((id) => evidence.get(id)?.label ?? id).join('\n')
+}
+
+const windows = ['today', 'yesterday', 'week'] as const
 
 export function BriefView() {
   useBriefStatus()
@@ -73,13 +56,34 @@ export function BriefView() {
         {!status && !failed && <p className="wf-note">Loading…</p>}
         {status && !brief && !generating && <p className="wf-note">cmdrd writes the Brief at 7 AM, 1 PM, 7 PM and 1 AM Eastern. Regenerate writes one now.</p>}
         {brief && (
-          <>
-            <Section title="Moving today" sub={brief.windows.today.label} groups={brief.today} evidence={evidence} empty="Nothing is moving today." />
-            <Section title="Done yesterday" sub={brief.windows.yesterday.label} groups={brief.yesterday} evidence={evidence} empty="Nothing was finished." />
-            <Section title="This week" sub={brief.windows.week.label} groups={brief.week} evidence={evidence} empty="Nothing recorded this week." />
-            {brief.linear_note && <p className="wf-note">Linear tickets are not included: {brief.linear_note}.</p>}
-          </>
+          <article className="brief-doc">
+            {brief.sections.map((s, i) => (
+              <section key={s.title} aria-label={s.title}>
+                <h2>
+                  {s.title}
+                  {windows[i] && <span className="brief-sub">{brief.windows[windows[i]]?.label}</span>}
+                </h2>
+                {s.paragraph.length > 0 && (
+                  <p>
+                    {s.paragraph.map((x, n) => (
+                      <Fragment key={n}>
+                        {n > 0 && ' '}
+                        <span title={cites(x, evidence)}>{inline(x.text)}</span>
+                      </Fragment>
+                    ))}
+                  </p>
+                )}
+                {s.bullets.length > 0 && (
+                  <ul>
+                    {s.bullets.map((b, n) => <li key={n} title={cites(b, evidence)}>{inline(b.text)}</li>)}
+                  </ul>
+                )}
+                {!s.paragraph.length && !s.bullets.length && <p className="brief-none">Nothing to report.</p>}
+              </section>
+            ))}
+          </article>
         )}
+        {brief?.linear_note && <p className="wf-note">Linear tickets are not included: {brief.linear_note}.</p>}
       </div>
     </div>
   )

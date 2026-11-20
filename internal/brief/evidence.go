@@ -15,12 +15,15 @@ import (
 // Other is the workstream key of evidence that belongs to no workstream.
 const Other = "other"
 
-// Evidence is one record the Brief may cite. When says which section it can
-// back: today, yesterday, week, board (the live board now) or later (a wait
-// that does not come due today).
+// Evidence is one record of the writer's briefing. ID is how the Brief cites
+// it (bead:<id> or linear:<ID>); Ref names the record itself (step:<id>,
+// report:<project>:<id>, week:<project>:<id>...). When says which section it
+// can back: today, yesterday, week, board (the live board now) or later (a
+// wait that does not come due today).
 type Evidence struct {
 	ID         string `json:"id"`
-	Workstream string `json:"workstream"`
+	Ref        string `json:"ref,omitempty"`
+	Workstream string `json:"workstream"` // its workstream's name, or Other
 	When       string `json:"when"`
 	Label      string `json:"label"`
 	Text       string `json:"text"`
@@ -29,12 +32,12 @@ type Evidence struct {
 
 // Workstream is a group the Brief is written under.
 type Workstream struct {
-	Key  string `json:"key"`
+	Key  string `json:"-"`
 	Name string `json:"name"`
 	Goal string `json:"goal,omitempty"`
-	// Progress is the board's share done (0-100), -1 when it is not on the board.
-	Progress int  `json:"-"`
-	Done     bool `json:"-"`
+	// Progress is the board's share done (0-100); nil when it is not on the board.
+	Progress *int `json:"percent_done,omitempty"`
+	Done     bool `json:"done,omitempty"`
 }
 
 // Input is what the reader gets.
@@ -47,6 +50,8 @@ type Input struct {
 	Evidence    []Evidence   `json:"evidence"`
 	// ids are the bead ids the evidence names; prose must not show them.
 	ids []string
+	// whens is each known bead's windows: board, later, today, yesterday, week.
+	whens map[string]map[string]bool
 }
 
 // Ticket is a Linear ticket assigned to the user that changed in the window.
@@ -67,7 +72,9 @@ type Sources struct {
 	Tree    livedata.Tree
 	// WaitUntil is each step's earliest time wait (unix s), from the snapshot.
 	WaitUntil map[string]int64
-	Linear    []Ticket
+	// PRs are each step's pull requests ("owner/repo#12"), from the snapshot.
+	PRs    map[string][]string
+	Linear []Ticket
 	// LinearNote says why Linear is not in the Brief ("" when it is).
 	LinearNote string
 }
@@ -132,7 +139,7 @@ func Assemble(w Windows, src Sources) Input {
 		if ws := reg[key]; ws != nil {
 			return ws
 		}
-		ws := &Workstream{Key: key, Name: ShortName(title), Progress: -1}
+		ws := &Workstream{Key: key, Name: ShortName(title)}
 		reg[key] = ws
 		order = append(order, key)
 		return ws
@@ -168,7 +175,8 @@ func Assemble(w Windows, src Sources) Input {
 		}
 		ws := addWS(r.Key, r.Title)
 		ws.Goal = trim(strings.Join(r.Criteria, " "), 600)
-		ws.Progress, ws.Done = r.Progress, r.Done
+		pct := r.Progress
+		ws.Progress, ws.Done = &pct, r.Done
 		var status []string
 		for _, l := range r.Status {
 			status = append(status, l.Text)
@@ -201,6 +209,9 @@ func Assemble(w Windows, src Sources) Input {
 		}
 		if s.Ask != "" {
 			rec["asks_you"] = s.Ask
+		}
+		if prs := src.PRs[s.ID]; len(prs) > 0 {
+			rec["pull_requests"] = prs
 		}
 		if s.Since > 0 && s.State == "active" {
 			rec["active_since"] = clock(time.Unix(s.Since, 0))
@@ -408,8 +419,15 @@ func Assemble(w Windows, src Sources) Input {
 			in.Workstreams = append(in.Workstreams, *reg[key])
 		}
 	}
-	if used[Other] {
-		in.Workstreams = append(in.Workstreams, Workstream{Key: Other, Name: "Other", Progress: -1})
+	// The writer cites beads and tickets by id and reads workstreams by name.
+	for i := range in.Evidence {
+		e := &in.Evidence[i]
+		e.Ref, e.ID = e.ID, citeOf(e.ID)
+		name := "Other"
+		if ws := reg[e.Workstream]; ws != nil {
+			name = ws.Name
+		}
+		e.Workstream = name
 	}
 	for id := range ids {
 		if len(id) >= 5 && strings.Contains(id, "-") { // a bead id, never an ordinary word
@@ -417,5 +435,52 @@ func Assemble(w Windows, src Sources) Input {
 		}
 	}
 	sort.Strings(in.ids)
+
+	// Which windows each bead can back, from every record read, not only those
+	// the briefing kept.
+	in.whens = map[string]map[string]bool{}
+	mark := func(id, when string) {
+		if when == "" {
+			return
+		}
+		if in.whens[id] == nil {
+			in.whens[id] = map[string]bool{}
+		}
+		in.whens[id][when] = true
+	}
+	for _, r := range src.Tree.Rows {
+		mark(r.ID, "board")
+	}
+	for _, st := range src.Tree.Steps {
+		if st.State == "done" {
+			continue
+		}
+		when := "board"
+		if u := src.WaitUntil[st.ID]; u > 0 && !sameDay(time.Unix(u, 0), w.Now, Zone) && time.Unix(u, 0).After(w.Now) {
+			when = "later"
+		}
+		mark(st.ID, when)
+	}
+	for _, b := range src.Beads {
+		mark(b.ID, w.When(b.UpdatedAt))
+	}
+	for _, r := range src.Reports {
+		mark(r.BeadID, w.When(r.CreatedAt))
+	}
 	return in
+}
+
+// citeOf is how the Brief cites a record: its bead, or its Linear ticket.
+func citeOf(ref string) string {
+	kind, rest, _ := strings.Cut(ref, ":")
+	switch kind {
+	case "linear":
+		return ref
+	case "step":
+		return "bead:" + rest
+	}
+	if _, id, ok := strings.Cut(rest, ":"); ok && id != Other {
+		return "bead:" + id // goal:, bead:, report:, week: <project>:<id>
+	}
+	return ref
 }

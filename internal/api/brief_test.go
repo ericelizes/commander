@@ -12,7 +12,6 @@ import (
 
 	"github.com/example-user/commander/internal/brief"
 	"github.com/example-user/commander/internal/livedata"
-	"github.com/example-user/commander/internal/overview"
 	"github.com/example-user/commander/internal/store"
 )
 
@@ -41,8 +40,8 @@ func TestBriefEndpointServesTheLatestAndRegeneratesOnPost(t *testing.T) {
 	gather := func(_ context.Context, w brief.Windows) (brief.Sources, error) {
 		return brief.Sources{Beads: []store.BriefBead{{Project: "p", ID: "p-ws.1", Title: "Build the retry key", Status: "closed", UpdatedAt: w.Yesterday.Start.Add(10 * time.Hour), Workstream: "p-ws", WorkstreamTitle: "Billing"}}}, nil
 	}
-	generate := func(_ context.Context, in brief.Input) (brief.Output, error) {
-		return brief.Output{Yesterday: []brief.Group{{Workstream: "p:p-ws", Sentences: []overview.Sentence{{Text: "I built the retry key.", Sources: []string{"bead:p:p-ws.1"}}}}}}, nil
+	generate := func(_ context.Context, in brief.Input) (string, error) {
+		return "## Done yesterday\n\nYesterday I built the retry key. [^" + in.Evidence[0].ID + "]\n", nil
 	}
 	svc := brief.NewService(home, gather, generate)
 	srv := httptest.NewServer(New(Options{Token: "tok", Brief: svc}).Handler())
@@ -60,12 +59,12 @@ func TestBriefEndpointServesTheLatestAndRegeneratesOnPost(t *testing.T) {
 	}
 	svc.Wait()
 	code, st = briefRequest(t, srv.URL, "GET", "tok")
-	if code != 200 || st.Brief == nil || st.Generating || len(st.Brief.Yesterday) != 1 || st.Brief.Yesterday[0].Name != "Billing" {
+	if code != 200 || st.Brief == nil || st.Generating || len(st.Brief.Sections) != 3 || len(st.Brief.Sections[1].Paragraph) != 1 || !strings.Contains(st.Brief.Markdown, "Yesterday I built the retry key.") {
 		t.Fatalf("%d %+v", code, st)
 	}
 	cited := false
 	for _, e := range st.Evidence {
-		cited = cited || e.ID == "bead:p:p-ws.1"
+		cited = cited || (e.Ref == "bead:p:p-ws.1" && e.ID == st.Brief.Sections[1].Paragraph[0].Sources[0])
 	}
 	if !cited {
 		t.Fatalf("the cited evidence comes with it: %+v", st.Evidence)

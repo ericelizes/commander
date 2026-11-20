@@ -15,7 +15,7 @@ import (
 	"github.com/example-user/commander/internal/livedata"
 )
 
-// briefModel writes the Brief: four runs a day, so the better writer.
+// briefModel is the Brief's writer: an agent that investigates, four runs a day.
 const briefModel = "sonnet"
 
 // serveBrief is the Brief page: GET reads the latest, POST starts a rewrite
@@ -49,7 +49,7 @@ func (s *Server) gatherBrief(ctx context.Context, w brief.Windows) (brief.Source
 	if s.opts.StateStore == nil || !s.opts.StateStore.IsPostgres() {
 		return brief.Sources{}, errors.New("the Brief reads beads from Postgres")
 	}
-	src := brief.Sources{Tree: livedata.BuildTree(snap, time.Now().Unix()), WaitUntil: waitUntils(snap)}
+	src := brief.Sources{Tree: livedata.BuildTree(snap, time.Now().Unix()), WaitUntil: waitUntils(snap), PRs: stepPRs(snap)}
 	var err error
 	if src.Beads, src.Reports, err = s.opts.StateStore.BriefBeads(ctx, w.Since()); err != nil {
 		return brief.Sources{}, err
@@ -76,19 +76,41 @@ func waitUntils(snap livedata.Snapshot) map[string]int64 {
 	return out
 }
 
+// stepPRs is each step's pull requests as owner/repo#n, by bead id.
+func stepPRs(snap livedata.Snapshot) map[string][]string {
+	out := map[string][]string{}
+	for _, ws := range snap.Workstreams {
+		var walk func([]livedata.SnapStep)
+		walk = func(steps []livedata.SnapStep) {
+			for _, st := range steps {
+				repo := st.PRRepo
+				if repo == "" {
+					repo = ws.Repo
+				}
+				for _, ref := range st.PR {
+					out[st.BeadID] = append(out[st.BeadID], repo+"#"+strings.TrimPrefix(ref, "#"))
+				}
+				walk(st.Children)
+			}
+		}
+		walk(ws.Steps)
+	}
+	return out
+}
+
 // briefGenerator is the Brief's reader on the Commander's Claude account, as the user.
 func briefGenerator(opts Options) brief.Generate {
 	home := filepath.Dir(opts.ConfigPath)
 	if opts.Chat != nil {
 		home = opts.Chat.Home()
 	}
-	prompt := brief.Prompt
+	prompt := brief.AgentPrompt
 	if cfg, err := config.Load(opts.ConfigPath); err == nil {
 		if name := strings.TrimSpace(config.UserName(cfg)); name != "" {
 			prompt += "\nThe person is " + name + ": write as them, in the first person (I, my); never their name."
 		}
 	}
-	return func(ctx context.Context, in brief.Input) (brief.Output, error) {
-		return brief.Claude(briefModel, prompt, claudeacct.Env(home, chat.ReadAccount(home, "commander")))(ctx, in)
+	return func(ctx context.Context, in brief.Input) (string, error) {
+		return brief.Agent(briefModel, prompt, claudeacct.Env(home, chat.ReadAccount(home, "commander")))(ctx, in)
 	}
 }

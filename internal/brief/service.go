@@ -46,8 +46,12 @@ type Service struct {
 	done    chan struct{} // closed when the running rewrite ends
 }
 
-// generateTimeout bounds one rewrite: the sources and the reader together.
-const generateTimeout = 5 * time.Minute
+// generateTimeout bounds one rewrite: the sources, then the writer's
+// investigation and document (it has 10 minutes of this).
+const generateTimeout = 12 * time.Minute
+
+// writerTimeout bounds the writer's investigation and document.
+const writerTimeout = 10 * time.Minute
 
 // NewService loads the saved Brief from home, if any. It writes nothing until
 // the next slot or a Start: a restart shows the last Brief.
@@ -129,16 +133,20 @@ func (s *Service) write(ctx context.Context) error {
 		return err
 	}
 	in := Assemble(w, src)
-	var out Output
+	md := ""
 	if len(in.Evidence) > 0 {
-		if out, err = s.generate(ctx, in); err != nil {
+		wctx, cancel := context.WithTimeout(ctx, writerTimeout)
+		md, err = s.generate(wctx, in)
+		cancel()
+		if err != nil {
 			return err
 		}
 	}
 	b := Brief{GeneratedAt: s.now().UTC(), Windows: w, LinearNote: src.LinearNote}
-	b.Output, b.Dropped = Check(out, in)
+	b.Sections, b.Dropped = Check(md, in)
+	b.Markdown = Markdown(b.Sections)
 	if b.Dropped > 0 {
-		log.Printf("brief: dropped %d sentences the evidence did not back", b.Dropped)
+		log.Printf("brief: dropped %d sentences or bullets the evidence did not back", b.Dropped)
 	}
 	st := Stored{Brief: b, Evidence: in.Evidence}
 	if err := save(s.path, st); err != nil {
