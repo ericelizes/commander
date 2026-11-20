@@ -15,6 +15,8 @@ func TestParseWait(t *testing.T) {
 		"main-ci:acme/web@349a7f4": {Kind: "main-ci", Repo: "acme/web", Sha: "349a7f4"},
 		"prod-tag:349a7f4abc":      {Kind: "prod-tag", Sha: "349a7f4abc"},
 		"review:reviewer-a":        {Kind: "review", Ref: "reviewer-a"},
+		"review:acme/infra-team":   {Kind: "review", Ref: "acme/infra-team"},
+		"review:any":               {Kind: "review", Ref: "any"},
 		"user":                     {Kind: "user"},
 		"operator:op-x-1":          {Kind: "operator", Ref: "op-x-1"},
 	} {
@@ -23,7 +25,7 @@ func TestParseWait(t *testing.T) {
 			t.Errorf("ParseWait(%q) = %+v, %v; want %+v", arg, got, err, want)
 		}
 	}
-	for _, bad := range []string{"", "ci:4101", "ci:#x", "ci:a.b/c#1", "review:", "review:a b", "user:x", "slack:x", "main-ci:", "main-ci:xyz1234", "main-ci:abc", "prod-tag:a.b/c@349a7f4"} {
+	for _, bad := range []string{"", "ci:4101", "ci:#x", "ci:a.b/c#1", "review:", "review:a b", "review:acme/", "review:/team", "review:a/b/c", "review:infra team", "operator:a/b", "user:x", "slack:x", "main-ci:", "main-ci:xyz1234", "main-ci:abc", "prod-tag:a.b/c@349a7f4"} {
 		if _, err := ParseWait(bad); err == nil {
 			t.Errorf("ParseWait(%q) succeeded", bad)
 		}
@@ -32,7 +34,7 @@ func TestParseWait(t *testing.T) {
 
 func TestWaitLabelRoundTrip(t *testing.T) {
 	since := time.Unix(1700000000, 0)
-	for _, arg := range []string{"ci:#4101", "ci:acme/web#12", "main-ci:349a7f4", "main-ci:acme/web@349a7f4", "prod-tag:349a7f4", "review:reviewer-a", "user", "operator:op-x"} {
+	for _, arg := range []string{"ci:#4101", "ci:acme/web#12", "main-ci:349a7f4", "main-ci:acme/web@349a7f4", "prod-tag:349a7f4", "review:reviewer-a", "review:acme/infra-team", "review:any", "user", "operator:op-x"} {
 		w, _ := ParseWait(arg)
 		w.Since = since
 		got, ok := ParseWaitLabel(w.Label())
@@ -42,6 +44,13 @@ func TestWaitLabelRoundTrip(t *testing.T) {
 	}
 	if _, ok := ParseWaitLabel("waiting-on-me"); ok {
 		t.Error("parsed a foreign label")
+	}
+	// A team review wait is stored with ":" (the label grammar), read back as org/team.
+	if w, _ := ParseWait("review:acme/infra-team"); func() string { w.Since = since; return w.Label() }() != "waiting:1700000000:review:acme:infra-team" {
+		t.Errorf("team review label = %q", w.Label())
+	}
+	if _, ok := ParseWaitLabel("waiting:1:operator:a:b"); ok {
+		t.Error("an operator wait has one part")
 	}
 }
 

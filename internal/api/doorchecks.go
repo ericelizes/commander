@@ -14,7 +14,9 @@ import (
 	"time"
 
 	"github.com/example-user/commander/internal/beads"
+	"github.com/example-user/commander/internal/livedata"
 	"github.com/example-user/commander/internal/ownercompat"
+	"github.com/example-user/commander/internal/reviewers"
 )
 
 // DoorChecksEnv switches the write checks off in cmdrd when set to off/0/false.
@@ -85,7 +87,7 @@ func checkOp(ctx context.Context, bc beads.Client, dir string, args []string) er
 	}
 	switch args[0] {
 	case "create":
-		return checkCreate(args)
+		return checkCreate(ctx, dir, args)
 	case "close":
 		for _, id := range args[1:] {
 			if strings.HasPrefix(id, "-") {
@@ -193,12 +195,12 @@ func refuseAfterClosingGate(ctx context.Context, bc beads.Client, dir, blocker s
 	return nil
 }
 
-func checkCreate(args []string) error {
+func checkCreate(ctx context.Context, dir string, args []string) error {
 	var labels []string
 	for _, l := range flagVals(args, "--labels") {
 		labels = append(labels, strings.Split(l, ",")...)
 	}
-	if err := checkWaitLabels(labels, func() ([]string, bool) { return nil, true }); err != nil {
+	if err := checkWaitLabels(ctx, dir, "", labels, func() ([]string, bool) { return nil, true }); err != nil {
 		return err
 	}
 	if !slices.Contains(labels, beads.GateLabel) {
@@ -227,17 +229,25 @@ func checkCreate(args []string) error {
 	return nil
 }
 
+// reviewerGH answers the door's one cheap GitHub check of a review wait's ref (tests replace it).
+var reviewerGH reviewers.Runner = reviewers.RunGH
+
+// reviewerCheckTimeout bounds that check: past it the write goes through unchecked.
+const reviewerCheckTimeout = 10 * time.Second
+
 // checkWaitLabels refuses a waiting:* label that is not a typed wait, a slug
-// time label, a timer standing in for a PR review, or a review wait with no PR.
-// beadLabels reads the bead's own labels (for its pr: label) only when needed.
-func checkWaitLabels(added []string, beadLabels func() ([]string, bool)) error {
-	hasPR := func(ls []string) bool {
+// time label, a timer standing in for a PR review, a review wait with no PR,
+// or a review wait whose ref no review can ever match (not a GitHub login, not
+// a team, not any). beadLabels reads the bead's own labels (for its pr: label)
+// only when needed.
+func checkWaitLabels(ctx context.Context, dir, id string, added []string, beadLabels func() ([]string, bool)) error {
+	prOf := func(ls []string) string {
 		for _, l := range ls {
 			if strings.HasPrefix(l, "pr:") && l != "pr:" {
-				return true
+				return l
 			}
 		}
-		return false
+		return ""
 	}
 	for _, l := range added {
 		if !strings.HasPrefix(l, beads.WaitLabelPrefix) && !strings.HasPrefix(l, "w:") {
@@ -265,15 +275,28 @@ func checkWaitLabels(added []string, beadLabels func() ([]string, bool)) error {
 				return fmt.Errorf("wait until:...:%q: a clock time standing in for a deploy, PR or notification leaves the step idle after it happens. cmdrd watches these itself and the step continues the moment it happens: --waiting deploy:<sha> (a successful prod deploy containing the commit), pr:<merged|green|approved>:#N, or event:slack:<channel id>:<regexp> (a matching message after now), each optionally with ,by=<RFC3339>", w.Ref)
 			}
 		case beads.WaitReview:
-			if hasPR(added) {
-				continue
+			pr := prOf(added)
+			if pr == "" {
+				labels, ok := beadLabels()
+				if !ok {
+					continue // unreadable bead: let the write through (logged)
+				}
+				if pr = prOf(labels); pr == "" {
+					return fmt.Errorf("wait review:%s names no PR, so cmdrd can never see the review and the wait would never clear. Give the step a pr: label (--review <PR number>)", w.Ref)
+				}
 			}
-			labels, ok := beadLabels()
-			if !ok {
-				continue // unreadable bead: let the write through (logged)
+			repo := livedata.ReviewRepo([]string{pr})
+			if repo == "" {
+				repo = livedata.GitHubRepo(dir)
 			}
-			if !hasPR(labels) {
-				return fmt.Errorf("wait review:%s names no PR, so cmdrd can never see the review and the wait would never clear. Give the step a pr: label (--review <PR number>)", w.Ref)
+			cctx, cancel := context.WithTimeout(ctx, reviewerCheckTimeout)
+			refusal, unchecked := reviewers.Check(cctx, reviewerGH, w.Ref, repo)
+			cancel()
+			if unchecked != nil {
+				logDoorFailOpen(dir, id, "review wait reviewer "+w.Ref, unchecked)
+			}
+			if refusal != nil {
+				return refusal
 			}
 		}
 	}
@@ -303,7 +326,7 @@ func checkUpdate(ctx context.Context, bc beads.Client, dir, id string, args, add
 		labels, ok := read()
 		return slices.DeleteFunc(slices.Clone(labels), func(l string) bool { return slices.Contains(removed, l) }), ok
 	}
-	if err := checkWaitLabels(added, kept); err != nil {
+	if err := checkWaitLabels(ctx, dir, id, added, kept); err != nil {
 		return err
 	}
 	if slices.Contains(added, beads.HoldLabel) || slices.Contains(added, beads.ParkedLabel) {

@@ -19,6 +19,7 @@ import (
 	"github.com/example-user/commander/internal/holding"
 	"github.com/example-user/commander/internal/holdread"
 	"github.com/example-user/commander/internal/livedata"
+	"github.com/example-user/commander/internal/reviewers"
 	"github.com/example-user/commander/internal/spawn"
 	"github.com/example-user/commander/internal/store"
 	"github.com/example-user/commander/internal/wsmgr"
@@ -109,6 +110,10 @@ type waitWatcher struct {
 	deployedShas map[int64]string // run id -> the commit it shipped ("" = none)
 	// slack reads a channel's history for event:slack waits; nil = not configured.
 	slack slackHistoryFunc
+	// teams caches GitHub team membership for team review waits (built from gh on first use).
+	teams *reviewers.Teams
+	// closeStep closes an Automatic step whose event happened (nil = closeWithReason, the guarded close).
+	closeStep func(ctx context.Context, project, bead, reason string) error
 }
 
 // CheckedAt is when the waits were last checked; zero before the first poll.
@@ -298,7 +303,11 @@ func (w *waitWatcher) wake(ctx context.Context, p store.Project, b beads.Bead, w
 	// An Automatic step's event happened: it closes itself, and the step after it starts.
 	if slices.Contains(b.Labels, beads.AutomaticLabel) {
 		// Through the guarded close (the shared workflow verifier), like every close.
-		if err := closeWithReason(ctx, p.Name, b.ID, "Automatic: "+subject); err != nil {
+		closeStep := w.closeStep
+		if closeStep == nil {
+			closeStep = closeWithReason
+		}
+		if err := closeStep(ctx, p.Name, b.ID, "Automatic: "+subject); err != nil {
 			log.Printf("daemon: waits: close automatic step %s: %v", b.ID, err)
 			return
 		}
@@ -553,7 +562,7 @@ func (w *waitWatcher) event(ctx context.Context, projectRepo string, b beads.Bea
 		if pr == 0 || repo == "" {
 			return
 		}
-		verdict, prState, ok := w.reviewVerdict(ctx, repo, pr, wt)
+		verdict, by, prState, ok := w.reviewVerdict(ctx, repo, pr, wt)
 		if !ok && (prState == "MERGED" || prState == "CLOSED") {
 			// The PR is gone: no review can land on it any more.
 			done := strings.ToLower(prState)
@@ -563,8 +572,8 @@ func (w *waitWatcher) event(ctx context.Context, projectRepo string, b beads.Bea
 		if !ok {
 			return
 		}
-		subject = fmt.Sprintf("[review] %s %s #%d", wt.Ref, verdict, pr)
-		return subject, fmt.Sprintf("%s %s PR #%d in %s. You were waiting on that review (%s). Pick the work back up.", wt.Ref, verdict, pr, repo, b.ID), true
+		subject = fmt.Sprintf("[review] %s %s #%d", by, verdict, pr)
+		return subject, fmt.Sprintf("%s %s PR #%d in %s. You were waiting on that review (%s). Pick the work back up.", by, verdict, pr, repo, b.ID), true
 	case beads.WaitOperator:
 		role := spawn.CanonicalRole("operator-" + strings.TrimPrefix(wt.Ref, "operator-"))
 		if w.runningNow == nil || w.runningNow[role] {
@@ -701,8 +710,6 @@ func (w *waitWatcher) ciResult(ctx context.Context, repo string, pr int) (failin
 	return failing, true
 }
 
-// reviewVerdict is "approved", "requested changes on" or "commented on" when the waited-on
-// reviewer's latest review, submitted since the wait began, says so.
 // ReviewFacts is GitHub's word on each bead's review waits at the last poll.
 func (w *waitWatcher) ReviewFacts() map[string]livedata.ReviewFact {
 	if m := w.facts.Load(); m != nil {
@@ -731,8 +738,8 @@ func (w *waitWatcher) reviewFact(ctx context.Context, repo string, b beads.Bead,
 	}
 	var acted, waiting []string
 	for _, wt := range reviews {
-		if verdict, _, ok := w.reviewVerdict(ctx, repo, pr, wt); ok {
-			acted = append(acted, fmt.Sprintf("%s %s #%d", wt.Ref, verdict, pr))
+		if verdict, by, _, ok := w.reviewVerdict(ctx, repo, pr, wt); ok {
+			acted = append(acted, fmt.Sprintf("%s %s #%d", by, verdict, pr))
 		} else {
 			waiting = append(waiting, wt.Ref)
 		}
@@ -743,22 +750,89 @@ func (w *waitWatcher) reviewFact(ctx context.Context, repo string, b beads.Bead,
 	return livedata.ReviewFact{Text: fmt.Sprintf("waiting on %s (#%d)", strings.Join(waiting, ", "), pr)}, true
 }
 
-// reviewVerdict also returns the PR's state (OPEN, MERGED, CLOSED).
-func (w *waitWatcher) reviewVerdict(ctx context.Context, repo string, pr int, wt beads.Wait) (string, string, bool) {
-	out, err := w.gh(ctx, "pr", "view", strconv.Itoa(pr), "--repo", repo, "--json", "reviews,state")
-	if err != nil {
-		return "", "", false
-	}
-	var v struct {
-		State   string
-		Reviews []struct {
-			Author      struct{ Login string }
-			State       string
-			SubmittedAt time.Time
+// prView is the part of `gh pr view --json reviews,state,author` the review waits read.
+type prView struct {
+	State   string
+	Author  struct{ Login string }
+	Reviews []prReview
+}
+
+// prReview is one submitted review.
+type prReview struct {
+	Author      struct{ Login string }
+	State       string
+	SubmittedAt time.Time
+}
+
+var verdictWords = map[string]string{"APPROVED": "approved", "CHANGES_REQUESTED": "requested changes on", "COMMENTED": "commented on"}
+
+// settledVerdict is what the reviews submitted since `since` by the logins counts accepts say. Each
+// login's latest review is its word (a comment-only one only when comments is true); across logins a
+// change request beats an approval, which beats a comment, as GitHub's own review decision does.
+// For one login this is that login's latest review. by is the login whose review decided it.
+func settledVerdict(reviews []prReview, since time.Time, counts func(login string) bool, comments bool) (verdict, by string) {
+	latest := map[string]prReview{}
+	var order []string
+	for _, r := range reviews {
+		if r.SubmittedAt.Before(since) || verdictWords[r.State] == "" || (r.State == "COMMENTED" && !comments) || !counts(r.Author.Login) {
+			continue
+		}
+		k := strings.ToLower(r.Author.Login)
+		prev, seen := latest[k]
+		if !seen {
+			order = append(order, k)
+		}
+		if !seen || r.SubmittedAt.After(prev.SubmittedAt) {
+			latest[k] = r
 		}
 	}
+	rank := map[string]int{"COMMENTED": 1, "APPROVED": 2, "CHANGES_REQUESTED": 3}
+	var best prReview
+	for _, k := range order {
+		r := latest[k]
+		if rank[r.State] > rank[best.State] || (rank[r.State] == rank[best.State] && r.SubmittedAt.After(best.SubmittedAt)) {
+			best = r
+		}
+	}
+	return verdictWords[best.State], best.Author.Login
+}
+
+// teamMembers is the member test for org/slug; nil when GitHub has no such team or cannot say now
+// (the wait then stays, and the next poll asks again).
+func (w *waitWatcher) teamMembers(ctx context.Context, org, slug string) func(string) bool {
+	if w.teams == nil {
+		w.teams = &reviewers.Teams{GH: reviewers.Runner(w.gh), Now: w.now}
+	}
+	members, found, err := w.teams.Members(ctx, org, slug)
+	if err != nil {
+		log.Printf("daemon: waits: read team %s/%s: %v", org, slug, err)
+		return nil
+	}
+	if !found {
+		return nil
+	}
+	return func(login string) bool { return members[strings.ToLower(login)] }
+}
+
+// reviewVerdict is "approved", "requested changes on" or "commented on" when the waited-on reviewer's
+// review, submitted since the wait began, says so; by is who reviewed, as the wake names them. The
+// wait's ref picks the reviewers:
+//   - a login: that login (and, when the PR's org has a team with that slug, any member of it);
+//   - <org>/<team>: any member of that GitHub team;
+//   - any: anyone.
+//
+// The PR's author never counts for a team or any (their thread replies are COMMENTED reviews). A
+// comment-only review counts for a login and a team member, as it always has for a named reviewer
+// (their move is made); for any it does not, or a bot's comment would clear the wait.
+// It also returns the PR's state (OPEN, MERGED, CLOSED).
+func (w *waitWatcher) reviewVerdict(ctx context.Context, repo string, pr int, wt beads.Wait) (verdict, by, prState string, ok bool) {
+	out, err := w.gh(ctx, "pr", "view", strconv.Itoa(pr), "--repo", repo, "--json", "reviews,state,author")
+	if err != nil {
+		return "", "", "", false
+	}
+	var v prView
 	if json.Unmarshal(out, &v) != nil {
-		return "", "", false
+		return "", "", "", false
 	}
 	w.prMu.Lock()
 	if w.prStates == nil {
@@ -766,23 +840,31 @@ func (w *waitWatcher) reviewVerdict(ctx context.Context, repo string, pr int, wt
 	}
 	w.prStates[repo+"#"+strconv.Itoa(pr)] = v.State
 	w.prMu.Unlock()
-	verdict := ""
-	var latest time.Time
-	for _, r := range v.Reviews {
-		if !strings.EqualFold(r.Author.Login, wt.Ref) || r.SubmittedAt.Before(wt.Since) || !r.SubmittedAt.After(latest) {
-			continue
+	notAuthor := func(login string) bool { return !strings.EqualFold(login, v.Author.Login) }
+	inTeam := func(org, slug string) (string, string) {
+		member := w.teamMembers(ctx, org, slug)
+		if member == nil {
+			return "", ""
 		}
-		switch r.State {
-		case "APPROVED":
-			verdict, latest = "approved", r.SubmittedAt
-		case "CHANGES_REQUESTED":
-			verdict, latest = "requested changes on", r.SubmittedAt
-		case "COMMENTED":
-			// A comment-only review is still the reviewer's move made: theirs is done.
-			verdict, latest = "commented on", r.SubmittedAt
+		verdict, by := settledVerdict(v.Reviews, wt.Since, func(l string) bool { return notAuthor(l) && member(l) }, true)
+		if verdict == "" {
+			return "", ""
+		}
+		return verdict, by + " (" + org + "/" + slug + ")"
+	}
+	switch org, slug, isTeam := reviewers.Team(wt.Ref); {
+	case wt.Ref == reviewers.Any:
+		verdict, by = settledVerdict(v.Reviews, wt.Since, notAuthor, false)
+	case isTeam:
+		verdict, by = inTeam(org, slug)
+	default:
+		if verdict, _ = settledVerdict(v.Reviews, wt.Since, func(l string) bool { return strings.EqualFold(l, wt.Ref) }, true); verdict != "" {
+			by = wt.Ref
+		} else if owner := reviewers.Owner(repo); wt.Ref != "" && owner != "" {
+			verdict, by = inTeam(owner, wt.Ref)
 		}
 	}
-	return verdict, v.State, verdict != ""
+	return verdict, by, v.State, verdict != ""
 }
 
 // PRStates returns a copy of facts learned by existing review polls, with no gh calls.
