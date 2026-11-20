@@ -548,3 +548,11 @@ func TestStartRunsOneRewriteAtATimeAndAFailureKeepsTheLastBrief(t *testing.T) {
 		t.Fatalf("%+v", st)
 	}
 }
+
+// Nov 20: most of the night's work closed after midnight Eastern (tagged
+// today), and the Last 24 hours section lost every bullet that cited it.
+func TestLast24HoursMayCiteWorkFinishedEarlierToday(t *testing.T) {
+	if !backs["yesterday"]["today"] || !backs["yesterday"]["yesterday"] || backs["yesterday"]["board"] {
+		t.Fatal(backs["yesterday"])
+	}
+}
