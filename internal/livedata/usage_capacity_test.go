@@ -26,8 +26,9 @@ func TestUsageCapacityAppearsOnEveryAffectedRow(t *testing.T) {
 		}
 	}
 	w := s.Workstreams[1]
+	// A hold is never a quiet pause: it reads as an invalid state.
 	w.Hold = true
-	if l := (board{s: s, now: 1}).activeWorkstreamLine(w, 0); l.text != "Paused" {
+	if l := (board{s: s, now: 1}).activeWorkstreamLine(w, 0); l.kind != "stuck" || !strings.HasPrefix(l.text, "Invalid state:") {
 		t.Fatal(l)
 	}
 	w.Hold = false

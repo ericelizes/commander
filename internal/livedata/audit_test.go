@@ -180,7 +180,8 @@ func TestRuleOpenBeadNoOwner(t *testing.T) {
 	waits := leaf("w.3", "", "", "CI #5")
 	ws := SnapWorkstream{BeadID: "w", Steps: []SnapStep{orphan, parked, waits}}
 	sus := AuditSnapshot(snapOf(ws, idle), nowSec, AuditOptions{})
-	if !hasRule(sus, RuleOpenBead, "w.1") || hasRule(sus, RuleOpenBead, "w.2") || hasRule(sus, RuleOpenBead, "w.3") {
+	// A parked step is a pause, never a holder: it is a suspect too.
+	if !hasRule(sus, RuleOpenBead, "w.1") || !hasRule(sus, RuleOpenBead, "w.2") || hasRule(sus, RuleOpenBead, "w.3") {
 		t.Fatalf("got %v", rulesOf(sus))
 	}
 }

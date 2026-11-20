@@ -215,9 +215,9 @@ func TestInternalLabelRefusesStateLabelsNamingTheVerb(t *testing.T) {
 	mock := &beads.MockClient{}
 	setupObjectiveProject(t, mock)
 	for label, verb := range map[string]string{
-		"waiting:1:user": "--waiting", "kind:track": "--workstream", "kind:workstream": "--workstream", "hold": "--hold", "viz:2": "--viz",
+		"waiting:1:user": "--waiting", "kind:track": "--workstream", "kind:workstream": "--workstream", "hold": "--no-hold", "viz:2": "--viz",
 		"gate": "internal-gate", "decision:answered": "--decision", "needs-user": "--decision", "cmdr:planning": "internal-phase",
-		"parked-until:5": "--park", "proposed:gate:1": "proposals",
+		"parked-until:5": "--unpark", "proposed:gate:1": "proposals",
 	} {
 		code, out := runVerb(t, func(o, e *os.File) int {
 			return runInternalLabel([]string{"--project", "manifest", "--bead", "x-2", "add", label}, o, e)

@@ -44,10 +44,16 @@ type Bead struct {
 	ID, Title, Status string
 	Superseded        bool // dropped from the plan
 	Withdrawn         bool // a withdrawn or retired request
-	Held              bool // the hold label: paused by recorded direction
-	HoldReason        string
-	ClosingGate       bool // the workstream's "Confirm done" step: nobody's move until the rest is finished
-	ReadyToClose      bool // a closing gate whose workstream has nothing else open
+	// Held: an old hold label. cmdrd still starts nothing under it, and a step
+	// is never paused, so it reads as an invalid state until it is cleared.
+	Held bool
+	// UnderParked: an ancestor is parked (status deferred), so the park is read
+	// on that container, not on this step.
+	UnderParked bool
+	// ParkedUntil: a park with a time (unix s), which cmdrd watches and ends.
+	ParkedUntil  int64
+	ClosingGate  bool // the workstream's "Confirm done" step: nobody's move until the rest is finished
+	ReadyToClose bool // a closing gate whose workstream has nothing else open
 
 	NeedsUser          bool   // needs-user state, a user gate or an open decision card
 	UserAsk            string // what the user is asked, when known
@@ -368,12 +374,16 @@ func own(b Bead, ctx Context) Result {
 		return Result{Actor: None, Reason: "withdrawn", Text: "Withdrawn"}
 	case b.HumanAnswerPending:
 		return Result{Actor: Agent, Reason: "apply_answer", Who: "cmdrd", Text: "Applying your answer to " + quoted(b.Title)}
-	case b.Status == beads.StatusDeferred || b.Held:
-		text := "Paused"
-		if b.HoldReason != "" {
-			text += ": " + b.HoldReason
-		}
-		return Result{Actor: None, Reason: "paused", Text: text}
+	// A parked workstream or track (and what sits under it) is out of play, and
+	// a park with a time is a wait cmdrd ends. A parked or held step is not:
+	// whether an agent runs follows from the tree alone, and what must happen
+	// first is a bead the step is blocked by.
+	case b.Status == beads.StatusDeferred && (b.Container || b.UnderParked || b.ParkedUntil != 0):
+		return Result{Actor: None, Reason: "paused", Text: "Paused"}
+	case b.Held:
+		return Result{Actor: Stuck, Reason: InvalidPrefix + "hold", Text: "Invalid state: " + quoted(b.Title) + " is on hold, so nothing will start it: put what it waits for in front of it as its own bead (a card or a gate), then clear the hold"}
+	case b.Status == beads.StatusDeferred:
+		return Result{Actor: Stuck, Reason: InvalidPrefix + "parked", Text: "Invalid state: " + quoted(b.Title) + " is parked, so nothing will start it: put what it waits for in front of it as its own bead (a card or a gate), then unpark it"}
 	// A Confirm done step is the Complete button, never a card: a card left on
 	// one (from before cards were refused there) does not replace it.
 	case b.ClosingGate && b.ReadyToClose:

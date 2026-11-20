@@ -169,22 +169,6 @@ func proposeStateWrite(ctx context.Context, bc beads.Client, dir, beadID string,
 	return p, bc.SetLabel(ctx, dir, beadID, p.label(now), true)
 }
 
-// proposedPark is the proposal a Manager's park is: one with no time, or
-// further out than proposalWaitOver. nil for a short park.
-func proposedPark(until time.Time, reason string, now time.Time) *proposal {
-	why := ""
-	if r := strings.TrimSpace(reason); r != "" {
-		why = ": " + r
-	}
-	if until.IsZero() {
-		return &proposal{kind: beads.ProposedPark, detail: "park it with no time to come back" + why}
-	}
-	if until.Sub(now) > proposalWaitOver {
-		return &proposal{kind: beads.ProposedPark, detail: fmt.Sprintf("park it until %s (%s from now)%s", until.Format(time.RFC3339), until.Sub(now).Round(time.Minute), why)}
-	}
-	return nil
-}
-
 // announceProposal records who proposed what on the bead and mails Commander
 // to review it. Failures are reported, never undo the write (the label holds it);
 // a failed mail also comes back for callers with a result to put it in.

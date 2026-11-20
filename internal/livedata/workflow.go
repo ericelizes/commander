@@ -182,7 +182,15 @@ func (f flow) leafBaseLine(s SnapStep) line {
 		if s.ParkedUntil != 0 {
 			return line{kind: "idle", text: "Parked until " + clock(s.ParkedUntil, f.b.now, f.b.loc)}
 		}
+		// A step is never paused: a parked step nothing brings back is an
+		// invalid state (a parked gate, track or what sits under one is not).
+		if !s.Gate && !s.ClosingGate && !s.Track && len(s.Children) == 0 && !f.b.parkedAbove[f.ws.Project+"\x00"+s.BeadID] {
+			return line{kind: "stalled", text: ParkedStepText}
+		}
 		return line{kind: "idle", text: "Parked"}
+	}
+	if s.Hold && !s.Gate && !s.ClosingGate {
+		return line{kind: "stalled", text: HeldStepText}
 	}
 	if p, ok := f.b.noPitch[f.ws.Project+"\x00"+s.BeadID]; ok && p.Proposed != "" {
 		if p.ProposedAt > 0 && f.b.now-p.ProposedAt >= pitchDeadline {

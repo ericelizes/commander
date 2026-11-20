@@ -232,8 +232,19 @@ func newBoard(s Snapshot, nowSec int64) board {
 			index(st.Children)
 		}
 	}
+	b.parkedAbove = map[string]bool{}
+	var markParked func(project string, steps []SnapStep, parked bool)
+	markParked = func(project string, steps []SnapStep, parked bool) {
+		for _, st := range steps {
+			if parked {
+				b.parkedAbove[project+"\x00"+st.BeadID] = true
+			}
+			markParked(project, st.Children, parked || st.Status == beads.StatusDeferred)
+		}
+	}
 	for _, w := range s.Workstreams {
 		index(w.Steps)
+		markParked(w.Project, w.Steps, w.Status == beads.StatusDeferred)
 		if b.projectSteps[w.Project] == nil {
 			b.projectSteps[w.Project] = map[string]SnapStep{}
 		}
@@ -260,6 +271,7 @@ type board struct {
 	heldCard        map[string]string  // project\x00gate: the ancestor whose open card is this gate's ask
 	tasks           map[string]string
 	projectSteps    map[string]map[string]SnapStep // project-scoped dependency index, built once per board
+	parkedAbove     map[string]bool                // project\x00bead: a step under a parked workstream or track
 	byID            map[string]SnapStep            // every step of every workstream by bead id
 	steps           map[string]SnapStep            // the row's workstream, every bead by id: a track's blockers sit outside it
 	rowOf           map[string]string              // every step by bead id: the sidebar label of the row it sits in ("#2.2", "#2")

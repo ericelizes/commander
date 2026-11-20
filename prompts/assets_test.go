@@ -812,3 +812,25 @@ func TestExecutorStaysWithWhatItStarted(t *testing.T) {
 		t.Fatal("executors must not report while a release, deploy or run they started is still going")
 	}
 }
+
+// Nov 20 (4.1): the Commander put a step on hold and no agent ran. Commander
+// and Managers are told a step is never paused: add the bead it waits for and
+// make the step blocked by it. No prompt teaches --hold or --park.
+func TestNeverPauseAStepInPrompts(t *testing.T) {
+	for _, role := range []string{RoleCommander, RoleManager} {
+		body, err := roleBody(role)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, needle := range []string{"Never pause a step", "make the step blocked by it", "--deps blocks:<step>", "in a watched wait", "invalid state"} {
+			if !strings.Contains(body, needle) {
+				t.Errorf("%s prompt missing %q", role, needle)
+			}
+		}
+		for _, banned := range []string{"--hold <", "--park --until", " --park [", "or a park."} {
+			if strings.Contains(body, banned) {
+				t.Errorf("%s prompt still teaches %q", role, banned)
+			}
+		}
+	}
+}

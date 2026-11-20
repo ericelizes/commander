@@ -125,7 +125,11 @@ func AuditSnapshot(s Snapshot, nowSec int64, opt AuditOptions) []Suspect {
 
 		// (6) Open beads nobody answers for.
 		for _, b := range openWithoutOwner(ws) {
-			add(b.BeadID, ws.ManagerRole, RuleOpenBead, fmt.Sprintf("%q is open with no live agent, recorded wait or the user on it", truncate(b.Title, 50)))
+			why := fmt.Sprintf("%q is open with no live agent, recorded wait or the user on it", truncate(b.Title, 50))
+			if b.Status == statusDeferred {
+				why = fmt.Sprintf("%q is parked, so nothing will start it: a step is never paused, give it a blocking bead or a wait", truncate(b.Title, 50))
+			}
+			add(b.BeadID, ws.ManagerRole, RuleOpenBead, why)
 		}
 
 		// (7) A row's state that is only its children's rollup.
@@ -233,12 +237,19 @@ func earlierOpenGate(ws SnapWorkstream, id string, byBead map[string]SnapStep) s
 // openWithoutOwner is the open-bead invariant over a workstream's steps (the
 // snapshot form of the il9.27.1.1 rule): an open step is fine when it is a
 // gate, the user's, has a recorded wait or `until`, a live owner, an open child,
-// is parked, or is not in progress and waits behind an open step (not parked or superseded).
+// or is not in progress and waits behind an open step (not parked or superseded).
+// A parked step at the top of what is parked is listed too (a step is never paused).
 func openWithoutOwner(ws SnapWorkstream) []SnapStep {
 	w := newRowWorld(workstreamRows(ws), nil)
 	var out []SnapStep
 	for st := range stepValues(ws.Steps) {
-		if st.Status == "closed" || st.Status == statusDeferred {
+		if st.Status == statusDeferred {
+			if w.parkedStep(w.rows[st.BeadID]) {
+				out = append(out, st)
+			}
+			continue
+		}
+		if st.Status == "closed" {
 			continue
 		}
 		if _, held, _ := holding.Held(rowBead(w.rows[st.BeadID], w.now), w); !held {

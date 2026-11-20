@@ -30,6 +30,11 @@ type Violation struct {
 // child (the child answers for it), or is not in progress and waits behind at
 // least one open blocker (not closed, parked or superseded; a blocker the rows do not
 // list blocks nothing, so the bead is still checked).
+// A held bead (an old hold label: cmdrd starts nothing on it or under it) and a
+// parked step (status deferred, with no time cmdrd brings it back at) are
+// violations too: each is a pause, which the tree may not hold. Only the top of
+// a parked subtree is listed; parked workstreams, tracks, containers and gates
+// are not steps, so they are left alone. A hold on a gate stops nothing.
 // live may be nil (then only the Operator state speaks for an owner).
 func OpenBeadInvariant(rows []ObjectiveRow, live LiveAgent) []Violation {
 	return OpenBeadInvariantAt(rows, live, time.Time{})
@@ -43,7 +48,27 @@ func OpenBeadInvariantAt(rows []ObjectiveRow, live LiveAgent, now time.Time) []V
 	byID := w.rows
 	var out []Violation
 	for _, r := range rows {
-		if r.Status == "closed" || r.Status == beads.StatusDeferred {
+		if r.Status == beads.StatusDeferred {
+			if w.parkedStep(r) {
+				owner := ownerIn(byID, r.BeadID)
+				out = append(out, Violation{
+					BeadID: r.BeadID, Title: r.Title, Project: r.ProjectName,
+					Workstream: owner, ManagerRole: store.WorkstreamManagerRole(owner),
+					Why: ParkedStepWhy,
+				})
+			}
+			continue
+		}
+		if r.Status == "closed" {
+			continue
+		}
+		if r.Hold && !r.Gate && !r.ClosingGate {
+			owner := ownerIn(byID, r.BeadID)
+			out = append(out, Violation{
+				BeadID: r.BeadID, Title: r.Title, Project: r.ProjectName,
+				Workstream: owner, ManagerRole: store.WorkstreamManagerRole(owner),
+				Why: HeldStepWhy,
+			})
 			continue
 		}
 		if _, held, _ := holding.Held(rowBead(r, now), w); held {
@@ -63,6 +88,41 @@ func OpenBeadInvariantAt(rows []ObjectiveRow, live LiveAgent, now time.Time) []V
 	return out
 }
 
+// HeldStepText is a held step's line on the board.
+const HeldStepText = "Invalid state: on hold, so nothing will start it"
+
+// HeldStepWhy is what a held bead's violation says.
+const HeldStepWhy = "on hold: cmdrd starts nothing on it or under it, and a step is never paused. Put what it waits for in front of it as its own bead (a gate or step with the user's card, or a wait), make the step blocked by it, then clear the hold with cmdr internal-set-objective --no-hold"
+
+// ParkedStepText is a parked step's line on the board.
+const ParkedStepText = "Invalid state: parked, so nothing will start it"
+
+// ParkedStepWhy is what a parked step's violation says.
+const ParkedStepWhy = "parked: nothing will ever start it, and a step is never paused. Put what it waits for in front of it as its own bead (a gate or step with the user's card, or a wait), make the step blocked by it, then bring it back with cmdr internal-set-objective --unpark"
+
+// parkedStep: r is a parked step at the top of what is parked, with no time
+// cmdrd brings it back at, and not a gate, a workstream, a track or a
+// container of other steps.
+func (w *rowWorld) parkedStep(r ObjectiveRow) bool {
+	// A park with a time is a watched wait: cmdrd un-parks it then (unparkDue).
+	if r.ParkedUntil != 0 || r.Gate || r.ClosingGate || r.Track || r.Superseded || r.Withdrawn || r.ParentBeadID == "" || w.child[r.BeadID] {
+		return false
+	}
+	seen := map[string]bool{}
+	for id := r.ParentBeadID; id != "" && !seen[id]; {
+		seen[id] = true
+		p, ok := w.rows[id]
+		if !ok {
+			break
+		}
+		if p.Status == beads.StatusDeferred || p.Status == "closed" {
+			return false
+		}
+		id = p.ParentBeadID
+	}
+	return true
+}
+
 // untypedWait is the label of the row's first slug-labelled time wait, or "".
 func untypedWait(r ObjectiveRow) string {
 	for _, w := range r.Waits {
@@ -77,14 +137,18 @@ func untypedWait(r ObjectiveRow) string {
 type rowWorld struct {
 	rows      map[string]ObjectiveRow
 	openChild map[string]bool
+	child     map[string]bool // has any child row
 	live      LiveAgent
 	now       time.Time
 }
 
 func newRowWorld(rows []ObjectiveRow, live LiveAgent) *rowWorld {
-	w := &rowWorld{rows: make(map[string]ObjectiveRow, len(rows)), openChild: map[string]bool{}, live: live}
+	w := &rowWorld{rows: make(map[string]ObjectiveRow, len(rows)), openChild: map[string]bool{}, child: map[string]bool{}, live: live}
 	for _, r := range rows {
 		w.rows[r.BeadID] = r
+		if r.ParentBeadID != "" {
+			w.child[r.ParentBeadID] = true
+		}
 	}
 	for _, r := range rows {
 		if r.Status != "closed" && r.Status != beads.StatusDeferred && r.ParentBeadID != "" {
@@ -140,7 +204,7 @@ func rowBead(r ObjectiveRow, now time.Time) holding.Bead {
 func SnapshotViolations(s Snapshot) []Violation {
 	var rows []ObjectiveRow
 	for _, ws := range s.Workstreams {
-		rows = append(rows, ObjectiveRow{PlanningPending: ws.PlanningPending, ResultRunID: ws.ResultRunID, ResultReadyAt: ws.ResultReadyAt, QuestionWaiting: ws.QuestionWaiting, HumanAnswerPending: ws.HumanAnswerPending, ExecutionReady: ws.ExecutionReady, PlanningCommander: ws.PlanningCommander, BlockedBy: ws.BlockedBy, BeadID: ws.BeadID, Title: ws.Title, ProjectName: ws.Project, Status: ws.Status, State: ws.State, Owner: ws.Owner})
+		rows = append(rows, ObjectiveRow{PlanningPending: ws.PlanningPending, ResultRunID: ws.ResultRunID, ResultReadyAt: ws.ResultReadyAt, QuestionWaiting: ws.QuestionWaiting, HumanAnswerPending: ws.HumanAnswerPending, ExecutionReady: ws.ExecutionReady, PlanningCommander: ws.PlanningCommander, BlockedBy: ws.BlockedBy, BeadID: ws.BeadID, Title: ws.Title, ProjectName: ws.Project, Status: ws.Status, State: ws.State, Owner: ws.Owner, Hold: ws.Hold})
 		rows = append(rows, workstreamRows(ws)...)
 	}
 	return OpenBeadInvariant(rows, func(owner string) string { return s.Agents[owner].State })
@@ -166,6 +230,7 @@ func workstreamRows(ws SnapWorkstream) []ObjectiveRow {
 				PlanningPending: st.PlanningPending, ResultRunID: st.ResultRunID, ResultReadyAt: st.ResultReadyAt, QuestionWaiting: st.QuestionWaiting, HumanAnswerPending: st.HumanAnswerPending, ExecutionReady: st.ExecutionReady, PlanningCommander: st.PlanningCommander,
 				BeadID: st.BeadID, ParentBeadID: parent, Title: st.Title, ProjectName: ws.Project, Status: st.Status,
 				WorkflowCheck: st.WorkflowCheck, State: st.State, Owner: st.Owner, OwnerState: st.OwnerState, BlockedBy: st.BlockedBy, Until: st.Until, Gate: st.Gate, Superseded: st.Superseded,
+				Track: st.Track, ClosingGate: st.ClosingGate, Withdrawn: st.Withdrawn, ParkedUntil: st.ParkedUntil, Hold: st.Hold,
 				Owns: st.ManagerRole != "",
 			}
 			if st.Waiting != "" {

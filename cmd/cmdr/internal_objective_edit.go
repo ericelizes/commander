@@ -85,16 +85,16 @@ func runInternalSetObjective(args []string, stdout, stderr *os.File) int {
 	fs.BoolVar(noTrack, "no-track", false, "old name of --no-workstream")
 	runOn := fs.String("run-on", "", "the paired place this step's Operator runs on (mac:<name>, see cmdr place list); \"none\" runs it on cmdrd's machine again. Spawns there need a closed user gate over the step")
 	maxOps := fs.String("max-operators", "", "on a workstream bead: how many Operators may run under it at once, overriding [concurrency] max_operators_per_workstream; \"none\" restores the default")
-	holdArg := fs.String("hold", "", "hold the bead (and everything under it): internal-ship refuses and Operators stop shipping; the value is the reason (use \"-\" for none)")
-	noHold := fs.Bool("no-hold", false, "clear a hold")
-	park := fs.Bool("park", false, "park the ask the user put on hold (status deferred): out of NEEDS YOU, rows and checkpoints; its card is kept. With --until (RFC3339 or 2h, 3d) cmdrd un-parks it then and mails the Manager")
-	unpark := fs.Bool("unpark", false, "bring a parked bead back to the status it had, with its card")
+	holdArg := fs.String("hold", "", "removed: a step is never paused. Add the bead it waits for and make the step blocked by it")
+	noHold := fs.Bool("no-hold", false, "clear an old hold label (a hold no longer stops anything)")
+	park := fs.Bool("park", false, "removed: a step is never parked. Add the bead it waits for and make the step blocked by it")
+	unpark := fs.Bool("unpark", false, "bring a parked bead back to the status it had, with its card; refused unless something holds it once back (a card, a wait, a blocker)")
 	cardCheckArg := fs.String("card-check", "", `"still-right": confirm the open card on the bead is still right as written (needs --reason); it stops reading out of date. Refused when nothing changed and only the age rule fired twice in a row`)
-	pushReason := fs.String("push-reason", "", "with --waiting until:... or --park --until: why the date moves LATER again (15+ chars, not a repeat). Without it the push past [needs] push_count / push_days is refused; with it below them it is a comment only")
+	pushReason := fs.String("push-reason", "", "with --waiting until:...: why the date moves LATER again (15+ chars, not a repeat). Without it the push past [needs] push_count / push_days is refused; with it below them it is a comment only")
 	pushReset := fs.Bool("push-reset", false, "clear the bead's push counter (Commander and the user only)")
 	checksNotGreen := fs.String("checks-not-green", "", "with --decision on a card that asks the user to review or merge a PR: send it although CI is not green on the PR head; the value says why, and the card shows it")
 	notSameAsk := fs.String("not-the-same-ask", "", "with --state needs-user on a gate: an ancestor already holds an open card about the same PR, but this card asks a different question; the value says what differs")
-	reason := fs.String("reason", "", "with --park: why it is on hold; with --card-check: what you checked; with --review none: why the label goes (15+ chars, required on a merge target or a merge gate's stage), recorded on the bead")
+	reason := fs.String("reason", "", "with --card-check: what you checked; with --review none: why the label goes (15+ chars, required on a merge target or a merge gate's stage), recorded on the bead")
 	var waiting stringList
 	fs.Var(&waiting, "waiting", "what the owner waits on, repeatable: ci:#N, ci:<owner/repo>#N, review:<login>, user, operator:<role>, until:<RFC3339>:<plain words>; \"none\" clears. cmdrd wakes the Manager when CI finishes, a reviewer answers or the time is reached")
 	if err := fs.Parse(args); err != nil {
@@ -111,22 +111,18 @@ func runInternalSetObjective(args []string, stdout, stderr *os.File) int {
 	if *cardCheckArg != "" {
 		return runCardCheck(*projectName, *beadID, *cardCheckArg, *reason, stdout, stderr)
 	}
-	if *park || *unpark {
-		if *park && *unpark {
-			emitErr(stderr, "--park and --unpark exclude each other")
-			return 1
-		}
-		if strings.HasPrefix(os.Getenv("COMMANDER_ROLE"), "operator-") {
-			emitErr(stderr, "an Operator cannot park or unpark a bead: ask your Manager")
-			return 1
-		}
-		return runParkEdit(*projectName, *beadID, *park, *until, *reason, *pushReason, stdout, stderr)
-	}
-	if *holdArg != "" && *noHold {
-		emitErr(stderr, "--hold and --no-hold exclude each other")
+	if *park || *holdArg != "" {
+		emitErr(stderr, noPauseRefusal(*projectName, *beadID))
 		return 1
 	}
-	if err := refuseOperatorHold(*holdArg != "" || *noHold); err != nil {
+	if *unpark {
+		if strings.HasPrefix(os.Getenv("COMMANDER_ROLE"), "operator-") {
+			emitErr(stderr, "an Operator cannot unpark a bead: ask your Manager")
+			return 1
+		}
+		return runUnparkEdit(*projectName, *beadID, stdout, stderr)
+	}
+	if err := refuseOperatorHold(*noHold); err != nil {
 		emitErr(stderr, err.Error())
 		return 1
 	}
@@ -439,8 +435,8 @@ func runInternalSetObjective(args []string, stdout, stderr *os.File) int {
 				startNestedManager(ctx, bc, *projectName, dir, *beadID, func(w string) { fmt.Fprintln(stderr, "warning: "+w) })
 			}
 		}
-		if *holdArg != "" || *noHold {
-			if err := applyHold(ctx, bc, dir, *beadID, *holdArg, *noHold); err != nil {
+		if *noHold {
+			if err := clearHold(ctx, bc, dir, *beadID); err != nil {
 				return result, err
 			}
 		}
@@ -1389,49 +1385,46 @@ func applyTrack(ctx context.Context, bc beads.Client, dir, beadID string, on boo
 	return bc.SetLabel(ctx, dir, beadID, beads.WorkstreamLabel, on)
 }
 
-// refuseOperatorHold keeps an Operator from holding or releasing any bead: a
-// hold is the Manager's (or Commander's) order to stop.
+// refuseOperatorHold keeps an Operator from clearing a hold label: that is
+// the Manager's (or Commander's) tidy-up.
 func refuseOperatorHold(touchesHold bool) error {
 	if touchesHold && strings.HasPrefix(os.Getenv("COMMANDER_ROLE"), "operator-") {
-		return fmt.Errorf("an Operator cannot set or clear a hold: ask your Manager")
+		return fmt.Errorf("an Operator cannot clear a hold: ask your Manager")
 	}
 	return nil
 }
 
-// applyHold sets (reason, who) or clears the hold label and records who and why
-// in a comment.
-func applyHold(ctx context.Context, bc beads.Client, dir, beadID, reason string, clear bool) error {
+// noPauseRefusal is the answer to --hold and --park. Whether an agent runs a
+// step follows from the tree alone: a ready step gets an agent. What must
+// happen first is its own bead the step is blocked by, never a pause on the
+// step itself.
+func noPauseRefusal(project, beadID string) string {
+	return fmt.Sprintf("refused: a step is never paused (--hold and --park are gone). Every step is working, in a watched wait, or a card for the user. "+
+		"If something must happen first, add it as its own bead and make %[2]s blocked by it: "+
+		"an approval or a question for the user is a gate (cmdr internal-create-objective --project %[1]s --parent <track> --gate --approver user --criteria '...' --before %[2]s, then put its card up with --state needs-user --decision), "+
+		"something only the user can do (a laptop-only step) is a step of its own with his card (cmdr internal-create-objective --project %[1]s --parent <track> --title '...' --deps blocks:%[2]s, then cmdr internal-set-objective --project %[1]s --bead <new> --state needs-user --decision '<card>'), "+
+		"a time or an event is a wait (--waiting until:<time>:<what happens then>, ci:#N, review:<login>). "+
+		"If the step is not wanted, supersede it", project, beadID)
+}
+
+// clearHold removes an old hold label and records who did it. A hold no
+// longer stops dispatch; this only tidies the label away.
+func clearHold(ctx context.Context, bc beads.Client, dir, beadID string) error {
 	who := os.Getenv("COMMANDER_ROLE")
 	if who == "" {
 		who = "commander"
 	}
-	if clear {
-		if err := bc.SetLabel(ctx, dir, beadID, beads.HoldLabel, false); err != nil {
-			return err
-		}
-		return bc.AddComment(ctx, dir, beadID, "hold cleared by "+who)
-	}
-	if reason == "-" {
-		reason = "no reason given"
-	}
-	if err := bc.SetLabel(ctx, dir, beadID, beads.HoldLabel, true); err != nil {
+	if err := bc.SetLabel(ctx, dir, beadID, beads.HoldLabel, false); err != nil {
 		return err
 	}
-	return bc.AddComment(ctx, dir, beadID, beads.HoldComment(who, reason))
+	return bc.AddComment(ctx, dir, beadID, "hold cleared by "+who)
 }
 
-// runParkEdit is --park / --unpark: Park and Unpark touch only the status and
-// the parking labels, so a needs-user marker and the stored card stay.
-func runParkEdit(project, beadID string, park bool, until, reason, pushReason string, stdout, stderr *os.File) int {
-	var untilAt time.Time
-	if park && strings.TrimSpace(until) != "" {
-		t, err := beads.ParseParkUntil(until, time.Now())
-		if err != nil {
-			emitErr(stderr, err.Error())
-			return 1
-		}
-		untilAt = t
-	}
+// runUnparkEdit is --unpark: it brings a parked bead back to the status it had
+// (Unpark touches only the status and the parking labels, so a needs-user
+// marker and the stored card come back with it), and only when something
+// holds it once back.
+func runUnparkEdit(project, beadID string, stdout, stderr *os.File) int {
 	who := os.Getenv("COMMANDER_ROLE")
 	if who == "" {
 		who = "commander"
@@ -1439,34 +1432,8 @@ func runParkEdit(project, beadID string, park bool, until, reason, pushReason st
 	return editObjective(project, stdout, stderr, func(ctx context.Context, dir string) (internalObjectiveEditResult, error) {
 		bc := newBeadsClientFn()
 		result := internalObjectiveEditResult{BeadID: beadID}
-		if !park {
-			if err := checkReopenPlacement(ctx, bc, dir, beadID); err != nil {
-				return result, err
-			}
-		}
-		if park {
-			if err := checkStandingDecisions(ctx, bc, dir, beadID, reason); err != nil {
-				return result, err
-			}
-			push, err := planBeadPush(ctx, bc, dir, beadID, untilAt, pushReason)
-			if err != nil {
-				return result, err
-			}
-			if err := beads.Park(ctx, bc, dir, beadID, who, strings.TrimSpace(reason), untilAt); err != nil {
-				return result, err
-			}
-			if err := finishPush(ctx, bc, dir, project, beadID, push, stderr); err != nil {
-				return result, err
-			}
-			result.Status = beads.StatusDeferred
-			if p := proposedPark(untilAt, reason, time.Now()); p != nil && proposingManager() != "" {
-				if err := bc.SetLabel(ctx, dir, beadID, p.label(time.Now()), true); err != nil {
-					return result, fmt.Errorf("%s is parked, but marking the park proposed failed: %w", beadID, err)
-				}
-				announceProposal(ctx, bc, dir, project, beadID, proposingManager(), *p, stderr)
-				result.Proposed = p.kind
-			}
-			return result, nil
+		if err := checkReopenPlacement(ctx, bc, dir, beadID); err != nil {
+			return result, err
 		}
 		owed, err := requireHeldAfter(ctx, bc, dir, beadID, "internal-set-objective --unpark "+beadID, holdFlags+"; put it on the bead first, then unpark",
 			map[string]holding.Edit{beadID: func(b *holding.Bead) { b.Status = "open" }})

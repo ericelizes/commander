@@ -16,12 +16,14 @@ func TestParkedRequiredReviewStillHoldsSnapshotDependents(t *testing.T) {
 	review := SnapStep{BeadID: "review", Title: "Required review", Status: beads.StatusDeferred, WorkflowCheck: &workflowtemplate.Node{Bead: beads.Bead{ID: "review", Labels: []string{"workflow-template:pr-review"}}}}
 	work := SnapStep{BeadID: "work", Title: "Release", Status: "open", State: "open", BlockedBy: []string{"review"}}
 	snapshot := Snapshot{Workstreams: []SnapWorkstream{{N: 1, Project: "p", BeadID: "root", Title: "Goal", Status: "open", Steps: []SnapStep{review, work}}}}
-	if problems := SnapshotViolations(snapshot); len(problems) != 0 {
+	// The parked check is itself flagged (a step is never paused), and it still
+	// holds the release behind it.
+	if problems := SnapshotViolations(snapshot); len(problems) != 1 || problems[0].BeadID != "review" || problems[0].Why != ParkedStepWhy {
 		t.Fatalf("snapshot lost the required parked check and reported work unheld: %+v", problems)
 	}
 	snapshot.Workstreams[0].Steps[0].WorkflowCheck = nil
-	if problems := SnapshotViolations(snapshot); len(problems) == 0 {
-		t.Fatal("ordinary parked work unexpectedly retained required-check authority")
+	if problems := SnapshotViolations(snapshot); len(problems) != 2 || problems[1].BeadID != "work" {
+		t.Fatalf("ordinary parked work unexpectedly retained required-check authority: %+v", problems)
 	}
 }
 

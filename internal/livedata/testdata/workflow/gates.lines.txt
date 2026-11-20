@@ -15,7 +15,7 @@
 ▶ [gate, you] Workflow approved: compare sample text variants: Needs you (lab-t06.6)
 + [gate, you] Results reviewed and reports posted: Not reached (lab-t06.7)
   Write the summary post: Not started (lab-t06.8)
-  Revisit the old fixtures: Parked (lab-t06.10)
+  Revisit the old fixtures: Invalid state: parked, so nothing will start it (lab-t06.10)
 
 ▶ = now (lab-t06.6)
 + = approving it starts these 4, through the next gate

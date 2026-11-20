@@ -77,7 +77,7 @@ func beadOf(f store.SupervisionFact) nextactor.Bead {
 	b := nextactor.Bead{
 		ID: f.BeadID, Title: f.Title, Status: f.Status,
 		Superseded: has(f.Labels, "superseded") || has(f.Labels, "retired"), Withdrawn: has(f.Labels, "withdrawn"),
-		Held: f.Held, NeedsUser: state == beads.StateNeedsUser || has(f.Labels, beads.GateLabel) && !beads.IsClosingGate(f.Labels),
+		NeedsUser:          state == beads.StateNeedsUser || has(f.Labels, beads.GateLabel) && !beads.IsClosingGate(f.Labels),
 		ClosingGate:        beads.IsClosingGate(f.Labels),
 		HumanAnswerPending: f.PendingHumanAnswer, PendingQuestions: f.PendingQuestions, QuestionWaiting: f.QuestionWaiting,
 		Waits: beads.WaitsOf(f.Labels), HasOpenChildren: f.ChildCount > 0, ProgressAt: f.ProgressAt,
@@ -85,6 +85,12 @@ func beadOf(f store.SupervisionFact) nextactor.Bead {
 	}
 	if f.OpenBlockers > 0 {
 		b.BlockedBy = []string{"open-blocker"} // supervision does not follow chains: the blocker has its own job
+	}
+	if f.Held {
+		// Out of play (held, parked, closed or dropped, itself or above):
+		// observed as before. A held or parked step is flagged red on the board
+		// and by the open-bead invariant, which mails its Manager.
+		b.Status, b.UnderParked = beads.StatusDeferred, true
 	}
 	switch {
 	case f.ExecutorBound && f.Alive:
@@ -115,7 +121,7 @@ func beadOf(f store.SupervisionFact) nextactor.Bead {
 func childBeadOf(c store.SupervisionChild, parent store.SupervisionFact) nextactor.Bead {
 	state, _ := beads.StepState(c.Status, c.Labels)
 	b := nextactor.Bead{
-		ID: c.ID, Status: c.Status, Held: has(c.Labels, "hold"), Withdrawn: has(c.Labels, "withdrawn"),
+		ID: c.ID, Status: c.Status, UnderParked: has(c.Labels, beads.HoldLabel), Withdrawn: has(c.Labels, "withdrawn"),
 		Superseded:      has(c.Labels, "superseded") || has(c.Labels, "retired"),
 		NeedsUser:       state == beads.StateNeedsUser || has(c.Labels, beads.GateLabel),
 		QuestionWaiting: c.QuestionWaiting, Waits: beads.WaitsOf(c.Labels), HasOpenChildren: c.HasOpenChildren,
@@ -123,6 +129,9 @@ func childBeadOf(c store.SupervisionChild, parent store.SupervisionFact) nextact
 	}
 	if c.OpenBlockers > 0 {
 		b.BlockedBy = []string{"open-blocker"}
+	}
+	if b.UnderParked {
+		b.Status = beads.StatusDeferred // a held child is observed as before
 	}
 	if c.Running {
 		b.Executing, b.ExecWorking = true, true // its own run is supervised by its own facts

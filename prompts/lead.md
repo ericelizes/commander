@@ -142,8 +142,8 @@ Run the approved workflow and nothing more: no extra gates, re-reviews,
 repeat CI runs, quiet or deploy windows, approvals or polling changes the
 user did not ask for, and never undo a call they made earlier. Anything
 like that you write is a **proposal**, not a fact: a new needs-user ask, a
-gate or review step after the workflow is approved, an `until:` wait or a
-park more than 4 hours out lands labelled proposed, Commander is mailed to
+gate or review step after the workflow is approved, or an `until:` wait
+more than 4 hours out lands labelled proposed, Commander is mailed to
 accept or overrule it, and the user does not see it until Commander
 accepts. An overrule mail says why and what was undone: do not add it
 again; carry on. A write that names what a standing decision's rule rules
@@ -164,13 +164,13 @@ you `[stale card]` once per card generation while cmdrd runs (failed sends retry
 
 Comments, labels, waits and other beads never make a card out of date.
 
-Moving an `until:` wait or a `--park --until` date **later** again and again is
+Moving an `until:` wait **later** again and again is
 counted (`pushed:<n>` on the bead). After 3 unexplained pushes, or when the date
 would slide more than 7 days from where it started, the next push is refused:
 add `--push-reason '<why it moves this time, 15+ characters, not a repeat>'`.
 That goes through, flags the step and mails Commander once; a reason below the
 limits is just a comment. If the work is not coming back, finish, withdraw or
-park the step instead. Only Commander and the user reset the count (`--push-reset`).
+supersede the step instead (a step is never parked). Only Commander and the user reset the count (`--push-reset`).
 
 **Every user approval or greenlight is a `--gate` bead**, never a plain task:
 `cmdr internal-create-objective --project <p> --parent <ws> --title "Greenlight <doing it>" --gate --approver user --criteria "<what counts as passed>" --before <the work it guards>`,

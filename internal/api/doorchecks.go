@@ -115,8 +115,47 @@ func checkOp(ctx context.Context, bc beads.Client, dir string, args []string) er
 		if len(args) >= 4 && args[1] == "add" {
 			return checkUpdate(ctx, bc, dir, args[2], nil, args[3:], nil)
 		}
+	case "defer":
+		for _, id := range args[1:] {
+			if strings.HasPrefix(id, "-") {
+				break
+			}
+			if err := refusePause(ctx, bc, dir, id, nil); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
+}
+
+// refusePause: a step is never paused. Whether an agent runs follows from the
+// tree alone, so an agent may not park a step (status deferred) or put a hold
+// label on any bead; what must happen first is its own bead the step is
+// blocked by. Parking a gate (a withdrawn or dropped approval) is no pause.
+// read, when not nil, reads the bead's labels (ok=false: unreadable).
+func refusePause(ctx context.Context, bc beads.Client, dir, id string, read func() ([]string, bool)) error {
+	if read == nil {
+		read = func() ([]string, bool) {
+			b, err := bc.Show(ctx, dir, id)
+			if err != nil || b == nil {
+				if err == nil {
+					err = errors.New("bead not found")
+				}
+				logDoorFailOpen(dir, id, "read bead", err)
+				return nil, false
+			}
+			return b.Labels, true
+		}
+	}
+	labels, ok := read()
+	if !ok || slices.Contains(labels, beads.GateLabel) || slices.Contains(labels, "kind:gate") || beads.IsClosingGate(labels) {
+		return nil
+	}
+	return pauseRefusal(id)
+}
+
+func pauseRefusal(id string) error {
+	return fmt.Errorf("refused: a step is never paused (%s). Every step is working, in a watched wait, or a card for the user. If something must happen first, add it as its own bead and make %s blocked by it: a gate or a step with the user's card (cmdr internal-create-objective --deps blocks:%s, or --gate --approver user --before %s), or a wait (cmdr internal-set-objective --waiting). If the step is not wanted, supersede it", id, id, id, id)
 }
 
 // refuseWorkstreamClose: only the user marks a workstream done. An agent that
@@ -266,6 +305,14 @@ func checkUpdate(ctx context.Context, bc beads.Client, dir, id string, args, add
 	}
 	if err := checkWaitLabels(added, kept); err != nil {
 		return err
+	}
+	if slices.Contains(added, beads.HoldLabel) || slices.Contains(added, beads.ParkedLabel) {
+		return pauseRefusal(id)
+	}
+	if st := flagVals(args, "--status"); len(st) > 0 && st[len(st)-1] == beads.StatusDeferred {
+		if err := refusePause(ctx, bc, dir, id, read); err != nil {
+			return err
+		}
 	}
 	if slices.Contains(added, beads.NeedsUserLabel) {
 		if labels, ok := read(); ok && beads.IsClosingGate(labels) {

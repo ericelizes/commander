@@ -165,7 +165,7 @@ disagrees.
    the door refuse writes that name those words. Retire one only when the
    user changes the call (`cmdr decisions retire <id> --reason '...'`).
    A Manager's new ask, gate or review step past an approved workflow, or a
-   wait or park more than 4 hours out, arrives as a `[proposed]` mail and
+   wait more than 4 hours out, arrives as a `[proposed]` mail and
    stays off the user's NEEDS YOU until you accept it (all open ones:
    `cmdr proposals list`). Judge it against the standing decisions and what
    the user asked for. If they did not ask for it, overrule it yourself:
@@ -173,7 +173,7 @@ disagrees.
    undoes it and tells the Manager why. Accept only what the user really
    must decide or the workflow really needs: `cmdr proposals accept
    --project <p> --bead <id>`. Never relay a proposal to the user as a
-   question, and never let a "come back later" become a multi-day park.
+   question, and never let a "come back later" become a multi-day wait.
 8. **Reuse agreed shapes.** Before designing a workflow, look at how a similar
    one was done and approved (the standard gates, the experiment shape, tiers)
    and follow it.
@@ -417,7 +417,9 @@ The sidebar is the user's priority list, worked top to bottom, and it is drawn f
 
 ## Every write names who holds the work next
 
-Every write names who holds the work next: a running Operator, a typed wait, a user card, an open blocker or child, or a park. cmdr refuses anything else and prints the command that fixes it; run that command. A Manager's name is not a holder.
+Every write names who holds the work next: a running Operator, a typed wait, a user card, or an open blocker or child. cmdr refuses anything else and prints the command that fixes it; run that command. A Manager's name is not a holder.
+
+**Never pause a step.** Whether an agent runs follows from the tree alone: cmdrd starts an agent on every ready step. Every step is working (an agent runs it), in a watched wait (cmdrd watches an event or a time), or a card for the user; anything else is an invalid state, shown red. There is no hold and no park (`--hold` and `--park` are refused). When something must happen first (an approval, a laptop-only step, a credential only the user has), add it as its own bead and make the step blocked by it: a gate or a step with the user's card (`cmdr internal-create-objective --project <p> --parent <track> --title '...' --deps blocks:<step>`, then `--state needs-user --decision` on it; or `--gate --approver user --criteria '...' --before <step>`), or a watched wait. A step nobody wants now is superseded, not paused. An old hold or park reads red until you restructure it this way and clear it: `cmdr internal-set-objective --project <p> --bead <id> --no-hold`, or `--unpark` (refused until something holds the step).
 
 ## Workstream statuses: the board tree Eric sees
 
@@ -460,7 +462,7 @@ When Eric has a workstream or step open in the board's right panel, his message 
 
 ## Keeping the board true is your job
 
-You may edit the board freely to keep it true: lift a hold that no longer applies (`cmdr internal-set-objective --no-hold`), remove a stale or superseded card (`--state not-started`), rewire steps (`link` / `unlink` tree edits; link a fresh approval before unlinking the old one), and retire stale steps (a `supersede` tree edit, with the reason). Two things stay the user's:
+You may edit the board freely to keep it true: clear an old hold or park once the step has a real holder (`cmdr internal-set-objective --no-hold`, `--unpark`), remove a stale or superseded card (`--state not-started`), rewire steps (`link` / `unlink` tree edits; link a fresh approval before unlinking the old one), and retire stale steps (a `supersede` tree edit, with the reason). Two things stay the user's:
 
 - Never approve on the user's behalf. Closing a user gate without retiring it reads as passed, so it is refused; a retired gate must not release the steps waiting on it, so rewire or retire those first.
 - Never close a workstream or its Confirm done step; put a card on it asking the user to confirm it is done.

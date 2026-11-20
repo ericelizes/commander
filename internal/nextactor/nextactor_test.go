@@ -47,10 +47,14 @@ func TestDecideCoversEveryFactCombination(t *testing.T) {
 		{"closed is done", open(func(b *Bead) { b.Status = "closed" }), false, 0, None, "done", "Done"},
 		{"superseded", open(func(b *Bead) { b.Superseded = true }), false, 0, None, "withdrawn", "Withdrawn"},
 		{"withdrawn gate", open(func(b *Bead) { b.Withdrawn = true; b.NeedsUser = true }), false, 0, None, "withdrawn", "Withdrawn"},
-		{"held", open(func(b *Bead) { b.Held = true; b.HoldReason = "until the batch lands" }), false, 0, None, "paused", "Paused: until the batch lands"},
-		{"deferred", open(func(b *Bead) { b.Status = beads.StatusDeferred }), false, 0, None, "paused", "Paused"},
-		{"held beats a user ask", open(func(b *Bead) { b.Held = true; b.NeedsUser = true }), false, 0, None, "paused", "Paused"},
+		{"a held step is an invalid state (4.1, Nov 20)", open(func(b *Bead) { b.Held = true }), false, 0, Stuck, "invalid:hold", "Invalid state:"},
+		{"a hold no longer beats a user ask", open(func(b *Bead) { b.Held = true; b.NeedsUser = true }), false, 0, Stuck, "invalid:hold", "Invalid state:"},
 		{"saved answer on held work goes to Commander", open(func(b *Bead) { b.Held = true; b.HumanAnswerPending = true }), true, 0, Agent, "apply_answer", "Applying your answer"},
+		{"a parked step is an invalid state", open(func(b *Bead) { b.Status = beads.StatusDeferred }), false, 0, Stuck, "invalid:parked", "Invalid state:"},
+		{"a parked container is paused", open(func(b *Bead) { b.Status = beads.StatusDeferred; b.Container = true }), false, 0, None, "paused", "Paused"},
+		{"a park with a time is a wait cmdrd ends", open(func(b *Bead) { b.Status = beads.StatusDeferred; b.ParkedUntil = 1 }), false, 0, None, "paused", "Paused"},
+		{"a step under a parked container is paused", open(func(b *Bead) { b.Status = beads.StatusDeferred; b.UnderParked = true }), false, 0, None, "paused", "Paused"},
+		{"saved answer on parked work goes to Commander", open(func(b *Bead) { b.Status = beads.StatusDeferred; b.HumanAnswerPending = true }), true, 0, Agent, "apply_answer", "Applying your answer"},
 		{"user decision", open(func(b *Bead) { b.NeedsUser = true; b.UserAsk = "approve the refund guard" }), false, 0, User, "decision", "Needs you: approve the refund guard"},
 		{"user decision beats a running agent", open(func(b *Bead) { b.NeedsUser = true; b.Executing = true }), false, 0, User, "decision", "Needs you"},
 		{"waiting on the user with a recorded ask", open(func(b *Bead) { b.Waits = []beads.Wait{{Kind: beads.WaitUser}}; b.UserAsk = "pick the rollout day" }), false, 0, User, "waiting_user", "Needs you: pick the rollout day"},
@@ -236,7 +240,7 @@ func TestRollupLeadsWithTheUserAndCountsTheRest(t *testing.T) {
 func TestEveryDecisionHasAnActorAndText(t *testing.T) {
 	// Property: whatever facts are set, the decision is never blank.
 	flags := []func(*Bead){
-		func(b *Bead) { b.Held = true }, func(b *Bead) { b.NeedsUser = true }, func(b *Bead) { b.Executing = true },
+		func(b *Bead) { b.Status = beads.StatusDeferred }, func(b *Bead) { b.NeedsUser = true }, func(b *Bead) { b.Executing = true },
 		func(b *Bead) { b.ResultReady = true }, func(b *Bead) { b.ReadyQueued = true }, func(b *Bead) { b.HasOpenChildren = true },
 		func(b *Bead) { b.Unverified = true }, func(b *Bead) { b.LaunchFailed = true }, func(b *Bead) { b.PendingQuestions = 1 },
 		func(b *Bead) { b.Waits = []beads.Wait{{Kind: beads.WaitCI, PR: 1}} }, func(b *Bead) { b.ExitedWithoutReport = true },
@@ -267,7 +271,7 @@ func TestUsageCapacityPreservesNextActorGates(t *testing.T) {
 		reason string
 	}{
 		{"queued exhaustion", func(b *Bead) {}, Stuck, "usage_capacity"},
-		{"paused", func(b *Bead) { b.Held = true }, None, "paused"},
+		{"paused", func(b *Bead) { b.Status = beads.StatusDeferred; b.Container = true }, None, "paused"},
 		{"user decision", func(b *Bead) { b.NeedsUser = true }, User, "decision"},
 		{"external wait", func(b *Bead) { b.Waits = []beads.Wait{{Kind: beads.WaitCI, PR: 42}} }, External, "wait:ci"},
 		{"running", func(b *Bead) { b.Executing = true; b.ProgressAt = now.Unix() }, Agent, "executing"},

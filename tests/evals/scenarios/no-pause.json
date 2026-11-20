@@ -1,0 +1,32 @@
+{
+  "storage": "postgres",
+  "orchestration_mode": "active",
+  "projects": [{"id": 1, "name": "vibe-apps", "path": "/tmp/vibe-apps"}],
+  "agents": {"manager-w": {"state": "idle"}},
+  "workstreams": [
+    {
+      "n": 1,
+      "project": "vibe-apps",
+      "project_id": 1,
+      "bead_id": "w",
+      "title": "Vibe apps",
+      "status": "open",
+      "manager_role": "manager-w",
+      "steps": [
+        {
+          "bead_id": "w.6",
+          "title": "RCM SharePoint move",
+          "status": "open",
+          "track": true,
+          "children": [
+            {"bead_id": "w.6.18", "title": "Revise the test write to answer the review", "status": "open", "state": "not-started", "lane": "agents", "hold": true, "hold_reason": "No Modal access for agents"},
+            {"bead_id": "w.6.21", "title": "Move the old folders", "status": "deferred", "state": "not-started", "lane": "agents"},
+            {"bead_id": "w.6.22", "title": "Re-check after the weekend", "status": "deferred", "state": "not-started", "lane": "agents", "parked_until": 4102444800},
+            {"bead_id": "w.6.20", "title": "Run the Modal test write from your laptop", "status": "open", "state": "needs-user", "lane": "you"},
+            {"bead_id": "w.6.23", "title": "Check the test write landed", "status": "open", "state": "not-started", "lane": "agents", "blocked_by": ["w.6.20"]}
+          ]
+        }
+      ]
+    }
+  ]
+}

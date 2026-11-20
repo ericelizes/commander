@@ -126,27 +126,6 @@ func TestPushNonUntilWaitsNeverCount(t *testing.T) {
 	}
 }
 
-func TestPushParkUntilCounts(t *testing.T) {
-	m := pushFixture(t, "manager-ms-1")
-	park := func(until string, extra ...string) (int, string) {
-		stdout, stderr, read := withTempOutputFiles(t)
-		code := runInternalSetObjective(append([]string{"--project", "manifest", "--bead", "ms-1.2", "--park", "--until", until}, extra...), stdout, stderr)
-		_, e := read()
-		return code, e
-	}
-	for _, u := range []string{"2h", "4h", "6h", "8h"} {
-		if code, e := park(u); code != 0 {
-			t.Fatalf("park %s: %s", u, e)
-		}
-	}
-	if st := beads.PushStateOf(labelsOf(m)); st.Count != 3 {
-		t.Fatalf("%+v", st)
-	}
-	if code, e := park("10h"); code == 0 || !strings.Contains(e, "--push-reason") {
-		t.Fatalf("the fourth park push is refused: %d %s", code, e)
-	}
-}
-
 func TestPushLabelsClearedOnClose(t *testing.T) {
 	m := pushFixture(t, "manager-ms-1", "pushed:2", "pushed-first:5", "pushed-last:9", "pushed-flagged")
 	stdout, stderr, read := withTempOutputFiles(t)
