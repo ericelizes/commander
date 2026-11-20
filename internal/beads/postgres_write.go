@@ -593,7 +593,7 @@ func pgWrite(ctx context.Context, q store.Querier, pid int64, args []string) ([]
 		if !ok || dim == "" || value == "" {
 			return nil, errors.New("invalid state")
 		}
-		labels = slices.DeleteFunc(labels, func(l string) bool { return strings.HasPrefix(l, dim+":") })
+		labels = slices.DeleteFunc(labels, func(l string) bool { return replacedBySetState(l, dim) })
 		labels = append(labels, dim+":"+value)
 	default:
 		return nil, fmt.Errorf("unsupported Postgres bead operation %s", verb)

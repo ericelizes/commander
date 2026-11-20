@@ -77,6 +77,26 @@ func TestSetState_PropagatesExecError(t *testing.T) {
 	}
 }
 
+// Nov 20: cmdr=executing wiped cmdr:release-deploy, so the approved deploy
+// step's agent was refused the deploy.
+func TestSetStateKeepsReleaseMarkers(t *testing.T) {
+	for _, c := range []struct {
+		label string
+		state bool
+	}{
+		{"cmdr:brainstorming", true},
+		{"cmdr:executing", true},
+		{"cmdr:blocked", true},
+		{"cmdr:release-deploy", false},
+		{"cmdr:release-land", false},
+		{"lane:agents", false},
+	} {
+		if got := replacedBySetState(c.label, "cmdr"); got != c.state {
+			t.Errorf("replacedBySetState(%q, cmdr) = %v, want %v", c.label, got, c.state)
+		}
+	}
+}
+
 func assertArgv(t *testing.T, got, want []string) {
 	t.Helper()
 	if len(got) != len(want) {

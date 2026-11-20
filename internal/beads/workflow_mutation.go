@@ -71,7 +71,7 @@ func pgCheckWorkflowMutation(ctx context.Context, q store.Querier, pid int64, b 
 	if verb == "set-state" && len(pos) == 2 {
 		dim, value, ok := strings.Cut(pos[1], "=")
 		if ok {
-			after.Labels = slices.DeleteFunc(after.Labels, func(l string) bool { return strings.HasPrefix(l, dim+":") })
+			after.Labels = slices.DeleteFunc(after.Labels, func(l string) bool { return replacedBySetState(l, dim) })
 			after.Labels = append(after.Labels, dim+":"+value)
 		}
 	}

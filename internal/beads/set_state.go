@@ -37,6 +37,17 @@ func (c *cmdClient) SetState(ctx context.Context, projectDir, issueID, dimension
 	return nil
 }
 
+// stateMarkers share the cmdr: prefix but say what a step may do, not its
+// phase, so a phase change keeps them. Nov 20: cmdr=executing wiped
+// cmdr:release-deploy, and the approved QA Hub deploy step was refused.
+var stateMarkers = map[string]bool{"cmdr:release-deploy": true, "cmdr:release-land": true}
+
+// replacedBySetState reports whether l holds dimension's current value, which
+// setting the dimension replaces.
+func replacedBySetState(l, dimension string) bool {
+	return strings.HasPrefix(l, dimension+":") && !stateMarkers[l]
+}
+
 func (c *cmdClient) setStateByLabels(ctx context.Context, projectDir, issueID, dimension, value string) error {
 	out, stderr, err := c.run(ctx, projectDir, beadsBinary(), "label", "list", issueID, "--json")
 	if err != nil {
@@ -48,7 +59,7 @@ func (c *cmdClient) setStateByLabels(ctx context.Context, projectDir, issueID, d
 	}
 	want := dimension + ":" + value
 	for _, l := range labels {
-		if strings.HasPrefix(l, dimension+":") && l != want {
+		if replacedBySetState(l, dimension) && l != want {
 			if err := c.SetLabel(ctx, projectDir, issueID, l, false); err != nil {
 				return err
 			}
