@@ -67,7 +67,13 @@ func TestSpawnUsageMoveScenario(t *testing.T) {
 			t.Setenv("CODEX_HOME", codexHome)
 			os.WriteFile(filepath.Join(codexHome, "auth.json"), []byte(`{"tokens":{"access_token":"test"}}`), 0o600)
 			codex := filepath.Join(t.TempDir(), "codex")
-			writeExecutable(t, codex, "#!/bin/sh\necho 'hooks stable true'\n")
+			// A working Codex: `features list` shows hooks on, and the tool
+			// preflight (`codex exec`) gets its echo back through a command run.
+			writeExecutable(t, codex, "#!/bin/sh\n"+
+				"if [ \"$1\" = exec ]; then\n"+
+				"  echo '{\"type\":\"item.completed\",\"item\":{\"type\":\"command_execution\",\"aggregated_output\":\"cmdr-tool-preflight-ok\\n\"}}'\n"+
+				"  exit 0\nfi\n"+
+				"echo 'hooks stable true'\n")
 			t.Setenv("COMMANDER_CODEX_BIN", codex)
 			for _, d := range []string{filepath.Join(user, ".claude")} {
 				os.MkdirAll(d, 0o700)
