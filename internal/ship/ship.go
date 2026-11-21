@@ -377,7 +377,9 @@ func verifyTree(ctx context.Context, opts Options, base, branchSHA string, step 
 		// Unit packages run in parallel; the end-to-end evals run on their own
 		// after them, serially, because they time out on a loaded host.
 		{tree, []string{"sh", "-c", "go test -p 1 $(go list ./... | grep -v /tests/evals)"}},
-		{tree, []string{"go", "test", "-p", "1", "./tests/evals/..."}},
+		// The full eval package runs about 15 minutes on this VM, past Go's
+		// default 10-minute package timeout (see docs/testing/watch-read-timeout.md).
+		{tree, []string{"go", "test", "-p", "1", "-timeout", "30m", "./tests/evals/..."}},
 	}
 	if appChanged != "" {
 		// node_modules is untracked: borrow the main checkout's.

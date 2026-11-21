@@ -343,7 +343,7 @@ func TestShipRunsChecksInTheReusedVerifyTree(t *testing.T) {
 	if err := runFakeShip(context.Background(), Options{Root: dir, Branch: "feat", Run: recorder("", &calls)}, &bytes.Buffer{}); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	if len(calls) != 3 || calls[0].cmd != "go build ./..." || calls[1].cmd != "sh -c go test -p 1 $(go list ./... | grep -v /tests/evals)" || calls[2].cmd != "go test -p 1 ./tests/evals/..." {
+	if len(calls) != 3 || calls[0].cmd != "go build ./..." || calls[1].cmd != "sh -c go test -p 1 $(go list ./... | grep -v /tests/evals)" || calls[2].cmd != "go test -p 1 -timeout 30m ./tests/evals/..." {
 		t.Fatalf("calls = %+v, want go build + go test only (app untouched)", calls)
 	}
 	want, err := verifyTreePath(dir, 0)
@@ -379,7 +379,7 @@ func TestShipRunsChecksInTheReusedVerifyTree(t *testing.T) {
 }
 
 func TestShipRefusesRedBranch(t *testing.T) {
-	for _, failOn := range []string{"go build ./...", "sh -c go test -p 1 $(go list ./... | grep -v /tests/evals)", "go test -p 1 ./tests/evals/..."} {
+	for _, failOn := range []string{"go build ./...", "sh -c go test -p 1 $(go list ./... | grep -v /tests/evals)", "go test -p 1 -timeout 30m ./tests/evals/..."} {
 		dir := newRepo(t)
 		head := git(t, dir, "rev-parse", "main")
 		var calls []call
@@ -403,7 +403,7 @@ func TestShipChecksAppWhenItChanged(t *testing.T) {
 	for _, c := range calls {
 		got = append(got, c.cmd)
 	}
-	want := "go build ./...|sh -c go test -p 1 $(go list ./... | grep -v /tests/evals)|go test -p 1 ./tests/evals/...|npm run typecheck|npm test"
+	want := "go build ./...|sh -c go test -p 1 $(go list ./... | grep -v /tests/evals)|go test -p 1 -timeout 30m ./tests/evals/...|npm run typecheck|npm test"
 	if strings.Join(got, "|") != want {
 		t.Fatalf("calls = %v, want %s", got, want)
 	}
