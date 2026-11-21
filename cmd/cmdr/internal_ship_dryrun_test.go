@@ -39,6 +39,15 @@ func shipRepo(t *testing.T, goSource string) string {
 		t.Setenv(name, strings.TrimSpace(string(out))) // a private HOME must not cost a cold build cache
 	}
 	base := t.TempDir()
+	// ship refuses without a secret scanner; these repos hold nothing to scan.
+	stub := filepath.Join(base, "stubbin")
+	if err := os.MkdirAll(stub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(stub, "gitleaks"), []byte("#!/bin/sh\necho '1:00AM INF scan completed in 1ms'\necho '1:00AM INF no leaks found'\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", stub+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("HOME", base)
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(base, "cache"))
 	t.Setenv("COMMANDER_HOME", filepath.Join(base, "home"))

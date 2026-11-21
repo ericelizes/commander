@@ -17,6 +17,7 @@ import (
 func TestMain(m *testing.M) {
 	// Hermetic: a real gitleaks on PATH would add a call to every check list.
 	lookPath = func(string) (string, error) { return "", exec.ErrNotFound }
+	secretScanRequired = false
 	os.Exit(m.Run())
 }
 
@@ -746,6 +747,29 @@ func TestShipTestsIgnoreAGitleaksOnPATH(t *testing.T) {
 		if strings.HasPrefix(c.cmd, "gitleaks") {
 			t.Fatalf("the PATH's gitleaks ran: %+v", calls)
 		}
+	}
+}
+
+func TestRunCommandDropsTheShippersRunIdentity(t *testing.T) {
+	t.Setenv("COMMANDER_RUN_ID", "run-1")
+	t.Setenv("COMMANDER_RUN_SESSION", "sess-1")
+	out, err := runCommand(context.Background(), t.TempDir(), "env")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out, "COMMANDER_RUN_ID=") || strings.Contains(out, "COMMANDER_RUN_SESSION=") {
+		t.Fatalf("the check inherited the run identity:\n%s", out)
+	}
+}
+
+func TestShipRefusesWithoutGitleaks(t *testing.T) {
+	secretScanRequired = true
+	t.Cleanup(func() { secretScanRequired = false })
+	var calls []call
+	missing := func(string) (string, error) { return "", os.ErrNotExist }
+	err := Run(context.Background(), Options{Root: newRepo(t), Branch: "feat", LookPath: missing, Run: recorder("", &calls)}, &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "gitleaks not found") {
+		t.Fatalf("want a refusal without gitleaks, got %v", err)
 	}
 }
 

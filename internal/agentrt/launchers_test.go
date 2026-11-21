@@ -19,6 +19,7 @@ import (
 var claudeLaunchers = map[string]string{
 	"internal/statusclassify/runner.go": "subscriptionEnv clears inherited provider/config credentials, then claudeacct.Env(home, selected account); fake-runner tests verify the selected subscription environment",
 	"internal/agentrt/claude.go":        "ClaudeInteractiveCmd: always default, clears the variable; ClaudeHeadlessArgs: argv only, callers set the env",
+	"internal/brief/agent.go":           "overview.ReaderEnv (cleanEnv) drops the variable, then the Commander account's claudeacct.Env",
 	"internal/chat/engine.go":           "childEnv clears the variable; extra sets a named account (also the --version probe)",
 	"internal/chat/handover.go":         "ClaudeInteractiveCmd",
 	"internal/chat/host.go":             "h.cfg.Binary under os.Environ: the Engine starts the host with childEnv (TestChatHostRunsUnderChildEnv)",

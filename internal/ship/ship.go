@@ -419,6 +419,10 @@ var lookPath = exec.LookPath
 // defaultGitleaksConfig is tool-owned: upstream v8.21.2 rules with no
 // global allowlist or path allowlists. Never inherit a repository's policy.
 //
+// secretScanRequired makes a missing gitleaks a refusal. Only this package's
+// tests turn it off, so their fakes need no scanner.
+var secretScanRequired = true
+
 //go:embed gitleaks.toml
 var defaultGitleaksConfig string
 
@@ -468,8 +472,8 @@ func readGitleaksLog(output string) (leaks bool, incomplete string) {
 }
 
 // scanSecrets runs gitleaks over the commits the branch adds to base and
-// refuses on any finding. Without gitleaks it warns and goes on (the GitHub
-// Action still scans every push).
+// refuses on any finding. Without gitleaks it refuses too: a ship that skipped
+// the scan would pass silently on a machine that lacks the tool.
 //
 // Policy is embedded in the tool. The source directory is private and empty
 // except for a gitdir pointer: repository ignore files cannot suppress findings.
@@ -479,8 +483,11 @@ func scanSecrets(ctx context.Context, opts Options, run Runner, base, branchSHA 
 		look = lookPath
 	}
 	if _, err := look("gitleaks"); err != nil {
-		fmt.Fprintln(out, "warning: gitleaks not found on PATH, secret scan skipped (install gitleaks to scan before shipping)")
-		return nil
+		if !secretScanRequired {
+			fmt.Fprintln(out, "warning: gitleaks not found on PATH, secret scan skipped")
+			return nil
+		}
+		return fmt.Errorf("gitleaks not found on PATH: refusing to ship without the secret scan (install gitleaks %v)", err)
 	}
 	// The range is built from commits, never from the base's name: a tag (or
 	// any ref) named like the base makes the name ambiguous, and git's
@@ -593,6 +600,7 @@ func runCommand(ctx context.Context, dir, name string, args ...string) (string, 
 		switch {
 		case strings.HasPrefix(e, "TMUX="):
 		case strings.HasPrefix(e, "COMMANDER_ROLE="): // the shipper's role is not the checks' identity
+		case strings.HasPrefix(e, "COMMANDER_RUN_ID="), strings.HasPrefix(e, "COMMANDER_RUN_SESSION="): // nor is its execution run
 		case strings.HasPrefix(e, "GOFLAGS="):
 			if v := strings.TrimPrefix(e, "GOFLAGS="); !strings.Contains(v, "-trimpath") {
 				goflags += " " + v
