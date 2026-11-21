@@ -417,8 +417,10 @@ func TestClaimedExecutionUsesRealNativeHostAndRecoversCommittedStartup(t *testin
 				t.Fatalf("terminal result missing from live board: %+v", reviewedSnapshot)
 			}
 			row := reviewedSnapshot.Display.Workstreams[0]
-			// A finished result is the planning Commander's move: review it.
-			if row.Kind != "working" || row.Text != "Commander to review the finished result" || row.Working != 0 || row.Actor == nil || row.Actor.Lead.Reason != "review_result" {
+			// A step that finished without a clean final report is not closed by cmdrd
+			// and not a Commander review (review is an explicit step): it reads as
+			// stuck, "ended blocked", with nothing working.
+			if row.Kind != "stuck" || !strings.Contains(row.Text, "ended blocked: Execution exited without a recorded final report") || row.Working != 0 || row.Actor == nil || !strings.HasSuffix(row.Actor.Lead.Reason, "agent_blocked") {
 				t.Fatalf("completed native turn has the wrong handoff: %+v", row)
 			}
 			steps := reviewedSnapshot.Workstreams[0].Steps

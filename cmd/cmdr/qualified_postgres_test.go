@@ -56,11 +56,11 @@ func TestPostgresQualifiedDependencyCommand(t *testing.T) {
 	beads.SetDoorServer(true)
 	defer beads.SetDoorServer(false)
 	c := beads.New()
-	source, e := c.Create(ctx, dir, "Synthetic source", beads.CreateOptions{Silent: true})
+	source, e := c.Create(ctx, dir, "Synthetic source", beads.CreateOptions{Silent: true, Labels: []string{"lane:agents"}, Description: "Fixture bead for the qualified dependency command", AcceptanceCriteria: "The dependency is recorded"})
 	if e != nil {
 		t.Fatal(e)
 	}
-	target, e := c.Create(ctx, foreign, "Synthetic target", beads.CreateOptions{Silent: true})
+	target, e := c.Create(ctx, foreign, "Synthetic target", beads.CreateOptions{Silent: true, Labels: []string{"lane:agents"}, Description: "Fixture bead for the qualified dependency command", AcceptanceCriteria: "The dependency is recorded"})
 	if e != nil {
 		t.Fatal(e)
 	}
