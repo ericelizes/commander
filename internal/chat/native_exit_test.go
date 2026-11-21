@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/example-user/commander/internal/authpause"
 	"os"
 	"path/filepath"
 	"strings"
@@ -524,5 +525,34 @@ func TestNativeExecutionWaitsForItsBackgroundTasks(t *testing.T) {
 	log, _ := os.ReadFile(filepath.Join(h.home, "chat", scenario.Role+".jsonl"))
 	if !strings.Contains(string(log), "regression passed after the background run") {
 		t.Fatal("the run was stopped before its background task finished and the follow-up turn ran")
+	}
+}
+
+func authReceiptRun(t *testing.T, role string, receipt nativeExitReceipt) (*harness, int64) {
+	h, _, _, rid, sid := setupNativeExitHarness(t, role)
+	receipt.Role, receipt.RunID, receipt.SessionID, receipt.ObservedAt = role, rid, sid, time.Now().Unix()
+	receipt.Runtime, receipt.Account = RuntimeClaude, "default"
+	if e := os.MkdirAll(filepath.Dir(nativeExitPath(h.home, role, rid)), 0700); e != nil {
+		t.Fatal(e)
+	}
+	raw, _ := json.Marshal(receipt)
+	if e := os.WriteFile(nativeExitPath(h.home, role, rid), raw, 0600); e != nil {
+		t.Fatal(e)
+	}
+	if e := h.e.flushNativeExits(context.Background(), ""); e != nil {
+		t.Fatal(e)
+	}
+	return h, rid
+}
+
+// Finding 2: only the structured auth failure pauses; message text never does.
+func TestOnlyAStructuredAuthFailurePausesDispatch(t *testing.T) {
+	text, _ := authReceiptRun(t, "operator-auth-text", nativeExitReceipt{Status: "native-error", Code: 1, Summary: "got 401 unauthorized; not logged in; please run /login"})
+	if authpause.Paused(text.home, "default") {
+		t.Fatal("message text paused dispatch")
+	}
+	structured, _ := authReceiptRun(t, "operator-auth-code", nativeExitReceipt{Status: "native-error", Code: 1, AuthFailed: true, Summary: "Failed to authenticate"})
+	if !authpause.Paused(structured.home, "default") {
+		t.Fatal("the structured authentication_failed error did not pause dispatch")
 	}
 }

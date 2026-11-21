@@ -104,3 +104,33 @@ func (s *Store) DeleteNeedsYou(ctx context.Context, projectID int64, beadID stri
 	}
 	return nil
 }
+
+// InsertNeedsYouIfAbsent raises a card only on a step that has none: it never
+// replaces another card (a user's decision card, say). It reports whether it
+// inserted.
+func (s *Store) InsertNeedsYouIfAbsent(ctx context.Context, n NeedsYou) (bool, error) {
+	if n.BeadID == "" {
+		return false, errors.New("store: InsertNeedsYouIfAbsent requires a bead id")
+	}
+	if n.Since == 0 {
+		n.Since = time.Now().Unix()
+	}
+	res, err := s.db.ExecContext(ctx, `INSERT INTO needs_you(project_id, bead_id, ask, note, since, decision) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(project_id, bead_id) DO NOTHING`,
+		n.ProjectID, n.BeadID, strings.TrimSpace(n.Ask), n.Note, n.Since, n.Decision)
+	if err != nil {
+		return false, fmt.Errorf("store: insert needs_you %s: %w", n.BeadID, err)
+	}
+	if k, _ := res.RowsAffected(); k == 0 {
+		return false, nil
+	}
+	return true, s.RecordPitch(ctx, n.ProjectID, n.BeadID, strings.TrimSpace(n.Ask), n.Decision, n.Basis)
+}
+
+// DeleteNeedsYouIfAsk clears a step's card only while it still carries ask, so
+// a card that replaced it (or was never ours) is left alone.
+func (s *Store) DeleteNeedsYouIfAsk(ctx context.Context, projectID int64, beadID, ask string) error {
+	if _, err := s.db.ExecContext(ctx, `DELETE FROM needs_you WHERE project_id = ? AND bead_id = ? AND ask = ?`, projectID, beadID, ask); err != nil {
+		return fmt.Errorf("store: delete needs_you: %w", err)
+	}
+	return nil
+}

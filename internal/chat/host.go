@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/example-user/commander/internal/authpause"
 	"io"
 	"net"
 	"os"
@@ -116,6 +117,7 @@ type host struct {
 	nativeLimit         *UsageLimit
 	nativeResultError   bool
 	nativeResultSummary string
+	nativeAuthFailed    bool // an assistant message carried the structured authentication_failed error
 	// An execution's turn can end while its own background tasks (a long test
 	// run, a CI wait) still run; claude then starts the next turn itself when
 	// they finish. The host waits for that turn instead of ending the run.
@@ -240,6 +242,11 @@ func (h *host) pump(stdout io.Reader) {
 		if h.cfg.Info.ExecutionRunID > 0 {
 			events, _ := normalizer.Line(sc.Bytes())
 			for _, event := range events {
+				if (event.Kind == KindText || event.Kind == KindResult) && authpause.IsFailureCode(event.Error) {
+					h.mu.Lock()
+					h.nativeAuthFailed = true
+					h.mu.Unlock()
+				}
 				if u := usageLimitOf(event); u != nil {
 					if h.nativeLimit != nil && u.ResetsAt == 0 {
 						u.ResetsAt = h.nativeLimit.ResetsAt

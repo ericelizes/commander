@@ -21,6 +21,7 @@ type nativeExitReceipt struct {
 	SessionID  string      `json:"session_id"`
 	Runtime    string      `json:"runtime,omitempty"`
 	Account    string      `json:"account,omitempty"`
+	AuthFailed bool        `json:"auth_failed,omitempty"`
 	Status     string      `json:"status"`
 	Code       int         `json:"code"`
 	Signal     string      `json:"signal,omitempty"`
@@ -209,7 +210,7 @@ func (h *host) persistNativeExit(exit *hostExit) {
 	} else {
 		h.nativeLimit = nil
 	}
-	receipt := nativeExitReceipt{Limit: h.nativeLimit, Summary: h.nativeResultSummary, Runtime: h.cfg.Info.Runtime, Account: h.cfg.Info.Account, Role: h.cfg.Info.Role, RunID: h.cfg.Info.ExecutionRunID, SessionID: h.cfg.Info.SessionID, Status: status, Code: exit.Code, Signal: exit.Signal, ObservedAt: time.Now().Unix()}
+	receipt := nativeExitReceipt{Limit: h.nativeLimit, Summary: h.nativeResultSummary, Runtime: h.cfg.Info.Runtime, Account: h.cfg.Info.Account, AuthFailed: h.authFailedLocked(), Role: h.cfg.Info.Role, RunID: h.cfg.Info.ExecutionRunID, SessionID: h.cfg.Info.SessionID, Status: status, Code: exit.Code, Signal: exit.Signal, ObservedAt: time.Now().Unix()}
 	raw, e := json.Marshal(receipt)
 	if e == nil {
 		tmp := h.cfg.ExitReceiptPath + ".tmp"
@@ -315,15 +316,18 @@ func (e *Engine) flushNativeExits(ctx context.Context, role string) error {
 		}
 		// A failed Claude login pauses that account's dispatch before the exit
 		// makes the step claimable again.
-		if receipt.Status == "native-error" && receipt.Runtime != RuntimeCodex && authpause.IsFailure(receipt.Summary) {
+		// Only the runtime's structured auth failure counts, never message text.
+		status := receipt.Status
+		if status == "native-error" && receipt.Runtime != RuntimeCodex && receipt.AuthFailed {
 			if _, err := authpause.Mark(e.opts.Home, receipt.Account, receipt.Summary, time.Now()); err != nil {
 				e.opts.Logf("chat: pause dispatch after a login failure: %v", err)
 			}
+			status = "native-auth-failed"
 		}
 		if exits, ok := e.opts.States.(interface {
 			FinishNativeExecutionExit(context.Context, string, int64, string, string, string, string) error
 		}); ok {
-			err = exits.FinishNativeExecutionExit(ctx, receipt.Role, receipt.RunID, receipt.SessionID, receipt.Status, receipt.Summary, receipt.cause())
+			err = exits.FinishNativeExecutionExit(ctx, receipt.Role, receipt.RunID, receipt.SessionID, status, receipt.Summary, receipt.cause())
 		} else if reports, ok := e.opts.States.(interface {
 			FinishNativeExecutionReport(context.Context, string, int64, string, string, string) error
 		}); ok {
@@ -367,4 +371,10 @@ func CodexThreadFileForRun(home, role string, rid int64, session string) string 
 		return (Spec{Role: role, ExecutionRunID: rid, SessionID: session}).codexThreadFile(home)
 	}
 	return CodexThreadFile(home, role)
+}
+
+func (h *host) authFailedLocked() bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.nativeAuthFailed
 }

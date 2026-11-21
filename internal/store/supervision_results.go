@@ -32,7 +32,7 @@ func (s *Store) FinishNativeExecutionReport(ctx context.Context, role string, ri
 // physical cause of a crash ("exit code 1", "signal killed"), which the step
 // shows when its agent stopped.
 func (s *Store) FinishNativeExecutionExit(ctx context.Context, role string, rid int64, session, status, report, cause string) error {
-	if !s.postgres || rid <= 0 || role == "" || session == "" || (status != "exited" && status != "native-error" && status != "usage-limited") {
+	if !s.postgres || rid <= 0 || role == "" || session == "" || (status != "exited" && status != "native-error" && status != "usage-limited" && status != "native-auth-failed") {
 		return errors.New("invalid native execution exit identity")
 	}
 	return s.closeSupervisedRunIdentity(ctx, rid, status, role, session, truncateSupervision(report, 6000), truncateSupervision(cause, 200))
@@ -46,7 +46,8 @@ func (s *Store) closeSupervisedRunIdentity(ctx context.Context, rid int64, statu
 
 func closeSupervisedRunTx(ctx context.Context, q Querier, rid int64, status, expectedRole, expectedSession, nativeReport, cause string) error {
 	usageLimited := status == "usage-limited"
-	if usageLimited {
+	authFailed := status == "native-auth-failed"
+	if usageLimited || authFailed {
 		status = "native-error"
 	}
 	var pid int64
@@ -172,9 +173,10 @@ func closeSupervisedRunTx(ctx context.Context, q Querier, rid int64, status, exp
 	// step's result.
 	// A failed Claude login is infrastructure, not a result and not a crash:
 	// the step goes back to ready and waits for a sign-in (the pause itself is
-	// recorded by the host's exit receipt).
-	if expectedRole != "" && status == "native-error" && !usageLimited && summary == "" && authpause.IsFailure(nativeReport) {
-		_, e = q.ExecContext(ctx, `UPDATE bead_tasks b SET status='open',execution_ready=TRUE,resume_run_id=NULL,resume_plan_revision=0,execution_attempts=0,execution_due_at=0,execution_error=? WHERE b.project_id=? AND b.id=? AND b.active_run_id=? AND b.status IN('open','in_progress') AND b.result_run_id IS NULL`, truncateSupervision(authpause.WaitingPrefix+"the run failed to authenticate; sign in again", 1000), pid, bead, rid)
+	// recorded by the host's exit receipt). The attempt counter is left as it
+	// was: an auth failure neither spends nor forgives an attempt.
+	if expectedRole != "" && status == "native-error" && !usageLimited && authFailed && summary == "" {
+		_, e = q.ExecContext(ctx, `UPDATE bead_tasks b SET status='open',execution_ready=TRUE,resume_run_id=NULL,resume_plan_revision=0,execution_due_at=0,execution_error=? WHERE b.project_id=? AND b.id=? AND b.active_run_id=? AND b.status IN('open','in_progress') AND b.result_run_id IS NULL`, truncateSupervision(authpause.WaitingPrefix+"the run failed to authenticate; sign in again", 1000), pid, bead, rid)
 		return e
 	}
 	if expectedRole != "" && status == "native-error" && !usageLimited && summary == "" {

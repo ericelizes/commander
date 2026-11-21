@@ -11,7 +11,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"sync"
 	"time"
@@ -148,18 +147,22 @@ func Clear(home, account string) (Entry, bool, error) {
 	return e, true, write(home, m)
 }
 
-// Recovered reports whether a login seen now is a new sign-in after the
-// failure: the account was seen logged out since, or its credential file
-// changed after the pause began.
-func Recovered(e Entry, loggedIn bool, credMTime time.Time) bool {
+// Recovered reports whether the pause can lift: the account is logged in and
+// either was seen logged out since the failure, its credential file changed
+// after the pause began, or it is seen logged in and healthy (healthy is the
+// caller's own probe of the account, e.g. `claude auth status`).
+func Recovered(e Entry, loggedIn bool, credMTime time.Time, healthy bool) bool {
 	if !loggedIn {
 		return false
 	}
-	return e.SawLoggedOut || (!credMTime.IsZero() && credMTime.Unix() > e.Since)
+	return e.SawLoggedOut || healthy || (!credMTime.IsZero() && credMTime.Unix() > e.Since)
 }
 
-var failureRe = regexp.MustCompile(`(?i)(oauth (session|token) (has )?(expired|revoked)|session expired|please run /login|run /login|not logged in|invalid authentication credentials|authentication_error|failed to refresh (the )?(oauth |access )?token|refresh token (is )?(invalid|expired|revoked)|token refresh failed|401 unauthorized|credentials (have )?expired)`)
+// StructuredCode is the error code Claude Code puts on an assistant message
+// when the login failed ("authentication_failed"). It is the only signal that
+// pauses dispatch: message text is never read, since a run may legitimately
+// print "401 unauthorized" or "not logged in" while it works.
+const StructuredCode = "authentication_failed"
 
-// IsFailure reports whether text (a run's last message or error) says the
-// Claude login failed.
-func IsFailure(text string) bool { return failureRe.MatchString(text) }
+// IsFailureCode reports whether code is the runtime's structured auth failure.
+func IsFailureCode(code string) bool { return code == StructuredCode }

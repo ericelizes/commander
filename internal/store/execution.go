@@ -223,11 +223,12 @@ func (s *Store) WaitExecutionAuth(ctx context.Context, c ExecutionClaim, detail 
 type AuthWaiter struct {
 	ProjectID int64
 	BeadID    string
+	HasCard   bool // the step already carries a Needs-you card (the user's own)
 }
 
 // AuthWaiters lists the ready steps waiting for a sign-in, oldest first.
 func (s *Store) AuthWaiters(ctx context.Context) ([]AuthWaiter, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT project_id,id FROM bead_tasks WHERE status='open' AND execution_ready AND execution_error LIKE ? ORDER BY progress_at,id`, authpause.WaitingPrefix+"%")
+	rows, err := s.db.QueryContext(ctx, `SELECT b.project_id,b.id,EXISTS(SELECT 1 FROM needs_you n WHERE n.project_id=b.project_id AND n.bead_id=b.id) FROM bead_tasks b WHERE b.status='open' AND b.execution_ready AND b.execution_error LIKE ? ORDER BY b.progress_at,b.id`, authpause.WaitingPrefix+"%")
 	if err != nil {
 		return nil, err
 	}
@@ -235,7 +236,7 @@ func (s *Store) AuthWaiters(ctx context.Context) ([]AuthWaiter, error) {
 	var out []AuthWaiter
 	for rows.Next() {
 		var w AuthWaiter
-		if err := rows.Scan(&w.ProjectID, &w.BeadID); err != nil {
+		if err := rows.Scan(&w.ProjectID, &w.BeadID, &w.HasCard); err != nil {
 			return nil, err
 		}
 		out = append(out, w)
