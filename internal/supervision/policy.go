@@ -19,7 +19,7 @@ type Decision struct {
 // facts; a live process alone neither proves work nor warrants an interruption.
 func Decide(f store.SupervisionFact, now time.Time) Decision {
 	d := Decision{Action: "observe", Target: f.AgentID, CheckAfter: time.Minute}
-	if f.PendingHumanAnswer && !f.Deleted {
+	if f.PendingHumanAnswer && !f.Deleted && !answerMoot(f) {
 		d.Reason = "human_answer_pending"
 		d.Description = "Apply or reconcile the saved human answer; do not ask again or broaden its authority"
 		d.Action = "wake"
@@ -305,4 +305,13 @@ func managerHandoff(labels []string) bool {
 		}
 	}
 	return false
+}
+
+// answerMoot: a saved answer on work that is closed (or superseded/retired) has
+// nothing left to apply, unless the bead is a gate whose closing the answer's
+// receipt still owes. Without it a closed step's answer (often Commander's own
+// reply to an agent) re-raised the recovery forever.
+func answerMoot(f store.SupervisionFact) bool {
+	gate := has(f.Labels, "kind:gate") || has(f.Labels, beads.GateLabel)
+	return !gate && (f.Status == "closed" || has(f.Labels, "superseded") || has(f.Labels, "retired"))
 }

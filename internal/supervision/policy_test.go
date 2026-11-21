@@ -90,10 +90,11 @@ func TestResponsibilityPolicyAcrossAgentCapabilities(t *testing.T) {
 			f.Held = true
 			f.Labels = []string{"needs-user"}
 		}, "wake", "human_answer_pending", "commander-urgent"},
-		{"closed work needs answer receipt", func(f *store.SupervisionFact) {
+		{"closed gate needs answer receipt", func(f *store.SupervisionFact) {
 			f.PendingHumanAnswer = true
 			f.PlanningCommander = "commander-urgent"
 			f.Status = "closed"
+			f.Labels = []string{"kind:gate"}
 		}, "wake", "human_answer_pending", "commander-urgent"},
 		{"waiting for another owner", func(f *store.SupervisionFact) { f.QuestionWaiting = true }, "observe", "planning_answer", "workstream-qa"},
 		{"startup reserved", func(f *store.SupervisionFact) {
