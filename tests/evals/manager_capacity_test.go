@@ -60,16 +60,16 @@ func TestNestedCapacityOwnerScenario(t *testing.T) {
 			}
 		}
 	}
-	check("Not started: Manager to plan")
+	check("Not started: nothing planned yet")
 	s.Agents["manager-sample-root"] = livedata.SnapAgent{State: "stuck"}
-	check("Not started: Manager to plan")
+	check("Not started: nothing planned yet")
 	s.Agents["manager-sample-nested"] = livedata.SnapAgent{State: "stuck"}
 	check("Stuck")
 	s.ManagerCapacity = map[string]string{"manager-sample-nested": "no account has usage left"}
 	check("Manager out of usage")
 	s.ManagerCapacity = nil
 	s.Agents["manager-sample-nested"] = livedata.SnapAgent{State: "idle"}
-	check("Not started: Manager to plan")
+	check("Not started: nothing planned yet")
 }
 
 func TestMissingCapacityClearScenario(t *testing.T) {

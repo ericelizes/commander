@@ -8,8 +8,8 @@ import (
 	"github.com/example-user/commander/internal/livedata"
 )
 
-// Read-only fixture: an open workstream with nothing in it reads "Not started: Manager to plan"
-// (planning is the Manager's move) or, while a Manager-to-plan handoff holds it, "Manager planning".
+// Read-only fixture: an open workstream with nothing in it reads "Not started: nothing planned yet"
+// (planning is the Manager's move) or, while a Manager-to-plan handoff holds it, "Steps not planned yet".
 // It never reads "Nothing to do".
 func TestEmptyWorkstreamScenario(t *testing.T) {
 	raw, err := os.ReadFile("scenarios/empty-workstream.json")
@@ -21,7 +21,7 @@ func TestEmptyWorkstreamScenario(t *testing.T) {
 		t.Fatal(err)
 	}
 	rows := livedata.Board(snap, 1060).Workstreams
-	want := map[string]string{"demo-ew": "Not started: Manager to plan", "demo-ep": "Manager planning"}
+	want := map[string]string{"demo-ew": "Not started: nothing planned yet", "demo-ep": "Steps not planned yet"}
 	for _, r := range rows {
 		if r.Text != want[r.BeadID] {
 			t.Errorf("%s reads %q, want %q", r.BeadID, r.Text, want[r.BeadID])
