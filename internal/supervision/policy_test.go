@@ -15,7 +15,9 @@ func TestResponsibilityPolicyAcrossAgentCapabilities(t *testing.T) {
 		change                 func(*store.SupervisionFact)
 		action, reason, target string
 	}{
-		{"idle actionable", func(f *store.SupervisionFact) {}, "wake", "work_pending", "workstream-qa"},
+		// An open step nothing holds is queued for an agent (nextactor f18369c2): the
+		// scheduler starts it, so supervision observes instead of nudging.
+		{"idle actionable", func(f *store.SupervisionFact) {}, "observe", "ready", "workstream-qa"},
 		{"working", func(f *store.SupervisionFact) { f.Alive = true; f.AgentState = "working"; f.ExecutorBound = true }, "observe", "working", "workstream-qa"},
 		{"paused", func(f *store.SupervisionFact) { f.Held = true }, "observe", "held", "workstream-qa"},
 		{"blocked dependency", func(f *store.SupervisionFact) { f.OpenBlockers = 1 }, "observe", "dependency", "workstream-qa"},
@@ -29,10 +31,10 @@ func TestResponsibilityPolicyAcrossAgentCapabilities(t *testing.T) {
 			f.ChildCount = 2
 			f.ProgressAt = now.Add(-time.Hour).Unix()
 			f.Children = []store.SupervisionChild{{Status: "open", Labels: []string{"needs-user"}}, {Status: "open"}}
-		}, "wake", "subordinate_progress", "workstream-qa"},
+		}, "observe", "subordinates_waiting", "workstream-qa"},
 		{"result delivered", func(f *store.SupervisionFact) { f.ResultReady = true }, "wake", "result_pending", "workstream-qa"},
 		{"reviewer busy", func(f *store.SupervisionFact) { f.ResultReady = true; f.AgentState = "working"; f.Alive = true }, "defer", "result_pending", "workstream-qa"},
-		{"unknown runtime", func(f *store.SupervisionFact) { f.PresenceKnown = false }, "observe", "runtime_unknown", "workstream-qa"},
+		{"unknown runtime", func(f *store.SupervisionFact) { f.PresenceKnown = false }, "observe", "ready", "workstream-qa"},
 		{"missing resumable execution", func(f *store.SupervisionFact) { f.ExecutorBound = true }, "resume", "work_pending", "workstream-qa"},
 		{"busy without progress", func(f *store.SupervisionFact) {
 			f.Alive = true
@@ -50,7 +52,7 @@ func TestResponsibilityPolicyAcrossAgentCapabilities(t *testing.T) {
 			f.Labels = []string{"waiting:1700000000:ci:12"}
 		}, "observe", "dependency", "workstream-qa"},
 		{"withdrawn request is nobody's move", func(f *store.SupervisionFact) { f.Labels = []string{"withdrawn"} }, "observe", "withdrawn", "workstream-qa"},
-		{"wait on the user with no question recorded", func(f *store.SupervisionFact) { f.Labels = []string{"waiting:1700000000:user"} }, "wake", "record_question", "commander"},
+		{"wait on the user with no question recorded", func(f *store.SupervisionFact) { f.Labels = []string{"waiting:1700000000:user"} }, "observe", "dependency", "workstream-qa"},
 		{"review without progress", func(f *store.SupervisionFact) {
 			f.Alive = true
 			f.ResultReady = true
@@ -61,8 +63,8 @@ func TestResponsibilityPolicyAcrossAgentCapabilities(t *testing.T) {
 			f.Alive = true
 			f.AgentState = "working"
 			f.CompletionAt = now.Add(-3 * time.Hour).Unix()
-		}, "wake", "completion_check", "commander"},
-		{"busy owner on other work", func(f *store.SupervisionFact) { f.Alive = true; f.AgentState = "working" }, "defer", "work_pending", "workstream-qa"},
+		}, "observe", "ready", "workstream-qa"},
+		{"busy owner on other work", func(f *store.SupervisionFact) { f.Alive = true; f.AgentState = "working" }, "observe", "ready", "workstream-qa"},
 		{"real user decision", func(f *store.SupervisionFact) { f.Labels = []string{"needs-user"} }, "observe", "user_decision", "workstream-qa"},
 		{"ready queued", func(f *store.SupervisionFact) { f.ExecutionReady = true; f.ExecutionCapable = true }, "observe", "execution_queued", "workstream-qa"},
 		{"retired intent", func(f *store.SupervisionFact) { f.Labels = []string{"retired"} }, "resolve", "", "workstream-qa"},

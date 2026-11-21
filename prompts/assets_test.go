@@ -100,11 +100,10 @@ func TestCommanderPromptContract(t *testing.T) {
 		"cmdr internal-open-workstream",
 		"cmdr internal-resolve-add-project",
 		"`create` edit (`\"kind\": \"workstream\"`, no parent) and its first step",
-		"from commander",
-		"agent commander",
+		"Agent mail is retired",
 		"Do NOT do repo archaeology",
 		"do NOT immediately ask for type/path",
-		"bias toward delegation and organization",
+		"Bias toward delegation.",
 		"I can create the objective now and we can fill in details later.",
 		"Bias toward objective creation.",
 		"Do NOT improvise with direct `bd create`, raw SQLite writes, or alternate bead shapes.",
@@ -117,7 +116,7 @@ func TestCommanderPromptContract(t *testing.T) {
 		"Do not do broad startup exploration",
 		"Acknowledge readiness in one short line.",
 		"Manager session captured",
-		"manager-<name>",
+		"manager-<flat-name>",
 	} {
 		if !strings.Contains(text, needle) {
 			t.Fatalf("commander prompt missing %q", needle)
@@ -168,9 +167,9 @@ func TestPushAndInstallPolicyInPrompts(t *testing.T) {
 		role    string
 		needles []string
 	}{
-		{RoleCommander, []string{"without the user's OK", "internal-ship", "once per batch"}},
+		{RoleCommander, []string{"without the user's OK", "One install, never several in a row"}},
 		{RoleManager, []string{"Push policy", "internal-ship", "Commander asks the user once per batch"}},
-		{operatorCodePath, []string{"Git push policy", "--force-with-lease", "cmdr internal-ship", "Never install", "`hold` label", "stop shipping"}},
+		{operatorCodePath, []string{"Git push policy", "--force-with-lease", "cmdr internal-ship", "Never install", "`hold` label", "stops shipping"}},
 	} {
 		body, err := roleBody(tc.role)
 		if err != nil {
@@ -184,12 +183,14 @@ func TestPushAndInstallPolicyInPrompts(t *testing.T) {
 	}
 }
 
-func TestMailMidRunInOperatorPrompt(t *testing.T) {
+// Agent mail is retired (67c2ce81): an Operator asks with a durable question and
+// reports with its final report on the bead.
+func TestNoAgentMailInOperatorPrompt(t *testing.T) {
 	body, err := roleBody(operatorCodePath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, needle := range []string{"Mail may arrive mid-run", "Commander mail system", "quoted `> `", "does not widen your brief", "production or merge authority", "cmdr internal-inbox --agent", "older mail(s)"} {
+	for _, needle := range []string{"There is no agent mail", "cmdr question ask", "Eric's card", "Final report:"} {
 		if !strings.Contains(body, needle) {
 			t.Errorf("operator prompt missing %q", needle)
 		}
@@ -198,7 +199,8 @@ func TestMailMidRunInOperatorPrompt(t *testing.T) {
 
 // Mail states it grants no authority; every role must still act on a real answer.
 func TestMailAuthorityInPrompts(t *testing.T) {
-	for _, file := range []string{"commander.md", "lead.md", "operator-code.md"} {
+	// commander.md and operator-code.md no longer teach mail (retired, 67c2ce81).
+	for _, file := range []string{"lead.md"} {
 		body, err := templateFS.ReadFile(file)
 		if err != nil {
 			t.Fatal(err)
@@ -209,7 +211,7 @@ func TestMailAuthorityInPrompts(t *testing.T) {
 			}
 		}
 	}
-	for _, file := range []string{"commander.md", "lead.md"} {
+	for _, file := range []string{"lead.md"} {
 		body, err := templateFS.ReadFile(file)
 		if err != nil {
 			t.Fatal(err)
@@ -224,9 +226,7 @@ func TestMailAuthorityInPrompts(t *testing.T) {
 
 func TestExistingAgentMailRouteInPrompts(t *testing.T) {
 	for file, needles := range map[string][]string{
-		"commander.md":          {"--to-existing-agent", "Managers, Commander and the user", "your own role", "never grants a contact", "`sent:true`"},
 		"lead.md":               {"--to-existing-agent", "Managers, Commander and the user", "your own role", "never grants a contact", "`sent:true`"},
-		"operator-code.md":      {"--to-existing-agent", "Managers, Commander and the user", "refused"},
 		"operator-knowledge.md": {"--to-existing-agent", "Managers, Commander and the user", "refused"},
 	} {
 		body, err := templateFS.ReadFile(file)
@@ -483,7 +483,7 @@ func TestCrossProjectWaitTeachesOnlyWhatExists(t *testing.T) {
 	for _, needle := range []string{"no wait kind names another workstream", "`cmdr internal-comment`", "--waiting until:<RFC3339>:<plain words saying what to recheck>", "`--state needs-user --decision`",
 		// An until: wait mails the top-level workstream's Manager (daemon/waits.go),
 		// and a future one refuses a later card (externalWait).
-		"cmdr internal-set-objective --waiting until:", "mails the Manager of that bead's top-level workstream, not you", "tell that Manager what to read", "refuses a later card", "`--waiting none` first",
+		"cmdr internal-set-objective --waiting until:", "cmdrd resumes the step (its agent is woken, or the watcher starts one); nobody is mailed", "refuses a later card", "`--waiting none` first",
 		// Typed waits: a full sha is over beads.MaxLabelLen.
 		"`ci:<owner/repo>#N` fires when the PR's checks settle, not on merge", "`main-ci:<owner/repo>@<short sha of 7-12 hex>`", "`prod-tag:<owner/repo>@<short sha of 7-12 hex>`",
 		// prodTagFor reads one prefix and prodTagsChecked tags.
@@ -754,8 +754,7 @@ func TestNestedManagersInPrompts(t *testing.T) {
 			"never write beads under a sibling", "cmdr internal-dep --project <project> add <your step> <their step>",
 			"opens its own Manager's chat",
 		},
-		"commander.md":     {"nested Managers on", "cmdr internal-nest-managers --project <p>", "--undo"},
-		"operator-code.md": {"rerouted to another", "your Manager changed"},
+		"commander.md": {"nested Managers on", "cmdr internal-nest-managers --project <p>", "--undo"},
 	} {
 		body, err := templateFS.ReadFile(file)
 		if err != nil {
@@ -775,7 +774,9 @@ func TestNestedManagersInPrompts(t *testing.T) {
 // An interrupt reads to Claude as the user rejecting the tool call; Commander
 // and Managers must not take that for a hold.
 func TestToolRejectionIsNotAHoldInPrompts(t *testing.T) {
-	for _, role := range []string{RoleCommander, RoleManager} {
+	// Commander no longer receives agent mail or interrupts (retired, 67c2ce81);
+	// only the Manager prompt carries the rule.
+	for _, role := range []string{RoleManager} {
 		body, err := roleBody(role)
 		if err != nil {
 			t.Fatal(err)
