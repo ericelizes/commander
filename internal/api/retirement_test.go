@@ -62,6 +62,9 @@ func TestPostgresPlanningRetirementScenario(t *testing.T) {
 		}
 	}
 	insert("root", "", "Commander", "", "open", []string{"kind:objective", beads.WorkstreamLabel})
+	// A workstream may not be left with no children (plan rule 2), so retiring the
+	// legacy stage leaves this live step under it.
+	insert("keep-step", "root", "Remaining planned step", "Remaining work", "open", []string{"kind:objective", "lane:agents"})
 	insert(scenario.Stage, "root", "Reviewed board repair fast-forwarded to local main", "", "deferred", []string{"kind:objective", "parked"})
 	insert(scenario.Gate, "root", "gate merged", "git merge-base --is-ancestor old main", "open", []string{"kind:gate", "verifier:auto", "gate-name:merged", "gate-status:failed", "gate-of:" + beads.EscapeLabel(scenario.Stage)})
 	ghCalls := 0
