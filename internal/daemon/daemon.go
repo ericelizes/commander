@@ -642,7 +642,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 		if d.chat != nil {
 			go executionRedirector{store: d.store, send: d.chat.Send, dead: newUnreachable()}.run(ctx)
 			go executionCutover{store: d.store, send: d.chat.Send, stop: d.chat.Stop, dead: newUnreachable()}.run(ctx)
-			go executionReported{store: d.store, stop: d.chat.Stop}.run(ctx)
+			go (&executionReported{store: d.store, status: d.chat.Status, stop: d.chat.Stop}).run(ctx)
 		}
 	} else {
 		d.scheduler.Start(ctx)

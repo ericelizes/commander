@@ -179,3 +179,24 @@ func TestCrashedAgentWakesItsPlanningCommanderWithTheCause(t *testing.T) {
 		t.Fatalf("queued restart woke the Commander: %+v", d)
 	}
 }
+
+func TestPendingAnswerOnMootNonGateWorkRaisesNoRecovery(t *testing.T) {
+	for name, change := range map[string]func(*store.SupervisionFact){
+		"closed":     func(f *store.SupervisionFact) { f.Status = "closed" },
+		"superseded": func(f *store.SupervisionFact) { f.Labels = []string{"superseded"} },
+		"retired":    func(f *store.SupervisionFact) { f.Labels = []string{"retired"} },
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := store.SupervisionFact{Status: "open", PendingHumanAnswer: true, PlanningCommander: "commander-urgent", SupervisorID: "commander", AgentID: "executor-generic"}
+			change(&f)
+			if d := Decide(f, time.Now()); d.Reason == "human_answer_pending" {
+				t.Fatalf("recovery raised for moot work: %+v", d)
+			}
+		})
+	}
+	// The same answer on live work still wakes.
+	f := store.SupervisionFact{Status: "open", PendingHumanAnswer: true, PlanningCommander: "commander-urgent", SupervisorID: "commander", AgentID: "executor-generic"}
+	if d := Decide(f, time.Now()); d.Reason != "human_answer_pending" {
+		t.Fatalf("live work lost its answer recovery: %+v", d)
+	}
+}
