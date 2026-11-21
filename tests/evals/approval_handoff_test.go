@@ -43,7 +43,7 @@ func TestApprovalHandoffScenario(t *testing.T) {
 			for _, step := range row.Diagram.Steps {
 				if step.ID == "repair" {
 					found = true
-					if step.Text != tc.Want || step.Actor != livedata.ActorManager {
+					if step.Text != tc.Want || step.Actor != livedata.ActorOperators {
 						t.Fatalf("diagram %+v", step)
 					}
 				}

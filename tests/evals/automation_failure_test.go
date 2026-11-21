@@ -25,7 +25,7 @@ func TestAutomationFailureScenario(t *testing.T) {
 		t.Fatalf("failure hidden: %+v", r)
 	}
 	report := livedata.CheckinReport(scenario.Snapshot, scenario.Now, livedata.AuditOptions{})
-	if !strings.Contains(report, "[red] Manager review overdue") || strings.Contains(report, "Closed report |") {
+	if !strings.Contains(report, "[red] Finished but not closed") || strings.Contains(report, "Closed report |") {
 		t.Fatal(report)
 	}
 	// A genuine sibling user action stays visible while the hidden failure persists.
@@ -40,7 +40,7 @@ func TestAutomationFailureScenario(t *testing.T) {
 			t.Fatalf("user action hidden: %+v", row)
 		}
 		failures := livedata.StalledWork(scenario.Snapshot, scenario.Now)
-		if len(failures) != 1 || !strings.Contains(livedata.CheckinReport(scenario.Snapshot, scenario.Now, livedata.AuditOptions{}), "Manager review overdue") {
+		if len(failures) != 1 || !strings.Contains(livedata.CheckinReport(scenario.Snapshot, scenario.Now, livedata.AuditOptions{}), "Finished but not closed") {
 			t.Fatalf("hidden failure lost: %+v", failures)
 		}
 	}
