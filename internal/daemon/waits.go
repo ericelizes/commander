@@ -463,7 +463,8 @@ func (w *waitWatcher) poll(ctx context.Context) {
 				continue
 			}
 			if waits := beads.WaitsOf(b.Labels); len(waits) > 0 {
-				w.checkBead(ctx, p, repo, b, waits)
+				open += len(waits)
+				fired += w.checkBead(ctx, p, repo, b, waits)
 				if f, ok := w.reviewFact(ctx, repo, b, waits); ok {
 					facts[b.ID] = f
 				}
