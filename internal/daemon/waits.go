@@ -44,7 +44,16 @@ const (
 // run with output is not an error.
 type ghRunner func(ctx context.Context, args ...string) ([]byte, error)
 
+// ghCallTimeout bounds each gh call of the wait poll.
+// pollBudget bounds one whole poll, so a stuck read cannot end polling.
+const pollBudget = 5 * time.Minute
+
+const ghCallTimeout = 60 * time.Second
+
 func runGH(ctx context.Context, args ...string) ([]byte, error) {
+	// One hung gh call used to stall the whole poll loop for good, silently.
+	ctx, cancel := context.WithTimeout(ctx, ghCallTimeout)
+	defer cancel()
 	out, err := exec.CommandContext(ctx, "gh", args...).Output()
 	if err != nil && len(out) > 0 {
 		return out, nil
@@ -130,7 +139,9 @@ func (w *waitWatcher) Run(ctx context.Context) {
 	u := time.NewTicker(untilPollInterval)
 	defer u.Stop()
 	for {
-		w.poll(ctx)
+		pollCtx, cancel := context.WithTimeout(ctx, pollBudget)
+		w.poll(pollCtx)
+		cancel()
 		for wait := true; wait; {
 			select {
 			case <-ctx.Done():
@@ -422,6 +433,11 @@ func storedLabel(labels []string, wt beads.Wait) string {
 }
 
 func (w *waitWatcher) poll(ctx context.Context) {
+	started := w.now()
+	var open, fired int
+	defer func() {
+		log.Printf("daemon: waits: poll done in %s: %d open waits checked, %d fired", w.now().Sub(started).Round(time.Millisecond), open, fired)
+	}()
 	w.deployRuns = nil // read fresh each poll
 	projects, err := w.projects.ListProjects(ctx)
 	if err != nil {
@@ -460,18 +476,21 @@ func (w *waitWatcher) poll(ctx context.Context) {
 
 // checkBead handles one bead's waits: events wake the Manager; the rest are
 // only stamped as checked.
-func (w *waitWatcher) checkBead(ctx context.Context, p store.Project, repo string, b beads.Bead, waits []beads.Wait) {
+func (w *waitWatcher) checkBead(ctx context.Context, p store.Project, repo string, b beads.Bead, waits []beads.Wait) (fired int) {
 	for _, wt := range waits {
-		subject, body, fired := w.event(ctx, repo, b, wt)
-		if !fired && wt.IsEventWait() {
-			subject, body, fired = w.eventWaitFired(ctx, repo, b, wt)
+		subject, body, ok := w.event(ctx, repo, b, wt)
+		if !ok && wt.IsEventWait() {
+			subject, body, ok = w.eventWaitFired(ctx, repo, b, wt)
 		}
-		if !fired {
+		if !ok {
 			w.expectOverdue(ctx, b, wt)
 			continue
 		}
+		fired++
+		log.Printf("daemon: waits: %s on %s fired: %s", wt.Label(), b.ID, subject)
 		w.wake(ctx, p, b, wt, subject, body)
 	}
+	return fired
 }
 
 // clearStamps removes the per-bead "checked" and old nudge labels earlier

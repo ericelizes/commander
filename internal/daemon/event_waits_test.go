@@ -254,3 +254,62 @@ func TestPRWaitSettles(t *testing.T) {
 		}
 	}
 }
+
+// Nov 23: scheduled main run 45192027706 deployed prod-20261120-213503 (547ee53d39ab).
+// Waits on commits inside that tag must clear; a bad compare answer (an API error
+// body) must neither clear nor be remembered; a skipped deploy job never clears.
+func TestScheduledRunDeploysEarlierTagClearsAncestorWaits(t *testing.T) {
+	const run = "45192027706"
+	ancestors := map[string]string{
+		"1b9766540492312fadeff0ff585c31ecbf6cb945": "ahead",
+		"93ad29868f": "ahead",
+		"2c869a9fa5": "ahead",
+		"ffffffffff": "diverged",
+	}
+	for _, c := range []struct {
+		name, sha, deployJob, firstAnswer string
+		fired                             bool
+	}{
+		{"1b97665404 full sha", "1b9766540492312fadeff0ff585c31ecbf6cb945", "success", "", true},
+		{"93ad29868f", "93ad29868f", "success", "", true},
+		{"2c869a9fa5", "2c869a9fa5", "success", "", true},
+		{"2c869a9fa5 after an error body", "2c869a9fa5", "success", `{"message":"API rate limit exceeded","status":"403"}`, true},
+		{"not an ancestor", "ffffffffff", "success", "", false},
+		{"skipped deploy job", "2c869a9fa5", "skipped", "", false},
+	} {
+		wt := beads.Wait{Kind: beads.WaitDeploy, Sha: c.sha, Since: cutoverOn}
+		w, m, _ := memWatcher([]string{wt.Label()}, reconcileAt)
+		w.managerLive = func(string) bool { return false }
+		answers := 0
+		w.gh = func(_ context.Context, args ...string) ([]byte, error) {
+			cmd := strings.Join(args, " ")
+			switch {
+			case strings.HasPrefix(cmd, "api repos/acme/web/actions/workflows?per_page=100"):
+				return []byte("11\tDeploy orchestrator to prod\n"), nil
+			case strings.HasPrefix(cmd, "api repos/acme/web/actions/workflows/11/runs?status=success"):
+				return []byte(`[{"id":` + run + `,"name":"Deploy orchestrator to prod","head_sha":"` + deployHead + `","head_branch":"main","event":"schedule","updated_at":"2026-11-23T14:14:00Z"}]`), nil
+			case strings.HasPrefix(cmd, "api repos/acme/web/actions/runs/"+run+"/jobs"):
+				return []byte("1\tresolve\tsuccess\n2\tdeploy\t" + c.deployJob + "\n"), nil
+			case strings.HasPrefix(cmd, "api repos/acme/web/actions/jobs/1/logs"):
+				return []byte("Deploying prod-20261120-213503 (547ee53d39ab)\n"), nil
+			case strings.HasPrefix(cmd, "api repos/acme/web/compare/"):
+				answers++
+				if answers == 1 && c.firstAnswer != "" {
+					return []byte(c.firstAnswer), nil
+				}
+				return []byte(ancestors[c.sha] + "\n"), nil
+			}
+			return nil, fmt.Errorf("gh %v", args)
+		}
+		w.poll(context.Background())
+		if c.firstAnswer != "" {
+			if !slices.Contains(labelsOf(t, m), wt.Label()) {
+				t.Fatalf("%s: a non-status answer cleared the wait", c.name)
+			}
+			w.poll(context.Background()) // the bad body was not remembered
+		}
+		if fired := !slices.Contains(labelsOf(t, m), wt.Label()); fired != c.fired {
+			t.Errorf("%s: fired=%v, want %v", c.name, fired, c.fired)
+		}
+	}
+}

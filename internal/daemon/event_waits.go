@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -41,6 +42,9 @@ var deployedLine = regexp.MustCompile(`Deploying (prod-\S+) \(([0-9a-f]{7,40})\)
 
 // defaultDeployWorkflow matches a prod deploy workflow's name ("Deploy orchestrator to prod").
 var defaultDeployWorkflow = regexp.MustCompile(`(?i)\bdeploy\b.*\bprod`)
+
+// compareStatuses are the answers of GitHub's compare API (immutable per pair).
+var compareStatuses = map[string]bool{"ahead": true, "identical": true, "behind": true, "diverged": true}
 
 // deployRunsChecked bounds the compare calls per deploy wait per poll: the newest runs only.
 const deployRunsChecked = 15
@@ -100,9 +104,17 @@ func (w *waitWatcher) deployFor(ctx context.Context, repo, sha string) (deployRu
 		if !seen {
 			out, err := w.gh(ctx, "api", "repos/"+repo+"/compare/"+sha+"..."+shipped, "--method", "GET", "--jq", ".status")
 			if err != nil {
+				log.Printf("daemon: waits: compare %s...%s in %s: %v", sha, shipped, repo, err)
 				continue
 			}
 			status = strings.TrimSpace(string(out))
+			// runGH hands back an API error's body (rate limit, 5xx) as an
+			// answer. Only a real status is kept: a bad body cached here
+			// would read "not deployed" for this pair until cmdrd restarted.
+			if !compareStatuses[status] {
+				log.Printf("daemon: waits: compare %s...%s in %s answered %q, not a status; will retry", sha, shipped, repo, eventLine(status))
+				continue
+			}
 			if w.compared == nil {
 				w.compared = map[string]string{}
 			}
